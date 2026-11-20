@@ -77,7 +77,8 @@
         "viewProfile": "Переглянути профіль",
         "resizeHint": "Потягніть для зміни розміру, подвійне клацання для скидання",
         "dismiss": "Скасувати",
-        "search": "Пошук"
+        "search": "Пошук",
+        "saved": "Збережені"
     },
     "newMessage": {
         "title": "Нове повідомлення",
@@ -549,20 +550,26 @@
         "reply": "Відповісти",
         "copyMessage": "Копіювати текст",
         "replyQuoteHiddenEncrypted": "Цитату приховано: оригінал був зашифрований",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Переслати повідомлення",
+        "forwardLinkOnly": "Надсилає ваш коментар, цитовану копію повідомлення та посилання на оригінал. Цитату можуть прочитати всі в пункті призначення.",
+        "forwardQuotedCopy": "Цитована копія пересланого повідомлення",
+        "forwardedCopyUnknownAuthor": "невідомий відправник",
+        "forwardedFromLabel": "Переслано від",
+        "forwardedCopyDirectChat": "Особистий чат",
+        "forwardedCopyOpen": "Відкрити оригінальне повідомлення",
+        "forwardedCopyUnknownSource": "невідома кімната",
+        "forwardedCopyDiffers": "Переслана копія відрізняється від оригінального повідомлення",
+        "forwardedCopyClaimed": "Копія, надіслана з пересиланням:",
+        "forwardedOriginNotFound": "Оригінального повідомлення немає у вашій історії",
+        "forwardQuoteOnly": "Надсилає ваш коментар і цитовану копію повідомлення. Цитату можуть прочитати всі в пункті призначення.",
+        "forwardEncryptedOnly": "Це повідомлення із зашифрованого чату, тому його можна переслати лише в зашифрований чат.",
+        "forwardDestination": "Чат або кімната",
+        "forwardChoose": "Виберіть чат або кімнату",
+        "forwardUnavailable": "Пункт призначення недоступний",
+        "forwardComment": "Коментар (необов'язково)",
+        "forwardSend": "Надіслати",
+        "forwardSending": "Надсилання…",
+        "forwardFailed": "Не вдалося надіслати повідомлення. Ваш вибір і коментар збережено.",
         "forwardMessage": "Переслати повідомлення (незабаром)",
         "moreReactions": "Більше реакцій",
         "reactions": "Реакції",
@@ -640,8 +647,8 @@
             "verifiedTooltip": "Перевірений ключ OpenPGP",
             "tofuNewTooltip": "Новий контакт. Перевірте відбиток для повної довіри",
             "unverifiedKeysetTooltip": "Цей контакт має новий ключ, який не було перевірено.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Шифрування призупинено",
+            "blockedTooltip": "Ключ співрозмовника змінився. Усуньте проблему, щоб відновити шифрування",
             "sendBlockedEncryptionRequired": "Повідомлення не надіслано. Для цієї розмови потрібне шифрування, але зараз воно недоступне.",
             "sendBlockedKeyChanged": "Повідомлення не надіслано. Ключ шифрування цього контакту змінився. Перегляньте зміну ключа перед надсиланням.",
             "sendBlockedKeyLocked": "Повідомлення не надіслано. Розблокуйте свій ключ шифрування, щоб надіслати це повідомлення.",
@@ -657,8 +664,8 @@
                 "pendingAll": "Ключі {{name}} не отримують повідомлень, доки цей пристрій не отримає ваші рішення щодо довіри з попередньої версії або з інших ваших пристроїв. Доти ви не можете надсилати повідомлення. Спроба повторюється автоматично.",
                 "review": "Переглянути ключі"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Шифрування вимкнено",
+            "plaintextForcedTooltip": "Ви вимкнули шифрування для цієї розмови, тому повідомлення надсилаються у відкритому вигляді",
             "keyLocked": "Шифрування заблоковано",
             "keyLockedTooltip": "Шифрування заблоковано. Натисніть для розблокування",
             "encryptedClickToUnlock": "Зашифроване повідомлення. Натисніть для розблокування",
@@ -681,8 +688,8 @@
                 "fingerprint_mismatch": "Відбиток не збігається із заявленим значенням",
                 "uid_mismatch": "Ідентичність сертифіката не збігається з адресою співрозмовника"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Вимкнути шифрування для цієї розмови",
+            "enableEncryption": "Знову увімкнути шифрування",
             "tooltip": {
                 "header": "Зашифровано",
                 "protocol": {
@@ -730,7 +737,9 @@
         "loadAudio": "Завантажити аудіо",
         "loadFilePreview": "Завантажити прев'ю",
         "showLinkImage": "Показати зображення",
-        "emojiSuggestions": "Пропозиції емодзі"
+        "emojiSuggestions": "Пропозиції емодзі",
+        "saveMessage": "Зберегти повідомлення",
+        "removeFromSaved": "Прибрати зі збережених"
     },
     "dates": {
         "today": "Сьогодні",
@@ -767,6 +776,20 @@
             "privacy": "Конфіденційність",
             "mcp": "Інтеграція з Claude",
             "advanced": "Розширені"
+        },
+        "categoryDescriptions": {
+            "profile": "Ваш профіль, обліковий запис і підключені пристрої.",
+            "appearance": "Тема, режим, щільність відображення та акцентний колір.",
+            "accessibility": "Розмір тексту, ширина читання, анімація та прозорість.",
+            "language": "Мова інтерфейсу та регіональні формати.",
+            "notifications": "Виберіть, як і коли Fluux сповіщатиме вас.",
+            "encryption": "Ключі наскрізного шифрування для ваших розмов.",
+            "privacy": "Архівування повідомлень на сервері та автоматичне завантаження медіафайлів.",
+            "blocked": "Люди, які не можуть вам писати та бачити ваш статус.",
+            "storage": "Медіафайли в кеші цього пристрою та місце, яке вони займають.",
+            "updates": "Підтримуйте Fluux в актуальному стані.",
+            "mcp": "Налаштування локального мосту Claude.",
+            "advanced": "Інструменти розробника та діагностика."
         },
         "groups": {
             "general": "Загальні",
@@ -1378,6 +1401,10 @@
         "search": {
             "title": "Результати пошуку",
             "description": "Виберіть результат на бічній панелі, щоб переглянути бесіду."
+        },
+        "saved": {
+            "title": "Збережені повідомлення",
+            "description": "Виберіть збережене повідомлення на бічній панелі, щоб відкрити його у його розмові."
         }
     },
     "avatar": {
@@ -1646,7 +1673,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} відреагував(ла) на '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} відреагував(ла) на ваше повідомлення",
         "see": "Показати"
     },
     "commands": {
@@ -1763,5 +1790,17 @@
         "edit": "{{nickname}} (змінено): {{text}}",
         "retraction": "{{nickname}} видалив(-ла) повідомлення",
         "messages": "{{nickname}}: нових повідомлень — {{count}}"
+    },
+    "saved": {
+        "title": "Збережені повідомлення",
+        "marker": "Збережено",
+        "empty": "Немає збережених повідомлень",
+        "emptyHint": "Відкрийте меню «Ще» біля повідомлення й виберіть «Зберегти повідомлення», щоб залишити його тут.",
+        "remove": "Прибрати зі збережених",
+        "encrypted": "Зашифроване повідомлення",
+        "deleted": "Повідомлення видалено",
+        "tryAgain": "Спробувати ще раз",
+        "full": "Список збережених повідомлень заповнено ({{count}}). Приберіть одне, щоб зберегти інше.",
+        "refused": "Ваш сервер відмовився зберегти це повідомлення."
     }
 }

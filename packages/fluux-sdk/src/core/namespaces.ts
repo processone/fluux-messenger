@@ -132,6 +132,10 @@ export const NS_IGNORED_USERS = 'urn:xmpp:fluux:ignored-users:0'
 export const NS_CONVERSATIONS = 'urn:xmpp:fluux:conversations:0'
 export const NS_CONVERSATIONS_NOTIFY = 'urn:xmpp:fluux:conversations:0+notify'
 
+// Custom: Fluux saved messages (private PEP node, docs/XEP-SAVED_MESSAGES.md).
+export const NS_SAVED_MESSAGES = 'urn:xmpp:fluux:saved-messages:0'
+export const NS_SAVED_MESSAGES_NOTIFY = 'urn:xmpp:fluux:saved-messages:0+notify'
+
 // XEP-0334: Message Processing Hints
 export const NS_HINTS = 'urn:xmpp:hints'
 

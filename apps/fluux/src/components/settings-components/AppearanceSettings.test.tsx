@@ -60,7 +60,7 @@ describe('AppearanceSettings', () => {
   it('keeps the appearance panel width stable when mode and density change', () => {
     const { container } = render(<AppearanceSettings />)
     const panel = container.firstElementChild
-    expect(panel).toHaveClass('w-full', 'max-w-md')
+    expect(panel).toHaveClass('w-full')
 
     const initialClassName = panel?.className
     fireEvent.click(screen.getByRole('button', { name: /settings\.light/i }))

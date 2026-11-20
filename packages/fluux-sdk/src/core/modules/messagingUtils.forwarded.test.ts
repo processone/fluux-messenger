@@ -43,3 +43,20 @@ describe('parseForwardedCopy', () => {
     expect(parseMessageContent({ messageEl: copy(xml('body', {}, 'Ship it')), body: 'hello' }).forwarded?.text).toBe('Ship it')
   })
 })
+
+// Captain's choice on FLM-332: the original's ids ride in the copy so a reader can find it again.
+describe('parseForwardedCopy ids of the original', () => {
+  const NSID = 'urn:xmpp:sid:0'
+  it('reads the original id and the archive id with its archive', () => {
+    const parsed = parseForwardedCopy(xml('message', {}, xml('forwarded', { xmlns: NSF },
+      xml('message', { xmlns: 'jabber:client', from: 'bob@example.org', type: 'chat', id: 'orig-1' }, xml('body', {}, 'hi'),
+        xml('stanza-id', { xmlns: NSID, by: 'me@example.org', id: 'arch-9' })))))
+    expect(parsed).toMatchObject({ id: 'orig-1', stanzaId: 'arch-9', stanzaIdBy: 'me@example.org' })
+  })
+  it('ignores an archive id without its archive and a stanza-id in another namespace; a copy without ids stays valid', () => {
+    const parsed = parseForwardedCopy(xml('message', {}, xml('forwarded', { xmlns: NSF },
+      xml('message', { xmlns: 'jabber:client', from: 'bob@example.org', type: 'chat' }, xml('body', {}, 'hi'),
+        xml('stanza-id', { xmlns: NSID, id: 'arch-9' }), xml('stanza-id', { xmlns: 'urn:other', by: 'x@y', id: 'z' })))))
+    expect(parsed).toEqual({ author: 'bob@example.org', from: 'bob@example.org', text: 'hi', type: 'chat' })
+  })
+})

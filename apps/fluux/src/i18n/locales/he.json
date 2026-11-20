@@ -77,7 +77,8 @@
         "viewProfile": "צפה בפרופיל",
         "resizeHint": "גרור לשינוי גודל, לחיצה כפולה לאיפוס",
         "dismiss": "סגור",
-        "search": "חיפוש"
+        "search": "חיפוש",
+        "saved": "שמורות"
     },
     "newMessage": {
         "title": "הודעה חדשה",
@@ -548,20 +549,26 @@
         "reply": "תגובה",
         "copyMessage": "העתקת טקסט",
         "replyQuoteHiddenEncrypted": "הציטוט הוסתר: המקור היה מוצפן",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "העברת ההודעה",
+        "forwardLinkOnly": "שולח את התגובה שלך, עותק מצוטט של ההודעה וקישור למקור. כל מי שביעד יכול לקרוא את הציטוט.",
+        "forwardQuotedCopy": "עותק מצוטט של הודעה שהועברה",
+        "forwardedCopyUnknownAuthor": "שולח לא ידוע",
+        "forwardedFromLabel": "הועבר מאת",
+        "forwardedCopyDirectChat": "שיחה ישירה",
+        "forwardedCopyOpen": "פתיחת ההודעה המקורית",
+        "forwardedCopyUnknownSource": "חדר לא ידוע",
+        "forwardedCopyDiffers": "ההעתק שהועבר שונה מההודעה המקורית",
+        "forwardedCopyClaimed": "ההעתק שנשלח עם ההעברה:",
+        "forwardedOriginNotFound": "ההודעה המקורית אינה בהיסטוריה שלך",
+        "forwardQuoteOnly": "שולח את התגובה שלך ועותק מצוטט של ההודעה. כל מי שביעד יכול לקרוא את הציטוט.",
+        "forwardEncryptedOnly": "הודעה זו מגיעה משיחה מוצפנת, ולכן אפשר להעביר אותה רק לשיחה מוצפנת.",
+        "forwardDestination": "שיחה או חדר",
+        "forwardChoose": "בחר שיחה או חדר",
+        "forwardUnavailable": "היעד אינו זמין",
+        "forwardComment": "תגובה (אופציונלי)",
+        "forwardSend": "שליחה",
+        "forwardSending": "שולח…",
+        "forwardFailed": "לא ניתן היה לשלוח את ההודעה. הבחירה והתגובה שלך נשמרו.",
         "forwardMessage": "העברת הודעה (בקרוב)",
         "moreReactions": "תגובות נוספות",
         "reactions": "תגובות",
@@ -638,8 +645,8 @@
             "verifiedTooltip": "מפתח OpenPGP מאומת",
             "tofuNewTooltip": "איש קשר חדש. אמתו את טביעת האצבע לאמון מלא",
             "unverifiedKeysetTooltip": "לאיש קשר זה יש מפתח חדש שלא אומת.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "ההצפנה מושהית",
+            "blockedTooltip": "המפתח של איש הקשר השתנה. פתור זאת כדי לחדש את ההצפנה",
             "sendBlockedEncryptionRequired": "ההודעה לא נשלחה. נדרשת הצפנה לשיחה זו אך היא אינה זמינה כעת.",
             "sendBlockedKeyChanged": "ההודעה לא נשלחה. מפתח ההצפנה של איש קשר זה השתנה. בדוק את שינוי המפתח לפני השליחה.",
             "sendBlockedKeyLocked": "ההודעה לא נשלחה. שחרר את נעילת מפתח ההצפנה שלך כדי לשלוח הודעה זו.",
@@ -655,8 +662,8 @@
                 "pendingAll": "המפתחות של {{name}} לא מקבלים הודעות עד שהמכשיר הזה יקבל את החלטות האמון שלך מגרסה קודמת או מהמכשירים האחרים שלך. עד אז לא ניתן לשלוח הודעות. הניסיון חוזר אוטומטית.",
                 "review": "סקירת מפתחות"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "ההצפנה מושבתת",
+            "plaintextForcedTooltip": "השבתת את ההצפנה עבור שיחה זו, ולכן ההודעות נשלחות ללא הצפנה",
             "keyLocked": "ההצפנה נעולה",
             "keyLockedTooltip": "ההצפנה נעולה. לחץ לפתיחה",
             "encryptedClickToUnlock": "הודעה מוצפנת. לחץ לפתיחה",
@@ -679,8 +686,8 @@
                 "fingerprint_mismatch": "טביעת האצבע אינה תואמת לערך המוצהר",
                 "uid_mismatch": "זהות האישור אינה תואמת לכתובת הצד השני"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "השבת הצפנה עבור שיחה זו",
+            "enableEncryption": "הפעל מחדש את ההצפנה",
             "tooltip": {
                 "header": "מוצפן",
                 "protocol": {
@@ -728,7 +735,9 @@
         "loadAudio": "טען שמע",
         "loadFilePreview": "טען תצוגה מקדימה",
         "showLinkImage": "הצג תמונה",
-        "emojiSuggestions": "הצעות אמוג'י"
+        "emojiSuggestions": "הצעות אמוג'י",
+        "saveMessage": "שמירת ההודעה",
+        "removeFromSaved": "הסרה מהשמורות"
     },
     "dates": {
         "today": "היום",
@@ -765,6 +774,20 @@
             "privacy": "פרטיות",
             "mcp": "שילוב Claude",
             "advanced": "מתקדם"
+        },
+        "categoryDescriptions": {
+            "profile": "הפרופיל שלך, החשבון והמכשירים המחוברים.",
+            "appearance": "ערכת נושא, מצב, צפיפות תצוגה וצבע הדגשה.",
+            "accessibility": "גודל טקסט, רוחב קריאה, תנועה ושקיפות.",
+            "language": "שפת הממשק ותבניות אזוריות.",
+            "notifications": "בחר איך ומתי Fluux יתריע לך.",
+            "encryption": "מפתחות הצפנה מקצה לקצה לשיחות שלך.",
+            "privacy": "ארכוב הודעות בשרת והורדה אוטומטית של מדיה.",
+            "blocked": "אנשים שלא יכולים לשלוח לך הודעות או לראות את המצב שלך.",
+            "storage": "מדיה שמורה במטמון של מכשיר זה והמקום שהיא תופסת.",
+            "updates": "שמור על Fluux מעודכן.",
+            "mcp": "הגדרות הגשר המקומי של Claude.",
+            "advanced": "כלי פיתוח ואבחון."
         },
         "groups": {
             "general": "כללי",
@@ -1376,6 +1399,10 @@
         "search": {
             "title": "תוצאות חיפוש",
             "description": "בחר תוצאה מסרגל הצד לצפייה בשיחה."
+        },
+        "saved": {
+            "title": "הודעות שמורות",
+            "description": "בחרו הודעה שמורה בסרגל הצד כדי לפתוח אותה בשיחה שלה."
         }
     },
     "avatar": {
@@ -1644,7 +1671,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} הגיב על '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} הגיב על ההודעה שלך",
         "see": "הצג"
     },
     "commands": {
@@ -1761,5 +1788,17 @@
         "edit": "{{nickname}} (עריכה): {{text}}",
         "retraction": "{{nickname}} מחק/ה הודעה",
         "messages": "{{nickname}}: {{count}} הודעות חדשות"
+    },
+    "saved": {
+        "title": "הודעות שמורות",
+        "marker": "שמורה",
+        "empty": "אין הודעות שמורות",
+        "emptyHint": "פתחו את תפריט \"עוד\" של הודעה ובחרו \"שמירת ההודעה\" כדי לשמור אותה כאן.",
+        "remove": "הסרה מהשמורות",
+        "encrypted": "הודעה מוצפנת",
+        "deleted": "ההודעה נמחקה",
+        "tryAgain": "נסו שוב",
+        "full": "רשימת ההודעות השמורות מלאה ({{count}}). הסירו הודעה כדי לשמור אחרת.",
+        "refused": "השרת שלכם סירב לאחסן הודעה זו."
     }
 }

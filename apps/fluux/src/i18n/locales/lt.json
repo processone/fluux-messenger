@@ -77,7 +77,8 @@
         "viewProfile": "Peržiūrėti profilį",
         "resizeHint": "Vilkite, kad pakeistumėte dydį, dukart spustelėkite, kad atstatytumėte",
         "dismiss": "Atmesti",
-        "search": "Paieška"
+        "search": "Paieška",
+        "saved": "Išsaugoti"
     },
     "newMessage": {
         "title": "Naujas pranešimas",
@@ -549,20 +550,26 @@
         "reply": "Atsakyti",
         "copyMessage": "Kopijuoti tekstą",
         "replyQuoteHiddenEncrypted": "Citata paslėpta: originalas buvo užšifruotas",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Persiųsti žinutę",
+        "forwardLinkOnly": "Išsiunčia jūsų komentarą, cituojamą žinutės kopiją ir nuorodą į originalą. Visi paskirties vietoje gali perskaityti citatą.",
+        "forwardQuotedCopy": "Cituojama persiųstos žinutės kopija",
+        "forwardedCopyUnknownAuthor": "nežinomas siuntėjas",
+        "forwardedFromLabel": "Persiųsta nuo",
+        "forwardedCopyDirectChat": "Tiesioginis pokalbis",
+        "forwardedCopyOpen": "Atidaryti originalią žinutę",
+        "forwardedCopyUnknownSource": "nežinomas kambarys",
+        "forwardedCopyDiffers": "Persiųsta kopija skiriasi nuo originalios žinutės",
+        "forwardedCopyClaimed": "Kopija, išsiųsta kartu su persiuntimu:",
+        "forwardedOriginNotFound": "Originalios žinutės nėra jūsų istorijoje",
+        "forwardQuoteOnly": "Išsiunčia jūsų komentarą ir cituojamą žinutės kopiją. Visi paskirties vietoje gali perskaityti citatą.",
+        "forwardEncryptedOnly": "Ši žinutė yra iš užšifruoto pokalbio, todėl ją galima persiųsti tik į užšifruotą pokalbį.",
+        "forwardDestination": "Pokalbis arba kambarys",
+        "forwardChoose": "Pasirinkite pokalbį arba kambarį",
+        "forwardUnavailable": "Paskirties vieta nepasiekiama",
+        "forwardComment": "Komentaras (nebūtinas)",
+        "forwardSend": "Siųsti",
+        "forwardSending": "Siunčiama…",
+        "forwardFailed": "Nepavyko išsiųsti žinutės. Jūsų pasirinkimas ir komentaras išsaugoti.",
         "forwardMessage": "Persiųsti žinutę (greitai)",
         "moreReactions": "Daugiau reakcijų",
         "reactions": "Reakcijos",
@@ -640,8 +647,8 @@
             "verifiedTooltip": "Patvirtintas OpenPGP raktas",
             "tofuNewTooltip": "Naujas kontaktas. Patikrinkite piršto atspaudą pilnam pasitikėjimui",
             "unverifiedKeysetTooltip": "Šis kontaktas turi naują raktą, kuris nebuvo patvirtintas.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Šifravimas pristabdytas",
+            "blockedTooltip": "Pašnekovo raktas pasikeitė. Išspręskite tai, kad atnaujintumėte šifravimą",
             "sendBlockedEncryptionRequired": "Pranešimas neišsiųstas. Šiam pokalbiui reikalingas šifravimas, bet šiuo metu jis nepasiekiamas.",
             "sendBlockedKeyChanged": "Pranešimas neišsiųstas. Šio kontakto šifravimo raktas pasikeitė. Prieš siųsdami peržiūrėkite rakto pakeitimą.",
             "sendBlockedKeyLocked": "Pranešimas neišsiųstas. Atrakinkite savo šifravimo raktą, kad galėtumėte išsiųsti šį pranešimą.",
@@ -657,8 +664,8 @@
                 "pendingAll": "{{name}} raktai negauna žinučių, kol šis įrenginys negaus jūsų pasitikėjimo sprendimų iš ankstesnės versijos ar kitų jūsų įrenginių. Iki tol negalite siųsti žinučių. Bandoma iš naujo automatiškai.",
                 "review": "Peržiūrėti raktus"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Šifravimas išjungtas",
+            "plaintextForcedTooltip": "Išjungėte šifravimą šiam pokalbiui, todėl pranešimai siunčiami atviru tekstu",
             "keyLocked": "Šifravimas užrakintas",
             "keyLockedTooltip": "Šifravimas užrakintas. Spustelėkite, kad atrakintumėte",
             "encryptedClickToUnlock": "Šifruotas pranešimas. Spustelėkite, kad atrakintumėte",
@@ -681,8 +688,8 @@
                 "fingerprint_mismatch": "Piršto antspaudas neatitinka skelbiamos reikšmės",
                 "uid_mismatch": "Sertifikato tapatybė neatitinka pašnekovo adreso"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Išjungti šifravimą šiam pokalbiui",
+            "enableEncryption": "Vėl įjungti šifravimą",
             "tooltip": {
                 "header": "Šifruota",
                 "protocol": {
@@ -730,7 +737,9 @@
         "loadAudio": "Įkelti garsą",
         "loadFilePreview": "Įkelti peržiūrą",
         "showLinkImage": "Rodyti nuotrauką",
-        "emojiSuggestions": "Emoji pasiūlymai"
+        "emojiSuggestions": "Emoji pasiūlymai",
+        "saveMessage": "Išsaugoti žinutę",
+        "removeFromSaved": "Pašalinti iš išsaugotų"
     },
     "dates": {
         "today": "Šiandien",
@@ -767,6 +776,20 @@
             "privacy": "Privatumas",
             "mcp": "Claude integracija",
             "advanced": "Išplėstiniai"
+        },
+        "categoryDescriptions": {
+            "profile": "Jūsų profilis, paskyra ir prijungti įrenginiai.",
+            "appearance": "Tema, režimas, rodinio tankis ir akcento spalva.",
+            "accessibility": "Teksto dydis, skaitymo plotis, animacija ir skaidrumas.",
+            "language": "Sąsajos kalba ir regioniniai formatai.",
+            "notifications": "Pasirinkite, kaip ir kada Fluux jus įspės.",
+            "encryption": "Jūsų pokalbių ištisinio šifravimo raktai.",
+            "privacy": "Žinučių archyvavimas serveryje ir automatinis medijos atsisiuntimas.",
+            "blocked": "Žmonės, kurie negali jums rašyti ar matyti jūsų būsenos.",
+            "storage": "Šio įrenginio podėlyje saugoma medija ir jos užimama vieta.",
+            "updates": "Atnaujinkite Fluux.",
+            "mcp": "Vietinio Claude tilto nustatymai.",
+            "advanced": "Kūrėjo įrankiai ir diagnostika."
         },
         "groups": {
             "general": "Bendra",
@@ -1378,6 +1401,10 @@
         "search": {
             "title": "Paieškos rezultatai",
             "description": "Pasirinkite rezultatą šoninėje juostoje, kad peržiūrėtumėte pokalbį."
+        },
+        "saved": {
+            "title": "Išsaugotos žinutės",
+            "description": "Šoninėje juostoje pasirinkite išsaugotą žinutę, kad atvertumėte ją jos pokalbyje."
         }
     },
     "avatar": {
@@ -1646,7 +1673,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} sureagavo į '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} sureagavo į jūsų pranešimą",
         "see": "Peržiūrėti"
     },
     "commands": {
@@ -1763,5 +1790,17 @@
         "edit": "{{nickname}} (redaguota): {{text}}",
         "retraction": "{{nickname}} ištrynė žinutę",
         "messages": "{{nickname}}: {{count}} naujų žinučių"
+    },
+    "saved": {
+        "title": "Išsaugotos žinutės",
+        "marker": "Išsaugota",
+        "empty": "Nėra išsaugotų žinučių",
+        "emptyHint": "Atverkite žinutės meniu Daugiau ir pasirinkite Išsaugoti žinutę, kad ją čia laikytumėte.",
+        "remove": "Pašalinti iš išsaugotų",
+        "encrypted": "Užšifruota žinutė",
+        "deleted": "Žinutė ištrinta",
+        "tryAgain": "Bandyti dar kartą",
+        "full": "Išsaugotų žinučių sąrašas pilnas ({{count}}). Pašalinkite vieną, kad išsaugotumėte kitą.",
+        "refused": "Jūsų serveris atsisakė saugoti šią žinutę."
     }
 }

@@ -102,6 +102,30 @@ describe('i18n', () => {
       })
       expect(emptyKeys).toEqual([])
     })
+
+    // These strings first shipped with their English text copied into other languages, which the
+    // key checks above cannot see: the Forward strings, the encryption on/off texts of the chat
+    // header and composer, and the reaction notification for a message with nothing to quote.
+    // Danish and Norwegian "Send" is the language's own word, not a copied placeholder.
+    const forwardKeys = enKeys.filter(key => key.startsWith('chat.forward'))
+    const copiedFromEnglish = [
+      ...forwardKeys,
+      'chat.encryption.blocked',
+      'chat.encryption.blockedTooltip',
+      'chat.encryption.disableEncryption',
+      'chat.encryption.enableEncryption',
+      'chat.encryption.plaintextForced',
+      'chat.encryption.plaintextForcedTooltip',
+      'reactions.mentionNoPreview',
+    ]
+    const sameAsEnglish: Record<string, string[]> = { da: ['chat.forwardSend'], nb: ['chat.forwardSend'] }
+    it.each(nonEnglish)('%s should translate every string first copied from English', (code) => {
+      expect(forwardKeys.length).toBeGreaterThan(0)
+      expect(copiedFromEnglish.filter(key => typeof resolveKey(locales['en'], key) !== 'string')).toEqual([])
+      const english = copiedFromEnglish.filter(key => !sameAsEnglish[code]?.includes(key) &&
+        resolveKey(locales[code], key) === resolveKey(locales['en'], key))
+      expect(english).toEqual([])
+    })
   })
 
   // A locale is only really shipped once three lists agree: the JSON file exists,

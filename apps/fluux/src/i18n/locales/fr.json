@@ -77,7 +77,8 @@
         "viewProfile": "Voir le profil",
         "resizeHint": "Glisser pour redimensionner, double-clic pour réinitialiser",
         "dismiss": "Ignorer",
-        "search": "Recherche"
+        "search": "Recherche",
+        "saved": "Enregistrés"
     },
     "newMessage": {
         "title": "Nouveau message",
@@ -549,20 +550,26 @@
         "reply": "Répondre",
         "copyMessage": "Copier le texte",
         "replyQuoteHiddenEncrypted": "Citation masquée: le message d'origine était chiffré",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Transférer le message",
+        "forwardLinkOnly": "Envoie votre commentaire, une copie citée du message et un lien vers l'original. Tous les membres de la destination peuvent lire la citation.",
+        "forwardQuotedCopy": "Copie citée d'un message transféré",
+        "forwardedCopyUnknownAuthor": "un expéditeur inconnu",
+        "forwardedFromLabel": "Transféré de",
+        "forwardedCopyDirectChat": "Discussion privée",
+        "forwardedCopyOpen": "Ouvrir le message d'origine",
+        "forwardedCopyUnknownSource": "un salon inconnu",
+        "forwardedCopyDiffers": "La copie transférée diffère du message d'origine",
+        "forwardedCopyClaimed": "Copie jointe au transfert :",
+        "forwardedOriginNotFound": "Le message d'origine n'est pas dans votre historique",
+        "forwardQuoteOnly": "Envoie votre commentaire et une copie citée du message. Tous les membres de la destination peuvent lire la citation.",
+        "forwardEncryptedOnly": "Ce message provient d'une discussion chiffrée ; il ne peut être transféré que vers une discussion chiffrée.",
+        "forwardDestination": "Discussion ou salon",
+        "forwardChoose": "Choisir une discussion ou un salon",
+        "forwardUnavailable": "Destination indisponible",
+        "forwardComment": "Commentaire (facultatif)",
+        "forwardSend": "Envoyer",
+        "forwardSending": "Envoi…",
+        "forwardFailed": "Impossible d'envoyer le message. Votre sélection et votre commentaire sont conservés.",
         "forwardMessage": "Transférer le message (bientôt disponible)",
         "moreReactions": "Plus de réactions",
         "reactions": "Réactions",
@@ -729,7 +736,9 @@
         "loadAudio": "Charger l'audio",
         "loadFilePreview": "Charger l'aperçu",
         "showLinkImage": "Afficher l'image",
-        "emojiSuggestions": "Suggestions d'emoji"
+        "emojiSuggestions": "Suggestions d'emoji",
+        "saveMessage": "Enregistrer le message",
+        "removeFromSaved": "Retirer des enregistrés"
     },
     "dates": {
         "today": "Aujourd'hui",
@@ -766,6 +775,20 @@
             "privacy": "Confidentialité",
             "mcp": "Intégration Claude",
             "advanced": "Avancé"
+        },
+        "categoryDescriptions": {
+            "profile": "Votre profil, votre compte et vos appareils connectés.",
+            "appearance": "Thème, mode, densité d'affichage et couleur d'accent.",
+            "accessibility": "Taille du texte, largeur de lecture, animations et transparence.",
+            "language": "Langue de l'interface et formats régionaux.",
+            "notifications": "Choisissez comment et quand Fluux vous avertit.",
+            "encryption": "Clés de chiffrement de bout en bout pour vos conversations.",
+            "privacy": "Archivage des messages sur le serveur et téléchargement automatique des médias.",
+            "blocked": "Les personnes qui ne peuvent ni vous écrire ni voir votre statut.",
+            "storage": "Médias en cache sur cet appareil et espace utilisé.",
+            "updates": "Gardez Fluux à jour.",
+            "mcp": "Réglages de la passerelle Claude locale.",
+            "advanced": "Outils de développement et diagnostics."
         },
         "groups": {
             "general": "Général",
@@ -1377,6 +1400,10 @@
         "search": {
             "title": "Recherche",
             "description": "Sélectionnez un résultat dans la barre latérale pour afficher la conversation."
+        },
+        "saved": {
+            "title": "Messages enregistrés",
+            "description": "Sélectionnez un message enregistré dans la barre latérale pour l’ouvrir dans sa conversation."
         }
     },
     "avatar": {
@@ -1645,7 +1672,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} a réagi à « {{preview}} »",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} a réagi à votre message",
         "see": "Voir"
     },
     "commands": {
@@ -1762,5 +1789,17 @@
         "edit": "{{nickname}} (edit) : {{text}}",
         "retraction": "{{nickname}} a supprimé un message",
         "messages": "{{nickname}} : {{count}} nouveaux messages"
+    },
+    "saved": {
+        "title": "Messages enregistrés",
+        "marker": "Enregistré",
+        "empty": "Aucun message enregistré",
+        "emptyHint": "Ouvrez le menu Plus d’un message et choisissez Enregistrer le message pour le garder ici.",
+        "remove": "Retirer des enregistrés",
+        "encrypted": "Message chiffré",
+        "deleted": "Message supprimé",
+        "tryAgain": "Réessayer",
+        "full": "La liste des messages enregistrés est pleine ({{count}}). Retirez-en un pour en enregistrer un autre.",
+        "refused": "Votre serveur a refusé de stocker ce message."
     }
 }

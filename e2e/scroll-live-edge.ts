@@ -8,7 +8,6 @@ import {
   STRESS_ROOM_JID,
   AT_BOTTOM_OK_PX,
   CLEAR_OF_BOTTOM_PX,
-  SETTLE_MS,
   settle,
   wheelAwayFromBottom,
   loadDemo,
@@ -67,6 +66,11 @@ test.describe('Virtualization scroll invariants', () => {
       state.advanceReadPointer(jid, { id: last.id })
     }, roomJid)
     await enableScrollTrace(page)
+    // Start the first open from the same settled chat as the second. The app's own startup
+    // selection can still be activating when the demo reports ready (see activateChat); its
+    // switch pin would then start after the window below is armed and be latched instead of
+    // the room's, ending the window before the room's measurement settle was sampled.
+    await activateChat(page, 'ava@fluux.chat')
 
     const evidence: unknown[] = []
     for (let open = 0; open < 2; open++) {
@@ -1194,7 +1198,7 @@ test.describe('Typing indicator never covers message text', () => {
       await captureTargetHighlight(page, id, () => page.evaluate(id => {
         (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState().setTargetMessageId(id)
       }, id))
-      await page.waitForTimeout(SETTLE_MS)
+      await settle(page)
       await setRoomTypers(page, STRESS_ROOM_JID, ['AwayBot'])
       const before = await measureGlued(page, id)
       await page.evaluate(async () => {
@@ -1206,14 +1210,14 @@ test.describe('Typing indicator never covers message text', () => {
         row.appendChild(image)
         await image.decode()
       })
-      await page.waitForTimeout(SETTLE_MS)
+      await settle(page)
       const grown = await measureGlued(page, id)
       expect(grown.top - before.top).toBeGreaterThan(1000)
       expect(grown.belowFold).toBeLessThanOrEqual(1)
       const widths = []
       for (const width of [1280, 760]) {
         await page.setViewportSize({ width, height: 700 })
-        await page.waitForTimeout(SETTLE_MS)
+        await settle(page)
         const geometry = await measureGlued(page, id)
         expect(geometry.belowFold).toBeLessThanOrEqual(1)
         const rowTop = await page.evaluate(id => {
@@ -1229,11 +1233,11 @@ test.describe('Typing indicator never covers message text', () => {
       await list.evaluate(element => { (element as HTMLElement).tabIndex = 0; (element as HTMLElement).focus() })
       const top = await list.evaluate(element => element.scrollTop)
       await page.keyboard.press('PageUp')
-      await page.waitForTimeout(SETTLE_MS)
+      await settle(page)
       const upward = await list.evaluate(element => element.scrollTop)
       expect(upward).toBeLessThan(top)
       await page.keyboard.press('PageDown')
-      await page.waitForTimeout(SETTLE_MS)
+      await settle(page)
       const downward = await list.evaluate(element => element.scrollTop)
       expect(downward).toBeGreaterThan(upward)
       await testInfo.attach('selected-layout-geometry', { body: JSON.stringify({ before, grown, widths, top, upward, downward }), contentType: 'application/json' })
@@ -1261,7 +1265,7 @@ test.describe('Typing indicator never covers message text', () => {
       const initialHighlight = await captureTargetHighlight(page, tailId, () => page.evaluate(id => {
         (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState().setTargetMessageId(id)
       }, tailId))
-      await page.waitForTimeout(SETTLE_MS)
+      await settle(page)
       const before = await measureGlued(page, tailId)
       expect(before.dist, 'target navigation must settle at the bottom').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
 
@@ -1278,7 +1282,7 @@ test.describe('Typing indicator never covers message text', () => {
         )!
         row.style.minHeight = `${row.getBoundingClientRect().height + 80}px`
       })
-      await page.waitForTimeout(SETTLE_MS)
+      await settle(page)
       const grown = await measureGlued(page, tailId)
       expect(grown.client).toBe(after.client)
       expect(grown.belowFold, 'content growth must not clip the retained target').toBeLessThanOrEqual(0)
@@ -1299,7 +1303,7 @@ test.describe('Typing indicator never covers message text', () => {
           incrementUnread: true,
         })
       }, STRESS_ROOM_JID)
-      await page.waitForTimeout(SETTLE_MS)
+      await settle(page)
       const appended = await measureGlued(page, tailId)
       expect(appended.dist, 'layout correction must not start following later messages').toBeGreaterThan(20)
       expect(appended.typingHeight, 'the typing fixture must keep the same band through the geometry comparison').toBe(after.typingHeight)
@@ -1316,7 +1320,7 @@ test.describe('Typing indicator never covers message text', () => {
         }).__roomStore.getState()
         store.setTargetMessageId('after-target-resize')
       }))
-      await page.waitForTimeout(SETTLE_MS)
+      await settle(page)
       const retargeted = await measureGlued(page, 'after-target-resize')
       expect(retargeted.dist).toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
       if (interaction === 'held') {
@@ -1358,7 +1362,7 @@ test.describe('Typing indicator never covers message text', () => {
       }, upward.dist)
       expect(movement.afterLayout, 'growth below the browser anchor must leave scrollTop unchanged').toBe(movement.before)
       expect(movement.afterInput - movement.before, 'the downward input must apply in full').toBe(upward.dist)
-      await page.waitForTimeout(SETTLE_MS)
+      await settle(page)
       await page.evaluate((jid) => {
         const client = (window as unknown as {
           __demoClient: { emitSDK: (event: string, payload: unknown) => void }
@@ -1374,7 +1378,7 @@ test.describe('Typing indicator never covers message text', () => {
           incrementUnread: true,
         })
       }, STRESS_ROOM_JID)
-      await page.waitForTimeout(SETTLE_MS)
+      await settle(page)
       const recovered = await measureGlued(page, 'after-growth-takeover')
       await testInfo.attach('target-growth-geometry', {
         body: JSON.stringify({ before, after, grown, appended, retargeted, initialHighlight, retargetHighlight, interactionBeforeWheel, upward, movement, recovered }),

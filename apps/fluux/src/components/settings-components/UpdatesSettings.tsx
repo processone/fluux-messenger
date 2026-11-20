@@ -8,10 +8,10 @@ export function UpdatesSettings() {
   const update = useAutoUpdate()
 
   return (
-    <section className="w-full max-w-md">
+    <section className="w-full">
       <SettingsSection>
         <div className="space-y-3">
-        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between p-4 fluux-card">
           <div className="flex min-w-0 items-center gap-3">
             {update.downloaded ? (
               <CheckCircle className="size-5 text-fluux-green" />

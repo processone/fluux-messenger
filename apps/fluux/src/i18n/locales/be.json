@@ -77,7 +77,8 @@
         "viewProfile": "Праглядзець профіль",
         "resizeHint": "Пцягніце для змены памеру, падвойнае пстрык для скідання",
         "dismiss": "Адхіліць",
-        "search": "Пошук"
+        "search": "Пошук",
+        "saved": "Захаваныя"
     },
     "newMessage": {
         "title": "Новае паведамленне",
@@ -549,20 +550,26 @@
         "reply": "Адказаць",
         "copyMessage": "Капіяваць тэкст",
         "replyQuoteHiddenEncrypted": "Цытата схаваная: арыгінал быў зашыфраваны",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Перанакіраваць паведамленне",
+        "forwardLinkOnly": "Адпраўляе ваш каментарый, цытаваную копію паведамлення і спасылку на арыгінал. Цытату змогуць прачытаць усе ў месцы прызначэння.",
+        "forwardQuotedCopy": "Цытаваная копія перанакіраванага паведамлення",
+        "forwardedCopyUnknownAuthor": "невядомы адпраўнік",
+        "forwardedFromLabel": "Перанакіравана ад",
+        "forwardedCopyDirectChat": "Асабісты чат",
+        "forwardedCopyOpen": "Адкрыць зыходнае паведамленне",
+        "forwardedCopyUnknownSource": "невядомы пакой",
+        "forwardedCopyDiffers": "Перанакіраваная копія адрозніваецца ад зыходнага паведамлення",
+        "forwardedCopyClaimed": "Копія, адпраўленая з перанакіраваннем:",
+        "forwardedOriginNotFound": "Зыходнага паведамлення няма ў вашай гісторыі",
+        "forwardQuoteOnly": "Адпраўляе ваш каментарый і цытаваную копію паведамлення. Цытату змогуць прачытаць усе ў месцы прызначэння.",
+        "forwardEncryptedOnly": "Гэта паведамленне з зашыфраванага чата, таму яго можна перанакіраваць толькі ў зашыфраваны чат.",
+        "forwardDestination": "Чат або пакой",
+        "forwardChoose": "Выберыце чат або пакой",
+        "forwardUnavailable": "Месца прызначэння недаступнае",
+        "forwardComment": "Каментарый (неабавязкова)",
+        "forwardSend": "Адправіць",
+        "forwardSending": "Адпраўка…",
+        "forwardFailed": "Не ўдалося адправіць паведамленне. Ваш выбар і каментарый захаваны.",
         "forwardMessage": "Пераслаць паведамленне (хутка)",
         "moreReactions": "Больш рэакцый",
         "reactions": "Рэакцыі",
@@ -640,8 +647,8 @@
             "verifiedTooltip": "Правераны ключ OpenPGP",
             "tofuNewTooltip": "Новы кантакт. Праверце адбітак для поўнага даверу",
             "unverifiedKeysetTooltip": "У гэтага кантакта ёсць новы ключ, які не быў правераны.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Шыфраванне прыпынена",
+            "blockedTooltip": "Ключ суразмоўцы змяніўся. Вырашыце гэта, каб аднавіць шыфраванне",
             "sendBlockedEncryptionRequired": "Паведамленне не адпраўлена. Для гэтай размовы патрабуецца шыфраванне, але зараз яно недаступнае.",
             "sendBlockedKeyChanged": "Паведамленне не адпраўлена. Ключ шыфравання гэтага кантакту змяніўся. Праверце змену ключа перад адпраўкай.",
             "sendBlockedKeyLocked": "Паведамленне не адпраўлена. Разблакуйце свой ключ шыфравання, каб адправіць гэта паведамленне.",
@@ -657,8 +664,8 @@
                 "pendingAll": "Ключы {{name}} не атрымліваюць паведамленняў, пакуль гэта прылада не атрымае вашы рашэнні аб даверы з ранейшай версіі або з іншых вашых прылад. Да таго часу вы не можаце адпраўляць паведамленні. Спроба паўтараецца аўтаматычна.",
                 "review": "Праглядзець ключы"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Шыфраванне адключана",
+            "plaintextForcedTooltip": "Вы адключылі шыфраванне для гэтай размовы, таму паведамленні адпраўляюцца ў адкрытым выглядзе",
             "keyLocked": "Шыфраванне заблакаванае",
             "keyLockedTooltip": "Шыфраванне заблакаванае. Націсніце, каб разблакаваць",
             "encryptedClickToUnlock": "Зашыфраванае паведамленне. Націсніце для разблакоўкі",
@@ -681,8 +688,8 @@
                 "fingerprint_mismatch": "Адбітак не супадае з абвешчаным значэннем",
                 "uid_mismatch": "Ідэнтычнасць сертыфіката не супадае з адрасам суразмоўцы"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Адключыць шыфраванне для гэтай размовы",
+            "enableEncryption": "Зноў уключыць шыфраванне",
             "tooltip": {
                 "header": "Зашыфравана",
                 "protocol": {
@@ -730,7 +737,9 @@
         "loadAudio": "Загрузіць аўдыё",
         "loadFilePreview": "Загрузіць папярэдні прагляд",
         "showLinkImage": "Паказаць выяву",
-        "emojiSuggestions": "Прапановы эмодзі"
+        "emojiSuggestions": "Прапановы эмодзі",
+        "saveMessage": "Захаваць паведамленне",
+        "removeFromSaved": "Выдаліць са захаваных"
     },
     "dates": {
         "today": "Сёння",
@@ -767,6 +776,20 @@
             "privacy": "Прыватнасць",
             "mcp": "Інтэграцыя Claude",
             "advanced": "Пашыраныя"
+        },
+        "categoryDescriptions": {
+            "profile": "Ваш профіль, уліковы запіс і падключаныя прылады.",
+            "appearance": "Тэма, рэжым, шчыльнасць адлюстравання і акцэнтны колер.",
+            "accessibility": "Памер тэксту, шырыня чытання, анімацыя і празрыстасць.",
+            "language": "Мова інтэрфейсу і рэгіянальныя фарматы.",
+            "notifications": "Выберыце, як і калі Fluux будзе вас апавяшчаць.",
+            "encryption": "Ключы скразнога шыфравання для вашых размоў.",
+            "privacy": "Архіваванне паведамленняў на серверы і аўтаматычная загрузка медыяфайлаў.",
+            "blocked": "Людзі, якія не могуць вам пісаць і бачыць ваш статус.",
+            "storage": "Медыяфайлы ў кэшы гэтай прылады і месца, якое яны займаюць.",
+            "updates": "Падтрымлівайце Fluux у актуальным стане.",
+            "mcp": "Налады лакальнага моста Claude.",
+            "advanced": "Інструменты распрацоўшчыка і дыягностыка."
         },
         "groups": {
             "general": "Агульныя",
@@ -1378,6 +1401,10 @@
         "search": {
             "title": "Вынікі пошуку",
             "description": "Выберыце вынік на бакавой панэлі, каб прагледзець размову."
+        },
+        "saved": {
+            "title": "Захаваныя паведамленні",
+            "description": "Выберыце захаванае паведамленне ў бакавой панэлі, каб адкрыць яго ў яго размове."
         }
     },
     "avatar": {
@@ -1646,7 +1673,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} адрэагаваў на '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} адрэагаваў на ваша паведамленне",
         "see": "Паказаць"
     },
     "commands": {
@@ -1763,5 +1790,17 @@
         "edit": "{{nickname}} (зменена): {{text}}",
         "retraction": "{{nickname}} выдаліў(-ла) паведамленне",
         "messages": "{{nickname}}: новых паведамленняў — {{count}}"
+    },
+    "saved": {
+        "title": "Захаваныя паведамленні",
+        "marker": "Захавана",
+        "empty": "Няма захаваных паведамленняў",
+        "emptyHint": "Адкрыйце меню «Яшчэ» для паведамлення і выберыце «Захаваць паведамленне», каб захаваць яго тут.",
+        "remove": "Выдаліць са захаваных",
+        "encrypted": "Зашыфраванае паведамленне",
+        "deleted": "Паведамленне выдалена",
+        "tryAgain": "Паспрабаваць зноў",
+        "full": "Спіс захаваных паведамленняў запоўнены ({{count}}). Выдаліце адно, каб захаваць іншае.",
+        "refused": "Ваш сервер адмовіўся захаваць гэта паведамленне."
     }
 }

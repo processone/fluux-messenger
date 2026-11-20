@@ -64,13 +64,13 @@ interface GroupableMessage {
  * including both being cleartext (no context). A trust change mid-burst forces
  * a group break so the lock indicator re-shows.
  */
-function sameSecurityContext(
+function sameSecurityProtocol(
   a: GroupingSecurityContext | undefined,
   b: GroupingSecurityContext | undefined,
 ): boolean {
   if (!a && !b) return true
   if (!a || !b) return false
-  return a.protocolId === b.protocolId && a.trust === b.trust
+  return a.protocolId === b.protocolId
 }
 
 /**
@@ -153,10 +153,12 @@ export function groupMessagesByDate<T extends GroupableMessage>(messages: T[]): 
  * - First message always shows avatar
  * - Different sender from previous message
  * - More than 5 minutes gap from previous message
- * - E2EE security context differs from previous (protocol or trust change
- *   forces a group break so the lock indicator re-shows — without this, a
- *   sender's untrusted message nestled between trusted ones would render
- *   without any security-state cue).
+ * - Encryption protocol differs from previous, including encryption appearing
+ *   or dropping: the header's lock indicator re-shows for the new protocol.
+ *   A trust change within one protocol does NOT break the group; the row shows
+ *   its own trust in the avatar gutter instead (see MessageBubble's
+ *   `groupSecurityContext`), so a sender's untrusted message nestled between
+ *   trusted ones still carries a visible security cue.
  * - Whisper context differs from previous (public↔private or a different
  *   whisper counterpart forces a group break so the whisper badge re-shows).
  * - Previous message was a /me action and this one is not (see below).
@@ -177,8 +179,8 @@ export function shouldShowAvatar<T extends GroupableMessage>(messages: T[], inde
   // Re-show the avatar when emerging from an action so the sender is identified.
   if (isActionMessage(previous.body) && !isActionMessage(current.body)) return true
 
-  // Show avatar if security context changed (encryption added/removed/trust shift)
-  if (!sameSecurityContext(current.securityContext, previous.securityContext)) return true
+  // Show avatar if the encryption protocol changed (including added or removed)
+  if (!sameSecurityProtocol(current.securityContext, previous.securityContext)) return true
 
   // Show avatar if whisper context changed (public↔private, or different counterpart)
   if (!sameWhisperContext(current, previous)) return true
@@ -189,31 +191,13 @@ export function shouldShowAvatar<T extends GroupableMessage>(messages: T[], inde
 }
 
 /**
- * Stable key identifying the run of consecutive OWN messages a row belongs to,
- * or `undefined` when the row is incoming OR is a solo own message (a group of
- * one needs no shared-width coordination). The key is the group-start message's
- * id, so every member of the same run resolves to the same value.
- *
- * A "run" is an avatar-group (same boundaries as {@link shouldShowAvatar}) whose
- * rows are all outgoing — the exact span the own-message tint renders as one
- * continuous surface. Used to make those rows share the widest line's width so
- * the tint reads as a clean rectangle (see `useOwnGroupWidth`).
+ * Index of the row that opened the avatar group `index` belongs to: the row
+ * itself when it shows the avatar, else the nearest earlier group start.
  */
-export function ownGroupKey<T extends GroupableMessage>(messages: T[], index: number): string | undefined {
-  if (!messages[index]?.isOutgoing) return undefined
-
-  // Walk back to the group start (rows without an avatar continue the previous).
+export function groupHeaderIndex<T extends GroupableMessage>(messages: T[], index: number): number {
   let start = index
   while (start > 0 && !shouldShowAvatar(messages, start)) start--
-  // Walk forward to the group end (the next avatar row starts a new group).
-  let end = index
-  while (end < messages.length - 1 && !shouldShowAvatar(messages, end + 1)) end++
-
-  // The whole run must be outgoing (a sender change is an avatar break, so this
-  // holds by construction, but guard the boundaries defensively) and span > 1 row.
-  if (start === end) return undefined
-  if (!messages[start].isOutgoing || !messages[end].isOutgoing) return undefined
-  return messages[start].id
+  return start
 }
 
 /** Position of a message within a whisper thread (see `whisperThreadPosition`). */

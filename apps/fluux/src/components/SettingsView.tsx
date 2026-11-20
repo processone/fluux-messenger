@@ -49,6 +49,8 @@ export function SettingsView({ onBack }: SettingsViewProps) {
   // Encryption has a screen per method behind its overview; an unknown one shows the overview.
   const encryptionSubPage = activeCategory === 'encryption' ? resolveEncryptionSubPage(settingsSubPage) : null
   const headerLabel = encryptionSubPage ? t(ENCRYPTION_SUB_PAGE_LABEL_KEYS[encryptionSubPage]) : categoryLabel
+  // The category summary describes the category's root screen, not one of its sub-pages.
+  const categoryDescription = activeCategoryConfig && !encryptionSubPage ? t(activeCategoryConfig.descriptionKey) : null
 
   // Render settings content based on active category
   const renderContent = () => {
@@ -111,16 +113,23 @@ export function SettingsView({ onBack }: SettingsViewProps) {
           </button>
         )}
         {CategoryIcon && <CategoryIcon className="size-5 text-fluux-muted me-2" />}
-        <h2 className="type-view-title text-fluux-text">{headerLabel}</h2>
+        <div className="min-w-0">
+          <h2 className="type-view-title text-fluux-text truncate !leading-tight">{headerLabel}</h2>
+          {categoryDescription && (
+            <p className="text-xs text-fluux-muted truncate">{categoryDescription}</p>
+          )}
+        </div>
       </div>
 
-      {/* Content. Profile uses edge-to-edge hero (handles its own padding);
-          other categories center a narrow column inside p-6. */}
+      {/* Content. Profile uses an edge-to-edge hero that handles its own padding
+          and width; every other category fills one shared reading column. */}
       <div className="flex-1 overflow-y-auto">
         {activeCategory === 'profile' ? (
           <div className="py-6">{renderContent()}</div>
         ) : (
-          <div className="p-6 flex flex-col items-center">{renderContent()}</div>
+          <div className="px-4 py-6 md:px-8 md:py-8">
+            <div className="w-full max-w-2xl mx-auto">{renderContent()}</div>
+          </div>
         )}
       </div>
     </div>

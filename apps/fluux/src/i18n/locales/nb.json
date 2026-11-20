@@ -77,7 +77,8 @@
         "viewProfile": "Vis profil",
         "resizeHint": "Dra for å endre størrelse, dobbeltklikk for å tilbakestille",
         "dismiss": "Avvis",
-        "search": "Søk"
+        "search": "Søk",
+        "saved": "Lagrede"
     },
     "newMessage": {
         "title": "Ny melding",
@@ -547,20 +548,26 @@
         "reply": "Svar",
         "copyMessage": "Kopier tekst",
         "replyQuoteHiddenEncrypted": "Sitat skjult: originalen var kryptert",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
+        "forwardMessageLink": "Videresend melding",
+        "forwardLinkOnly": "Sender kommentaren din, en sitert kopi av meldingen og en lenke til originalen. Alle på destinasjonen kan lese sitatet.",
+        "forwardQuotedCopy": "Sitert kopi av en videresendt melding",
+        "forwardedCopyUnknownAuthor": "en ukjent avsender",
+        "forwardedFromLabel": "Videresendt fra",
+        "forwardedCopyDirectChat": "Direktechat",
+        "forwardedCopyOpen": "Åpne den opprinnelige meldingen",
+        "forwardedCopyUnknownSource": "et ukjent rom",
+        "forwardedCopyDiffers": "Den videresendte kopien avviker fra den opprinnelige meldingen",
+        "forwardedCopyClaimed": "Kopi sendt med videresendingen:",
+        "forwardedOriginNotFound": "Den opprinnelige meldingen finnes ikke i historikken din",
+        "forwardQuoteOnly": "Sender kommentaren din og en sitert kopi av meldingen. Alle på destinasjonen kan lese sitatet.",
+        "forwardEncryptedOnly": "Denne meldingen er fra en kryptert chat, så den kan bare videresendes til en kryptert chat.",
+        "forwardDestination": "Chat eller rom",
+        "forwardChoose": "Velg en chat eller et rom",
+        "forwardUnavailable": "Destinasjonen er utilgjengelig",
+        "forwardComment": "Kommentar (valgfritt)",
         "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardSending": "Sender…",
+        "forwardFailed": "Kunne ikke sende meldingen. Valget og kommentaren din er beholdt.",
         "forwardMessage": "Videresend melding (kommer snart)",
         "moreReactions": "Flere reaksjoner",
         "reactions": "Reaksjoner",
@@ -636,8 +643,8 @@
             "verifiedTooltip": "Verifisert OpenPGP-nøkkel",
             "tofuNewTooltip": "Ny kontakt. Bekreft fingeravtrykk for full tillit",
             "unverifiedKeysetTooltip": "Denne kontakten har en ny nøkkel som ikke er bekreftet.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Kryptering satt på pause",
+            "blockedTooltip": "Kontaktens nøkkel er endret. Løs dette for å gjenoppta krypteringen",
             "sendBlockedEncryptionRequired": "Meldingen ble ikke sendt. Kryptering kreves for denne samtalen, men er ikke tilgjengelig akkurat nå.",
             "sendBlockedKeyChanged": "Meldingen ble ikke sendt. Krypteringsnøkkelen til denne kontakten er endret. Gjennomgå nøkkelendringen før du sender.",
             "sendBlockedKeyLocked": "Meldingen ble ikke sendt. Lås opp krypteringsnøkkelen din for å sende denne meldingen.",
@@ -653,8 +660,8 @@
                 "pendingAll": "Nøklene til {{name}} mottar ingen meldinger før denne enheten har tillitsbeslutningene dine fra en tidligere versjon eller fra de andre enhetene dine. Til da kan du ikke sende meldinger. Det prøves på nytt automatisk.",
                 "review": "Gjennomgå nøkler"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Kryptering er slått av",
+            "plaintextForcedTooltip": "Du har slått av kryptering for denne samtalen, så meldinger sendes i klartekst",
             "keyLocked": "Kryptering låst",
             "keyLockedTooltip": "Kryptering låst. Klikk for å låse opp",
             "encryptedClickToUnlock": "Kryptert melding. Klikk for å låse opp",
@@ -677,8 +684,8 @@
                 "fingerprint_mismatch": "Fingeravtrykket samsvarer ikke med den oppgitte verdien",
                 "uid_mismatch": "Sertifikatets identitet samsvarer ikke med samtalepartnerens adresse"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Slå av kryptering for denne samtalen",
+            "enableEncryption": "Slå på kryptering igjen",
             "tooltip": {
                 "header": "Kryptert",
                 "protocol": {
@@ -726,7 +733,9 @@
         "loadAudio": "Last inn lyd",
         "loadFilePreview": "Last inn forhåndsvisning",
         "showLinkImage": "Vis bilde",
-        "emojiSuggestions": "Emoji-forslag"
+        "emojiSuggestions": "Emoji-forslag",
+        "saveMessage": "Lagre melding",
+        "removeFromSaved": "Fjern fra lagrede"
     },
     "dates": {
         "today": "I dag",
@@ -763,6 +772,20 @@
             "privacy": "Personvern",
             "mcp": "Claude-integrasjon",
             "advanced": "Avansert"
+        },
+        "categoryDescriptions": {
+            "profile": "Profilen din, kontoen din og tilkoblede enheter.",
+            "appearance": "Tema, modus, visningstetthet og aksentfarge.",
+            "accessibility": "Tekststørrelse, lesebredde, bevegelse og gjennomsiktighet.",
+            "language": "Grensesnittets språk og regionale formater.",
+            "notifications": "Velg hvordan og når Fluux varsler deg.",
+            "encryption": "Nøkler for ende-til-ende-kryptering av samtalene dine.",
+            "privacy": "Arkivering av meldinger på serveren og automatisk nedlasting av medier.",
+            "blocked": "Personer som ikke kan sende deg meldinger eller se statusen din.",
+            "storage": "Medier bufret på denne enheten og plassen de bruker.",
+            "updates": "Hold Fluux oppdatert.",
+            "mcp": "Innstillinger for den lokale Claude-broen.",
+            "advanced": "Utviklerverktøy og diagnostikk."
         },
         "groups": {
             "general": "Generelt",
@@ -1374,6 +1397,10 @@
         "search": {
             "title": "Søkeresultater",
             "description": "Velg et resultat i sidefeltet for å vise samtalen."
+        },
+        "saved": {
+            "title": "Lagrede meldinger",
+            "description": "Velg en lagret melding i sidefeltet for å åpne den i samtalen sin."
         }
     },
     "avatar": {
@@ -1642,7 +1669,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reagerte på '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reagerte på meldingen din",
         "see": "Vis"
     },
     "commands": {
@@ -1759,5 +1786,17 @@
         "edit": "{{nickname}} (redigert): {{text}}",
         "retraction": "{{nickname}} slettet en melding",
         "messages": "{{nickname}}: {{count}} nye meldinger"
+    },
+    "saved": {
+        "title": "Lagrede meldinger",
+        "marker": "Lagret",
+        "empty": "Ingen lagrede meldinger",
+        "emptyHint": "Åpne Mer-menyen til en melding og velg Lagre melding for å beholde den her.",
+        "remove": "Fjern fra lagrede",
+        "encrypted": "Kryptert melding",
+        "deleted": "Meldingen er slettet",
+        "tryAgain": "Prøv igjen",
+        "full": "Listen over lagrede meldinger er full ({{count}}). Fjern én for å lagre en annen.",
+        "refused": "Serveren din nektet å lagre denne meldingen."
     }
 }

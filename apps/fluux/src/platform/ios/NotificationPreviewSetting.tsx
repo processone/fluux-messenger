@@ -28,7 +28,7 @@ export function NotificationPreviewSetting() {
   const shown: PreviewProblem | null = enabled ? failure?.problem ?? (missingCredential ? 'credential' : null) : null
   const asksPassword = shown === 'credential' || shown === 'refused'
   return <div className="space-y-2">
-    <div className="flex items-center justify-between gap-4 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+    <div className="flex items-center justify-between gap-4 p-4 fluux-card">
       <div>
         <label htmlFor="ox-notification-preview" className="text-sm font-medium text-fluux-text">{t('settings.oxNotificationPreview')}</label>
         <p className="text-xs text-fluux-muted">{t('settings.oxNotificationPreviewDescription')}</p>

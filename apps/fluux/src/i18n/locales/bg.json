@@ -77,7 +77,8 @@
         "viewProfile": "Преглед на профил",
         "resizeHint": "Плъзнете за преоразмеряване, щракнете двукратно за нулиране",
         "dismiss": "Отхвърли",
-        "search": "Търсене"
+        "search": "Търсене",
+        "saved": "Запазени"
     },
     "newMessage": {
         "title": "Ново съобщение",
@@ -547,20 +548,26 @@
         "reply": "Отговор",
         "copyMessage": "Копиране на текста",
         "replyQuoteHiddenEncrypted": "Цитатът е скрит: оригиналът беше шифрован",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Препращане на съобщението",
+        "forwardLinkOnly": "Изпраща вашия коментар, цитирано копие на съобщението и връзка към оригинала. Всички в получателя могат да прочетат цитата.",
+        "forwardQuotedCopy": "Цитирано копие на препратено съобщение",
+        "forwardedCopyUnknownAuthor": "непознат подател",
+        "forwardedFromLabel": "Препратено от",
+        "forwardedCopyDirectChat": "Личен чат",
+        "forwardedCopyOpen": "Отваряне на оригиналното съобщение",
+        "forwardedCopyUnknownSource": "непозната стая",
+        "forwardedCopyDiffers": "Препратеното копие се различава от оригиналното съобщение",
+        "forwardedCopyClaimed": "Копие, изпратено с препращането:",
+        "forwardedOriginNotFound": "Оригиналното съобщение не е в историята ви",
+        "forwardQuoteOnly": "Изпраща вашия коментар и цитирано копие на съобщението. Всички в получателя могат да прочетат цитата.",
+        "forwardEncryptedOnly": "Това съобщение е от шифриран чат, затова може да бъде препратено само към шифриран чат.",
+        "forwardDestination": "Чат или стая",
+        "forwardChoose": "Изберете чат или стая",
+        "forwardUnavailable": "Местоназначението е недостъпно",
+        "forwardComment": "Коментар (по избор)",
+        "forwardSend": "Изпрати",
+        "forwardSending": "Изпращане…",
+        "forwardFailed": "Съобщението не можа да бъде изпратено. Изборът и коментарът ви са запазени.",
         "forwardMessage": "Препрати съобщение (очаквайте скоро)",
         "moreReactions": "Още реакции",
         "reactions": "Реакции",
@@ -636,8 +643,8 @@
             "verifiedTooltip": "Проверен OpenPGP ключ",
             "tofuNewTooltip": "Нов контакт. Проверете отпечатъка за пълно доверие",
             "unverifiedKeysetTooltip": "Този контакт има нов ключ, който не е потвърден.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Криптирането е на пауза",
+            "blockedTooltip": "Ключът на събеседника е променен. Разрешете проблема, за да възобновите криптирането",
             "sendBlockedEncryptionRequired": "Съобщението не е изпратено. За този разговор се изисква криптиране, но в момента не е налично.",
             "sendBlockedKeyChanged": "Съобщението не е изпратено. Ключът за криптиране на този контакт е променен. Прегледайте промяната на ключа преди изпращане.",
             "sendBlockedKeyLocked": "Съобщението не е изпратено. Отключете своя ключ за криптиране, за да изпратите това съобщение.",
@@ -653,8 +660,8 @@
                 "pendingAll": "Ключовете на {{name}} не получават съобщения, докато това устройство не получи решенията ви за доверие от по-стара версия или от другите ви устройства. Дотогава не можете да изпращате съобщения. Опитът се повтаря автоматично.",
                 "review": "Преглед на ключовете"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Криптирането е изключено",
+            "plaintextForcedTooltip": "Изключихте криптирането за този разговор, затова съобщенията се изпращат в чист текст",
             "keyLocked": "Криптирането е заключено",
             "keyLockedTooltip": "Криптирането е заключено. Щракнете за отключване",
             "encryptedClickToUnlock": "Шифровано съобщение. Щракнете за отключване",
@@ -677,8 +684,8 @@
                 "fingerprint_mismatch": "Отпечатъкът не съвпада с обявената стойност",
                 "uid_mismatch": "Идентичността на сертификата не съвпада с адреса на отсрещната страна"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Изключване на криптирането за този разговор",
+            "enableEncryption": "Повторно включване на криптирането",
             "tooltip": {
                 "header": "Шифровано",
                 "protocol": {
@@ -726,7 +733,9 @@
         "loadAudio": "Зареди аудио",
         "loadFilePreview": "Зареди преглед",
         "showLinkImage": "Покажи изображение",
-        "emojiSuggestions": "Предложения за емоджи"
+        "emojiSuggestions": "Предложения за емоджи",
+        "saveMessage": "Запази съобщението",
+        "removeFromSaved": "Премахни от запазените"
     },
     "dates": {
         "today": "Днес",
@@ -763,6 +772,20 @@
             "privacy": "Поверителност",
             "mcp": "Интеграция с Claude",
             "advanced": "Разширени"
+        },
+        "categoryDescriptions": {
+            "profile": "Вашият профил, акаунт и свързани устройства.",
+            "appearance": "Тема, режим, плътност на показване и акцентен цвят.",
+            "accessibility": "Размер на текста, ширина за четене, анимации и прозрачност.",
+            "language": "Език на интерфейса и регионални формати.",
+            "notifications": "Изберете как и кога Fluux да ви уведомява.",
+            "encryption": "Ключове за шифроване от край до край за вашите разговори.",
+            "privacy": "Архивиране на съобщения на сървъра и автоматично изтегляне на медия.",
+            "blocked": "Хора, които не могат да ви пишат или да виждат статуса ви.",
+            "storage": "Медия в кеша на това устройство и мястото, което заема.",
+            "updates": "Поддържайте Fluux актуален.",
+            "mcp": "Настройки на локалния мост към Claude.",
+            "advanced": "Инструменти за разработчици и диагностика."
         },
         "groups": {
             "general": "Общи",
@@ -1374,6 +1397,10 @@
         "search": {
             "title": "Резултати от търсенето",
             "description": "Изберете резултат от страничната лента, за да видите разговора."
+        },
+        "saved": {
+            "title": "Запазени съобщения",
+            "description": "Изберете запазено съобщение в страничната лента, за да го отворите в неговия разговор."
         }
     },
     "avatar": {
@@ -1642,7 +1669,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} реагира на '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} реагира на вашето съобщение",
         "see": "Виж"
     },
     "commands": {
@@ -1759,5 +1786,17 @@
         "edit": "{{nickname}} (редакция): {{text}}",
         "retraction": "{{nickname}} изтри съобщение",
         "messages": "{{nickname}}: {{count}} нови съобщения"
+    },
+    "saved": {
+        "title": "Запазени съобщения",
+        "marker": "Запазено",
+        "empty": "Няма запазени съобщения",
+        "emptyHint": "Отворете менюто „Още“ на съобщение и изберете „Запази съобщението“, за да го пазите тук.",
+        "remove": "Премахни от запазените",
+        "encrypted": "Шифровано съобщение",
+        "deleted": "Съобщението е изтрито",
+        "tryAgain": "Опитайте отново",
+        "full": "Списъкът със запазени съобщения е пълен ({{count}}). Премахнете едно, за да запазите друго.",
+        "refused": "Вашият сървър отказа да съхрани това съобщение."
     }
 }

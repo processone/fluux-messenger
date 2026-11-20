@@ -77,7 +77,8 @@
         "viewProfile": "View profile",
         "resizeHint": "Drag to resize, double-click to reset",
         "dismiss": "Dismiss",
-        "search": "Search"
+        "search": "Search",
+        "saved": "Saved"
     },
     "newMessage": {
         "title": "New message",
@@ -550,8 +551,14 @@
         "forwardMessageLink": "Forward message",
         "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
         "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
         "forwardedCopyUnknownAuthor": "an unknown sender",
+        "forwardedFromLabel": "Forwarded from",
+        "forwardedCopyDirectChat": "Direct chat",
+        "forwardedCopyOpen": "Open the original message",
+        "forwardedCopyUnknownSource": "an unknown room",
+        "forwardedCopyDiffers": "The forwarder's copy differs from the original message",
+        "forwardedCopyClaimed": "Copy sent by the forwarder:",
+        "forwardedOriginNotFound": "The original message is not in your history",
         "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
         "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
         "forwardDestination": "Chat or room",
@@ -726,7 +733,9 @@
         "loadAudio": "Load audio",
         "loadFilePreview": "Load preview",
         "showLinkImage": "Show image",
-        "emojiSuggestions": "Emoji suggestions"
+        "emojiSuggestions": "Emoji suggestions",
+        "saveMessage": "Save message",
+        "removeFromSaved": "Remove from saved"
     },
     "dates": {
         "today": "Today",
@@ -763,6 +772,20 @@
             "privacy": "Privacy",
             "mcp": "Claude Integration",
             "advanced": "Advanced"
+        },
+        "categoryDescriptions": {
+            "profile": "Your profile, account and connected devices.",
+            "appearance": "Theme, mode, display density and accent color.",
+            "accessibility": "Text size, reading width, motion and transparency.",
+            "language": "Interface language and regional formats.",
+            "notifications": "Choose how and when Fluux alerts you.",
+            "encryption": "End-to-end encryption keys for your conversations.",
+            "privacy": "Server message archiving and automatic media downloads.",
+            "blocked": "People who cannot message you or see your status.",
+            "storage": "Media cached on this device and the space it uses.",
+            "updates": "Keep Fluux up to date.",
+            "mcp": "Settings for the local Claude bridge.",
+            "advanced": "Developer tools and diagnostics."
         },
         "groups": {
             "general": "General",
@@ -1374,6 +1397,10 @@
         "search": {
             "title": "Search Results",
             "description": "Select a result from the sidebar to view the conversation."
+        },
+        "saved": {
+            "title": "Saved messages",
+            "description": "Select a saved message in the sidebar to open it in its conversation."
         }
     },
     "avatar": {
@@ -1759,5 +1786,17 @@
         "edit": "{{nickname}} (edit): {{text}}",
         "retraction": "{{nickname}} deleted a message",
         "messages": "{{nickname}}: {{count}} new messages"
+    },
+    "saved": {
+        "title": "Saved messages",
+        "marker": "Saved",
+        "empty": "No saved messages",
+        "emptyHint": "Open a message's More menu and choose Save message to keep it here.",
+        "remove": "Remove from saved",
+        "encrypted": "Encrypted message",
+        "deleted": "Message deleted",
+        "tryAgain": "Try again",
+        "full": "Saved messages are full ({{count}}). Remove one to save another.",
+        "refused": "Your server refused to store this message."
     }
 }

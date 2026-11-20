@@ -286,3 +286,4 @@ export function isChatMessage(msg: AnyMessage): msg is Message {
 export function isRoomMessage(msg: AnyMessage): msg is RoomMessage {
   return msg.type === 'groupchat'
 }
+export type { SavedMessage, SavedPendingOp } from './saved'

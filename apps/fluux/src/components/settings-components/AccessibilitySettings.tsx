@@ -37,7 +37,7 @@ export function AccessibilitySettings() {
   const setReadingWidth = useSettingsStore((s) => s.setReadingWidth)
 
   return (
-    <section className="w-full max-w-md space-y-8">
+    <section className="w-full space-y-8">
       <SettingsSection title={t('settings.readingSection')}>
         <div className="space-y-6">
           <div className="space-y-3">

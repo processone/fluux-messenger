@@ -15,6 +15,8 @@ export interface OverviewCardDef {
    */
   secondaryKey?: keyof ServerStats
   secondaryLabelKey?: string
+  /** The secondary metric is a share of the headline (online of registered): draw it as a bar. */
+  secondaryIsShare?: boolean
   /** When set, the card is interactive and navigates to this admin section on click. */
   target?: AdminCategory
 }
@@ -28,7 +30,7 @@ export const OVERVIEW_CARDS: OverviewCardDef[] = [
   { key: 'uptimeSeconds', icon: Clock, labelKey: 'admin.overview.cards.uptime', format: (v, u) => formatDuration(v as number, u) },
   { key: 'version', icon: Tag, labelKey: 'admin.overview.cards.version', format: (v) => String(v) },
   // Users: registered total as headline, distinct-online count as a sub-line. Tappable → user management.
-  { key: 'registeredUsers', icon: Users, labelKey: 'admin.overview.cards.users', format: (v) => formatCount(v as number), secondaryKey: 'onlineUsers', secondaryLabelKey: 'admin.overview.cards.onlineSuffix', target: 'users' },
+  { key: 'registeredUsers', icon: Users, labelKey: 'admin.overview.cards.users', format: (v) => formatCount(v as number), secondaryKey: 'onlineUsers', secondaryLabelKey: 'admin.overview.cards.onlineSuffix', secondaryIsShare: true, target: 'users' },
   { key: 'onlineSessions', icon: Network, labelKey: 'admin.overview.cards.onlineSessions', format: (v) => formatCount(v as number) },
   { key: 'onlineRooms', icon: Hash, labelKey: 'admin.overview.cards.onlineRooms', format: (v) => formatCount(v as number), target: 'rooms' },
   { key: 'vhostCount', icon: Server, labelKey: 'admin.overview.cards.vhosts', format: (v) => formatCount(v as number) },

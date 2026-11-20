@@ -24,13 +24,11 @@ export function RoomMessageLinkPreview({ message, formatTime, isDarkMode, onSour
   return target ? <ReaderQuote key={JSON.stringify(target)} target={target} formatTime={formatTime} isDarkMode={isDarkMode} onSourceShown={onSourceShown} /> : null
 }
 
-function ReaderQuote({ target, formatTime, isDarkMode, onSourceShown }: {
-  target: RoomMessageLink
-  formatTime: (date: Date) => string
-  isDarkMode?: boolean
-  onSourceShown?: (shown: boolean) => void
-}) {
-  const { t } = useTranslation()
+/**
+ * The reader's own copy of a linked room message: found in the joined room's local history or its
+ * archive, kept current by edits and retractions. `message` may be unreadable (an undecryptable entry); `readable` is set only when it is readable. Key the caller by the target: the state belongs to one target.
+ */
+export function useRoomMessagePreview(target: RoomMessageLink) {
   const { client } = useXMPPContext()
   const account = useConnectionStore(state => getBareJid(state.jid ?? ''))
   const room = useRoomStore(state => state.rooms.get(target.roomJid))
@@ -158,6 +156,17 @@ function ReaderQuote({ target, formatTime, isDarkMode, onSourceShown }: {
   const message = joined && account && result?.kind === 'found' ? result.message : undefined
   // An undecryptable entry's body can be a cleartext fallback, not room content.
   const readable = message && !message.encryptedPayload && !message.unsupportedEncryption
+  return { room, joined, account, result, message, readable: readable ? message : undefined }
+}
+
+function ReaderQuote({ target, formatTime, isDarkMode, onSourceShown }: {
+  target: RoomMessageLink
+  formatTime: (date: Date) => string
+  isDarkMode?: boolean
+  onSourceShown?: (shown: boolean) => void
+}) {
+  const { t } = useTranslation()
+  const { room, joined, account, result, message, readable } = useRoomMessagePreview(target)
   const sourceShown = !!(joined && account && readable)
   useEffect(() => {
     onSourceShown?.(sourceShown)
@@ -187,8 +196,8 @@ function ReaderQuote({ target, formatTime, isDarkMode, onSourceShown }: {
         <div className="text-sm min-w-0 flex-1 text-fluux-muted [overflow-wrap:anywhere]">
           <div className="font-medium text-fluux-text">{room?.name ?? getLocalPart(target.roomJid)}</div>
           {readable ? <>
-            <div><span className="font-medium" style={{ color }}><NickText nick={message.nick} /></span><span className="text-xs ms-2">{formatTime(message.timestamp)}</span></div>
-            <div className="reply-quote-preview line-clamp-2 opacity-75">{renderQuotePreview(message.body)}</div>
+            <div><span className="font-medium" style={{ color }}><NickText nick={readable.nick} /></span><span className="text-xs ms-2">{formatTime(readable.timestamp)}</span></div>
+            <div className="reply-quote-preview line-clamp-2 opacity-75">{renderQuotePreview(readable.body)}</div>
           </> : <div>{label}</div>}
         </div>
       </MessageLink>

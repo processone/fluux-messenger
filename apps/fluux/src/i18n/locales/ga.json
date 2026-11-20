@@ -77,7 +77,8 @@
         "viewProfile": "Féach ar phróifíl",
         "resizeHint": "Tarraing chun méid a athrú, cliceáil faoi dhó chun athshocrú",
         "dismiss": "Díbir",
-        "search": "Cuardach"
+        "search": "Cuardach",
+        "saved": "Sábháilte"
     },
     "newMessage": {
         "title": "Teachtaireacht nua",
@@ -550,20 +551,26 @@
         "reply": "Freagair",
         "copyMessage": "Cóipeáil téacs",
         "replyQuoteHiddenEncrypted": "Athfhriotal i bhfolach: bhí an bunteachtaireacht criptithe",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Seol an teachtaireacht ar aghaidh",
+        "forwardLinkOnly": "Seolann sé do thrácht, cóip luaite den teachtaireacht agus nasc chuig an mbunleagan. Is féidir le gach duine sa cheann scríbe an lua a léamh.",
+        "forwardQuotedCopy": "Cóip luaite de theachtaireacht a seoladh ar aghaidh",
+        "forwardedCopyUnknownAuthor": "seoltóir anaithnid",
+        "forwardedFromLabel": "Seolta ar aghaidh ó",
+        "forwardedCopyDirectChat": "Comhrá díreach",
+        "forwardedCopyOpen": "Oscail an bhunteachtaireacht",
+        "forwardedCopyUnknownSource": "seomra anaithnid",
+        "forwardedCopyDiffers": "Tá an chóip a seoladh ar aghaidh difriúil leis an mbunteachtaireacht",
+        "forwardedCopyClaimed": "An chóip a seoladh leis an gcur ar aghaidh:",
+        "forwardedOriginNotFound": "Níl an bhunteachtaireacht i do stair",
+        "forwardQuoteOnly": "Seolann sé do thrácht agus cóip luaite den teachtaireacht. Is féidir le gach duine sa cheann scríbe an lua a léamh.",
+        "forwardEncryptedOnly": "Is ó chomhrá criptithe an teachtaireacht seo, mar sin ní féidir í a sheoladh ar aghaidh ach chuig comhrá criptithe.",
+        "forwardDestination": "Comhrá nó seomra",
+        "forwardChoose": "Roghnaigh comhrá nó seomra",
+        "forwardUnavailable": "Níl an ceann scríbe ar fáil",
+        "forwardComment": "Trácht (roghnach)",
+        "forwardSend": "Seol",
+        "forwardSending": "Á sheoladh…",
+        "forwardFailed": "Níorbh fhéidir an teachtaireacht a sheoladh. Coinníodh do rogha agus do thrácht.",
         "forwardMessage": "Seol ar aghaidh (ag teacht go luath)",
         "moreReactions": "Níos mó frithghníomhartha",
         "reactions": "Frithghníomhartha",
@@ -642,8 +649,8 @@
             "verifiedTooltip": "Eochair OpenPGP fíoraithe",
             "tofuNewTooltip": "Teagmháil nua. Fíoraigh an mhéarlorg le haghaidh muiníne iomlán",
             "unverifiedKeysetTooltip": "Tá eochair nua ag an teagmháil seo nach bhfuil fíoraithe.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Tá an criptiú ar sos",
+            "blockedTooltip": "Athraíodh eochair an teagmhálaí. Réitigh é chun leanúint leis an gcriptiú",
             "sendBlockedEncryptionRequired": "Níor seoladh an teachtaireacht. Tá criptiú ag teastáil don chomhrá seo ach níl sé ar fáil faoi láthair.",
             "sendBlockedKeyChanged": "Níor seoladh an teachtaireacht. Athraíodh eochair chriptithe an teagmhálaí seo. Déan athbhreithniú ar athrú na heochrach sula seolann tú.",
             "sendBlockedKeyLocked": "Níor seoladh an teachtaireacht. Díghlasáil d'eochair chriptithe chun an teachtaireacht seo a sheoladh.",
@@ -659,8 +666,8 @@
                 "pendingAll": "Ní fhaigheann eochracha {{name}} aon teachtaireacht go dtí go mbíonn do chinntí muiníne ó leagan níos luaithe nó ó do ghléasanna eile ag an ngléas seo. Ní féidir leat teachtaireachtaí a sheoladh go dtí sin. Déantar iarracht arís go huathoibríoch.",
                 "review": "Athbhreithnigh eochracha"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Tá an criptiú díchumasaithe",
+            "plaintextForcedTooltip": "Dhíchumasaigh tú criptiú don chomhrá seo, mar sin seoltar teachtaireachtaí sa ghnáth-théacs",
             "keyLocked": "Tá an criptiú faoi ghlas",
             "keyLockedTooltip": "Tá an criptiú faoi ghlas. Cliceáil chun é a dhíghlasáil",
             "encryptedClickToUnlock": "Teachtaireacht chriptithe. Cliceáil chun é a dhíghlasáil",
@@ -683,8 +690,8 @@
                 "fingerprint_mismatch": "Ní mheaitseálann an méarlorg leis an luach fógartha",
                 "uid_mismatch": "Ní mheaitseálann céannacht an teastais le seoladh an chomhpháirtí"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Díchumasaigh criptiú don chomhrá seo",
+            "enableEncryption": "Athchumasaigh criptiú",
             "tooltip": {
                 "header": "Criptithe",
                 "protocol": {
@@ -732,7 +739,9 @@
         "loadAudio": "Luchtaigh fuaim",
         "loadFilePreview": "Luchtaigh réamhamharc",
         "showLinkImage": "Taispeáin íomhá",
-        "emojiSuggestions": "Moltaí emoji"
+        "emojiSuggestions": "Moltaí emoji",
+        "saveMessage": "Sábháil an teachtaireacht",
+        "removeFromSaved": "Bain de na cinn shábháilte"
     },
     "dates": {
         "today": "Inniu",
@@ -769,6 +778,20 @@
             "privacy": "Príobháideacht",
             "mcp": "Comhtháthú Claude",
             "advanced": "Ardleibhéal"
+        },
+        "categoryDescriptions": {
+            "profile": "Do phróifíl, do chuntas agus do ghléasanna ceangailte.",
+            "appearance": "Téama, mód, dlús taispeána agus dath aibhsithe.",
+            "accessibility": "Méid an téacs, leithead léitheoireachta, gluaiseacht agus trédhearcacht.",
+            "language": "Teanga na comhéadaine agus formáidí réigiúnacha.",
+            "notifications": "Roghnaigh conas agus cathain a chuireann Fluux in iúl duit.",
+            "encryption": "Eochracha criptithe ó cheann ceann do do chomhráite.",
+            "privacy": "Cartlannú teachtaireachtaí ar an bhfreastalaí agus íoslódáil uathoibríoch meán.",
+            "blocked": "Daoine nach féidir leo teachtaireacht a sheoladh chugat ná do stádas a fheiceáil.",
+            "storage": "Meáin i dtaisce ar an ngléas seo agus an spás a úsáideann siad.",
+            "updates": "Coinnigh Fluux cothrom le dáta.",
+            "mcp": "Socruithe don droichead áitiúil Claude.",
+            "advanced": "Uirlisí forbróra agus diagnóisic."
         },
         "groups": {
             "general": "Ginearálta",
@@ -1380,6 +1403,10 @@
         "search": {
             "title": "Torthaí cuardaigh",
             "description": "Roghnaigh toradh sa bharra taoibh chun an comhrá a fheiceáil."
+        },
+        "saved": {
+            "title": "Teachtaireachtaí sábháilte",
+            "description": "Roghnaigh teachtaireacht shábháilte sa bharra taoibh chun í a oscailt ina comhrá."
         }
     },
     "avatar": {
@@ -1648,7 +1675,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} d'imoibrigh {{name}} le '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} d'imoibrigh {{name}} le do theachtaireacht",
         "see": "Amharc"
     },
     "commands": {
@@ -1765,5 +1792,17 @@
         "edit": "{{nickname}} (curtha in eagar): {{text}}",
         "retraction": "Scrios {{nickname}} teachtaireacht",
         "messages": "{{nickname}}: {{count}} teachtaireacht nua"
+    },
+    "saved": {
+        "title": "Teachtaireachtaí sábháilte",
+        "marker": "Sábháilte",
+        "empty": "Gan teachtaireachtaí sábháilte",
+        "emptyHint": "Oscail roghchlár Tuilleadh teachtaireachta agus roghnaigh Sábháil an teachtaireacht chun í a choinneáil anseo.",
+        "remove": "Bain de na cinn shábháilte",
+        "encrypted": "Teachtaireacht chriptithe",
+        "deleted": "Scriosadh an teachtaireacht",
+        "tryAgain": "Bain triail eile as",
+        "full": "Tá liosta na dteachtaireachtaí sábháilte lán ({{count}}). Bain ceann amach chun ceann eile a shábháil.",
+        "refused": "Dhiúltaigh do fhreastalaí an teachtaireacht seo a stóráil."
     }
 }

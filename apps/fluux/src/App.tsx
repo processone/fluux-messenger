@@ -537,6 +537,7 @@ function App() {
         <Route path="/archive/:jid?" element={<ChatLayout />} />
         <Route path="/events" element={<ChatLayout />} />
         <Route path="/search" element={<ChatLayout />} />
+        <Route path="/saved" element={<ChatLayout />} />
         <Route path="/admin/*" element={<ChatLayout />} />
         <Route path={SETTINGS_ROUTE_PATH} element={<ChatLayout />} />
         {/* Default redirect to messages */}

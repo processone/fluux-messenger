@@ -77,7 +77,8 @@
         "viewProfile": "查看个人资料",
         "resizeHint": "拖动即可调整大小，双击即可重置",
         "dismiss": "关闭",
-        "search": "搜索"
+        "search": "搜索",
+        "saved": "已保存"
     },
     "newMessage": {
         "title": "新消息",
@@ -547,20 +548,26 @@
         "reply": "回复",
         "copyMessage": "复制文本",
         "replyQuoteHiddenEncrypted": "引用已隐藏：原始消息已加密",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "转发消息",
+        "forwardLinkOnly": "发送您的评论、该消息的引用副本以及指向原消息的链接。目标中的所有人都可以阅读该引用。",
+        "forwardQuotedCopy": "转发消息的引用副本",
+        "forwardedCopyUnknownAuthor": "未知发送者",
+        "forwardedFromLabel": "转发自",
+        "forwardedCopyDirectChat": "私聊",
+        "forwardedCopyOpen": "打开原消息",
+        "forwardedCopyUnknownSource": "未知房间",
+        "forwardedCopyDiffers": "转发的副本与原消息不同",
+        "forwardedCopyClaimed": "随转发发送的副本：",
+        "forwardedOriginNotFound": "原消息不在您的历史记录中",
+        "forwardQuoteOnly": "发送您的评论和该消息的引用副本。目标中的所有人都可以阅读该引用。",
+        "forwardEncryptedOnly": "此消息来自加密聊天，因此只能转发到加密聊天。",
+        "forwardDestination": "聊天或房间",
+        "forwardChoose": "选择聊天或房间",
+        "forwardUnavailable": "目标不可用",
+        "forwardComment": "评论（可选）",
+        "forwardSend": "发送",
+        "forwardSending": "正在发送…",
+        "forwardFailed": "无法发送消息。您的选择和评论已保留。",
         "forwardMessage": "转发消息（即将推出）",
         "moreReactions": "更多回应",
         "reactions": "回应",
@@ -726,7 +733,9 @@
         "loadAudio": "加载音频",
         "loadFilePreview": "加载预览",
         "showLinkImage": "显示图片",
-        "emojiSuggestions": "表情符号建议"
+        "emojiSuggestions": "表情符号建议",
+        "saveMessage": "保存消息",
+        "removeFromSaved": "从已保存中移除"
     },
     "dates": {
         "today": "今天",
@@ -763,6 +772,20 @@
             "privacy": "隐私",
             "mcp": "Claude 集成",
             "advanced": "高级"
+        },
+        "categoryDescriptions": {
+            "profile": "您的个人资料、账户和已连接的设备。",
+            "appearance": "主题、模式、显示密度和强调色。",
+            "accessibility": "文字大小、阅读宽度、动效和透明度。",
+            "language": "界面语言和区域格式。",
+            "notifications": "选择 Fluux 何时以及如何提醒您。",
+            "encryption": "用于您的对话的端到端加密密钥。",
+            "privacy": "服务器消息存档和媒体自动下载。",
+            "blocked": "无法给您发消息或查看您状态的人。",
+            "storage": "此设备上缓存的媒体及其占用的空间。",
+            "updates": "让 Fluux 保持最新。",
+            "mcp": "本地 Claude 桥接的设置。",
+            "advanced": "开发者工具和诊断。"
         },
         "groups": {
             "general": "通用",
@@ -1374,6 +1397,10 @@
         "search": {
             "title": "搜索结果",
             "description": "从侧边栏选择一个结果即可查看对话。"
+        },
+        "saved": {
+            "title": "已保存的消息",
+            "description": "在侧边栏中选择一条已保存的消息，即可在其所在对话中打开。"
         }
     },
     "avatar": {
@@ -1642,7 +1669,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} 回应了 '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} 回应了您的消息",
         "see": "查看"
     },
     "commands": {
@@ -1759,5 +1786,17 @@
         "edit": "{{nickname}}（编辑）：{{text}}",
         "retraction": "{{nickname}}删除了一条消息",
         "messages": "{{nickname}}：{{count}}条新消息"
+    },
+    "saved": {
+        "title": "已保存的消息",
+        "marker": "已保存",
+        "empty": "没有已保存的消息",
+        "emptyHint": "打开消息的“更多”菜单并选择“保存消息”，即可保留在此处。",
+        "remove": "从已保存中移除",
+        "encrypted": "加密消息",
+        "deleted": "消息已删除",
+        "tryAgain": "重试",
+        "full": "已保存消息的列表已满（{{count}} 条）。请移除一条后再保存其他消息。",
+        "refused": "你的服务器拒绝存储这条消息。"
     }
 }

@@ -67,8 +67,12 @@ Below a shared link, a joined reader sees a quote with the room name, sender,
 time and a two-line excerpt resolved from their own resident history, local
 cache or archive. `readRoomMessagePreview` performs this lookup without adding
 arrivals, moving a room's history window or claiming archive coverage. When the
-original comes from the archive, the lookup reads subsequent pages to apply
-separately archived edits and deletions before displaying its text. Live updates
+original comes from the archive, the lookup reads subsequent pages (at most 100
+entries each, fewer where the server caps pages lower) to apply separately archived edits and deletions before displaying
+its text. To keep many links in one room from flooding the server, a lookup reads
+at most ten such pages and each client instance runs at most two of these walks
+at once; others wait. The first page asks only for entries from the original's time on, so a server that reports a count lets the lookup stop right away, after about three requests, when that tail alone exceeds what the cutoff can read. The time used is the archive's own time for the original, and an edit or deletion on that first page still applies before the lookup gives up. If the cutoff is reached before the archive ends, the quote
+is unavailable (the same state as a failed lookup) rather than possibly stale. Live updates
 also reconcile quotes whose targets are no longer in the resident window. Update
 references resolve against canonical room/cache/archive targets, so a sender id
 cannot shadow another message's room-assigned id. Closing or unmounting a quote
@@ -132,13 +136,19 @@ encrypted keeps it visible, and a marker outside the body is ignored. The stored
 copies but ignores XEP-0428 would show the quote and the copy together. Every room gets
 the quoted form alone. The
 copy holds a `<delay/>` with the original time and a `<message from=...>` whose
-only child is the plain body; `from` is the room occupant address for a room message and the sender's address for a one-to-one message; the inner message `type` is the source message's own (`groupchat` or `chat`), kept for a retry. The text is
+children are the plain body and, when known, an XEP-0359 `<stanza-id by=... id=.../>` naming the original's archive id (a room's, or the sender's own archive); the inner `id` attribute is the original's own id; `from` is the room occupant address for a room message and the sender's address for a one-to-one message; the inner message `type` is the source message's own (`groupchat` or `chat`), kept for a retry. The text is
 the sender's claim, not verified history. A receiver reads only that plain body,
-the sender and the time, bounded to 4000 characters, with control and
+the sender, the time and those ids (the ids are never an identity of the message that
+carries them, only a hint for finding the original), the body bounded to 4000 characters, with control and
 bidirectional-override characters removed; nested forwards and every other
 extension are ignored, and the inner message is never handled as a new arrival,
-correction, receipt or room event. Fluux shows it labelled with the claimed
-author and time, and without a second preview of the link. In an encrypted
+correction, receipt or room event. Fluux shows it as a source card naming the
+claimed author, the room or direct chat and the day, and without a second preview of the link.
+Clicking the card opens the original in context, looked up only on the click: the room message
+link the forward generated (the link that ends the marked quote), then the carried ids, then
+local history by sender, time (two minutes) and text, closest unique match only. A room original
+opens through the room message link route, a direct one in its conversation at that row; when
+nothing is found Fluux stays where it is and says the original is not in your history. In an encrypted
 chat the copy travels inside the encrypted payload only; a copy added outside the
 payload by anyone else is dropped. A retry keeps the copy and its original sender
 address, a copy received before the key was available is recovered with the body,

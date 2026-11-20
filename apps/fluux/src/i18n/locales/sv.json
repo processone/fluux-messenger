@@ -77,7 +77,8 @@
         "viewProfile": "Visa profil",
         "resizeHint": "Dra för att ändra storlek, dubbelklicka för att återställa",
         "dismiss": "Avfärda",
-        "search": "Sök"
+        "search": "Sök",
+        "saved": "Sparade"
     },
     "newMessage": {
         "title": "Nytt meddelande",
@@ -547,20 +548,26 @@
         "reply": "Svara",
         "copyMessage": "Kopiera text",
         "replyQuoteHiddenEncrypted": "Citat dolt: originalet var krypterat",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Vidarebefordra meddelande",
+        "forwardLinkOnly": "Skickar din kommentar, en citerad kopia av meddelandet och en länk till originalet. Alla på mottagarsidan kan läsa citatet.",
+        "forwardQuotedCopy": "Citerad kopia av ett vidarebefordrat meddelande",
+        "forwardedCopyUnknownAuthor": "en okänd avsändare",
+        "forwardedFromLabel": "Vidarebefordrat från",
+        "forwardedCopyDirectChat": "Direktchatt",
+        "forwardedCopyOpen": "Öppna originalmeddelandet",
+        "forwardedCopyUnknownSource": "ett okänt rum",
+        "forwardedCopyDiffers": "Den vidarebefordrade kopian skiljer sig från originalmeddelandet",
+        "forwardedCopyClaimed": "Kopia som skickades med vidarebefordran:",
+        "forwardedOriginNotFound": "Originalmeddelandet finns inte i din historik",
+        "forwardQuoteOnly": "Skickar din kommentar och en citerad kopia av meddelandet. Alla på mottagarsidan kan läsa citatet.",
+        "forwardEncryptedOnly": "Det här meddelandet kommer från en krypterad chatt och kan därför bara vidarebefordras till en krypterad chatt.",
+        "forwardDestination": "Chatt eller rum",
+        "forwardChoose": "Välj en chatt eller ett rum",
+        "forwardUnavailable": "Mottagaren är inte tillgänglig",
+        "forwardComment": "Kommentar (valfri)",
+        "forwardSend": "Skicka",
+        "forwardSending": "Skickar…",
+        "forwardFailed": "Det gick inte att skicka meddelandet. Ditt val och din kommentar har sparats.",
         "forwardMessage": "Vidarebefordra meddelande (kommer snart)",
         "moreReactions": "Fler reaktioner",
         "reactions": "Reaktioner",
@@ -636,8 +643,8 @@
             "verifiedTooltip": "Verifierad OpenPGP-nyckel",
             "tofuNewTooltip": "Ny kontakt. Verifiera fingeravtryck för fullt förtroende",
             "unverifiedKeysetTooltip": "Den här kontakten har en ny nyckel som inte har verifierats.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Kryptering pausad",
+            "blockedTooltip": "Kontaktens nyckel har ändrats. Lös det för att återuppta krypteringen",
             "sendBlockedEncryptionRequired": "Meddelandet skickades inte. Kryptering krävs för den här konversationen men är inte tillgänglig just nu.",
             "sendBlockedKeyChanged": "Meddelandet skickades inte. Den här kontaktens krypteringsnyckel har ändrats. Granska nyckeländringen innan du skickar.",
             "sendBlockedKeyLocked": "Meddelandet skickades inte. Lås upp din krypteringsnyckel för att skicka det här meddelandet.",
@@ -653,8 +660,8 @@
                 "pendingAll": "Nycklarna för {{name}} tar inte emot några meddelanden förrän den här enheten har dina förtroendebeslut från en tidigare version eller från dina andra enheter. Fram till dess kan du inte skicka meddelanden. Det försöks igen automatiskt.",
                 "review": "Granska nycklar"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Kryptering inaktiverad",
+            "plaintextForcedTooltip": "Du har inaktiverat krypteringen för den här konversationen, så meddelanden skickas i klartext",
             "keyLocked": "Kryptering låst",
             "keyLockedTooltip": "Kryptering låst. Klicka för att låsa upp",
             "encryptedClickToUnlock": "Krypterat meddelande. Klicka för att låsa upp",
@@ -677,8 +684,8 @@
                 "fingerprint_mismatch": "Fingeravtrycket matchar inte det angivna värdet",
                 "uid_mismatch": "Certifikatets identitet matchar inte samtalspartnerns adress"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Inaktivera kryptering för den här konversationen",
+            "enableEncryption": "Återaktivera kryptering",
             "tooltip": {
                 "header": "Krypterat",
                 "protocol": {
@@ -726,7 +733,9 @@
         "loadAudio": "Läs in ljud",
         "loadFilePreview": "Läs in förhandsgranskning",
         "showLinkImage": "Visa bild",
-        "emojiSuggestions": "Emoji-förslag"
+        "emojiSuggestions": "Emoji-förslag",
+        "saveMessage": "Spara meddelande",
+        "removeFromSaved": "Ta bort från sparade"
     },
     "dates": {
         "today": "Idag",
@@ -763,6 +772,20 @@
             "privacy": "Sekretess",
             "mcp": "Claude-integration",
             "advanced": "Avancerat"
+        },
+        "categoryDescriptions": {
+            "profile": "Din profil, ditt konto och anslutna enheter.",
+            "appearance": "Tema, läge, visningstäthet och accentfärg.",
+            "accessibility": "Textstorlek, läsbredd, rörelse och genomskinlighet.",
+            "language": "Gränssnittets språk och regionala format.",
+            "notifications": "Välj hur och när Fluux meddelar dig.",
+            "encryption": "Nycklar för end-to-end-kryptering av dina konversationer.",
+            "privacy": "Arkivering av meddelanden på servern och automatisk nedladdning av media.",
+            "blocked": "Personer som inte kan skriva till dig eller se din status.",
+            "storage": "Media som cachats på den här enheten och utrymmet de tar.",
+            "updates": "Håll Fluux uppdaterat.",
+            "mcp": "Inställningar för den lokala Claude-bryggan.",
+            "advanced": "Utvecklarverktyg och diagnostik."
         },
         "groups": {
             "general": "Allmänt",
@@ -1374,6 +1397,10 @@
         "search": {
             "title": "Sökresultat",
             "description": "Välj ett resultat i sidofältet för att visa konversationen."
+        },
+        "saved": {
+            "title": "Sparade meddelanden",
+            "description": "Välj ett sparat meddelande i sidofältet för att öppna det i sin konversation."
         }
     },
     "avatar": {
@@ -1642,7 +1669,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reagerade på '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reagerade på ditt meddelande",
         "see": "Visa"
     },
     "commands": {
@@ -1759,5 +1786,17 @@
         "edit": "{{nickname}} (redigerat): {{text}}",
         "retraction": "{{nickname}} raderade ett meddelande",
         "messages": "{{nickname}}: {{count}} nya meddelanden"
+    },
+    "saved": {
+        "title": "Sparade meddelanden",
+        "marker": "Sparat",
+        "empty": "Inga sparade meddelanden",
+        "emptyHint": "Öppna menyn Mer för ett meddelande och välj Spara meddelande för att behålla det här.",
+        "remove": "Ta bort från sparade",
+        "encrypted": "Krypterat meddelande",
+        "deleted": "Meddelandet har tagits bort",
+        "tryAgain": "Försök igen",
+        "full": "Listan över sparade meddelanden är full ({{count}}). Ta bort ett för att spara ett annat.",
+        "refused": "Din server vägrade lagra det här meddelandet."
     }
 }

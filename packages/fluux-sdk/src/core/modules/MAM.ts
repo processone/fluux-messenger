@@ -213,6 +213,13 @@ interface CorrectionOrderGroup {
   identity?: CorrectionReferences['identity']
 }
 
+/** Archive pages (up to 100 entries each; servers may cap lower) one linked-quote walk may read before giving up. */
+const PREVIEW_WALK_MAX_PAGES = 10
+/** Entries per linked-quote walk page. */
+const PREVIEW_WALK_PAGE_SIZE = 100
+/** Linked-quote archive walks allowed in flight at once. */
+const PREVIEW_WALK_MAX_CONCURRENT = 2
+
 /**
  * Message Archive Management (XEP-0313) module.
  *
@@ -1463,7 +1470,7 @@ export class MAM extends BaseModule {
     isRoom: boolean,
     targetTimestamp: string,
     contextSize: number = 50
-  ): Promise<{ messages: (Message | RoomMessage)[] }> {
+  ): Promise<{ messages: (Message | RoomMessage)[]; complete: boolean }> {
     const session = this.captureQuery()
     // Fetch messages before and after the target timestamp
     const oneHourBefore = new Date(new Date(targetTimestamp).getTime() - 3600000).toISOString()
@@ -1485,7 +1492,7 @@ export class MAM extends BaseModule {
         maxAutoPages: 1,
       })
       session.assertCurrent()
-      return { messages: result.messages }
+      return { messages: result.messages, complete: result.complete }
     } else {
       const result = await this.queryArchive({
         with: conversationId,
@@ -1495,7 +1502,7 @@ export class MAM extends BaseModule {
         preserveGapMarker: true,
       })
       session.assertCurrent()
-      return { messages: result.messages }
+      return { messages: result.messages, complete: result.complete }
     }
   }
 
@@ -3439,7 +3446,9 @@ export class MAM extends BaseModule {
 
   /**
    * One bounded RSM page of an archive (one entry by default): entries before
-   * `before`, after `after`, or from the oldest when neither is given. A cursor the
+   * `before`, after `after`, or from the oldest when neither is given, optionally
+   * only from `start` (an ISO time) on; `count` is the server's RSM count when it
+   * sent one (for a start filter, the size of that tail). A cursor the
    * server rejects as item-not-found reads `absent`; any other failure, or an
    * answer without `<fin/>`, reads `unknown`.
    */
@@ -3449,13 +3458,19 @@ export class MAM extends BaseModule {
     cursor: { before?: string; after?: string },
     max = 1,
     signal?: AbortSignal,
-  ): Promise<{ kind: 'page'; entries: RawArchiveEntry[]; complete: boolean } | { kind: 'absent' } | { kind: 'unknown' }> {
+    start?: string,
+  ): Promise<{ kind: 'page'; entries: RawArchiveEntry[]; complete: boolean; count?: number } | { kind: 'absent' } | { kind: 'unknown' }> {
     signal?.throwIfAborted()
     const session = this.captureQuery()
     const queryId = `mam_${generateUUID()}`
     // No `with` filter: the account archive is ordered as a whole, so the
     // predecessor proof holds without narrowing it to one conversation.
-    const iq = this.buildMAMQuery(queryId, [], max, cursor.before, isRoom ? entityId : undefined, cursor.after)
+    // A start time narrows the archive to entries from then on; the server's count then sizes that tail.
+    const startFields = start ? [
+      xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
+      xml('field', { var: 'start' }, xml('value', {}, start)),
+    ] : []
+    const iq = this.buildMAMQuery(queryId, startFields, max, cursor.before, isRoom ? entityId : undefined, cursor.after)
 
     const entries: RawArchiveEntry[] = []
     const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, id) => {
@@ -3484,7 +3499,8 @@ export class MAM extends BaseModule {
       unregister()
     }
     if (!session.isCurrent() || !response?.getChild('fin', NS_MAM)) return { kind: 'unknown' }
-    return { kind: 'page', entries, complete: this.parseMAMResponse(response).complete }
+    const parsed = this.parseMAMResponse(response)
+    return { kind: 'page', entries, complete: parsed.complete, count: parsed.page?.count }
   }
 
   /** Resolve an update's archive tier before considering detached sender-id aliases. */
@@ -3523,6 +3539,40 @@ export class MAM extends BaseModule {
     return target ? { kind: 'found', message: target } : { kind: 'absent' }
   }
 
+  private previewWalkActive = 0
+  private readonly previewWalkWaiters: Array<() => void> = []
+
+  /** Bound concurrent archive walks so many links in one room cannot flood the server. */
+  private async acquirePreviewWalkSlot(signal?: AbortSignal): Promise<() => void> {
+    while (this.previewWalkActive >= PREVIEW_WALK_MAX_CONCURRENT) {
+      // An abort event does not replay, so never enqueue (or requeue after losing a woken slot) when already aborted.
+      signal?.throwIfAborted()
+      await new Promise<void>((resolve, reject) => {
+        const wake = () => { signal?.removeEventListener('abort', onAbort); resolve() }
+        const onAbort = () => {
+          const at = this.previewWalkWaiters.indexOf(wake)
+          if (at >= 0) this.previewWalkWaiters.splice(at, 1)
+          reject(signal!.reason)
+        }
+        signal?.addEventListener('abort', onAbort, { once: true })
+        this.previewWalkWaiters.push(wake)
+      })
+    }
+    if (signal?.aborted) {
+      // Woken for a slot it will not use: pass the wake on so later waiters are not stranded.
+      this.previewWalkWaiters.shift()?.()
+      signal.throwIfAborted()
+    }
+    this.previewWalkActive++
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.previewWalkActive--
+      this.previewWalkWaiters.shift()?.()
+    }
+  }
+
   /** Read a linked quote without publishing arrivals, moving windows or claiming coverage. */
   async readRoomMessagePreview(roomJid: string, stanzaId: string, signal?: AbortSignal): Promise<
     { kind: 'found'; message: RoomMessage } | { kind: 'absent' | 'unknown' }
@@ -3555,45 +3605,67 @@ export class MAM extends BaseModule {
       message = this.parseRoomArchiveMessage(forwarded, roomJid, roomSelf(this.deps.stores?.room.getRoom(roomJid)), archiveId) ?? undefined
       if (message && !message.isRetracted) {
         const messages = [message]
-        // Edits and retractions may be separate entries arbitrarily far after
-        // the original. Walk to archive completion without publishing a page.
-        const order = new Map<string, Set<CorrectionOrderGroup>>()
-        let after = stanzaId
-        while (joined()) {
-          signal?.throwIfAborted()
-          const page = await this.queryOneArchivedEntry(roomJid, true, { after }, 100, signal)
-          signal?.throwIfAborted()
+        const releaseSlot = await this.acquirePreviewWalkSlot(signal)
+        try {
+          // A queued read may resume after the session was replaced or membership lost.
           session.assertCurrent()
-          if (!joined() || page.kind !== 'page') return { kind: 'unknown' }
-          const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
-          for (const entry of page.entries) {
+          if (!joined()) return { kind: 'unknown' }
+          // Edits and retractions may be separate entries arbitrarily far after
+          // the original. Walk to archive completion without publishing a page.
+          const order = new Map<string, Set<CorrectionOrderGroup>>()
+          let after = stanzaId
+          let pages = 0
+          // The archive's own time for the original (never the sender's claimed time, which may lie
+          // ahead of it and hide edits archived in between); no usable time means no start filter.
+          const archivedAt = this.extractForwardedTimestamp(forwarded)
+          const archivedFrom = archivedAt && !Number.isNaN(archivedAt.getTime()) ? archivedAt.toISOString() : undefined
+          while (joined()) {
+            // Unverified edits or retractions may lie past the cap, so the quote is not shown as current.
+            if (pages++ >= PREVIEW_WALK_MAX_PAGES) return { kind: 'unknown' }
             signal?.throwIfAborted()
-            const delay = entry.forwarded.getChild('delay', NS_DELAY)
-            await this.decryptArchiveEntryIfNeeded(entry.messageEl, roomJid, 'room', delayStamp(delay), entry.archiveId)
+            // The first page also asks for entries from the original's time on: servers report
+            // that tail's size as the RSM count, which can settle the cap before any more pages.
+            const page = await this.queryOneArchivedEntry(roomJid, true, { after }, PREVIEW_WALK_PAGE_SIZE, signal,
+              pages === 1 ? archivedFrom : undefined)
             signal?.throwIfAborted()
             session.assertCurrent()
-            if (!this.collectModification(entry.messageEl, modifications, from => from, delay, roomJid, entry.archiveId)) {
-              const row = this.parseRoomArchiveMessage(entry.forwarded, roomJid, roomSelf(this.deps.stores?.room.getRoom(roomJid)), entry.archiveId)
-              // Keep only competing identities, not the entire room history.
-              if (row && !messages.some(candidate => candidate.stanzaId === row.stanzaId) && messageReferences(message, 'archive-first')
-                .some(reference => resolveMessageReference([row], reference, 'archive-first'))) messages.push(row)
+            if (!joined() || page.kind !== 'page') return { kind: 'unknown' }
+            const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+            for (const entry of page.entries) {
+              signal?.throwIfAborted()
+              const delay = entry.forwarded.getChild('delay', NS_DELAY)
+              await this.decryptArchiveEntryIfNeeded(entry.messageEl, roomJid, 'room', delayStamp(delay), entry.archiveId)
+              signal?.throwIfAborted()
+              session.assertCurrent()
+              if (!this.collectModification(entry.messageEl, modifications, from => from, delay, roomJid, entry.archiveId)) {
+                const row = this.parseRoomArchiveMessage(entry.forwarded, roomJid, roomSelf(this.deps.stores?.room.getRoom(roomJid)), entry.archiveId)
+                // Keep only competing identities, not the entire room history.
+                if (row && !messages.some(candidate => candidate.stanzaId === row.stanzaId) && messageReferences(message, 'archive-first')
+                  .some(reference => resolveMessageReference([row], reference, 'archive-first'))) messages.push(row)
+              }
             }
+            // A sender id on the quote must not shadow another entry's archive id.
+            for (const reference of new Set([...modifications.corrections, ...modifications.retractions,
+              ...modifications.fastenings, ...modifications.reactions].map(change => change.targetId))) {
+              if (!resolveMessageReference([message], reference, 'archive-first')) continue
+              const canonical = await this.resolveRoomMessagePreviewTarget(message, reference, signal)
+              if (canonical.kind === 'unknown') return canonical
+              if (canonical.kind === 'found' && !messages.some(row => row.stanzaId === canonical.message.stanzaId)) messages.push(canonical.message)
+            }
+            await this.applyModifications(messages, modifications, roomMessageAuthor, undefined, order)
+            signal?.throwIfAborted()
+            session.assertCurrent()
+            if (messages[0].isRetracted || page.complete || !page.entries.length) break
+            // The count includes the original itself. The cap reads this many entries per page at
+            // most, but a server may cap pages lower; a tail past what the cap can read is unverifiable.
+            if (pages === 1 && archivedFrom && page.count !== undefined
+              && page.count - 1 > PREVIEW_WALK_MAX_PAGES * Math.min(PREVIEW_WALK_PAGE_SIZE, page.entries.length)) return { kind: 'unknown' }
+            const next = page.entries.at(-1)!.archiveId
+            if (!next || next === after) return { kind: 'unknown' }
+            after = next
           }
-          // A sender id on the quote must not shadow another entry's archive id.
-          for (const reference of new Set([...modifications.corrections, ...modifications.retractions,
-            ...modifications.fastenings, ...modifications.reactions].map(change => change.targetId))) {
-            if (!resolveMessageReference([message], reference, 'archive-first')) continue
-            const canonical = await this.resolveRoomMessagePreviewTarget(message, reference, signal)
-            if (canonical.kind === 'unknown') return canonical
-            if (canonical.kind === 'found' && !messages.some(row => row.stanzaId === canonical.message.stanzaId)) messages.push(canonical.message)
-          }
-          await this.applyModifications(messages, modifications, roomMessageAuthor, undefined, order)
-          signal?.throwIfAborted()
-          session.assertCurrent()
-          if (messages[0].isRetracted || page.complete || !page.entries.length) break
-          const next = page.entries.at(-1)!.archiveId
-          if (!next || next === after) return { kind: 'unknown' }
-          after = next
+        } finally {
+          releaseSlot()
         }
         message = messages[0]
       }
@@ -3659,6 +3731,80 @@ export class MAM extends BaseModule {
     if (!await this.deps.stores.room.saveMessageLinkContext?.(roomJid, reconciled)) return { kind: 'unknown' }
     session.assertCurrent()
     return { kind: 'found', message: target, source: 'archive' }
+  }
+
+  /**
+   * Locate a one-to-one message for a saved entry: the resident window, then the
+   * cache, then the account archive by exact archive id. An entry without an
+   * archive id falls back to the time-window lookup search uses. Fetched context
+   * lands in the cache, so the caller can open the conversation at the message.
+   *
+   * `absent` is only said when the archive answered and does not hold the
+   * message; a failed query is `unknown`.
+   */
+  async locateChatMessage(conversationId: string, ref: { id?: string; stanzaId?: string; originId?: string; sentAt?: number; from?: string }): Promise<
+    { kind: 'found'; message: Message; source: 'resident' | 'cache' | 'archive' } | { kind: 'absent' | 'unknown' }
+  > {
+    const session = this.captureQuery()
+    const chat = this.deps.stores?.chat
+    if (!chat) return { kind: 'unknown' }
+    const matches = (message: Message) => {
+      // A known archive identity or sender that disagrees settles it: a shared client or origin id is only a hint.
+      // The saved id names the account's own archive entry: when the message knows that one, a foreign alias must not stand in for it.
+      const archiveIds = (message.ownArchiveId ? [message.ownArchiveId] : [message.stanzaId]).filter(Boolean)
+      if (ref.stanzaId && archiveIds.length > 0 && !archiveIds.includes(ref.stanzaId)) return false
+      if (ref.originId && message.originId && message.originId !== ref.originId) return false
+      if (ref.from && getBareJid(message.from) !== getBareJid(ref.from)) return false
+      return (!!ref.stanzaId && archiveIds.includes(ref.stanzaId))
+        || (!!ref.originId && message.originId === ref.originId)
+        || (!!ref.id && message.id === ref.id)
+    }
+    const settle = (message: Message, source: 'resident' | 'cache') =>
+      message.isRetracted ? { kind: 'absent' as const } : { kind: 'found' as const, message, source }
+    const targets = [ref.stanzaId, ref.originId, ref.id].filter((target): target is string => !!target)
+    for (const target of targets) {
+      const resident = chat.getMessage(conversationId, target)
+      if (resident && matches(resident)) return settle(resident, 'resident')
+    }
+    for (const target of targets) {
+      if (!chat.resolveReactionTarget) break
+      const cached = await chat.resolveReactionTarget(conversationId, target)
+      session.assertCurrent()
+      if (cached && matches(cached)) return settle(cached, 'cache')
+    }
+
+    if (ref.stanzaId) {
+      const found = await this.lookUpArchivedMessage(conversationId, false, ref.stanzaId)
+      session.assertCurrent()
+      if (found.kind !== 'found') return found
+      const { messages } = await this.fetchContext(conversationId, false, new Date(found.timestamp).toISOString())
+      session.assertCurrent()
+      // The context query stores what it fetched; prefer that reconciled copy
+      // over the raw archive row, which nothing retains for the jump that follows.
+      const stored = chat.resolveReactionTarget ? await chat.resolveReactionTarget(conversationId, ref.stanzaId) : undefined
+      session.assertCurrent()
+      let message = (stored && matches(stored) ? stored : undefined) ?? (messages as Message[]).find((m) => matches(m))
+      if (!message) {
+        // The bounded context page missed the target: store the exact entry so the jump can load it.
+        const row = found.row as Message | undefined
+        if (!row) return { kind: 'unknown' }
+        const [reconciled] = (await chat.reconcileHistoryMessages?.([row])) ?? [row]
+        session.assertCurrent()
+        message = reconciled ?? row
+        this.deps.emitSDK('chat:history-messages', {
+          conversationId, messages: [message], page: { first: message.stanzaId, last: message.stanzaId, count: 1 },
+          complete: false, direction: 'backward', preserveGapMarker: true,
+        })
+      }
+      return message.isRetracted ? { kind: 'absent' } : { kind: 'found', message, source: 'archive' }
+    }
+    if (ref.sentAt === undefined) return { kind: 'unknown' }
+    const { messages, complete } = await this.fetchContext(conversationId, false, new Date(ref.sentAt).toISOString())
+    session.assertCurrent()
+    const message = (messages as Message[]).find((m) => matches(m))
+    // A bounded slice that did not reach the end of its window proves nothing about absence.
+    if (!message) return { kind: complete ? 'absent' : 'unknown' }
+    return message.isRetracted ? { kind: 'absent' } : { kind: 'found', message, source: 'archive' }
   }
 
   /**

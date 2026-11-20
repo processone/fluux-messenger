@@ -127,7 +127,7 @@ export function ContactProfileView({
     setDetails(null)
   }, [contact.jid, contact.name])
 
-  // A conversation's held-keys notice asked to review this contact's keys.
+  // A held-keys notice or the Forward dialog asked to review this contact's keys.
   const securityRequested = useContactSecurityRequestStore((s) => s.jid === contact.jid)
   const clearSecurityRequest = useContactSecurityRequestStore((s) => s.clearContactSecurityRequest)
   useEffect(() => {

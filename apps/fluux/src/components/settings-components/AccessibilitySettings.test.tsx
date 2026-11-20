@@ -24,7 +24,7 @@ describe('AccessibilitySettings', () => {
   it('keeps the accessibility panel width stable when transparency changes', () => {
     const { container } = render(<AccessibilitySettings />)
     const panel = container.firstElementChild
-    expect(panel).toHaveClass('w-full', 'max-w-md')
+    expect(panel).toHaveClass('w-full')
 
     const initialClassName = panel?.className
     fireEvent.click(screen.getByRole('button', { name: /transparencyFull/i }))

@@ -14,6 +14,8 @@ import { IDBFactory } from 'fake-indexeddb'
 import { openDB } from 'idb'
 import { chatStore } from './chatStore'
 import { roomStore } from './roomStore'
+import { savedStore } from './savedStore'
+import { buildSavedMessage } from '../utils/savedMessageBuilder'
 import {
   retractChatMessageInStorage,
   retractRoomMessageInStorage,
@@ -1724,7 +1726,7 @@ describe('retraction propagates to the cache and the search index', () => {
 
       const cache = await openDB(`fluux-message-cache:${SCOPE}`)
       try {
-        expect(cache.version).toBe(9)
+        expect(cache.version).toBe(10)
         expect([...cache.objectStoreNames]).not.toContain('retractions')
       } finally { cache.close() }
       const ledger = await openDB(`fluux-retraction-ledger:${SCOPE}`)
@@ -2401,7 +2403,7 @@ describe('the v7 upgrade scrubs bodies left on earlier tombstones', () => {
     await messageCache.getMessages(CHAT)
 
     const db = await openDB(`fluux-message-cache:${SCOPE}`)
-    expect(db.version).toBe(9)
+    expect(db.version).toBe(10)
     db.close()
     for (const [store, group] of [[CHAT_STORE, rows.chat], [ROOM_STORE, rows.room]] as const) {
       for (const [name, row] of Object.entries(group)) {
@@ -2421,5 +2423,37 @@ describe('the v7 upgrade scrubs bodies left on earlier tombstones', () => {
       `${ROOM_STORE}:room-moderated`,
     ])
     await expectNoTraceOf(SECRET)
+  })
+})
+
+describe('saved copies follow a durable retraction', () => {
+  beforeEach(() => {
+    globalThis.indexedDB = new IDBFactory()
+    messageCache._resetDBForTesting()
+    searchIndex._resetDBForTesting()
+    setStorageScopeJid(SCOPE)
+    localStorage.clear()
+    savedStore.getState().reset()
+  })
+  afterEach(() => { savedStore.getState().reset(); setStorageScopeJid(null) })
+
+  it('clears the saved text of a retracted 1:1 message and of a retracted room message', async () => {
+    const chat = chatMessage({ ownArchiveId: 'a1', ownArchiveBy: SCOPE })
+    const roomMsg = roomMessage({ stanzaId: 'r1', originId: 'o1', occupantId: 'occ' })
+    savedStore.getState().save(buildSavedMessage(chat, SCOPE))
+    savedStore.getState().save(buildSavedMessage(roomMsg, SCOPE))
+    await retractChatMessageInStorage(CHAT, chat, { isRetracted: true })
+    await retractRoomMessageInStorage(ROOM, roomMsg, { isRetracted: true })
+    const entries = Object.values(savedStore.getState().entries)
+    expect(entries).toHaveLength(2)
+    for (const entry of entries) expect(entry).toMatchObject({ text: '', deleted: true })
+  })
+
+  it('leaves another message with a shared origin id but a different archive id alone', async () => {
+    const mine = roomMessage({ stanzaId: 'r1', originId: 'same', occupantId: 'occ-a', from: `${ROOM}/Ann`, nick: 'Ann' })
+    const other = roomMessage({ id: 'x2', stanzaId: 'r2', originId: 'same', occupantId: 'occ-b', from: `${ROOM}/Bob`, nick: 'Bob' })
+    savedStore.getState().save(buildSavedMessage(mine, SCOPE))
+    await retractRoomMessageInStorage(ROOM, other, { isRetracted: true })
+    expect(Object.values(savedStore.getState().entries)[0]).toMatchObject({ text: mine.body })
   })
 })

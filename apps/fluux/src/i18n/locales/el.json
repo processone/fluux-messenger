@@ -77,7 +77,8 @@
         "viewProfile": "Προβολή προφίλ",
         "resizeHint": "Σύρετε για αλλαγή μεγέθους, διπλό κλικ για επαναφορά",
         "dismiss": "Απόρριψη",
-        "search": "Αναζήτηση"
+        "search": "Αναζήτηση",
+        "saved": "Αποθηκευμένα"
     },
     "newMessage": {
         "title": "Νέο μήνυμα",
@@ -548,20 +549,26 @@
         "reply": "Απάντηση",
         "copyMessage": "Αντιγραφή κειμένου",
         "replyQuoteHiddenEncrypted": "Το απόσπασμα αποκρύφθηκε: το αρχικό ήταν κρυπτογραφημένο",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Προώθηση μηνύματος",
+        "forwardLinkOnly": "Στέλνει το σχόλιό σας, ένα παρατιθέμενο αντίγραφο του μηνύματος και έναν σύνδεσμο προς το πρωτότυπο. Όλοι στον προορισμό μπορούν να διαβάσουν την παράθεση.",
+        "forwardQuotedCopy": "Παρατιθέμενο αντίγραφο προωθημένου μηνύματος",
+        "forwardedCopyUnknownAuthor": "άγνωστος αποστολέας",
+        "forwardedFromLabel": "Προωθήθηκε από",
+        "forwardedCopyDirectChat": "Άμεση συνομιλία",
+        "forwardedCopyOpen": "Άνοιγμα του αρχικού μηνύματος",
+        "forwardedCopyUnknownSource": "άγνωστο δωμάτιο",
+        "forwardedCopyDiffers": "Το προωθημένο αντίγραφο διαφέρει από το αρχικό μήνυμα",
+        "forwardedCopyClaimed": "Αντίγραφο που στάλθηκε με την προώθηση:",
+        "forwardedOriginNotFound": "Το αρχικό μήνυμα δεν υπάρχει στο ιστορικό σας",
+        "forwardQuoteOnly": "Στέλνει το σχόλιό σας και ένα παρατιθέμενο αντίγραφο του μηνύματος. Όλοι στον προορισμό μπορούν να διαβάσουν την παράθεση.",
+        "forwardEncryptedOnly": "Αυτό το μήνυμα προέρχεται από κρυπτογραφημένη συνομιλία, επομένως μπορεί να προωθηθεί μόνο σε κρυπτογραφημένη συνομιλία.",
+        "forwardDestination": "Συνομιλία ή δωμάτιο",
+        "forwardChoose": "Επιλέξτε συνομιλία ή δωμάτιο",
+        "forwardUnavailable": "Ο προορισμός δεν είναι διαθέσιμος",
+        "forwardComment": "Σχόλιο (προαιρετικό)",
+        "forwardSend": "Αποστολή",
+        "forwardSending": "Αποστολή…",
+        "forwardFailed": "Δεν ήταν δυνατή η αποστολή του μηνύματος. Η επιλογή και το σχόλιό σας διατηρήθηκαν.",
         "forwardMessage": "Προώθηση μηνύματος (σύντομα διαθέσιμο)",
         "moreReactions": "Περισσότερες αντιδράσεις",
         "reactions": "Αντιδράσεις",
@@ -637,8 +644,8 @@
             "verifiedTooltip": "Επαληθευμένο κλειδί OpenPGP",
             "tofuNewTooltip": "Νέα επαφή. Επαληθεύστε το αποτύπωμα για πλήρη εμπιστοσύνη",
             "unverifiedKeysetTooltip": "Αυτή η επαφή έχει ένα νέο κλειδί που δεν έχει επαληθευτεί.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Η κρυπτογράφηση είναι σε παύση",
+            "blockedTooltip": "Το κλειδί του συνομιλητή άλλαξε. Επιλύστε το για να συνεχιστεί η κρυπτογράφηση",
             "sendBlockedEncryptionRequired": "Το μήνυμα δεν στάλθηκε. Η κρυπτογράφηση απαιτείται για αυτή τη συνομιλία αλλά δεν είναι διαθέσιμη αυτή τη στιγμή.",
             "sendBlockedKeyChanged": "Το μήνυμα δεν στάλθηκε. Το κλειδί κρυπτογράφησης αυτής της επαφής άλλαξε. Ελέγξτε την αλλαγή κλειδιού πριν την αποστολή.",
             "sendBlockedKeyLocked": "Το μήνυμα δεν στάλθηκε. Ξεκλειδώστε το κλειδί κρυπτογράφησής σας για να στείλετε αυτό το μήνυμα.",
@@ -654,8 +661,8 @@
                 "pendingAll": "Τα κλειδιά της επαφής {{name}} δεν λαμβάνουν μηνύματα μέχρι αυτή η συσκευή να λάβει τις αποφάσεις εμπιστοσύνης σας από προηγούμενη έκδοση ή από τις άλλες συσκευές σας. Μέχρι τότε δεν μπορείτε να στείλετε μηνύματα. Η προσπάθεια επαναλαμβάνεται αυτόματα.",
                 "review": "Έλεγχος κλειδιών"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Η κρυπτογράφηση απενεργοποιήθηκε",
+            "plaintextForcedTooltip": "Απενεργοποιήσατε την κρυπτογράφηση για αυτή τη συνομιλία, οπότε τα μηνύματα αποστέλλονται σε απλό κείμενο",
             "keyLocked": "Η κρυπτογράφηση είναι κλειδωμένη",
             "keyLockedTooltip": "Η κρυπτογράφηση είναι κλειδωμένη. Κάντε κλικ για ξεκλείδωμα",
             "encryptedClickToUnlock": "Κρυπτογραφημένο μήνυμα. Κάντε κλικ για ξεκλείδωμα",
@@ -678,8 +685,8 @@
                 "fingerprint_mismatch": "Το αποτύπωμα δεν ταιριάζει με τη δηλωμένη τιμή",
                 "uid_mismatch": "Η ταυτότητα του πιστοποιητικού δεν ταιριάζει με τη διεύθυνση του συνομιλητή"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Απενεργοποίηση κρυπτογράφησης για αυτή τη συνομιλία",
+            "enableEncryption": "Επανενεργοποίηση κρυπτογράφησης",
             "tooltip": {
                 "header": "Κρυπτογραφημένο",
                 "protocol": {
@@ -727,7 +734,9 @@
         "loadAudio": "Φόρτωση ήχου",
         "loadFilePreview": "Φόρτωση προεπισκόπησης",
         "showLinkImage": "Εμφάνιση εικόνας",
-        "emojiSuggestions": "Προτάσεις emoji"
+        "emojiSuggestions": "Προτάσεις emoji",
+        "saveMessage": "Αποθήκευση μηνύματος",
+        "removeFromSaved": "Αφαίρεση από τα αποθηκευμένα"
     },
     "dates": {
         "today": "Σήμερα",
@@ -764,6 +773,20 @@
             "privacy": "Απόρρητο",
             "mcp": "Ενσωμάτωση Claude",
             "advanced": "Σύνθετα"
+        },
+        "categoryDescriptions": {
+            "profile": "Το προφίλ σας, ο λογαριασμός σας και οι συνδεδεμένες συσκευές.",
+            "appearance": "Θέμα, λειτουργία, πυκνότητα προβολής και χρώμα έμφασης.",
+            "accessibility": "Μέγεθος κειμένου, πλάτος ανάγνωσης, κίνηση και διαφάνεια.",
+            "language": "Γλώσσα διεπαφής και τοπικές μορφές.",
+            "notifications": "Επιλέξτε πώς και πότε σας ειδοποιεί το Fluux.",
+            "encryption": "Κλειδιά κρυπτογράφησης από άκρο σε άκρο για τις συνομιλίες σας.",
+            "privacy": "Αρχειοθέτηση μηνυμάτων στον διακομιστή και αυτόματη λήψη πολυμέσων.",
+            "blocked": "Άτομα που δεν μπορούν να σας στείλουν μηνύματα ή να δουν την κατάστασή σας.",
+            "storage": "Πολυμέσα στην προσωρινή μνήμη αυτής της συσκευής και ο χώρος που καταλαμβάνουν.",
+            "updates": "Διατηρήστε το Fluux ενημερωμένο.",
+            "mcp": "Ρυθμίσεις της τοπικής γέφυρας Claude.",
+            "advanced": "Εργαλεία προγραμματιστών και διαγνωστικά."
         },
         "groups": {
             "general": "Γενικά",
@@ -1375,6 +1398,10 @@
         "search": {
             "title": "Αποτελέσματα αναζήτησης",
             "description": "Επιλέξτε ένα αποτέλεσμα από την πλαϊνή μπάρα για να δείτε τη συνομιλία."
+        },
+        "saved": {
+            "title": "Αποθηκευμένα μηνύματα",
+            "description": "Επιλέξτε ένα αποθηκευμένο μήνυμα στην πλαϊνή στήλη για να το ανοίξετε στη συνομιλία του."
         }
     },
     "avatar": {
@@ -1643,7 +1670,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} αντέδρασε στο '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} αντέδρασε στο μήνυμά σας",
         "see": "Προβολή"
     },
     "commands": {
@@ -1760,5 +1787,17 @@
         "edit": "{{nickname}} (επεξεργασία): {{text}}",
         "retraction": "{{nickname}} διέγραψε ένα μήνυμα",
         "messages": "{{nickname}}: {{count}} νέα μηνύματα"
+    },
+    "saved": {
+        "title": "Αποθηκευμένα μηνύματα",
+        "marker": "Αποθηκευμένο",
+        "empty": "Δεν υπάρχουν αποθηκευμένα μηνύματα",
+        "emptyHint": "Ανοίξτε το μενού «Περισσότερα» ενός μηνύματος και επιλέξτε «Αποθήκευση μηνύματος» για να το κρατήσετε εδώ.",
+        "remove": "Αφαίρεση από τα αποθηκευμένα",
+        "encrypted": "Κρυπτογραφημένο μήνυμα",
+        "deleted": "Το μήνυμα διαγράφηκε",
+        "tryAgain": "Δοκιμή ξανά",
+        "full": "Η λίστα αποθηκευμένων μηνυμάτων είναι γεμάτη ({{count}}). Αφαιρέστε ένα για να αποθηκεύσετε άλλο.",
+        "refused": "Ο διακομιστής σας αρνήθηκε να αποθηκεύσει αυτό το μήνυμα."
     }
 }

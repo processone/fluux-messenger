@@ -3,6 +3,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
 import { MAM } from './MAM'
+import * as stanzaDecrypt from '../e2ee/stanzaDecrypt'
 import { applyRoomMessagePreviewUpdate } from '../../stores/shared/correctionHandoff'
 import type { ModuleDependencies } from './BaseModule'
 import { createMockPresenceReader } from '../test-utils'
@@ -12,6 +13,8 @@ import { setStorageScopeJid } from '../../utils/storageScope'
 import * as cache from '../../utils/messageCache'
 import * as searchIndex from '../../utils/searchIndex'
 import type { Room, RoomMessage } from '../types'
+
+vi.mock('../e2ee/stanzaDecrypt', async importOriginal => ({ ...await importOriginal<typeof import('../e2ee/stanzaDecrypt')>() }))
 
 const ROOM = 'team@conference.example.org'
 const ACCOUNT = 'alice@example.org'
@@ -38,7 +41,7 @@ afterEach(() => { roomStore.getState().reset(); setStorageScopeJid(null); vi.res
 // XEP-0313/RSM server boundary, shared by id lookup and context pages. The real
 // stores/cache own placement and read state; this stand-in owns only IQ replies.
 function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modification?: 'correction' | 'retraction' | 'correction-retraction', history = rows, targetReference?: string) {
-  let collect: ((stanza: Element) => void) | undefined
+  const collectors = new Map<string, (stanza: Element) => void>()
   const emitSDK = vi.fn()
   const sendIQ = vi.fn(async (iq: Element) => {
     if (failure === 'network') throw new Error('Connection lost')
@@ -54,7 +57,7 @@ function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modificati
     const pageMax = Math.min(max, 25)
     const page = before !== undefined ? history.slice(Math.max(0, at - pageMax), at)
       : after !== undefined ? history.slice(at + 1, at + 1 + pageMax) : history.slice(0, pageMax)
-    for (const row of page) collect!(xml('message', { from: ROOM },
+    for (const row of page) collectors.get(query.attrs.queryid)!(xml('message', { from: ROOM },
       xml('result', { xmlns: MAM_NS, queryid: query.attrs.queryid, id: row.stanzaId },
         xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
           xml('delay', { xmlns: 'urn:xmpp:delay', stamp: row.timestamp.toISOString() }),
@@ -72,7 +75,7 @@ function harness(failure?: 'network' | 'no-fin', sharedLink?: string, modificati
   })
   const deps: ModuleDependencies = { stores: createDefaultStoreBindings(), presence: createMockPresenceReader(),
     getCurrentJid: () => ACCOUNT, getXmpp: () => null, sendStanza: vi.fn(), sendIQ, emit: vi.fn(), emitSDK,
-    registerMAMCollector: (_id, collector) => { collect = collector; return () => { collect = undefined } },
+    registerMAMCollector: (id, collector) => { collectors.set(id, collector); return () => { collectors.delete(id) } },
   }
   return { mam: new MAM(deps), sendIQ, emitSDK }
 }
@@ -226,6 +229,241 @@ describe('linked room message lookup', () => {
     roomStore.getState().addRoom({ ...room, joined: false })
     expect(await h.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toEqual({ kind: 'unknown' })
     expect(h.sendIQ).not.toHaveBeenCalled()
+  })
+
+  // Intent: FLM-323 — a link to an old message must not make the client walk the whole room archive.
+  it('stops the forward archive walk after a bounded number of pages and reports unknown', async () => {
+    const long = Array.from({ length: 400 }, (_, index) => ({ ...rows[0], id: `long-${index}`, stanzaId: String(1731490100000000 + index),
+      body: `Long ${index}`, timestamp: new Date(Date.UTC(2026, 5, 1, 10, 0, index)) }))
+    const h = harness(undefined, undefined, undefined, long)
+    expect(await h.mam.readRoomMessagePreview(ROOM, long[0].stanzaId)).toEqual({ kind: 'unknown' })
+    const walked = h.sendIQ.mock.calls.filter(([iq]) => iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max') === '100')
+    expect(walked.length).toBeLessThanOrEqual(10)
+    expect(walked.length).toBeGreaterThan(0)
+  })
+
+  // Intent: FLM-339 — a start time lets the server's count settle a too-long tail on the first page.
+  function withCount(h: ReturnType<typeof harness>, history: typeof rows, reply = true) {
+    const serve = h.sendIQ.getMockImplementation()!
+    const starts: (string | undefined)[] = []
+    h.sendIQ.mockImplementation(async (iq: Element) => {
+      const query = iq.getChild('query', MAM_NS)!
+      const start = query.getChild('x')?.getChildren('field').find(f => f.attrs.var === 'start')?.getChildText('value') ?? undefined
+      starts.push(start)
+      const res = await serve(iq)
+      if (reply) {
+        const from = start ? history.filter(row => row.timestamp.getTime() >= Date.parse(start)).length : history.length
+        res.getChild('fin', MAM_NS)!.getChild('set', RSM_NS)!.children.push(xml('count', {}, String(from)))
+      }
+      return res
+    })
+    return starts
+  }
+  const longTail = Array.from({ length: 1200 }, (_, index) => ({ ...rows[0], id: `tail-${index}`, stanzaId: String(1731490200000000 + index),
+    body: `Tail ${index}`, timestamp: new Date(Date.UTC(2026, 5, 1, 10, 0, index)) }))
+
+  it('stops after the first walk page when the reported tail exceeds the cap', async () => {
+    const h = harness(undefined, undefined, undefined, longTail)
+    const starts = withCount(h, longTail)
+    expect(await h.mam.readRoomMessagePreview(ROOM, longTail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    // Two requests to locate the original, one first walk page carrying the original's time.
+    expect(h.sendIQ).toHaveBeenCalledTimes(3)
+    expect(starts).toEqual([undefined, undefined, longTail[0].timestamp.toISOString()])
+  })
+
+  // Intent: FLM-339 review — a deletion on the first walk page still reads absent despite a long tail.
+  it('still applies a deletion on the first walk page before giving up on a long tail', async () => {
+    const h = harness(undefined, undefined, 'retraction', longTail, longTail[50].stanzaId)
+    withCount(h, longTail)
+    expect(await h.mam.readRoomMessagePreview(ROOM, longTail[50].stanzaId)).toEqual({ kind: 'absent' })
+    expect(h.sendIQ).toHaveBeenCalledTimes(3)
+  })
+
+  // Intent: FLM-339 review — a server that caps pages lower reads fewer entries within the cap.
+  it('sizes the cap by the page the server actually returned', async () => {
+    const tail = longTail.slice(0, 400)
+    const h = harness(undefined, undefined, undefined, tail)
+    withCount(h, tail)
+    // The stand-in serves 25 entries a page, so ten pages read 250 entries and a 399-entry tail cannot fit.
+    expect(await h.mam.readRoomMessagePreview(ROOM, tail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    expect(h.sendIQ).toHaveBeenCalledTimes(3)
+  })
+
+  // Intent: FLM-339 review — the filter uses the archive's time, and none when that is missing.
+  it('sends no start filter when the original has no usable archive time', async () => {
+    const h = harness(undefined, undefined, undefined, longTail)
+    const starts = withCount(h, longTail)
+    vi.spyOn(h.mam as unknown as { extractForwardedTimestamp: () => undefined }, 'extractForwardedTimestamp').mockReturnValue(undefined)
+    expect(await h.mam.readRoomMessagePreview(ROOM, longTail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    expect(starts.every(start => start === undefined)).toBe(true)
+    expect(h.sendIQ.mock.calls.length).toBeGreaterThan(3)
+  })
+
+  // Intent: FLM-339 review — an encrypted original's sender-claimed time, ahead of its archive time, never becomes the start filter.
+  it('starts the first walk page at the archive time, not the sender time of a decrypted original', async () => {
+    const h = harness(undefined, undefined, undefined, longTail)
+    const starts = withCount(h, longTail)
+    vi.spyOn(stanzaDecrypt, 'readStashedAuthoredAt').mockReturnValue(new Date(longTail[0].timestamp.getTime() + 3_600_000))
+    expect(await h.mam.readRoomMessagePreview(ROOM, longTail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    expect(starts.filter(Boolean)).toEqual([longTail[0].timestamp.toISOString()])
+  })
+
+  it('walks as before when the server reports no count or a tail within the cap', async () => {
+    const noCount = harness(undefined, undefined, undefined, longTail)
+    withCount(noCount, longTail, false)
+    expect(await noCount.mam.readRoomMessagePreview(ROOM, longTail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    expect(noCount.sendIQ.mock.calls.length).toBeGreaterThan(3)
+    const fits = harness(undefined, undefined, 'retraction')
+    const starts = withCount(fits, rows)
+    expect(await fits.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toEqual({ kind: 'absent' })
+    expect(starts.filter(Boolean)).toEqual([rows[40].timestamp.toISOString()])
+  })
+
+  // Intent: FLM-323 — many links in one room cannot each run their own walk at once.
+  it('runs only a few forward archive walks at once and finishes the rest as slots free', async () => {
+    const h = harness()
+    const serve = h.sendIQ.getMockImplementation()!
+    let inFlight = 0
+    let peak = 0
+    const gates: Array<() => void> = []
+    h.sendIQ.mockImplementation(async iq => {
+      const isWalk = iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max') === '100'
+      if (!isWalk) return serve(iq)
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await new Promise<void>(resolve => gates.push(resolve))
+      inFlight--
+      return serve(iq)
+    })
+    const reads = [10, 11, 12, 13].map(index => h.mam.readRoomMessagePreview(ROOM, rows[index].stanzaId))
+    for (let turn = 0; turn < 40; turn++) await new Promise(resolve => setTimeout(resolve, 0))
+    expect(inFlight).toBe(2)
+    while (inFlight > 0 || gates.length) { gates.splice(0).forEach(open => open()); await new Promise(resolve => setTimeout(resolve, 0)) }
+    const results = await Promise.all(reads)
+    expect(results.map(result => result.kind)).toEqual(['found', 'found', 'found', 'found'])
+    expect(peak).toBe(2)
+  })
+
+  it('lets an aborted walk waiting for a slot leave without taking one', async () => {
+    const h = harness()
+    const serve = h.sendIQ.getMockImplementation()!
+    const gates: Array<() => void> = []
+    h.sendIQ.mockImplementation(async iq => {
+      if (iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max') !== '100') return serve(iq)
+      await new Promise<void>(resolve => gates.push(resolve))
+      return serve(iq)
+    })
+    const running = [10, 11].map(index => h.mam.readRoomMessagePreview(ROOM, rows[index].stanzaId))
+    const controller = new AbortController()
+    const waiting = h.mam.readRoomMessagePreview(ROOM, rows[12].stanzaId, controller.signal)
+    const rejected = expect(waiting).rejects.toBeDefined()
+    for (let turn = 0; turn < 40; turn++) await new Promise(resolve => setTimeout(resolve, 0))
+    controller.abort()
+    await rejected
+    const later = h.mam.readRoomMessagePreview(ROOM, rows[13].stanzaId)
+    for (let turn = 0; turn < 60; turn++) { gates.splice(0).forEach(open => open()); await new Promise(resolve => setTimeout(resolve, 0)) }
+    await Promise.all(running)
+    expect((await later).kind).toBe('found')
+  })
+
+  // Intent: FLM-323 review — a cancelled slot handoff must not strand later waiters.
+  it('wakes later waiters when callers woken for a slot have already aborted', async () => {
+    const h = harness()
+    const serve = h.sendIQ.getMockImplementation()!
+    const gates: Array<() => void> = []
+    h.sendIQ.mockImplementation(async iq => {
+      if (iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max') !== '100') return serve(iq)
+      await new Promise<void>(resolve => gates.push(resolve))
+      return serve(iq)
+    })
+    const settle = async () => { for (let turn = 0; turn < 40; turn++) await new Promise(resolve => setTimeout(resolve, 0)) }
+    const running = [10, 11].map(index => h.mam.readRoomMessagePreview(ROOM, rows[index].stanzaId))
+    const c = new AbortController()
+    const d = new AbortController()
+    // The slot wake removes the abort listener; abort right then, before the waiter resumes.
+    for (const controller of [c, d]) {
+      const remove = controller.signal.removeEventListener.bind(controller.signal)
+      vi.spyOn(controller.signal, 'removeEventListener').mockImplementation((...args: Parameters<typeof remove>) => { remove(...args); controller.abort() })
+    }
+    const queued = [c, d].map((controller, offset) => h.mam.readRoomMessagePreview(ROOM, rows[12 + offset].stanzaId, controller.signal).catch(() => 'aborted'))
+    const last = h.mam.readRoomMessagePreview(ROOM, rows[14].stanzaId)
+    await settle()
+    gates.splice(0).forEach(open => open())
+    for (let turn = 0; turn < 60; turn++) { gates.splice(0).forEach(open => open()); await new Promise(resolve => setTimeout(resolve, 0)) }
+    await Promise.all(running)
+    expect(await Promise.all(queued)).toEqual(['aborted', 'aborted'])
+    expect((await last).kind).toBe('found')
+  })
+
+  // Intent: FLM-323 review — a queued walk rechecks membership and session once it has a slot.
+  it('does not query the archive when membership is lost while waiting for a slot', async () => {
+    const h = harness()
+    const serve = h.sendIQ.getMockImplementation()!
+    const gates: Array<() => void> = []
+    let walks = 0
+    h.sendIQ.mockImplementation(async iq => {
+      if (iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max') !== '100') return serve(iq)
+      walks++
+      await new Promise<void>(resolve => gates.push(resolve))
+      return serve(iq)
+    })
+    const running = [10, 11].map(index => h.mam.readRoomMessagePreview(ROOM, rows[index].stanzaId))
+    const queued = h.mam.readRoomMessagePreview(ROOM, rows[12].stanzaId)
+    for (let turn = 0; turn < 40; turn++) await new Promise(resolve => setTimeout(resolve, 0))
+    expect(walks).toBe(2)
+    roomStore.getState().addRoom({ ...room, joined: false })
+    const reconcile = vi.spyOn(roomStore.getState(), 'reconcileHistoryMessages')
+    for (let turn = 0; turn < 60; turn++) { gates.splice(0).forEach(open => open()); await new Promise(resolve => setTimeout(resolve, 0)) }
+    await Promise.all(running)
+    expect(await queued).toEqual({ kind: 'unknown' })
+    expect(walks).toBe(2)
+    expect(reconcile).not.toHaveBeenCalled()
+  })
+
+  // Intent: FLM-323 review — a woken caller that aborts and loses its slot to a competitor cancels promptly.
+  it('rejects a woken aborted waiter whose slot was taken by a competing walk', async () => {
+    type Slots = { acquirePreviewWalkSlot(signal?: AbortSignal): Promise<() => void> }
+    const slots = harness().mam as unknown as Slots
+    const releaseA = await slots.acquirePreviewWalkSlot()
+    const releaseB = await slots.acquirePreviewWalkSlot()
+    const controller = new AbortController()
+    const remove = controller.signal.removeEventListener.bind(controller.signal)
+    vi.spyOn(controller.signal, 'removeEventListener').mockImplementation((...args: Parameters<typeof remove>) => { remove(...args); controller.abort() })
+    const waiting = slots.acquirePreviewWalkSlot(controller.signal).then(() => 'acquired', () => 'aborted')
+    releaseA() // wakes the waiter, which aborts before it resumes
+    const releaseCompetitor = await slots.acquirePreviewWalkSlot() // takes the freed slot first
+    expect(await Promise.race([waiting, new Promise(resolve => setTimeout(() => resolve('still queued'), 50))])).toBe('aborted')
+    // The competing walks still hold their slots: one more acquirer must wait.
+    const extra = slots.acquirePreviewWalkSlot().then(release => { release(); return 'acquired' })
+    expect(await Promise.race([extra, new Promise(resolve => setTimeout(() => resolve('waiting'), 20))])).toBe('waiting')
+    releaseB(); releaseCompetitor()
+    expect(await extra).toBe('acquired')
+  })
+
+  // Intent: FLM-323 review — a queued walk is cancelled when the session changes while it waits.
+  it('does not query or reconcile for a queued walk whose session was replaced while the room stays joined', async () => {
+    const h = harness()
+    const serve = h.sendIQ.getMockImplementation()!
+    const gates: Array<() => void> = []
+    let walks = 0
+    h.sendIQ.mockImplementation(async iq => {
+      if (iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max') !== '100') return serve(iq)
+      walks++
+      await new Promise<void>(resolve => gates.push(resolve))
+      return serve(iq)
+    })
+    const running = [10, 11].map(index => h.mam.readRoomMessagePreview(ROOM, rows[index].stanzaId).catch(() => 'cancelled'))
+    const queued = h.mam.readRoomMessagePreview(ROOM, rows[12].stanzaId).then(() => 'resolved', () => 'cancelled')
+    for (let turn = 0; turn < 40; turn++) await new Promise(resolve => setTimeout(resolve, 0))
+    expect(walks).toBe(2)
+    setStorageScopeJid('carol@example.org')
+    expect(roomStore.getState().rooms.get(ROOM)?.joined).toBe(true)
+    const reconcile = vi.spyOn(roomStore.getState(), 'reconcileHistoryMessages')
+    for (let turn = 0; turn < 60; turn++) { gates.splice(0).forEach(open => open()); await new Promise(resolve => setTimeout(resolve, 0)) }
+    await Promise.all(running)
+    expect(await queued).toBe('cancelled')
+    expect(walks).toBe(2)
+    expect(reconcile).not.toHaveBeenCalled()
   })
 
   it('does not confuse a deleted quote with a failed archive request', async () => {

@@ -77,7 +77,8 @@
         "viewProfile": "Skatīt profilu",
         "resizeHint": "Velciet, lai mainītu izmēru, dubultklikšķis, lai atiestatītu",
         "dismiss": "Noraidīt",
-        "search": "Meklēt"
+        "search": "Meklēt",
+        "saved": "Saglabātie"
     },
     "newMessage": {
         "title": "Jauna ziņa",
@@ -549,20 +550,26 @@
         "reply": "Atbildēt",
         "copyMessage": "Kopēt tekstu",
         "replyQuoteHiddenEncrypted": "Citāts paslēpts: oriģināls bija šifrēts",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Pārsūtīt ziņu",
+        "forwardLinkOnly": "Nosūta jūsu komentāru, ziņas citētu kopiju un saiti uz oriģinālu. Visi galamērķī var izlasīt citātu.",
+        "forwardQuotedCopy": "Pārsūtītas ziņas citēta kopija",
+        "forwardedCopyUnknownAuthor": "nezināms sūtītājs",
+        "forwardedFromLabel": "Pārsūtīts no",
+        "forwardedCopyDirectChat": "Tiešā saruna",
+        "forwardedCopyOpen": "Atvērt oriģinālo ziņu",
+        "forwardedCopyUnknownSource": "nezināma istaba",
+        "forwardedCopyDiffers": "Pārsūtītā kopija atšķiras no oriģinālās ziņas",
+        "forwardedCopyClaimed": "Kopija, kas nosūtīta kopā ar pārsūtījumu:",
+        "forwardedOriginNotFound": "Oriģinālās ziņas nav jūsu vēsturē",
+        "forwardQuoteOnly": "Nosūta jūsu komentāru un ziņas citētu kopiju. Visi galamērķī var izlasīt citātu.",
+        "forwardEncryptedOnly": "Šī ziņa ir no šifrētas sarunas, tāpēc to var pārsūtīt tikai uz šifrētu sarunu.",
+        "forwardDestination": "Saruna vai istaba",
+        "forwardChoose": "Izvēlieties sarunu vai istabu",
+        "forwardUnavailable": "Galamērķis nav pieejams",
+        "forwardComment": "Komentārs (neobligāts)",
+        "forwardSend": "Sūtīt",
+        "forwardSending": "Sūta…",
+        "forwardFailed": "Neizdevās nosūtīt ziņu. Jūsu izvēle un komentārs ir saglabāti.",
         "forwardMessage": "Pārsūtīt ziņojumu (drīzumā)",
         "moreReactions": "Vairāk reakciju",
         "reactions": "Reakcijas",
@@ -639,8 +646,8 @@
             "verifiedTooltip": "Pārbaudīta OpenPGP atslēga",
             "tofuNewTooltip": "Jauns kontakts. Pārbaudiet pirkstu nospiedumu pilnai uzticībai",
             "unverifiedKeysetTooltip": "Šim kontaktam ir jauna atslēga, kas nav pārbaudīta.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Šifrēšana apturēta",
+            "blockedTooltip": "Sarunbiedra atslēga ir mainījusies. Atrisiniet to, lai atsāktu šifrēšanu",
             "sendBlockedEncryptionRequired": "Ziņojums nav nosūtīts. Šai sarunai ir nepieciešama šifrēšana, taču pašlaik tā nav pieejama.",
             "sendBlockedKeyChanged": "Ziņojums nav nosūtīts. Šī kontakta šifrēšanas atslēga mainījās. Pirms sūtīšanas pārskatiet atslēgas izmaiņas.",
             "sendBlockedKeyLocked": "Ziņojums nav nosūtīts. Atbloķējiet savu šifrēšanas atslēgu, lai nosūtītu šo ziņojumu.",
@@ -656,8 +663,8 @@
                 "pendingAll": "{{name}} atslēgas nesaņem ziņas, līdz šī ierīce saņem jūsu uzticēšanās lēmumus no iepriekšējās versijas vai no jūsu citām ierīcēm. Līdz tam jūs nevarat sūtīt ziņas. Mēģinājums tiek automātiski atkārtots.",
                 "review": "Pārskatīt atslēgas"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Šifrēšana izslēgta",
+            "plaintextForcedTooltip": "Jūs izslēdzāt šifrēšanu šai sarunai, tāpēc ziņojumi tiek sūtīti atklātā tekstā",
             "keyLocked": "Šifrēšana ir bloķēta",
             "keyLockedTooltip": "Šifrēšana ir bloķēta. Noklikšķiniet, lai atbloķētu",
             "encryptedClickToUnlock": "Šifrēts ziņojums. Noklikšķiniet, lai atbloķētu",
@@ -680,8 +687,8 @@
                 "fingerprint_mismatch": "Pirkstu nospiedums neatbilst norādītajai vērtībai",
                 "uid_mismatch": "Sertifikāta identitāte neatbilst sarunu biedra adresei"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Izslēgt šifrēšanu šai sarunai",
+            "enableEncryption": "Atkārtoti ieslēgt šifrēšanu",
             "tooltip": {
                 "header": "Šifrēts",
                 "protocol": {
@@ -729,7 +736,9 @@
         "loadAudio": "Ielādēt audio",
         "loadFilePreview": "Ielādēt priekšskatījumu",
         "showLinkImage": "Rādīt attēlu",
-        "emojiSuggestions": "Emoji ieteikumi"
+        "emojiSuggestions": "Emoji ieteikumi",
+        "saveMessage": "Saglabāt ziņojumu",
+        "removeFromSaved": "Noņemt no saglabātajiem"
     },
     "dates": {
         "today": "Šodien",
@@ -766,6 +775,20 @@
             "privacy": "Privātums",
             "mcp": "Claude integrācija",
             "advanced": "Papildu"
+        },
+        "categoryDescriptions": {
+            "profile": "Jūsu profils, konts un pievienotās ierīces.",
+            "appearance": "Motīvs, režīms, attēlojuma blīvums un akcenta krāsa.",
+            "accessibility": "Teksta izmērs, lasīšanas platums, kustība un caurspīdīgums.",
+            "language": "Saskarnes valoda un reģionālie formāti.",
+            "notifications": "Izvēlieties, kā un kad Fluux jūs brīdina.",
+            "encryption": "Jūsu sarunu pilnīgas šifrēšanas atslēgas.",
+            "privacy": "Ziņojumu arhivēšana serverī un automātiska multivides lejupielāde.",
+            "blocked": "Cilvēki, kuri nevar jums rakstīt vai redzēt jūsu statusu.",
+            "storage": "Šīs ierīces kešatmiņā saglabātā multivide un tās aizņemtā vieta.",
+            "updates": "Uzturiet Fluux atjauninātu.",
+            "mcp": "Lokālā Claude tilta iestatījumi.",
+            "advanced": "Izstrādātāju rīki un diagnostika."
         },
         "groups": {
             "general": "Vispārīgi",
@@ -1377,6 +1400,10 @@
         "search": {
             "title": "Meklēšanas rezultāti",
             "description": "Izvēlieties rezultātu sānjoslā, lai skatītu sarunu."
+        },
+        "saved": {
+            "title": "Saglabātie ziņojumi",
+            "description": "Izvēlieties saglabātu ziņojumu sānjoslā, lai atvērtu to tā sarunā."
         }
     },
     "avatar": {
@@ -1645,7 +1672,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reaģēja uz '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reaģēja uz jūsu ziņojumu",
         "see": "Skatīt"
     },
     "commands": {
@@ -1762,5 +1789,17 @@
         "edit": "{{nickname}} (rediģēts): {{text}}",
         "retraction": "{{nickname}} izdzēsa ziņojumu",
         "messages": "{{nickname}}: {{count}} jauni ziņojumi"
+    },
+    "saved": {
+        "title": "Saglabātie ziņojumi",
+        "marker": "Saglabāts",
+        "empty": "Nav saglabātu ziņojumu",
+        "emptyHint": "Atveriet ziņojuma izvēlni Vairāk un izvēlieties Saglabāt ziņojumu, lai to paturētu šeit.",
+        "remove": "Noņemt no saglabātajiem",
+        "encrypted": "Šifrēts ziņojums",
+        "deleted": "Ziņojums dzēsts",
+        "tryAgain": "Mēģināt vēlreiz",
+        "full": "Saglabāto ziņojumu saraksts ir pilns ({{count}}). Noņemiet vienu, lai saglabātu citu.",
+        "refused": "Jūsu serveris atteicās glabāt šo ziņojumu."
     }
 }

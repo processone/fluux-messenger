@@ -77,7 +77,8 @@
         "viewProfile": "Veure perfil",
         "resizeHint": "Arrossega per redimensionar, doble clic per reiniciar",
         "dismiss": "Descarta",
-        "search": "Cerca"
+        "search": "Cerca",
+        "saved": "Desats"
     },
     "newMessage": {
         "title": "Missatge nou",
@@ -550,20 +551,26 @@
         "reply": "Respon",
         "copyMessage": "Copia el text",
         "replyQuoteHiddenEncrypted": "Cita amagada: l'original estava xifrat",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Reenvia el missatge",
+        "forwardLinkOnly": "Envia el teu comentari, una còpia citada del missatge i un enllaç a l'original. Tothom a la destinació pot llegir la cita.",
+        "forwardQuotedCopy": "Còpia citada d'un missatge reenviat",
+        "forwardedCopyUnknownAuthor": "un remitent desconegut",
+        "forwardedFromLabel": "Reenviat de",
+        "forwardedCopyDirectChat": "Xat directe",
+        "forwardedCopyOpen": "Obre el missatge original",
+        "forwardedCopyUnknownSource": "una sala desconeguda",
+        "forwardedCopyDiffers": "La còpia reenviada difereix del missatge original",
+        "forwardedCopyClaimed": "Còpia enviada amb el reenviament:",
+        "forwardedOriginNotFound": "El missatge original no és al teu historial",
+        "forwardQuoteOnly": "Envia el teu comentari i una còpia citada del missatge. Tothom a la destinació pot llegir la cita.",
+        "forwardEncryptedOnly": "Aquest missatge és d'un xat xifrat, així que només es pot reenviar a un xat xifrat.",
+        "forwardDestination": "Xat o sala",
+        "forwardChoose": "Tria un xat o una sala",
+        "forwardUnavailable": "Destinació no disponible",
+        "forwardComment": "Comentari (opcional)",
+        "forwardSend": "Envia",
+        "forwardSending": "S'està enviant…",
+        "forwardFailed": "No s'ha pogut enviar el missatge. Es conserven la selecció i el comentari.",
         "forwardMessage": "Reenvia el missatge (properament)",
         "moreReactions": "Més reaccions",
         "reactions": "Reaccions",
@@ -640,8 +647,8 @@
             "verifiedTooltip": "Clau OpenPGP verificada",
             "tofuNewTooltip": "Contacte nou. Verifiqueu l'empremta per a confiança plena",
             "unverifiedKeysetTooltip": "Aquest contacte té una clau nova que no s'ha verificat.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Xifratge en pausa",
+            "blockedTooltip": "La clau del contacte ha canviat. Resoleu-ho per reprendre el xifratge",
             "sendBlockedEncryptionRequired": "Missatge no enviat. El xifratge és obligatori per a aquesta conversa, però ara mateix no està disponible.",
             "sendBlockedKeyChanged": "Missatge no enviat. La clau de xifratge d'aquest contacte ha canviat. Reviseu el canvi de clau abans d'enviar.",
             "sendBlockedKeyLocked": "Missatge no enviat. Desbloquegeu la vostra clau de xifratge per enviar aquest missatge.",
@@ -657,8 +664,8 @@
                 "pendingAll": "Les claus de {{name}} no reben missatges fins que aquest dispositiu no tingui les vostres decisions de confiança d'una versió anterior o dels vostres altres dispositius. Fins aleshores no podeu enviar missatges. Es torna a provar automàticament.",
                 "review": "Revisa les claus"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Xifratge desactivat",
+            "plaintextForcedTooltip": "Heu desactivat el xifratge per a aquesta conversa, de manera que els missatges s'envien en text pla",
             "keyLocked": "Xifratge bloquejat",
             "keyLockedTooltip": "Xifratge bloquejat. Feu clic per desbloquejar",
             "encryptedClickToUnlock": "Missatge xifrat. Feu clic per desbloquejar",
@@ -681,8 +688,8 @@
                 "fingerprint_mismatch": "L'empremta digital no coincideix amb el valor anunciat",
                 "uid_mismatch": "La identitat del certificat no coincideix amb l'adreça del contacte"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Desactiva el xifratge per a aquesta conversa",
+            "enableEncryption": "Torna a activar el xifratge",
             "tooltip": {
                 "header": "Xifrat",
                 "protocol": {
@@ -730,7 +737,9 @@
         "loadAudio": "Carrega l'àudio",
         "loadFilePreview": "Carrega la previsualització",
         "showLinkImage": "Mostra la imatge",
-        "emojiSuggestions": "Suggeriments d'emoji"
+        "emojiSuggestions": "Suggeriments d'emoji",
+        "saveMessage": "Desa el missatge",
+        "removeFromSaved": "Treu dels desats"
     },
     "dates": {
         "today": "Avui",
@@ -767,6 +776,20 @@
             "privacy": "Privadesa",
             "mcp": "Integració amb Claude",
             "advanced": "Avançat"
+        },
+        "categoryDescriptions": {
+            "profile": "El teu perfil, el teu compte i els dispositius connectats.",
+            "appearance": "Tema, mode, densitat de visualització i color d'èmfasi.",
+            "accessibility": "Mida del text, amplada de lectura, moviment i transparència.",
+            "language": "Idioma de la interfície i formats regionals.",
+            "notifications": "Tria com i quan t'avisa Fluux.",
+            "encryption": "Claus de xifratge d'extrem a extrem per a les teves converses.",
+            "privacy": "Arxiu de missatges al servidor i baixada automàtica de multimèdia.",
+            "blocked": "Persones que no et poden escriure ni veure el teu estat.",
+            "storage": "Multimèdia en memòria cau en aquest dispositiu i l'espai que ocupa.",
+            "updates": "Mantén Fluux actualitzat.",
+            "mcp": "Configuració del pont local de Claude.",
+            "advanced": "Eines de desenvolupament i diagnòstic."
         },
         "groups": {
             "general": "General",
@@ -1378,6 +1401,10 @@
         "search": {
             "title": "Resultats de la cerca",
             "description": "Seleccioneu un resultat a la barra lateral per veure la conversa."
+        },
+        "saved": {
+            "title": "Missatges desats",
+            "description": "Seleccioneu un missatge desat a la barra lateral per obrir-lo a la seva conversa."
         }
     },
     "avatar": {
@@ -1646,7 +1673,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} ha reaccionat a '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} ha reaccionat al vostre missatge",
         "see": "Mostra"
     },
     "commands": {
@@ -1763,5 +1790,17 @@
         "edit": "{{nickname}} (editat): {{text}}",
         "retraction": "{{nickname}} ha suprimit un missatge",
         "messages": "{{nickname}}: {{count}} missatges nous"
+    },
+    "saved": {
+        "title": "Missatges desats",
+        "marker": "Desat",
+        "empty": "No hi ha cap missatge desat",
+        "emptyHint": "Obriu el menú «Més» d'un missatge i trieu «Desa el missatge» per conservar-lo aquí.",
+        "remove": "Treu dels desats",
+        "encrypted": "Missatge xifrat",
+        "deleted": "Missatge suprimit",
+        "tryAgain": "Torna-ho a provar",
+        "full": "La llista de missatges desats és plena ({{count}}). Traieu-ne un per desar-ne un altre.",
+        "refused": "El vostre servidor ha refusat emmagatzemar aquest missatge."
     }
 }

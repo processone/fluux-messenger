@@ -77,7 +77,8 @@
         "viewProfile": "Prikaži profil",
         "resizeHint": "Povucite za promjenu veličine, dvostruki klik za resetiranje",
         "dismiss": "Odbaci",
-        "search": "Traži"
+        "search": "Traži",
+        "saved": "Spremljeno"
     },
     "newMessage": {
         "title": "Nova poruka",
@@ -548,20 +549,26 @@
         "reply": "Odgovori",
         "copyMessage": "Kopiraj tekst",
         "replyQuoteHiddenEncrypted": "Citat skriven: izvornik je bio šifriran",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Proslijedi poruku",
+        "forwardLinkOnly": "Šalje vaš komentar, citiranu kopiju poruke i poveznicu na izvornik. Citat mogu pročitati svi na odredištu.",
+        "forwardQuotedCopy": "Citirana kopija proslijeđene poruke",
+        "forwardedCopyUnknownAuthor": "nepoznati pošiljatelj",
+        "forwardedFromLabel": "Proslijeđeno od",
+        "forwardedCopyDirectChat": "Izravni razgovor",
+        "forwardedCopyOpen": "Otvori izvornu poruku",
+        "forwardedCopyUnknownSource": "nepoznata soba",
+        "forwardedCopyDiffers": "Proslijeđena kopija razlikuje se od izvorne poruke",
+        "forwardedCopyClaimed": "Kopija poslana uz prosljeđivanje:",
+        "forwardedOriginNotFound": "Izvorne poruke nema u vašoj povijesti",
+        "forwardQuoteOnly": "Šalje vaš komentar i citiranu kopiju poruke. Citat mogu pročitati svi na odredištu.",
+        "forwardEncryptedOnly": "Ova poruka je iz šifriranog razgovora pa se može proslijediti samo u šifrirani razgovor.",
+        "forwardDestination": "Razgovor ili soba",
+        "forwardChoose": "Odaberite razgovor ili sobu",
+        "forwardUnavailable": "Odredište nije dostupno",
+        "forwardComment": "Komentar (neobavezno)",
+        "forwardSend": "Pošalji",
+        "forwardSending": "Slanje…",
+        "forwardFailed": "Poruka nije poslana. Vaš odabir i komentar su sačuvani.",
         "forwardMessage": "Proslijedi poruku (uskoro dolazi)",
         "moreReactions": "Više reakcija",
         "reactions": "Reakcije",
@@ -638,8 +645,8 @@
             "verifiedTooltip": "Provjereni OpenPGP ključ",
             "tofuNewTooltip": "Novi kontakt. Provjerite otisak za potpuno povjerenje",
             "unverifiedKeysetTooltip": "Ovaj kontakt ima novi ključ koji nije provjeren.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Šifriranje pauzirano",
+            "blockedTooltip": "Ključ sugovornika se promijenio. Riješite to kako biste nastavili šifriranje",
             "sendBlockedEncryptionRequired": "Poruka nije poslana. Za ovaj je razgovor potrebno šifriranje, ali trenutačno nije dostupno.",
             "sendBlockedKeyChanged": "Poruka nije poslana. Ključ za šifriranje ovog kontakta se promijenio. Pregledajte promjenu ključa prije slanja.",
             "sendBlockedKeyLocked": "Poruka nije poslana. Otključajte svoj ključ za šifriranje kako biste poslali ovu poruku.",
@@ -655,8 +662,8 @@
                 "pendingAll": "Ključevi kontakta {{name}} ne primaju poruke dok ovaj uređaj ne dobije vaše odluke o povjerenju iz starije verzije ili s vaših drugih uređaja. Do tada ne možete slati poruke. Pokušaj se automatski ponavlja.",
                 "review": "Pregledaj ključeve"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Šifriranje isključeno",
+            "plaintextForcedTooltip": "Isključili ste šifriranje za ovaj razgovor, pa se poruke šalju u običnom tekstu",
             "keyLocked": "Šifriranje zaključano",
             "keyLockedTooltip": "Šifriranje zaključano. Kliknite za otključavanje",
             "encryptedClickToUnlock": "Šifrirana poruka. Kliknite za otključavanje",
@@ -679,8 +686,8 @@
                 "fingerprint_mismatch": "Otisak ne odgovara objavljenoj vrijednosti",
                 "uid_mismatch": "Identitet certifikata ne odgovara adresi sugovornika"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Isključi šifriranje za ovaj razgovor",
+            "enableEncryption": "Ponovno uključi šifriranje",
             "tooltip": {
                 "header": "Šifrirano",
                 "protocol": {
@@ -728,7 +735,9 @@
         "loadAudio": "Učitaj zvuk",
         "loadFilePreview": "Učitaj pretpregled",
         "showLinkImage": "Prikaži sliku",
-        "emojiSuggestions": "Prijedlozi emojija"
+        "emojiSuggestions": "Prijedlozi emojija",
+        "saveMessage": "Spremi poruku",
+        "removeFromSaved": "Ukloni iz spremljenih"
     },
     "dates": {
         "today": "Danas",
@@ -765,6 +774,20 @@
             "privacy": "Privatnost",
             "mcp": "Integracija Claudea",
             "advanced": "Napredno"
+        },
+        "categoryDescriptions": {
+            "profile": "Vaš profil, račun i povezani uređaji.",
+            "appearance": "Tema, način, gustoća prikaza i boja naglaska.",
+            "accessibility": "Veličina teksta, širina čitanja, animacije i prozirnost.",
+            "language": "Jezik sučelja i regionalni formati.",
+            "notifications": "Odaberite kako i kada vas Fluux obavještava.",
+            "encryption": "Ključevi za šifriranje s kraja na kraj za vaše razgovore.",
+            "privacy": "Arhiviranje poruka na poslužitelju i automatsko preuzimanje medija.",
+            "blocked": "Osobe koje vam ne mogu pisati niti vidjeti vaš status.",
+            "storage": "Mediji u predmemoriji ovog uređaja i prostor koji zauzimaju.",
+            "updates": "Održavajte Fluux ažurnim.",
+            "mcp": "Postavke lokalnog Claude mosta.",
+            "advanced": "Alati za razvojne programere i dijagnostika."
         },
         "groups": {
             "general": "Općenito",
@@ -1376,6 +1399,10 @@
         "search": {
             "title": "Rezultati pretraživanja",
             "description": "Odaberite rezultat u bočnoj traci za prikaz razgovora."
+        },
+        "saved": {
+            "title": "Spremljene poruke",
+            "description": "Odaberite spremljenu poruku na bočnoj traci da biste je otvorili u njezinu razgovoru."
         }
     },
     "avatar": {
@@ -1644,7 +1671,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reagirao je na '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reagirao je na vašu poruku",
         "see": "Prikaži"
     },
     "commands": {
@@ -1761,5 +1788,17 @@
         "edit": "{{nickname}} (uređeno): {{text}}",
         "retraction": "{{nickname}} je izbrisao/la poruku",
         "messages": "{{nickname}}: nove poruke — {{count}}"
+    },
+    "saved": {
+        "title": "Spremljene poruke",
+        "marker": "Spremljeno",
+        "empty": "Nema spremljenih poruka",
+        "emptyHint": "Otvorite izbornik Više za poruku i odaberite Spremi poruku da je zadržite ovdje.",
+        "remove": "Ukloni iz spremljenih",
+        "encrypted": "Šifrirana poruka",
+        "deleted": "Poruka je izbrisana",
+        "tryAgain": "Pokušaj ponovno",
+        "full": "Popis spremljenih poruka je pun ({{count}}). Uklonite jednu da biste spremili drugu.",
+        "refused": "Vaš je poslužitelj odbio pohraniti ovu poruku."
     }
 }

@@ -337,6 +337,117 @@ describe('XMPPClient Message', () => {
     })
   })
 
+  // XEP-0280 §7/§11: only a wrapper from the user's own bare address is a carbon.
+  describe('carbon sender check (XEP-0280 §7/§11)', () => {
+    const carbon = (
+      outerFrom: string | undefined,
+      kind: 'received' | 'sent',
+      inner: Record<string, string>,
+      children: unknown[],
+    ) => createMockElement('message', {
+      ...(outerFrom ? { from: outerFrom } : {}),
+      to: 'user@example.com/desktop',
+    }, [
+      { name: kind, attrs: { xmlns: 'urn:xmpp:carbons:2' }, children: [
+        { name: 'forwarded', attrs: { xmlns: 'urn:xmpp:forward:0' }, children: [
+          { name: 'message', attrs: inner, children },
+        ] },
+      ] },
+    ] as any)
+
+    const forgedMessage = { from: 'boss@example.com/office', to: 'user@example.com/desktop', type: 'chat', id: 'forged-1' }
+    const chatEvents = () => emitSDKSpy.mock.calls.filter(([e]: unknown[]) => e === 'chat:message' || e === 'chat:message-updated')
+
+    it.each([
+      ['a stranger', 'mallory@evil.example/x'],
+      ['a stranger on the same server', 'mallory@example.com'],
+      ['a contact', 'boss@example.com'],
+      ['the own account\'s full address', 'user@example.com/phone'],
+      ['the own account\'s domain', 'example.com'],
+    ])('drops a received carbon wrapped by %s', async (_label, outer) => {
+      await connectClient()
+      mockXmppClientInstance._emit('stanza', carbon(outer, 'received', forgedMessage,
+        [{ name: 'body', text: 'Please wire 5000 EUR' }]))
+      expect(chatEvents()).toHaveLength(0)
+    })
+
+    it('drops a sent carbon wrapped by a stranger instead of showing it as the user\'s own', async () => {
+      await connectClient()
+      mockXmppClientInstance._emit('stanza', carbon('mallory@evil.example/x', 'sent',
+        { from: 'user@example.com/phone', to: 'boss@example.com', type: 'chat', id: 'forged-2' },
+        [{ name: 'body', text: 'I resign' }]))
+      expect(chatEvents()).toHaveLength(0)
+    })
+
+    it('does not let a stranger\'s carbon retract or edit a real message', async () => {
+      await connectClient()
+      vi.mocked(mockStores.chat.getMessage).mockReturnValue({
+        type: 'chat', id: 'boss-real-1', conversationId: 'boss@example.com',
+        from: 'boss@example.com', body: 'Real instructions', timestamp: new Date(), isOutgoing: false,
+      } as any)
+      mockXmppClientInstance._emit('stanza', carbon('mallory@evil.example/x', 'received',
+        { ...forgedMessage, id: 'forged-3' }, [
+          { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'boss-real-1' } },
+          { name: 'body', text: 'retracted' },
+        ]))
+      mockXmppClientInstance._emit('stanza', carbon('mallory@evil.example/x', 'received',
+        { ...forgedMessage, id: 'forged-4' }, [
+          { name: 'replace', attrs: { xmlns: 'urn:xmpp:message-correct:0', id: 'boss-real-1' } },
+          { name: 'body', text: 'edited by Mallory' },
+        ]))
+      expect(chatEvents()).toHaveLength(0)
+    })
+
+    it.each([
+      ['an own bare address', 'user@example.com'],
+      ['an own bare address in another case', 'User@Example.COM'],
+      ['no sender', undefined],
+    ])('accepts a received carbon with %s', async (_label, outer) => {
+      await connectClient()
+      mockXmppClientInstance._emit('stanza', carbon(outer, 'received',
+        { from: 'boss@example.com/office', to: 'user@example.com/phone', type: 'chat', id: 'real-1' },
+        [{ name: 'body', text: 'hello' }]))
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', expect.objectContaining({
+        message: expect.objectContaining({ id: 'real-1', from: 'boss@example.com', isOutgoing: false }),
+      }))
+    })
+
+    it('accepts a genuine sent carbon from the own account', async () => {
+      await connectClient()
+      mockXmppClientInstance._emit('stanza', carbon('user@example.com', 'sent',
+        { from: 'user@example.com/phone', to: 'boss@example.com', type: 'chat', id: 'real-2' },
+        [{ name: 'body', text: 'sent elsewhere' }]))
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', expect.objectContaining({
+        message: expect.objectContaining({ id: 'real-2', isOutgoing: true }),
+      }))
+    })
+
+    it('does not unwrap a carbon found inside a carbon', async () => {
+      await connectClient()
+      // A genuine outer carbon whose forwarded message is itself a carbon wrapper
+      // with no sender, so only the nesting guard (not the sender check) stops it.
+      const nested = {
+        name: 'message', attrs: { to: 'user@example.com', type: 'chat', id: 'outer' },
+        children: [
+          { name: 'received', attrs: { xmlns: 'urn:xmpp:carbons:2' }, children: [
+            { name: 'forwarded', attrs: { xmlns: 'urn:xmpp:forward:0' }, children: [
+              { name: 'message', attrs: forgedMessage, children: [{ name: 'body', text: 'forged via nesting' }] },
+            ] },
+          ] },
+        ],
+      }
+      mockXmppClientInstance._emit('stanza', createMockElement('message', {
+        from: 'user@example.com', to: 'user@example.com/desktop',
+      }, [
+        { name: 'received', attrs: { xmlns: 'urn:xmpp:carbons:2' }, children: [
+          { name: 'forwarded', attrs: { xmlns: 'urn:xmpp:forward:0' }, children: [nested] },
+        ] },
+      ] as any))
+      const forged = chatEvents().filter(([, p]: any) => p?.message?.body === 'forged via nesting' || p?.message?.id === 'forged-1')
+      expect(forged).toHaveLength(0)
+    })
+  })
+
   describe('message carbons (XEP-0280)', () => {
     it('should process received carbon and extract forwarded message', async () => {
       await connectClient()
@@ -3303,6 +3414,39 @@ describe('XMPPClient Message', () => {
         conversationId: 'contact@example.com',
         messageId: 'msg-123',
         error: { type: 'cancel', condition: 'service-unavailable', text: undefined },
+      })
+    })
+
+    describe('a reader device refusing a forwarded copy', () => {
+      const refusal = (from: string, condition: string, id = 'fwd-1') => createMockElement('message', {
+        from, to: 'user@example.com/desktop', type: 'error', id,
+      }, [{ name: 'error', attrs: { type: 'cancel' }, children: [{ name: condition, attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } }] }])
+      const withStoredMessage = (forwarded: boolean) => {
+        const row = { id: 'fwd-1', ...(forwarded && { forwarded: { from: 'x@example.com', text: 'hi', author: 'x' } }) }
+        mockStores.chat.getMessage = vi.fn((_c: string, id: string) => (id === 'fwd-1' ? row : undefined)) as never
+      }
+
+      it('does not mark a forward as failed when one device answers not-allowed', async () => {
+        await connectClient()
+        withStoredMessage(true)
+        mockXmppClientInstance._emit('stanza', refusal('contact@example.com/converse', 'not-allowed'))
+        expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message-error', expect.anything())
+        expect(emitSDKSpy).toHaveBeenCalledWith('console:event', expect.objectContaining({ category: 'error' }))
+      })
+
+      it('still marks a plain message as failed on not-allowed', async () => {
+        await connectClient()
+        withStoredMessage(false)
+        mockXmppClientInstance._emit('stanza', refusal('contact@example.com/converse', 'not-allowed'))
+        expect(emitSDKSpy).toHaveBeenCalledWith('chat:message-error', expect.objectContaining({ messageId: 'fwd-1' }))
+      })
+
+      it('still marks a forward as failed for a bare-address or other error', async () => {
+        await connectClient()
+        withStoredMessage(true)
+        mockXmppClientInstance._emit('stanza', refusal('contact@example.com', 'not-allowed'))
+        mockXmppClientInstance._emit('stanza', refusal('contact@example.com/converse', 'service-unavailable'))
+        expect(emitSDKSpy.mock.calls.filter((c: unknown[]) => c[0] === 'chat:message-error')).toHaveLength(2)
       })
     })
 

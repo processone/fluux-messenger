@@ -77,7 +77,8 @@
         "viewProfile": "Se profil",
         "resizeHint": "Træk for at ændre størrelse, dobbeltklik for at nulstille",
         "dismiss": "Afvis",
-        "search": "Søg"
+        "search": "Søg",
+        "saved": "Gemte"
     },
     "newMessage": {
         "title": "Ny besked",
@@ -547,20 +548,26 @@
         "reply": "Svar",
         "copyMessage": "Kopiér tekst",
         "replyQuoteHiddenEncrypted": "Citat skjult: originalen var krypteret",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
+        "forwardMessageLink": "Videresend besked",
+        "forwardLinkOnly": "Sender din kommentar, en citeret kopi af beskeden og et link til originalen. Alle på destinationen kan læse citatet.",
+        "forwardQuotedCopy": "Citeret kopi af en videresendt besked",
+        "forwardedCopyUnknownAuthor": "en ukendt afsender",
+        "forwardedFromLabel": "Videresendt fra",
+        "forwardedCopyDirectChat": "Direkte chat",
+        "forwardedCopyOpen": "Åbn den oprindelige besked",
+        "forwardedCopyUnknownSource": "et ukendt rum",
+        "forwardedCopyDiffers": "Den videresendte kopi afviger fra den oprindelige besked",
+        "forwardedCopyClaimed": "Kopi sendt med videresendelsen:",
+        "forwardedOriginNotFound": "Den oprindelige besked findes ikke i din historik",
+        "forwardQuoteOnly": "Sender din kommentar og en citeret kopi af beskeden. Alle på destinationen kan læse citatet.",
+        "forwardEncryptedOnly": "Denne besked er fra en krypteret chat, så den kan kun videresendes til en krypteret chat.",
+        "forwardDestination": "Chat eller rum",
+        "forwardChoose": "Vælg en chat eller et rum",
+        "forwardUnavailable": "Destinationen er ikke tilgængelig",
+        "forwardComment": "Kommentar (valgfri)",
         "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardSending": "Sender…",
+        "forwardFailed": "Beskeden kunne ikke sendes. Dit valg og din kommentar er bevaret.",
         "forwardMessage": "Videresend besked (kommer snart)",
         "moreReactions": "Flere reaktioner",
         "reactions": "Reaktioner",
@@ -636,8 +643,8 @@
             "verifiedTooltip": "Verificeret OpenPGP-nøgle",
             "tofuNewTooltip": "Ny kontakt. Bekræft fingeraftryk for fuld tillid",
             "unverifiedKeysetTooltip": "Denne kontakt har en ny nøgle, som ikke er blevet bekræftet.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Kryptering sat på pause",
+            "blockedTooltip": "Kontaktens nøgle er ændret. Løs det for at genoptage krypteringen",
             "sendBlockedEncryptionRequired": "Beskeden blev ikke sendt. Kryptering er påkrævet for denne samtale, men er ikke tilgængelig lige nu.",
             "sendBlockedKeyChanged": "Beskeden blev ikke sendt. Denne kontakts krypteringsnøgle er ændret. Gennemgå nøgleændringen, før du sender.",
             "sendBlockedKeyLocked": "Beskeden blev ikke sendt. Lås din krypteringsnøgle op for at sende denne besked.",
@@ -653,8 +660,8 @@
                 "pendingAll": "Nøglerne fra {{name}} modtager ingen beskeder, før denne enhed har dine tillidsbeslutninger fra en tidligere version eller fra dine andre enheder. Indtil da kan du ikke sende beskeder. Det forsøges igen automatisk.",
                 "review": "Gennemgå nøgler"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Kryptering deaktiveret",
+            "plaintextForcedTooltip": "Du har deaktiveret kryptering for denne samtale, så beskeder sendes i klartekst",
             "keyLocked": "Kryptering låst",
             "keyLockedTooltip": "Kryptering låst. Klik for at låse op",
             "encryptedClickToUnlock": "Krypteret besked. Klik for at låse op",
@@ -677,8 +684,8 @@
                 "fingerprint_mismatch": "Fingeraftrykket matcher ikke den annoncerede værdi",
                 "uid_mismatch": "Certifikatets identitet matcher ikke modpartens adresse"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Deaktiver kryptering for denne samtale",
+            "enableEncryption": "Genaktiver kryptering",
             "tooltip": {
                 "header": "Krypteret",
                 "protocol": {
@@ -726,7 +733,9 @@
         "loadAudio": "Indlæs lyd",
         "loadFilePreview": "Indlæs forhåndsvisning",
         "showLinkImage": "Vis billede",
-        "emojiSuggestions": "Emoji-forslag"
+        "emojiSuggestions": "Emoji-forslag",
+        "saveMessage": "Gem besked",
+        "removeFromSaved": "Fjern fra gemte"
     },
     "dates": {
         "today": "I dag",
@@ -763,6 +772,20 @@
             "privacy": "Privatliv",
             "mcp": "Claude-integration",
             "advanced": "Avanceret"
+        },
+        "categoryDescriptions": {
+            "profile": "Din profil, din konto og tilsluttede enheder.",
+            "appearance": "Tema, tilstand, visningstæthed og accentfarve.",
+            "accessibility": "Tekststørrelse, læsebredde, bevægelse og gennemsigtighed.",
+            "language": "Brugerfladens sprog og regionale formater.",
+            "notifications": "Vælg hvordan og hvornår Fluux giver dig besked.",
+            "encryption": "Nøgler til end-to-end-kryptering af dine samtaler.",
+            "privacy": "Arkivering af beskeder på serveren og automatisk download af medier.",
+            "blocked": "Personer, der ikke kan skrive til dig eller se din status.",
+            "storage": "Medier gemt i cache på denne enhed og den plads, de bruger.",
+            "updates": "Hold Fluux opdateret.",
+            "mcp": "Indstillinger for den lokale Claude-bro.",
+            "advanced": "Udviklerværktøjer og diagnosticering."
         },
         "groups": {
             "general": "Generelt",
@@ -1374,6 +1397,10 @@
         "search": {
             "title": "Søgeresultater",
             "description": "Vælg et resultat i sidebjælken for at se samtalen."
+        },
+        "saved": {
+            "title": "Gemte beskeder",
+            "description": "Vælg en gemt besked i sidepanelet for at åbne den i sin samtale."
         }
     },
     "avatar": {
@@ -1642,7 +1669,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reagerede på '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reagerede på din besked",
         "see": "Vis"
     },
     "commands": {
@@ -1759,5 +1786,17 @@
         "edit": "{{nickname}} (redigeret): {{text}}",
         "retraction": "{{nickname}} slettede en besked",
         "messages": "{{nickname}}: {{count}} nye beskeder"
+    },
+    "saved": {
+        "title": "Gemte beskeder",
+        "marker": "Gemt",
+        "empty": "Ingen gemte beskeder",
+        "emptyHint": "Åbn en besked menu Mere, og vælg Gem besked for at beholde den her.",
+        "remove": "Fjern fra gemte",
+        "encrypted": "Krypteret besked",
+        "deleted": "Beskeden er slettet",
+        "tryAgain": "Prøv igen",
+        "full": "Listen over gemte beskeder er fuld ({{count}}). Fjern én for at gemme en anden.",
+        "refused": "Din server nægtede at gemme denne besked."
     }
 }

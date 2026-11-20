@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { ForwardMessageModal } from './ForwardMessageModal'
 import { sendsSettled } from '@/utils/pendingSends'
+import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
 import { ForwardMessageProvider, useForwardMessage } from './conversation/forwardMessageContext'
 
 const fixture = vi.hoisted(() => ({
@@ -11,7 +12,8 @@ const fixture = vi.hoisted(() => ({
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('@fluux/sdk', async () => ({
   E2EEEncryptionRequiredError: (await vi.importActual<typeof import('@fluux/sdk')>('@fluux/sdk')).E2EEEncryptionRequiredError,
-  isE2EEPluginError: () => false,
+  E2EEPluginError: (await vi.importActual<typeof import('@fluux/sdk')>('@fluux/sdk')).E2EEPluginError,
+  isE2EEPluginError: (await vi.importActual<typeof import('@fluux/sdk')>('@fluux/sdk')).isE2EEPluginError,
   // The shared picker filters with the SDK's own name/address matcher.
   matchNameOrJid: (await vi.importActual<typeof import('@fluux/sdk')>('@fluux/sdk')).matchNameOrJid,
   useRoster: () => ({ contacts: [{ jid: 'emma@fluux.chat', name: 'Emma' }, { jid: 'james@fluux.chat', name: 'James' }] }),
@@ -174,6 +176,31 @@ describe('ForwardMessageModal', () => {
       await waitFor(() => expect(fixture.chatSend).toHaveBeenCalledOnce())
       expect(fixture.chatSend.mock.calls[0][2].forwarded).toMatchObject({ fromEncrypted: true })
       expect(fixture.roomSend).not.toHaveBeenCalled()
+    })
+
+    // A contact whose every key waits for a decision refuses the send; the dialog stays encrypted-only
+    // (one send attempt, never plain text) and offers Review keys for that contact.
+    it('offers Review keys for the contact when every key waits for a decision', async () => {
+      const { E2EEPluginError } = await vi.importActual<typeof import('@fluux/sdk')>('@fluux/sdk')
+      fixture.chatSend.mockRejectedValue(new E2EEPluginError('permanent', 'peer-keys-awaiting-decision', 'waiting'))
+      useContactSecurityRequestStore.getState().clearContactSecurityRequest()
+      const onClose = vi.fn()
+      render(<ForwardMessageModal quote={direct} onClose={onClose} />)
+      pickAndSend('em')
+      await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('chat.encryption.heldKeys.all'))
+      expect(fixture.chatSend).toHaveBeenCalledOnce()
+      fireEvent.click(screen.getByRole('button', { name: 'chat.encryption.heldKeys.review' }))
+      expect(useContactSecurityRequestStore.getState().jid).toBe('emma@fluux.chat')
+      expect(onClose).toHaveBeenCalledOnce()
+    })
+
+    it('offers no Review keys for another refusal', async () => {
+      const { E2EEPluginError } = await vi.importActual<typeof import('@fluux/sdk')>('@fluux/sdk')
+      fixture.chatSend.mockRejectedValue(new E2EEPluginError('permanent', 'peer-keys-trust-pending', 'pending'))
+      render(<ForwardMessageModal quote={direct} onClose={vi.fn()} />)
+      pickAndSend('em')
+      expect(await screen.findByRole('alert')).toHaveTextContent('chat.encryption.sendBlockedTrustPending')
+      expect(screen.queryByRole('button', { name: 'chat.encryption.heldKeys.review' })).toBeNull()
     })
 
     it('shows the encryption refusal and keeps the dialog when the destination cannot be encrypted', async () => {

@@ -24,6 +24,7 @@ import {
   NS_THUMBS,
   NS_FILE_METADATA,
   NS_STANZA_ID,
+  NS_OCCUPANT_ID,
   NS_XHTML,
   NS_FASTEN,
   NS_REACTIONS,
@@ -409,9 +410,19 @@ function boundedPlainText(value: string, limit: number): string {
 }
 
 /**
+ * The text a forwarded copy of a message body carries once received: the sender trims and cuts
+ * the body at the limit, and the parser drops control and direction-mark characters.
+ */
+export function forwardedCopyTextOf(body: string): string {
+  return boundedPlainText(Array.from(body.trim()).slice(0, MAX_FORWARDED_CODE_POINTS).join(''), MAX_FORWARDED_CODE_POINTS)
+}
+
+/**
  * XEP-0297: the one structured copy a message carries beside its own body. Bounded and
- * non-recursive: only the forwarded message's plain body, sender and original time are read.
- * A nested forward, receipts, routing addresses and every other extension are ignored, and the
+ * non-recursive: only the forwarded message's plain body, sender, original time and the
+ * original's ids (the inner `id` and an XEP-0359 `<stanza-id/>` with its `by`) are read. The ids
+ * are a claim used only to find the original in local history. A nested forward, receipts,
+ * routing addresses and every other extension are ignored, and the
  * inner message is never routed as a message of its own. Attribution to the sender of the
  * outer message stays separate: the author here is only the forwarder's claim.
  */
@@ -431,7 +442,80 @@ export function parseForwardedCopy(messageEl: Element): ForwardedCopy | undefine
   const stamp = forwarded?.getChild('delay', NS_DELAY)?.attrs.stamp
   const time = typeof stamp === 'string' ? new Date(stamp).getTime() : NaN
   const address = boundedPlainText(from, MAX_FORWARDED_ADDRESS_CODE_POINTS)
-  return { author, ...(address && address === from && { from: address }), text, ...(innerType && { type: innerType }), ...(Number.isFinite(time) && { timestamp: time }) }
+  // The original's ids are a claim for matching local history only, never an identity of this message.
+  const bounded = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= MAX_FORWARDED_ADDRESS_CODE_POINTS && value === boundedPlainText(value, MAX_FORWARDED_ADDRESS_CODE_POINTS) ? value : undefined
+  const sid = inner.getChildren('stanza-id').find((el: Element) => el.attrs?.xmlns === NS_STANZA_ID)
+  const id = bounded(inner.attrs.id)
+  const stanzaId = bounded(sid?.attrs.id)
+  const stanzaIdBy = stanzaId ? bounded(sid?.attrs.by) : undefined
+  return { author, ...(address && address === from && { from: address }), text,
+    ...(id && { id }), ...(stanzaId && stanzaIdBy && { stanzaId, stanzaIdBy }), ...(innerType && { type: innerType }), ...(Number.isFinite(time) && { timestamp: time }) }
+}
+
+/** Identity a saved-message copy keeps beside the plain forwarded fields (XEP-0359, XEP-0421). */
+export interface ForwardedCopyIdentity {
+  to?: string
+  id?: string
+  stanzaId?: string
+  stanzaIdBy?: string
+  originId?: string
+  occupantId?: string
+}
+
+/**
+ * XEP-0297: the standalone forwarded copy of one message, as a child of the outgoing message.
+ * Forward writes the plain fields and the original's id and stanza-id; a saved message passes the full `identity`. `text` may be
+ * empty only for a copy that carries no body (an encrypted or deleted original).
+ */
+export function forwardedCopyElement(
+  copy: { from: string; text: string; timestamp?: number; type?: 'chat' | 'groupchat' },
+  identity: ForwardedCopyIdentity = {},
+): Element {
+  // The type is the source message's own, never guessed from the address.
+  const attrs: Record<string, string> = { xmlns: 'jabber:client', from: copy.from, type: copy.type ?? 'groupchat' }
+  if (identity.to) attrs.to = identity.to
+  if (identity.id) attrs.id = identity.id
+  const inner = xml('message', attrs,
+    ...(copy.text ? [xml('body', {}, copy.text)] : []),
+    ...(identity.stanzaId && identity.stanzaIdBy ? [xml('stanza-id', { xmlns: NS_STANZA_ID, id: identity.stanzaId, by: identity.stanzaIdBy })] : []),
+    ...(identity.originId ? [xml('origin-id', { xmlns: NS_STANZA_ID, id: identity.originId })] : []),
+    ...(identity.occupantId ? [xml('occupant-id', { xmlns: NS_OCCUPANT_ID, id: identity.occupantId })] : []),
+  )
+  return xml('forwarded', { xmlns: NS_FORWARD },
+    ...(copy.timestamp !== undefined && Number.isFinite(copy.timestamp)
+      ? [xml('delay', { xmlns: NS_DELAY, stamp: new Date(copy.timestamp).toISOString() })] : []),
+    inner)
+}
+
+/**
+ * Reader for a saved message's copy: the bounds of {@link parseForwardedCopy} (4000 code
+ * points, control characters removed, no nested forward) plus the identity elements Forward's
+ * reader does not read (author address, origin id, occupant id). Unlike Forward's reader, a copy without a body is valid.
+ */
+export function parseSavedForwardedCopy(forwarded: Element): {
+  from: string; to?: string; type?: 'chat' | 'groupchat'; text: string; timestamp?: number
+} & ForwardedCopyIdentity | undefined {
+  if (forwarded.attrs?.xmlns !== NS_FORWARD) return undefined
+  const inner = forwarded.getChildren('message').find((el: Element) => !el.attrs?.xmlns || el.attrs.xmlns === 'jabber:client')
+  if (!inner || typeof inner.attrs.from !== 'string' || !inner.attrs.from) return undefined
+  const body = inner.getChildren('body').find((el: Element) => !el.attrs?.xmlns || el.attrs.xmlns === 'jabber:client')
+  const text = body ? boundedPlainText(body.text(), MAX_FORWARDED_CODE_POINTS) : ''
+  const type = inner.attrs.type === 'chat' || inner.attrs.type === 'groupchat' ? inner.attrs.type : undefined
+  const stamp = forwarded.getChild('delay', NS_DELAY)?.attrs.stamp
+  const time = typeof stamp === 'string' ? new Date(stamp).getTime() : NaN
+  const sid = inner.getChild('stanza-id', NS_STANZA_ID)
+  const text_ = (value: unknown): string | undefined =>
+    typeof value === 'string' && value ? boundedPlainText(value, MAX_FORWARDED_ADDRESS_CODE_POINTS) : undefined
+  const to = text_(inner.attrs.to), id = text_(inner.attrs.id)
+  const stanzaId = text_(sid?.attrs.id), stanzaIdBy = text_(sid?.attrs.by)
+  const originId = text_(inner.getChild('origin-id', NS_STANZA_ID)?.attrs.id)
+  const occupantId = text_(inner.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id)
+  return {
+    from: boundedPlainText(inner.attrs.from, MAX_FORWARDED_ADDRESS_CODE_POINTS), text,
+    ...(type && { type }), ...(Number.isFinite(time) && { timestamp: time }),
+    ...(to && { to }), ...(id && { id }), ...(stanzaId && stanzaIdBy && { stanzaId, stanzaIdBy }),
+    ...(originId && { originId }), ...(occupantId && { occupantId }),
+  }
 }
 
 /**
@@ -701,6 +785,8 @@ export function correctionMarks(parsed: ParsedMessageContent): MessageImplState 
  */
 export interface CorrectionResult extends MessageImplState {
   references?: MessageReference[]
+  /** A copy the correction carries again, so the edited forward keeps its source. */
+  forwarded?: ForwardedCopy
   body: string
   isEdited: true
   originalBody: string
@@ -737,7 +823,7 @@ export function applyCorrection(
   messageEl: Element,
   body: string,
   originalBody: string,
-  options: { delayEl?: Element; authoredAt?: Date; expectedStanzaIdBy?: string; archiveId?: string } = {},
+  options: { delayEl?: Element; authoredAt?: Date; expectedStanzaIdBy?: string; archiveId?: string; room?: boolean } = {},
 ): CorrectionResult {
   const parsed = parseMessageContent({
     messageEl,
@@ -750,6 +836,9 @@ export function applyCorrection(
   return {
     body: parsed.processedBody,
     references: parsed.references,
+    // Rooms never carry a copy (first arrival drops it too), so a correction cannot give a room message
+    // one. A caller that routes to a room says so (a whisper arrives as type chat); a groupchat stanza is one too.
+    ...(parsed.forwarded && !options.room && messageEl.attrs?.type !== 'groupchat' && { forwarded: parsed.forwarded }),
     ...correctionMarks(parsed),
     originalBody,
     ...(parsed.attachment && { attachment: parsed.attachment }),

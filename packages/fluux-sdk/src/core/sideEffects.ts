@@ -14,6 +14,7 @@ import { setupRoomSideEffects } from './roomSideEffects'
 import { setupBackgroundSyncSideEffects } from './backgroundSync'
 import { setupConversationSyncSideEffects } from './conversationSyncSideEffects'
 import { setupMdsSideEffects } from './mdsSideEffects'
+import { setupSavedMessagesSideEffects } from './savedMessagesSideEffects'
 
 // Re-export individual setup functions and types
 export { setupChatSideEffects } from './chatSideEffects'
@@ -21,6 +22,7 @@ export type { SideEffectsOptions } from './chatSideEffects'
 export { setupRoomSideEffects } from './roomSideEffects'
 export { setupConversationSyncSideEffects } from './conversationSyncSideEffects'
 export { setupMdsSideEffects } from './mdsSideEffects'
+export { setupSavedMessagesSideEffects } from './savedMessagesSideEffects'
 
 /**
  * Sets up all store-based side effects for the SDK.
@@ -44,6 +46,7 @@ export function setupStoreSideEffects(
   const unsubscribeSync = setupBackgroundSyncSideEffects(client, options)
   const unsubscribeConversationSync = setupConversationSyncSideEffects(client, options)
   const unsubscribeMds = setupMdsSideEffects(client, options)
+  const unsubscribeSaved = setupSavedMessagesSideEffects(client, options)
 
   return () => {
     unsubscribeChat()
@@ -51,5 +54,6 @@ export function setupStoreSideEffects(
     unsubscribeSync()
     unsubscribeConversationSync()
     unsubscribeMds()
+    unsubscribeSaved()
   }
 }

@@ -77,7 +77,8 @@
         "viewProfile": "Ver perfil",
         "resizeHint": "Arraste para redimensionar, duplo clique para repor",
         "dismiss": "Fechar",
-        "search": "Pesquisar"
+        "search": "Pesquisar",
+        "saved": "Guardadas"
     },
     "newMessage": {
         "title": "Nova mensagem",
@@ -550,20 +551,26 @@
         "reply": "Responder",
         "copyMessage": "Copiar texto",
         "replyQuoteHiddenEncrypted": "Citação oculta: o original estava cifrado",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Encaminhar mensagem",
+        "forwardLinkOnly": "Envia o seu comentário, uma cópia citada da mensagem e um link para o original. Todos no destino podem ler a citação.",
+        "forwardQuotedCopy": "Cópia citada de uma mensagem encaminhada",
+        "forwardedCopyUnknownAuthor": "um remetente desconhecido",
+        "forwardedFromLabel": "Encaminhado de",
+        "forwardedCopyDirectChat": "Conversa direta",
+        "forwardedCopyOpen": "Abrir a mensagem original",
+        "forwardedCopyUnknownSource": "uma sala desconhecida",
+        "forwardedCopyDiffers": "A cópia encaminhada difere da mensagem original",
+        "forwardedCopyClaimed": "Cópia enviada com o encaminhamento:",
+        "forwardedOriginNotFound": "A mensagem original não está no seu histórico",
+        "forwardQuoteOnly": "Envia o seu comentário e uma cópia citada da mensagem. Todos no destino podem ler a citação.",
+        "forwardEncryptedOnly": "Esta mensagem é de uma conversa cifrada, por isso só pode ser encaminhada para uma conversa cifrada.",
+        "forwardDestination": "Conversa ou sala",
+        "forwardChoose": "Escolha uma conversa ou sala",
+        "forwardUnavailable": "Destino indisponível",
+        "forwardComment": "Comentário (opcional)",
+        "forwardSend": "Enviar",
+        "forwardSending": "A enviar…",
+        "forwardFailed": "Não foi possível enviar a mensagem. A sua seleção e o comentário foram mantidos.",
         "forwardMessage": "Encaminhar mensagem (brevemente)",
         "moreReactions": "Mais reações",
         "reactions": "Reações",
@@ -640,8 +647,8 @@
             "verifiedTooltip": "Chave OpenPGP verificada",
             "tofuNewTooltip": "Novo contacto. Verifique a impressão digital para confiança total",
             "unverifiedKeysetTooltip": "Este contacto tem uma nova chave que não foi verificada.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Criptografia em pausa",
+            "blockedTooltip": "A chave do contacto mudou. Resolva para retomar a criptografia",
             "sendBlockedEncryptionRequired": "Mensagem não enviada. A criptografia é obrigatória para esta conversa, mas não está disponível neste momento.",
             "sendBlockedKeyChanged": "Mensagem não enviada. A chave de criptografia deste contacto mudou. Reveja a alteração da chave antes de enviar.",
             "sendBlockedKeyLocked": "Mensagem não enviada. Desbloqueie a sua chave de criptografia para enviar esta mensagem.",
@@ -657,8 +664,8 @@
                 "pendingAll": "As chaves de {{name}} não recebem mensagens até que este dispositivo tenha as suas decisões de confiança de uma versão anterior ou dos seus outros dispositivos. Até lá não pode enviar mensagens. É tentado de novo automaticamente.",
                 "review": "Rever chaves"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Criptografia desativada",
+            "plaintextForcedTooltip": "Desativou a criptografia nesta conversa, por isso as mensagens são enviadas em texto simples",
             "keyLocked": "Criptografia bloqueada",
             "keyLockedTooltip": "Criptografia bloqueada. Clique para desbloquear",
             "encryptedClickToUnlock": "Mensagem criptografada. Clique para desbloquear",
@@ -681,8 +688,8 @@
                 "fingerprint_mismatch": "A impressão digital não corresponde ao valor anunciado",
                 "uid_mismatch": "A identidade do certificado não corresponde ao endereço do interlocutor"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Desativar a criptografia nesta conversa",
+            "enableEncryption": "Reativar a criptografia",
             "tooltip": {
                 "header": "Cifrado",
                 "protocol": {
@@ -730,7 +737,9 @@
         "loadAudio": "Carregar áudio",
         "loadFilePreview": "Carregar pré-visualização",
         "showLinkImage": "Mostrar imagem",
-        "emojiSuggestions": "Sugestões de emojis"
+        "emojiSuggestions": "Sugestões de emojis",
+        "saveMessage": "Guardar mensagem",
+        "removeFromSaved": "Remover das guardadas"
     },
     "dates": {
         "today": "Hoje",
@@ -767,6 +776,20 @@
             "privacy": "Privacidade",
             "mcp": "Integração com o Claude",
             "advanced": "Avançado"
+        },
+        "categoryDescriptions": {
+            "profile": "Seu perfil, sua conta e dispositivos conectados.",
+            "appearance": "Tema, modo, densidade de exibição e cor de destaque.",
+            "accessibility": "Tamanho do texto, largura de leitura, movimento e transparência.",
+            "language": "Idioma da interface e formatos regionais.",
+            "notifications": "Escolha como e quando o Fluux avisa você.",
+            "encryption": "Chaves de criptografia de ponta a ponta para suas conversas.",
+            "privacy": "Arquivamento de mensagens no servidor e download automático de mídia.",
+            "blocked": "Pessoas que não podem enviar mensagens para você nem ver seu status.",
+            "storage": "Mídia em cache neste dispositivo e o espaço que ela ocupa.",
+            "updates": "Mantenha o Fluux atualizado.",
+            "mcp": "Configurações da ponte local do Claude.",
+            "advanced": "Ferramentas de desenvolvedor e diagnóstico."
         },
         "groups": {
             "general": "Geral",
@@ -1378,6 +1401,10 @@
         "search": {
             "title": "Resultados da pesquisa",
             "description": "Selecione um resultado na barra lateral para ver a conversa."
+        },
+        "saved": {
+            "title": "Mensagens guardadas",
+            "description": "Selecione uma mensagem guardada na barra lateral para a abrir na sua conversa."
         }
     },
     "avatar": {
@@ -1646,7 +1673,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reagiu a '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reagiu à sua mensagem",
         "see": "Ver"
     },
     "commands": {
@@ -1763,5 +1790,17 @@
         "edit": "{{nickname}} (edição): {{text}}",
         "retraction": "{{nickname}} eliminou uma mensagem",
         "messages": "{{nickname}}: {{count}} novas mensagens"
+    },
+    "saved": {
+        "title": "Mensagens guardadas",
+        "marker": "Guardada",
+        "empty": "Nenhuma mensagem guardada",
+        "emptyHint": "Abra o menu Mais de uma mensagem e escolha Guardar mensagem para a manter aqui.",
+        "remove": "Remover das guardadas",
+        "encrypted": "Mensagem cifrada",
+        "deleted": "Mensagem eliminada",
+        "tryAgain": "Tentar novamente",
+        "full": "A lista de mensagens guardadas está cheia ({{count}}). Remova uma para guardar outra.",
+        "refused": "O seu servidor recusou armazenar esta mensagem."
     }
 }

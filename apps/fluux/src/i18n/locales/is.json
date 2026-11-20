@@ -77,7 +77,8 @@
         "viewProfile": "Skoða prófíl",
         "resizeHint": "Dragðu til að breyta stærð, tvísmelltu til að endurstilla",
         "dismiss": "Hafna",
-        "search": "Leita"
+        "search": "Leita",
+        "saved": "Vistuð"
     },
     "newMessage": {
         "title": "Ný skilaboð",
@@ -547,20 +548,26 @@
         "reply": "Svara",
         "copyMessage": "Afrita texta",
         "replyQuoteHiddenEncrypted": "Tilvitnun falin: upprunalega skeytið var dulkóðað",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Áframsenda skilaboð",
+        "forwardLinkOnly": "Sendir athugasemdina þína, tilvitnað afrit skilaboðanna og tengil á upprunalegu skilaboðin. Allir á áfangastaðnum geta lesið tilvitnunina.",
+        "forwardQuotedCopy": "Tilvitnað afrit áframsendra skilaboða",
+        "forwardedCopyUnknownAuthor": "óþekktur sendandi",
+        "forwardedFromLabel": "Áframsent frá",
+        "forwardedCopyDirectChat": "Einkaspjall",
+        "forwardedCopyOpen": "Opna upprunalegu skilaboðin",
+        "forwardedCopyUnknownSource": "óþekkt herbergi",
+        "forwardedCopyDiffers": "Áframsenda afritið er frábrugðið upprunalegu skilaboðunum",
+        "forwardedCopyClaimed": "Afrit sem fylgdi áframsendingunni:",
+        "forwardedOriginNotFound": "Upprunalegu skilaboðin eru ekki í ferlinum þínum",
+        "forwardQuoteOnly": "Sendir athugasemdina þína og tilvitnað afrit skilaboðanna. Allir á áfangastaðnum geta lesið tilvitnunina.",
+        "forwardEncryptedOnly": "Þessi skilaboð eru úr dulrituðu spjalli og því er aðeins hægt að áframsenda þau í dulritað spjall.",
+        "forwardDestination": "Spjall eða herbergi",
+        "forwardChoose": "Veldu spjall eða herbergi",
+        "forwardUnavailable": "Áfangastaður ekki tiltækur",
+        "forwardComment": "Athugasemd (valfrjálst)",
+        "forwardSend": "Senda",
+        "forwardSending": "Sendi…",
+        "forwardFailed": "Ekki tókst að senda skilaboðin. Valið þitt og athugasemd eru varðveitt.",
         "forwardMessage": "Áframsenda skilaboð (væntanlegt)",
         "moreReactions": "Fleiri viðbrögð",
         "reactions": "Viðbrögð",
@@ -636,8 +643,8 @@
             "verifiedTooltip": "Staðfestur OpenPGP-lykill",
             "tofuNewTooltip": "Nýr tengiliður. Staðfestu fingrafar til fulls trausts",
             "unverifiedKeysetTooltip": "Þessi tengiliður er með nýjan lykil sem hefur ekki verið staðfestur.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Dulkóðun í bið",
+            "blockedTooltip": "Lykill viðmælanda hefur breyst. Leystu málið til að halda dulkóðun áfram",
             "sendBlockedEncryptionRequired": "Skilaboð ekki send. Dulkóðunar er krafist fyrir þetta samtal en hún er ekki tiltæk núna.",
             "sendBlockedKeyChanged": "Skilaboð ekki send. Dulkóðunarlykill þessa tengiliðs breyttist. Yfirfarðu breytinguna á lyklinum áður en þú sendir.",
             "sendBlockedKeyLocked": "Skilaboð ekki send. Aflæstu dulkóðunarlyklinum þínum til að senda þessi skilaboð.",
@@ -653,8 +660,8 @@
                 "pendingAll": "Lyklar {{name}} fá engin skilaboð fyrr en þetta tæki hefur fengið traustákvarðanir þínar úr eldri útgáfu eða frá öðrum tækjum þínum. Þangað til geturðu ekki sent skilaboð. Reynt er aftur sjálfkrafa.",
                 "review": "Yfirfara lykla"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Dulkóðun óvirk",
+            "plaintextForcedTooltip": "Þú slökktir á dulkóðun fyrir þetta samtal, svo skilaboð eru send ódulkóðuð",
             "keyLocked": "Dulkóðun læst",
             "keyLockedTooltip": "Dulkóðun læst. Smelltu til að aflæsa",
             "encryptedClickToUnlock": "Dulkóðuð skilaboð. Smelltu til að aflæsa",
@@ -677,8 +684,8 @@
                 "fingerprint_mismatch": "Fingrafar stemmir ekki við uppgefið gildi",
                 "uid_mismatch": "Auðkenni vottorðs stemmir ekki við netfang viðmælanda"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Slökkva á dulkóðun fyrir þetta samtal",
+            "enableEncryption": "Kveikja aftur á dulkóðun",
             "tooltip": {
                 "header": "Dulkóðað",
                 "protocol": {
@@ -726,7 +733,9 @@
         "loadAudio": "Hlaða hljóð",
         "loadFilePreview": "Hlaða forskoðun",
         "showLinkImage": "Sýna mynd",
-        "emojiSuggestions": "Emoji-tillögur"
+        "emojiSuggestions": "Emoji-tillögur",
+        "saveMessage": "Vista skilaboð",
+        "removeFromSaved": "Fjarlægja úr vistuðum"
     },
     "dates": {
         "today": "Í dag",
@@ -763,6 +772,20 @@
             "privacy": "Friðhelgi",
             "mcp": "Claude-samþætting",
             "advanced": "Ítarlegt"
+        },
+        "categoryDescriptions": {
+            "profile": "Prófíllinn þinn, aðgangurinn og tengd tæki.",
+            "appearance": "Þema, hamur, þéttleiki skjás og áherslulitur.",
+            "accessibility": "Textastærð, lesbreidd, hreyfing og gegnsæi.",
+            "language": "Tungumál viðmóts og svæðisbundin snið.",
+            "notifications": "Veldu hvernig og hvenær Fluux lætur þig vita.",
+            "encryption": "Lyklar fyrir enda-á-milli dulritun samtala þinna.",
+            "privacy": "Geymsla skilaboða á þjóni og sjálfvirk niðurhal margmiðlunarefnis.",
+            "blocked": "Fólk sem getur ekki sent þér skilaboð eða séð stöðu þína.",
+            "storage": "Margmiðlunarefni í skyndiminni á þessu tæki og plássið sem það tekur.",
+            "updates": "Haltu Fluux uppfærðu.",
+            "mcp": "Stillingar fyrir staðbundnu Claude-brúna.",
+            "advanced": "Forritaraverkfæri og greining."
         },
         "groups": {
             "general": "Almennt",
@@ -1374,6 +1397,10 @@
         "search": {
             "title": "Leitarniðurstöður",
             "description": "Veldu niðurstöðu á hliðarstikunni til að skoða samtalið."
+        },
+        "saved": {
+            "title": "Vistuð skilaboð",
+            "description": "Veldu vistuð skilaboð í hliðarstikunni til að opna þau í samtalinu sínu."
         }
     },
     "avatar": {
@@ -1642,7 +1669,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} brást við '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} brást við skilaboðunum þínum",
         "see": "Skoða"
     },
     "commands": {
@@ -1759,5 +1786,17 @@
         "edit": "{{nickname}} (breytt): {{text}}",
         "retraction": "{{nickname}} eyddi skilaboðum",
         "messages": "{{nickname}}: {{count}} ný skilaboð"
+    },
+    "saved": {
+        "title": "Vistuð skilaboð",
+        "marker": "Vistað",
+        "empty": "Engin vistuð skilaboð",
+        "emptyHint": "Opnaðu Meira-valmynd skilaboða og veldu Vista skilaboð til að geyma þau hér.",
+        "remove": "Fjarlægja úr vistuðum",
+        "encrypted": "Dulrituð skilaboð",
+        "deleted": "Skilaboðum eytt",
+        "tryAgain": "Reyna aftur",
+        "full": "Listi vistaðra skilaboða er fullur ({{count}}). Fjarlægðu eitt til að vista annað.",
+        "refused": "Þjónninn þinn neitaði að geyma þessi skilaboð."
     }
 }

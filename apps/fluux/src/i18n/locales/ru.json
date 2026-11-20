@@ -77,7 +77,8 @@
         "viewProfile": "Посмотреть профиль",
         "resizeHint": "Потяните для изменения размера, двойной клик для сброса",
         "dismiss": "Скрыть",
-        "search": "Поиск"
+        "search": "Поиск",
+        "saved": "Сохранённые"
     },
     "newMessage": {
         "title": "Новое сообщение",
@@ -549,20 +550,26 @@
         "reply": "Ответить",
         "copyMessage": "Копировать текст",
         "replyQuoteHiddenEncrypted": "Цитата скрыта: оригинал был зашифрован",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Переслать сообщение",
+        "forwardLinkOnly": "Отправляет ваш комментарий, цитату сообщения и ссылку на оригинал. Цитату смогут прочитать все в чате назначения.",
+        "forwardQuotedCopy": "Цитата из пересланного сообщения",
+        "forwardedCopyUnknownAuthor": "неизвестный отправитель",
+        "forwardedFromLabel": "Переслано от",
+        "forwardedCopyDirectChat": "Личный чат",
+        "forwardedCopyOpen": "Открыть исходное сообщение",
+        "forwardedCopyUnknownSource": "неизвестная конференция",
+        "forwardedCopyDiffers": "Пересланная копия отличается от исходного сообщения",
+        "forwardedCopyClaimed": "Копия, отправленная с пересылкой:",
+        "forwardedOriginNotFound": "Исходного сообщения нет в вашей истории",
+        "forwardQuoteOnly": "Отправляет ваш комментарий и цитату сообщения. Цитату смогут прочитать все в чате назначения.",
+        "forwardEncryptedOnly": "Это сообщение из зашифрованного чата, поэтому его можно переслать только в зашифрованный чат.",
+        "forwardDestination": "Чат или конференция",
+        "forwardChoose": "Выберите чат или конференцию",
+        "forwardUnavailable": "Назначение недоступно",
+        "forwardComment": "Комментарий (необязательно)",
+        "forwardSend": "Отправить",
+        "forwardSending": "Отправка…",
+        "forwardFailed": "Не удалось отправить сообщение. Ваш выбор и комментарий сохранены.",
         "forwardMessage": "Переслать сообщение (скоро)",
         "moreReactions": "Другие реакции",
         "reactions": "Реакции",
@@ -640,8 +647,8 @@
             "verifiedTooltip": "Проверенный ключ OpenPGP",
             "tofuNewTooltip": "Новый контакт. Проверьте отпечаток для полного доверия",
             "unverifiedKeysetTooltip": "У этого контакта есть новый ключ, который не был проверен.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Шифрование приостановлено",
+            "blockedTooltip": "Ключ собеседника изменился. Устраните проблему, чтобы возобновить шифрование",
             "sendBlockedEncryptionRequired": "Сообщение не отправлено. Для этого разговора требуется шифрование, но сейчас оно недоступно.",
             "sendBlockedKeyChanged": "Сообщение не отправлено. Ключ шифрования этого контакта изменился. Проверьте изменение ключа перед отправкой.",
             "sendBlockedKeyLocked": "Сообщение не отправлено. Разблокируйте свой ключ шифрования, чтобы отправить это сообщение.",
@@ -657,8 +664,8 @@
                 "pendingAll": "Ключи {{name}} не получают сообщений, пока это устройство не получит ваши решения о доверии из предыдущей версии или с других ваших устройств. До тех пор вы не можете отправлять сообщения. Попытка повторяется автоматически.",
                 "review": "Просмотреть ключи"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Шифрование отключено",
+            "plaintextForcedTooltip": "Вы отключили шифрование для этого разговора, поэтому сообщения отправляются в открытом виде",
             "keyLocked": "Шифрование заблокировано",
             "keyLockedTooltip": "Шифрование заблокировано. Нажмите, чтобы разблокировать",
             "encryptedClickToUnlock": "Зашифрованное сообщение. Нажмите, чтобы разблокировать",
@@ -681,8 +688,8 @@
                 "fingerprint_mismatch": "Отпечаток не совпадает с заявленным значением",
                 "uid_mismatch": "Удостоверение сертификата не совпадает с адресом собеседника"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Отключить шифрование для этого разговора",
+            "enableEncryption": "Снова включить шифрование",
             "tooltip": {
                 "header": "Зашифровано",
                 "protocol": {
@@ -730,7 +737,9 @@
         "loadAudio": "Загрузить аудио",
         "loadFilePreview": "Загрузить превью",
         "showLinkImage": "Показать изображение",
-        "emojiSuggestions": "Предложения эмодзи"
+        "emojiSuggestions": "Предложения эмодзи",
+        "saveMessage": "Сохранить сообщение",
+        "removeFromSaved": "Убрать из сохранённых"
     },
     "dates": {
         "today": "Сегодня",
@@ -767,6 +776,20 @@
             "privacy": "Конфиденциальность",
             "mcp": "Интеграция с Claude",
             "advanced": "Расширенные"
+        },
+        "categoryDescriptions": {
+            "profile": "Ваш профиль, учётная запись и подключённые устройства.",
+            "appearance": "Тема, режим, плотность отображения и акцентный цвет.",
+            "accessibility": "Размер текста, ширина чтения, анимация и прозрачность.",
+            "language": "Язык интерфейса и региональные форматы.",
+            "notifications": "Выберите, как и когда Fluux будет вас уведомлять.",
+            "encryption": "Ключи сквозного шифрования для ваших бесед.",
+            "privacy": "Архивирование сообщений на сервере и автоматическая загрузка медиафайлов.",
+            "blocked": "Люди, которые не могут вам писать и видеть ваш статус.",
+            "storage": "Медиафайлы в кэше этого устройства и занимаемое ими место.",
+            "updates": "Поддерживайте Fluux в актуальном состоянии.",
+            "mcp": "Настройки локального моста Claude.",
+            "advanced": "Инструменты разработчика и диагностика."
         },
         "groups": {
             "general": "Общие",
@@ -1378,6 +1401,10 @@
         "search": {
             "title": "Результаты поиска",
             "description": "Выберите результат на боковой панели, чтобы просмотреть беседу."
+        },
+        "saved": {
+            "title": "Сохранённые сообщения",
+            "description": "Выберите сохранённое сообщение на боковой панели, чтобы открыть его в его беседе."
         }
     },
     "avatar": {
@@ -1646,7 +1673,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} отреагировал(а) на '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} отреагировал(а) на ваше сообщение",
         "see": "Показать"
     },
     "commands": {
@@ -1763,5 +1790,17 @@
         "edit": "{{nickname}} (изменено): {{text}}",
         "retraction": "{{nickname}} удалил(а) сообщение",
         "messages": "{{nickname}}: новых сообщений — {{count}}"
+    },
+    "saved": {
+        "title": "Сохранённые сообщения",
+        "marker": "Сохранено",
+        "empty": "Нет сохранённых сообщений",
+        "emptyHint": "Откройте меню «Ещё» у сообщения и выберите «Сохранить сообщение», чтобы оставить его здесь.",
+        "remove": "Убрать из сохранённых",
+        "encrypted": "Зашифрованное сообщение",
+        "deleted": "Сообщение удалено",
+        "tryAgain": "Повторить",
+        "full": "Список сохранённых сообщений заполнен ({{count}}). Уберите одно, чтобы сохранить другое.",
+        "refused": "Ваш сервер отказался сохранить это сообщение."
     }
 }

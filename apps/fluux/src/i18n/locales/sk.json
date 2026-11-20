@@ -77,7 +77,8 @@
         "viewProfile": "Zobraziť profil",
         "resizeHint": "Potiahnutím zmeníte veľkosť, dvojklikom obnovíte",
         "dismiss": "Zamietnuť",
-        "search": "Hľadať"
+        "search": "Hľadať",
+        "saved": "Uložené"
     },
     "newMessage": {
         "title": "Nová správa",
@@ -550,20 +551,26 @@
         "reply": "Odpovedať",
         "copyMessage": "Kopírovať text",
         "replyQuoteHiddenEncrypted": "Citácia skrytá: originál bol šifrovaný",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Preposlať správu",
+        "forwardLinkOnly": "Odošle váš komentár, citovanú kópiu správy a odkaz na originál. Citáciu môžu čítať všetci v cieli.",
+        "forwardQuotedCopy": "Citovaná kópia preposlanej správy",
+        "forwardedCopyUnknownAuthor": "neznámy odosielateľ",
+        "forwardedFromLabel": "Preposlané od",
+        "forwardedCopyDirectChat": "Priamy čet",
+        "forwardedCopyOpen": "Otvoriť pôvodnú správu",
+        "forwardedCopyUnknownSource": "neznáma miestnosť",
+        "forwardedCopyDiffers": "Preposlaná kópia sa líši od pôvodnej správy",
+        "forwardedCopyClaimed": "Kópia odoslaná s preposlaním:",
+        "forwardedOriginNotFound": "Pôvodná správa nie je vo vašej histórii",
+        "forwardQuoteOnly": "Odošle váš komentár a citovanú kópiu správy. Citáciu môžu čítať všetci v cieli.",
+        "forwardEncryptedOnly": "Táto správa pochádza zo šifrovaného četu, preto ju možno preposlať iba do šifrovaného četu.",
+        "forwardDestination": "Čet alebo miestnosť",
+        "forwardChoose": "Vyberte čet alebo miestnosť",
+        "forwardUnavailable": "Cieľ nie je dostupný",
+        "forwardComment": "Komentár (voliteľný)",
+        "forwardSend": "Odoslať",
+        "forwardSending": "Odosiela sa…",
+        "forwardFailed": "Správu sa nepodarilo odoslať. Váš výber a komentár sa zachovali.",
         "forwardMessage": "Preposlať správu (už čoskoro)",
         "moreReactions": "Viac reakcií",
         "reactions": "Reakcie",
@@ -641,8 +648,8 @@
             "verifiedTooltip": "Overený kľúč OpenPGP",
             "tofuNewTooltip": "Nový kontakt. Overte odtlačok pre úplnú dôveru",
             "unverifiedKeysetTooltip": "Tento kontakt má nový kľúč, ktorý nebol overený.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Šifrovanie pozastavené",
+            "blockedTooltip": "Kľúč protistrany sa zmenil. Vyriešte to, aby ste obnovili šifrovanie",
             "sendBlockedEncryptionRequired": "Správa nebola odoslaná. Pre túto konverzáciu sa vyžaduje šifrovanie, ale momentálne nie je k dispozícii.",
             "sendBlockedKeyChanged": "Správa nebola odoslaná. Šifrovací kľúč tohto kontaktu sa zmenil. Pred odoslaním skontrolujte zmenu kľúča.",
             "sendBlockedKeyLocked": "Správa nebola odoslaná. Na odoslanie tejto správy odomknite svoj šifrovací kľúč.",
@@ -658,8 +665,8 @@
                 "pendingAll": "Kľúče kontaktu {{name}} nedostávajú správy, kým toto zariadenie nezíska vaše rozhodnutia o dôvere zo staršej verzie alebo z vašich ďalších zariadení. Dovtedy nemôžete odosielať správy. Pokus sa automaticky opakuje.",
                 "review": "Skontrolovať kľúče"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Šifrovanie vypnuté",
+            "plaintextForcedTooltip": "Pre túto konverzáciu ste vypli šifrovanie, takže správy sa odosielajú v čistom texte",
             "keyLocked": "Šifrovanie uzamknuté",
             "keyLockedTooltip": "Šifrovanie uzamknuté. Kliknutím odomknite",
             "encryptedClickToUnlock": "Šifrovaná správa. Kliknutím odomknite",
@@ -682,8 +689,8 @@
                 "fingerprint_mismatch": "Odtlačok sa nezhoduje s deklarovanou hodnotou",
                 "uid_mismatch": "Identita certifikátu sa nezhoduje s adresou partnera"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Vypnúť šifrovanie pre túto konverzáciu",
+            "enableEncryption": "Znovu zapnúť šifrovanie",
             "tooltip": {
                 "header": "Šifrované",
                 "protocol": {
@@ -731,7 +738,9 @@
         "loadAudio": "Načítať zvuk",
         "loadFilePreview": "Načítať náhľad",
         "showLinkImage": "Zobraziť obrázok",
-        "emojiSuggestions": "Návrhy emoji"
+        "emojiSuggestions": "Návrhy emoji",
+        "saveMessage": "Uložiť správu",
+        "removeFromSaved": "Odstrániť z uložených"
     },
     "dates": {
         "today": "Dnes",
@@ -768,6 +777,20 @@
             "privacy": "Súkromie",
             "mcp": "Integrácia Claude",
             "advanced": "Pokročilé"
+        },
+        "categoryDescriptions": {
+            "profile": "Váš profil, účet a pripojené zariadenia.",
+            "appearance": "Motív, režim, hustota zobrazenia a farba zvýraznenia.",
+            "accessibility": "Veľkosť textu, šírka čítania, animácie a priehľadnosť.",
+            "language": "Jazyk rozhrania a regionálne formáty.",
+            "notifications": "Zvoľte, ako a kedy vás Fluux upozorní.",
+            "encryption": "Kľúče koncového šifrovania pre vaše konverzácie.",
+            "privacy": "Archivácia správ na serveri a automatické sťahovanie médií.",
+            "blocked": "Ľudia, ktorí vám nemôžu písať ani vidieť váš stav.",
+            "storage": "Médiá uložené vo vyrovnávacej pamäti tohto zariadenia a miesto, ktoré zaberajú.",
+            "updates": "Udržujte Fluux aktuálny.",
+            "mcp": "Nastavenia miestneho mosta Claude.",
+            "advanced": "Vývojárske nástroje a diagnostika."
         },
         "groups": {
             "general": "Všeobecné",
@@ -1379,6 +1402,10 @@
         "search": {
             "title": "Výsledky vyhľadávania",
             "description": "Vyberte výsledok v bočnom paneli na zobrazenie konverzácie."
+        },
+        "saved": {
+            "title": "Uložené správy",
+            "description": "Vyberte uloženú správu v bočnom paneli, aby sa otvorila vo svojej konverzácii."
         }
     },
     "avatar": {
@@ -1647,7 +1674,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} zareagoval na '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} zareagoval na vašu správu",
         "see": "Zobraziť"
     },
     "commands": {
@@ -1764,5 +1791,17 @@
         "edit": "{{nickname}} (upravené): {{text}}",
         "retraction": "{{nickname}} odstránil(a) správu",
         "messages": "{{nickname}}: nové správy — {{count}}"
+    },
+    "saved": {
+        "title": "Uložené správy",
+        "marker": "Uložené",
+        "empty": "Žiadne uložené správy",
+        "emptyHint": "Otvorte ponuku Viac pri správe a vyberte Uložiť správu, aby sa tu uchovala.",
+        "remove": "Odstrániť z uložených",
+        "encrypted": "Šifrovaná správa",
+        "deleted": "Správa bola odstránená",
+        "tryAgain": "Skúsiť znova",
+        "full": "Zoznam uložených správ je plný ({{count}}). Odstráňte jednu, aby ste mohli uložiť ďalšiu.",
+        "refused": "Váš server odmietol túto správu uložiť."
     }
 }

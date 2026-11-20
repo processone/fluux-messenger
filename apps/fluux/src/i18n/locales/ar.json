@@ -77,7 +77,8 @@
         "viewProfile": "عرض الملف الشخصي",
         "resizeHint": "اسحب لتغيير الحجم، انقر مرتين لإعادة التعيين",
         "dismiss": "تجاهل",
-        "search": "بحث"
+        "search": "بحث",
+        "saved": "المحفوظة"
     },
     "newMessage": {
         "title": "رسالة جديدة",
@@ -551,20 +552,26 @@
         "reply": "رد",
         "copyMessage": "نسخ النص",
         "replyQuoteHiddenEncrypted": "تم إخفاء الاقتباس: كانت الرسالة الأصلية مُشفَّرة",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "إعادة توجيه الرسالة",
+        "forwardLinkOnly": "يرسل تعليقك ونسخة مقتبسة من الرسالة ورابطًا إلى الأصل. يمكن لجميع من في الوجهة قراءة الاقتباس.",
+        "forwardQuotedCopy": "نسخة مقتبسة من رسالة معاد توجيهها",
+        "forwardedCopyUnknownAuthor": "مرسل غير معروف",
+        "forwardedFromLabel": "أُعيد توجيهها من",
+        "forwardedCopyDirectChat": "محادثة مباشرة",
+        "forwardedCopyOpen": "فتح الرسالة الأصلية",
+        "forwardedCopyUnknownSource": "غرفة غير معروفة",
+        "forwardedCopyDiffers": "النسخة المُعاد توجيهها تختلف عن الرسالة الأصلية",
+        "forwardedCopyClaimed": "النسخة المرسلة مع إعادة التوجيه:",
+        "forwardedOriginNotFound": "الرسالة الأصلية غير موجودة في سجلك",
+        "forwardQuoteOnly": "يرسل تعليقك ونسخة مقتبسة من الرسالة. يمكن لجميع من في الوجهة قراءة الاقتباس.",
+        "forwardEncryptedOnly": "هذه الرسالة من محادثة مشفرة، لذا لا يمكن إعادة توجيهها إلا إلى محادثة مشفرة.",
+        "forwardDestination": "محادثة أو غرفة",
+        "forwardChoose": "اختر محادثة أو غرفة",
+        "forwardUnavailable": "الوجهة غير متاحة",
+        "forwardComment": "تعليق (اختياري)",
+        "forwardSend": "إرسال",
+        "forwardSending": "جارٍ الإرسال…",
+        "forwardFailed": "تعذر إرسال الرسالة. تم الاحتفاظ بتحديدك وتعليقك.",
         "forwardMessage": "إعادة توجيه الرسالة (قريبًا)",
         "moreReactions": "المزيد من التفاعلات",
         "reactions": "التفاعلات",
@@ -644,8 +651,8 @@
             "verifiedTooltip": "مفتاح OpenPGP موثّق",
             "tofuNewTooltip": "جهة اتصال جديدة. تحقّق من البصمة للثقة الكاملة",
             "unverifiedKeysetTooltip": "لدى جهة الاتصال هذه مفتاح جديد لم يتم التحقق منه.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "التشفير متوقف مؤقتًا",
+            "blockedTooltip": "تغيّر مفتاح هذا المراسل. عالِج ذلك لاستئناف التشفير",
             "sendBlockedEncryptionRequired": "لم تُرسل الرسالة. التشفير مطلوب لهذه المحادثة لكنه غير متاح حاليًا.",
             "sendBlockedKeyChanged": "لم تُرسل الرسالة. تغيّر مفتاح تشفير هذا المراسل. راجِع تغيير المفتاح قبل الإرسال.",
             "sendBlockedKeyLocked": "لم تُرسل الرسالة. افتح قفل مفتاح التشفير الخاص بك لإرسال هذه الرسالة.",
@@ -661,8 +668,8 @@
                 "pendingAll": "مفاتيح {{name}} لا تتلقى أي رسائل حتى يحصل هذا الجهاز على قرارات الثقة الخاصة بك من إصدار سابق أو من أجهزتك الأخرى. لا يمكنك إرسال الرسائل حتى ذلك الحين. تتم إعادة المحاولة تلقائيًا.",
                 "review": "مراجعة المفاتيح"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "التشفير معطّل",
+            "plaintextForcedTooltip": "عطّلتَ التشفير لهذه المحادثة، لذا تُرسل الرسائل بنص عادي",
             "keyLocked": "التشفير مقفل",
             "keyLockedTooltip": "التشفير مقفل. انقر للفتح",
             "encryptedClickToUnlock": "رسالة مشفرة. انقر للفتح",
@@ -685,8 +692,8 @@
                 "fingerprint_mismatch": "البصمة لا تتطابق مع القيمة المُعلَنة",
                 "uid_mismatch": "هوية الشهادة لا تتطابق مع عنوان الطرف الآخر"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "تعطيل التشفير لهذه المحادثة",
+            "enableEncryption": "إعادة تفعيل التشفير",
             "tooltip": {
                 "header": "مُشفَّر",
                 "protocol": {
@@ -734,7 +741,9 @@
         "loadAudio": "تحميل الصوت",
         "loadFilePreview": "تحميل المعاينة",
         "showLinkImage": "عرض الصورة",
-        "emojiSuggestions": "اقتراحات الرموز التعبيرية"
+        "emojiSuggestions": "اقتراحات الرموز التعبيرية",
+        "saveMessage": "حفظ الرسالة",
+        "removeFromSaved": "إزالة من المحفوظات"
     },
     "dates": {
         "today": "اليوم",
@@ -771,6 +780,20 @@
             "privacy": "الخصوصية",
             "mcp": "تكامل Claude",
             "advanced": "متقدم"
+        },
+        "categoryDescriptions": {
+            "profile": "ملفك الشخصي وحسابك والأجهزة المتصلة.",
+            "appearance": "السمة والوضع وكثافة العرض ولون التمييز.",
+            "accessibility": "حجم النص وعرض القراءة والحركة والشفافية.",
+            "language": "لغة الواجهة والتنسيقات الإقليمية.",
+            "notifications": "اختر كيف ومتى ينبهك Fluux.",
+            "encryption": "مفاتيح التشفير التام بين الطرفين لمحادثاتك.",
+            "privacy": "أرشفة الرسائل على الخادم والتنزيل التلقائي للوسائط.",
+            "blocked": "الأشخاص الذين لا يمكنهم مراسلتك أو رؤية حالتك.",
+            "storage": "الوسائط المخزنة مؤقتًا على هذا الجهاز والمساحة التي تشغلها.",
+            "updates": "حافظ على تحديث Fluux.",
+            "mcp": "إعدادات جسر Claude المحلي.",
+            "advanced": "أدوات المطورين والتشخيص."
         },
         "groups": {
             "general": "عام",
@@ -1382,6 +1405,10 @@
         "search": {
             "title": "نتائج البحث",
             "description": "اختر نتيجة من الشريط الجانبي لعرض المحادثة."
+        },
+        "saved": {
+            "title": "الرسائل المحفوظة",
+            "description": "اختر رسالة محفوظة في الشريط الجانبي لفتحها في محادثتها."
         }
     },
     "avatar": {
@@ -1650,7 +1677,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} تفاعل مع '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} تفاعل مع رسالتك",
         "see": "عرض"
     },
     "commands": {
@@ -1767,5 +1794,17 @@
         "edit": "{{nickname}} (تعديل): {{text}}",
         "retraction": "حذف {{nickname}} رسالة",
         "messages": "{{nickname}}: {{count}} رسائل جديدة"
+    },
+    "saved": {
+        "title": "الرسائل المحفوظة",
+        "marker": "محفوظة",
+        "empty": "لا توجد رسائل محفوظة",
+        "emptyHint": "افتح قائمة «المزيد» لرسالة واختر «حفظ الرسالة» للاحتفاظ بها هنا.",
+        "remove": "إزالة من المحفوظات",
+        "encrypted": "رسالة مشفّرة",
+        "deleted": "تم حذف الرسالة",
+        "tryAgain": "إعادة المحاولة",
+        "full": "قائمة الرسائل المحفوظة ممتلئة ({{count}}). أزل رسالة لتتمكن من حفظ أخرى.",
+        "refused": "رفض خادمك تخزين هذه الرسالة."
     }
 }

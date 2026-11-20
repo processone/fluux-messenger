@@ -77,7 +77,8 @@
         "viewProfile": "Profiel bekijken",
         "resizeHint": "Sleep om te verkleinen, dubbelklik om te herstellen",
         "dismiss": "Sluiten",
-        "search": "Zoeken"
+        "search": "Zoeken",
+        "saved": "Bewaard"
     },
     "newMessage": {
         "title": "Nieuw bericht",
@@ -547,20 +548,26 @@
         "reply": "Beantwoorden",
         "copyMessage": "Tekst kopiëren",
         "replyQuoteHiddenEncrypted": "Citaat verborgen: origineel was versleuteld",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Bericht doorsturen",
+        "forwardLinkOnly": "Verstuurt je opmerking, een geciteerde kopie van het bericht en een link naar het origineel. Iedereen op de bestemming kan het citaat lezen.",
+        "forwardQuotedCopy": "Geciteerde kopie van een doorgestuurd bericht",
+        "forwardedCopyUnknownAuthor": "een onbekende afzender",
+        "forwardedFromLabel": "Doorgestuurd van",
+        "forwardedCopyDirectChat": "Directe chat",
+        "forwardedCopyOpen": "Oorspronkelijk bericht openen",
+        "forwardedCopyUnknownSource": "een onbekende groep",
+        "forwardedCopyDiffers": "De kopie van de doorsturende persoon wijkt af van het originele bericht",
+        "forwardedCopyClaimed": "Door de doorsturende persoon verzonden kopie:",
+        "forwardedOriginNotFound": "Het oorspronkelijke bericht staat niet in je geschiedenis",
+        "forwardQuoteOnly": "Verstuurt je opmerking en een geciteerde kopie van het bericht. Iedereen op de bestemming kan het citaat lezen.",
+        "forwardEncryptedOnly": "Dit bericht komt uit een versleutelde chat en kan daarom alleen naar een versleutelde chat worden doorgestuurd.",
+        "forwardDestination": "Chat of groep",
+        "forwardChoose": "Kies een chat of groep",
+        "forwardUnavailable": "Bestemming niet beschikbaar",
+        "forwardComment": "Opmerking (optioneel)",
+        "forwardSend": "Verzenden",
+        "forwardSending": "Verzenden…",
+        "forwardFailed": "Het bericht kon niet worden verzonden. Je selectie en opmerking blijven bewaard.",
         "forwardMessage": "Bericht doorsturen (binnenkort)",
         "moreReactions": "Meer reacties",
         "reactions": "Reacties",
@@ -636,8 +643,8 @@
             "verifiedTooltip": "Geverifieerde OpenPGP-sleutel",
             "tofuNewTooltip": "Nieuw contact. Verifieer de vingerafdruk voor volledig vertrouwen",
             "unverifiedKeysetTooltip": "Dit contact heeft een nieuwe sleutel die niet is geverifieerd.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Versleuteling gepauzeerd",
+            "blockedTooltip": "De sleutel van je gesprekspartner is gewijzigd. Los dit op om de versleuteling te hervatten",
             "sendBlockedEncryptionRequired": "Bericht niet verzonden. Versleuteling is vereist voor dit gesprek, maar is op dit moment niet beschikbaar.",
             "sendBlockedKeyChanged": "Bericht niet verzonden. De versleutelingssleutel van dit contact is gewijzigd. Controleer de sleutelwijziging voordat je verzendt.",
             "sendBlockedKeyLocked": "Bericht niet verzonden. Ontgrendel je versleutelingssleutel om dit bericht te verzenden.",
@@ -653,8 +660,8 @@
                 "pendingAll": "De sleutels van {{name}} ontvangen geen berichten totdat dit apparaat je vertrouwensbeslissingen uit een eerdere versie of van je andere apparaten heeft. Tot die tijd kun je geen berichten verzenden. Dit wordt automatisch opnieuw geprobeerd.",
                 "review": "Sleutels bekijken"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Versleuteling uitgeschakeld",
+            "plaintextForcedTooltip": "Je hebt de versleuteling voor dit gesprek uitgeschakeld, dus berichten worden in platte tekst verzonden",
             "keyLocked": "Versleuteling vergrendeld",
             "keyLockedTooltip": "Versleuteling vergrendeld. Klik om te ontgrendelen",
             "encryptedClickToUnlock": "Versleuteld bericht. Klik om te ontgrendelen",
@@ -677,8 +684,8 @@
                 "fingerprint_mismatch": "Vingerafdruk komt niet overeen met de opgegeven waarde",
                 "uid_mismatch": "Certificaatidentiteit komt niet overeen met het adres van de gesprekspartner"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Versleuteling uitschakelen voor dit gesprek",
+            "enableEncryption": "Versleuteling weer inschakelen",
             "tooltip": {
                 "header": "Versleuteld",
                 "protocol": {
@@ -726,7 +733,9 @@
         "loadAudio": "Audio laden",
         "loadFilePreview": "Voorbeeld laden",
         "showLinkImage": "Afbeelding tonen",
-        "emojiSuggestions": "Emoji-suggesties"
+        "emojiSuggestions": "Emoji-suggesties",
+        "saveMessage": "Bericht bewaren",
+        "removeFromSaved": "Verwijderen uit bewaard"
     },
     "dates": {
         "today": "Vandaag",
@@ -763,6 +772,20 @@
             "privacy": "Privacy",
             "mcp": "Claude-integratie",
             "advanced": "Geavanceerd"
+        },
+        "categoryDescriptions": {
+            "profile": "Je profiel, account en verbonden apparaten.",
+            "appearance": "Thema, modus, weergavedichtheid en accentkleur.",
+            "accessibility": "Tekstgrootte, leesbreedte, beweging en transparantie.",
+            "language": "Taal van de interface en regionale notaties.",
+            "notifications": "Kies hoe en wanneer Fluux je waarschuwt.",
+            "encryption": "End-to-end-versleutelingssleutels voor je gesprekken.",
+            "privacy": "Berichtarchivering op de server en automatisch downloaden van media.",
+            "blocked": "Mensen die je geen berichten kunnen sturen en je status niet zien.",
+            "storage": "Media in de cache op dit apparaat en de ruimte die ze innemen.",
+            "updates": "Houd Fluux up-to-date.",
+            "mcp": "Instellingen voor de lokale Claude-brug.",
+            "advanced": "Ontwikkelaarstools en diagnose."
         },
         "groups": {
             "general": "Algemeen",
@@ -1374,6 +1397,10 @@
         "search": {
             "title": "Zoekresultaten",
             "description": "Selecteer een resultaat in de zijbalk om het gesprek te bekijken."
+        },
+        "saved": {
+            "title": "Bewaarde berichten",
+            "description": "Kies een bewaard bericht in de zijbalk om het in zijn gesprek te openen."
         }
     },
     "avatar": {
@@ -1642,7 +1669,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reageerde op '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reageerde op je bericht",
         "see": "Bekijken"
     },
     "commands": {
@@ -1759,5 +1786,17 @@
         "edit": "{{nickname}} (bewerkt): {{text}}",
         "retraction": "{{nickname}} heeft een bericht verwijderd",
         "messages": "{{nickname}}: {{count}} nieuwe berichten"
+    },
+    "saved": {
+        "title": "Bewaarde berichten",
+        "marker": "Bewaard",
+        "empty": "Geen bewaarde berichten",
+        "emptyHint": "Open het menu Meer van een bericht en kies Bericht bewaren om het hier te houden.",
+        "remove": "Verwijderen uit bewaard",
+        "encrypted": "Versleuteld bericht",
+        "deleted": "Bericht verwijderd",
+        "tryAgain": "Opnieuw proberen",
+        "full": "De lijst met bewaarde berichten is vol ({{count}}). Verwijder er een om een ander te bewaren.",
+        "refused": "Je server weigerde dit bericht op te slaan."
     }
 }

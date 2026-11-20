@@ -107,7 +107,9 @@ const DB_NAME = 'fluux-message-cache'
 // and aborts atomically on failure.
 // v7: scrub retained content only on rows already flagged `isRetracted` (#1349).
 // v8: authenticated archive signals and their target writes share one transaction.
-const DB_VERSION = 9
+// v10: `ownArchive` index over [conversationId, ownArchiveId], so a forwarded copy's own-archive id
+// resolves without reading the conversation's history.
+const DB_VERSION = 10
 const ARCHIVE_SIGNALS_STORE = 'archive-signals'
 // The canonical chat store (v5+). Keyed by the conversation-qualified canonical key.
 const MESSAGES_STORE = 'messages-canonical'
@@ -191,6 +193,8 @@ interface MessageCacheSchema extends DBSchema {
       ids: string
       timestamp: number
       conv_timestamp: [string, number]
+      // Sparse: only rows carrying an own-archive id.
+      ownArchive: [string, string]
       // Sparse: only messages awaiting deferred decryption are indexed here.
       encryptedPayload: string
     }
@@ -303,6 +307,13 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
         signals.createIndex('target', ['conversationId', 'effect.targetId'])
       }
 
+      if (db.objectStoreNames.contains(MESSAGES_STORE)) {
+        const chatStore = transaction.objectStore(MESSAGES_STORE)
+        if (!chatStore.indexNames.contains('ownArchive')) {
+          chatStore.createIndex('ownArchive', ['conversationId', 'ownArchiveId'], { unique: false })
+        }
+      }
+
       // Chat messages store (v5 canonical). Same shape and same reasoning as the v4
       // room store below.
       if (!db.objectStoreNames.contains(MESSAGES_STORE)) {
@@ -314,6 +325,7 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
         msgStore.createIndex('conv_timestamp', ['conversationId', 'timestamp'], {
           unique: false,
         })
+        msgStore.createIndex('ownArchive', ['conversationId', 'ownArchiveId'], { unique: false })
         // Sparse index — records without `encryptedPayload` are excluded.
         msgStore.createIndex('encryptedPayload', 'encryptedPayload', { unique: false })
         // `as never`: the legacy store is not in the v5 schema, so idb's typed
@@ -943,6 +955,7 @@ type ChatIdentityStore = {
   index(name: 'identityKeys'): { getAll(key: string): Promise<StoredMessage[]> }
   index(name: 'ids'): { getAll(key: string): Promise<StoredMessage[]> }
   index(name: 'conversationId'): { getAll(key: string): Promise<StoredMessage[]> }
+  index(name: 'ownArchive'): { getAll(key: [string, string]): Promise<StoredMessage[]> }
 }
 
 /** The read-only chat-store surface a lookup needs. A readonly idb transaction
@@ -1884,6 +1897,36 @@ export async function getMessageByReference(
   scope.assertCurrent()
   const row = resolution?.candidates[0]
   return row ? deserializeMessage(row) : null
+}
+
+/** An id a forwarded copy carries, kept with what kind of id it is. */
+export type ForwardedIdReference =
+  | { kind: 'sender-id'; id: string }
+  | { kind: 'own-archive'; id: string; by: string }
+
+/**
+ * The conversation's rows a carried id names, in that id's own namespace only. A sender id is a
+ * client id (any alias a merged row absorbed) or an origin id, never an archive id; an own-archive
+ * id is the row's verified own-archive pair, never its possibly foreign stanza id.
+ * The caller decides between several rows.
+ */
+export async function getMessagesByForwardedId(
+  conversationId: string,
+  reference: ForwardedIdReference,
+): Promise<Message[]> {
+  if (!isIndexedDBAvailable()) return []
+  const scope = captureStorageScope()
+  const db = await getDB(scope.jid)
+  const store = db.transaction(MESSAGES_STORE).store
+  const rows = reference.kind === 'sender-id'
+    ? [...new Map([
+        ...await findChatRowsForTier(store, conversationId, 'originId', reference.id),
+        ...await findChatRowsForTier(store, conversationId, 'fallback', reference.id),
+      ].map(row => [row.cacheKey, row])).values()]
+    // Only a verified pair: a row that records no own-archive pair never claims an archive id.
+    : (await store.index('ownArchive').getAll([conversationId, reference.id])).filter(row => row.ownArchiveBy === reference.by)
+  scope.assertCurrent()
+  return rows.map(deserializeMessage)
 }
 
 export interface RoomMessageReference {

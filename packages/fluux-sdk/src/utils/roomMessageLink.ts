@@ -28,11 +28,20 @@ export function parseRoomMessageLink(uri: string): RoomMessageLink | null {
   return { roomJid: parsed.jid, stanzaId: parsed.params.msg }
 }
 
+const TRAILING_PUNCTUATION = new Set('.,;:!?)"\']')
+
+/** Drop trailing sentence punctuation in one backwards pass (a regex would backtrack quadratically). */
+function trimTrailingPunctuation(value: string): string {
+  let end = value.length
+  while (end > 0 && TRAILING_PUNCTUATION.has(value[end - 1])) end--
+  return value.slice(0, end)
+}
+
 /** Find pasted room links with offsets in the original body (UTF-16 in memory). */
 export function roomMessageLinkReferences(body: string): DataReference[] {
   const references: DataReference[] = []
   for (const match of body.matchAll(/(?<![\w:])xmpp:[^\s<>]+/g)) {
-    const uri = match[0].replace(/[.,;:!?)"'\]]+$/, '')
+    const uri = trimTrailingPunctuation(match[0])
     if (parseRoomMessageLink(uri)) references.push({ type: 'data', uri, begin: match.index, end: match.index + uri.length })
   }
   return references

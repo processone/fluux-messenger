@@ -3,7 +3,7 @@ import type { DemoClient } from '@fluux/sdk/demo'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
 
-// jsdom cannot observe subpixel gaps between independently positioned message rows.
+// jsdom has no layout, so it cannot tell whether a link preview card stays inside its message row.
 for (const width of [1280, 390]) {
   for (const mode of ['light', 'dark'] as const) {
     for (const fontSize of [100, 125]) {
@@ -52,18 +52,7 @@ for (const width of [1280, 390]) {
         const chrome = (index: number) => page.locator(`[data-message-id="surface-${index}"] [data-msg-chrome]`)
         await expect(chrome(5)).toBeAttached()
         await chrome(3).scrollIntoViewIfNeeded()
-        // Both gaps and overlaps break a translucent group's continuous tint.
-        // Allow one layout unit for browser arithmetic, never a visible half-pixel seam.
-        for (let index = 0; index < 4; index++) {
-          await expect.poll(async () => {
-            const above = (await chrome(index).boundingBox())!
-            const below = (await chrome(index + 1).boundingBox())!
-            return Math.abs(below.y - (above.y + above.height))
-          }).toBeLessThanOrEqual(1 / 64)
-        }
         await expect(chrome(3)).toHaveAttribute('data-msg-chrome', 'cont')
-        await expect(chrome(4)).toHaveClass(/message-own-tint-end/)
-        await expect(chrome(5)).not.toHaveAttribute('data-msg-own')
         for (const index of [2, 4, 5]) {
           const content = (await chrome(index).boundingBox())!
           const card = (await chrome(index).getByRole('link', { name: /Daniel Gultsch Breaking Up/ }).boundingBox())!

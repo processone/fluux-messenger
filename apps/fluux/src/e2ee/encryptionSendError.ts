@@ -32,3 +32,8 @@ export function encryptionSendErrorKey(err: unknown): string | null {
   }
   return null
 }
+
+/** True when every key of the contact waits for the user's decision, so Review keys can unblock the send. */
+export function isKeysAwaitingDecision(err: unknown): boolean {
+  return isE2EEPluginError(err) && err.code === 'peer-keys-awaiting-decision'
+}

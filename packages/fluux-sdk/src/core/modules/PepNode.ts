@@ -174,13 +174,17 @@ export class PepNode<T, TWrite = T> {
     )
   }
 
-  /** Remove one item. Rejects if the server refuses; callers decide whether that matters. */
-  async retract(itemId: string): Promise<void> {
+  /**
+   * Remove one item. Rejects if the server refuses; callers decide whether that matters.
+   * `notify` asks the server to tell subscribers about the removal (XEP-0060 §7.2),
+   * which a node does not do unless it is configured to.
+   */
+  async retract(itemId: string, options: { notify?: boolean } = {}): Promise<void> {
     this.requireSession()
     await this.deps.sendIQ(
       xml('iq', { type: 'set', id: `pep_ret_${generateUUID()}` },
         xml('pubsub', { xmlns: NS_PUBSUB },
-          xml('retract', { node: this.node }, xml('item', { id: itemId })),
+          xml('retract', { node: this.node, ...(options.notify && { notify: 'true' }) }, xml('item', { id: itemId })),
         ),
       ),
     )

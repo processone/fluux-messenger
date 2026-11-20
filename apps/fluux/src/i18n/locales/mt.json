@@ -77,7 +77,8 @@
         "viewProfile": "Ara profil",
         "resizeHint": "Iġbed biex tibdel id-daqs, ikklikkja darbtejn biex tirrisettja",
         "dismiss": "Warrab",
-        "search": "Fittex"
+        "search": "Fittex",
+        "saved": "Imsejvin"
     },
     "newMessage": {
         "title": "Messaġġ ġdid",
@@ -552,20 +553,26 @@
         "reply": "Wieġeb",
         "copyMessage": "Ikkopja t-test",
         "replyQuoteHiddenEncrypted": "Kwotazzjoni moħbija: l-oriġinal kien ikkriptat",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Għaddi l-messaġġ 'l quddiem",
+        "forwardLinkOnly": "Tibgħat il-kummenti tiegħek, kopja kkwotata tal-messaġġ u rabta mal-oriġinal. Kulħadd fid-destinazzjoni jista' jaqra l-kwotazzjoni.",
+        "forwardQuotedCopy": "Kopja kkwotata ta' messaġġ mgħoddi 'l quddiem",
+        "forwardedCopyUnknownAuthor": "mittent mhux magħruf",
+        "forwardedFromLabel": "Mgħoddi 'l quddiem minn",
+        "forwardedCopyDirectChat": "Chat dirett",
+        "forwardedCopyOpen": "Iftaħ il-messaġġ oriġinali",
+        "forwardedCopyUnknownSource": "kamra mhux magħrufa",
+        "forwardedCopyDiffers": "Il-kopja mgħoddija 'l quddiem hija differenti mill-messaġġ oriġinali",
+        "forwardedCopyClaimed": "Kopja mibgħuta mal-forward:",
+        "forwardedOriginNotFound": "Il-messaġġ oriġinali mhuwiex fl-istorja tiegħek",
+        "forwardQuoteOnly": "Tibgħat il-kummenti tiegħek u kopja kkwotata tal-messaġġ. Kulħadd fid-destinazzjoni jista' jaqra l-kwotazzjoni.",
+        "forwardEncryptedOnly": "Dan il-messaġġ huwa minn chat ikkriptat, għalhekk jista' jiġi mgħoddi 'l quddiem biss lejn chat ikkriptat.",
+        "forwardDestination": "Chat jew kamra",
+        "forwardChoose": "Agħżel chat jew kamra",
+        "forwardUnavailable": "Id-destinazzjoni mhix disponibbli",
+        "forwardComment": "Kumment (mhux obbligatorju)",
+        "forwardSend": "Ibgħat",
+        "forwardSending": "Qed jintbagħat…",
+        "forwardFailed": "Ma setax jintbagħat il-messaġġ. L-għażla u l-kumment tiegħek inżammu.",
         "forwardMessage": "Ibgħat 'il quddiem (dalwaqt)",
         "moreReactions": "Aktar reazzjonijiet",
         "reactions": "Reazzjonijiet",
@@ -644,8 +651,8 @@
             "verifiedTooltip": "Ċavetta OpenPGP verifikata",
             "tofuNewTooltip": "Kuntatt ġdid. Ivverifika l-marka tas-saba' għal fiduċja sħiħa",
             "unverifiedKeysetTooltip": "Dan il-kuntatt għandu ċavetta ġdida li ma ġietx ivverifikata.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Il-kriptaġġ huwa sospiż",
+            "blockedTooltip": "Iċ-ċavetta tal-kuntatt inbidlet. Irriżolvi dan biex terġa' tibda l-kriptaġġ",
             "sendBlockedEncryptionRequired": "Il-messaġġ ma ntbagħatx. L-encryption huwa meħtieġ għal din il-konversazzjoni iżda bħalissa mhuwiex disponibbli.",
             "sendBlockedKeyChanged": "Il-messaġġ ma ntbagħatx. Iċ-ċavetta tal-encryption ta' dan il-kuntatt inbidlet. Irrevedi l-bidla taċ-ċavetta qabel ma tibgħat.",
             "sendBlockedKeyLocked": "Il-messaġġ ma ntbagħatx. Iftaħ iċ-ċavetta tal-encryption tiegħek biex tibgħat dan il-messaġġ.",
@@ -661,8 +668,8 @@
                 "pendingAll": "Iċ-ċwievet ta' {{name}} ma jirċievu l-ebda messaġġ sakemm dan l-apparat ikollu d-deċiżjonijiet ta' fiduċja tiegħek minn verżjoni preċedenti jew mill-apparati l-oħra tiegħek. Sa dakinhar ma tistax tibgħat messaġġi. Jerġa' jiġi ppruvat awtomatikament.",
                 "review": "Irrevedi ċ-ċwievet"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Il-kriptaġġ mitfi",
+            "plaintextForcedTooltip": "Tfajt il-kriptaġġ għal din il-konversazzjoni, għalhekk il-messaġġi jintbagħtu f'test ċar",
             "keyLocked": "L-encryption huwa msakkar",
             "keyLockedTooltip": "L-encryption huwa msakkar. Ikklikkja biex tiftaħ",
             "encryptedClickToUnlock": "Messaġġ kriptat. Ikklikkja biex tiftaħ",
@@ -685,8 +692,8 @@
                 "fingerprint_mismatch": "Il-fingerprint ma jaqbilx mal-valur iddikkjarat",
                 "uid_mismatch": "L-identità taċ-ċertifikat ma taqbilx mal-indirizz tal-persuna l-oħra"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Itfi l-kriptaġġ għal din il-konversazzjoni",
+            "enableEncryption": "Erġa' ixgħel il-kriptaġġ",
             "tooltip": {
                 "header": "Encrypted",
                 "protocol": {
@@ -734,7 +741,9 @@
         "loadAudio": "Itgħabba l-awdjo",
         "loadFilePreview": "Itgħabba l-anteprima",
         "showLinkImage": "Uri l-immaġni",
-        "emojiSuggestions": "Suġġerimenti ta' emoji"
+        "emojiSuggestions": "Suġġerimenti ta' emoji",
+        "saveMessage": "Issejvja l-messaġġ",
+        "removeFromSaved": "Neħħi mill-imsejvin"
     },
     "dates": {
         "today": "Illum",
@@ -771,6 +780,20 @@
             "privacy": "Privatezza",
             "mcp": "Integrazzjoni ta' Claude",
             "advanced": "Avvanzat"
+        },
+        "categoryDescriptions": {
+            "profile": "Il-profil tiegħek, il-kont u l-apparati konnessi.",
+            "appearance": "Tema, modalità, densità tal-wiri u kulur tal-enfasi.",
+            "accessibility": "Daqs tat-test, wisa' tal-qari, moviment u trasparenza.",
+            "language": "Il-lingwa tal-interfaċċja u l-formati reġjonali.",
+            "notifications": "Agħżel kif u meta Fluux javżak.",
+            "encryption": "Ċwievet tal-kriptaġġ minn tarf għal tarf għall-konversazzjonijiet tiegħek.",
+            "privacy": "Arkivjar tal-messaġġi fuq is-server u tniżżil awtomatiku tal-midja.",
+            "blocked": "Nies li ma jistgħux jiktbulek jew jaraw l-istatus tiegħek.",
+            "storage": "Midja maħżuna fil-cache ta' dan l-apparat u l-ispazju li tuża.",
+            "updates": "Żomm lil Fluux aġġornat.",
+            "mcp": "Settings għall-pont lokali ta' Claude.",
+            "advanced": "Għodod għall-iżviluppaturi u dijanjostika."
         },
         "groups": {
             "general": "Ġenerali",
@@ -1382,6 +1405,10 @@
         "search": {
             "title": "Riżultati tat-tfittxija",
             "description": "Agħżel riżultat fil-bar tal-ġenb biex tara l-konversazzjoni."
+        },
+        "saved": {
+            "title": "Messaġġi msejvin",
+            "description": "Agħżel messaġġ misjuv fil-bar tal-ġenb biex tiftaħ fil-konversazzjoni tiegħu."
         }
     },
     "avatar": {
@@ -1650,7 +1677,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} irreaġixxa għal '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} irreaġixxa għall-messaġġ tiegħek",
         "see": "Ara"
     },
     "commands": {
@@ -1767,5 +1794,17 @@
         "edit": "{{nickname}} (editjat): {{text}}",
         "retraction": "{{nickname}} ħassar messaġġ",
         "messages": "{{nickname}}: {{count}} messaġġi ġodda"
+    },
+    "saved": {
+        "title": "Messaġġi msejvin",
+        "marker": "Misjuv",
+        "empty": "Ebda messaġġ misjuv",
+        "emptyHint": "Iftaħ il-menu Aktar ta' messaġġ u agħżel Issejvja l-messaġġ biex iżżommu hawn.",
+        "remove": "Neħħi mill-imsejvin",
+        "encrypted": "Messaġġ ikkriptat",
+        "deleted": "Messaġġ imħassar",
+        "tryAgain": "Erġa' pprova",
+        "full": "Il-lista tal-messaġġi msejvin hija mimlija ({{count}}). Neħħi wieħed biex tsejvja ieħor.",
+        "refused": "Is-server tiegħek irrifjuta li jaħżen dan il-messaġġ."
     }
 }

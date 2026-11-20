@@ -258,6 +258,41 @@ describe('PubSub Module', () => {
     })
   })
 
+  describe('saved messages incoming notify', () => {
+    const savedEvent = (from: string, itemsChildren: Array<Record<string, unknown>>) =>
+      createMockElement('message', { from, to: 'user@example.com' }, [
+        {
+          name: 'event',
+          attrs: { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+          children: [{ name: 'items', attrs: { node: 'urn:xmpp:fluux:saved-messages:0' }, children: itemsChildren }],
+        },
+      ])
+    const savedItem = {
+      name: 'item', attrs: { id: 'h1' },
+      children: [{ name: 'saved', attrs: { xmlns: 'urn:xmpp:fluux:saved-messages:0', stamp: '2026-11-19T14:05:00Z' }, children: [
+        { name: 'forwarded', attrs: { xmlns: 'urn:xmpp:forward:0' }, children: [
+          { name: 'message', attrs: { xmlns: 'jabber:client', from: 'team@conference.example/Alice', type: 'groupchat' },
+            children: [{ name: 'body', attrs: {}, text: 'hello' }] },
+        ] },
+      ] }],
+    }
+
+    it('emits saved:synced for a save and a retract from our own node', async () => {
+      await connectClient()
+      mockXmppClientInstance._emit('stanza', savedEvent('user@example.com', [savedItem, { name: 'retract', attrs: { id: 'old' } }]))
+      expect(emitSDKSpy).toHaveBeenCalledWith('saved:synced', {
+        upserts: [expect.objectContaining({ id: 'h1', conversationJid: 'team@conference.example', text: 'hello' })],
+        removedIds: ['old'],
+      })
+    })
+
+    it('ignores another entity publishing to a node of the same name', async () => {
+      await connectClient()
+      mockXmppClientInstance._emit('stanza', savedEvent('attacker@evil.com', [savedItem]))
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('saved:synced', expect.anything())
+    })
+  })
+
   describe('MDS incoming notify (XEP-0490)', () => {
     const mdsEvent = (from: string, itemsChildren: Array<Record<string, unknown>>) =>
       createMockElement('message', { from, to: 'user@example.com' }, [

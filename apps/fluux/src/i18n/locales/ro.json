@@ -77,7 +77,8 @@
         "viewProfile": "Vezi profil",
         "resizeHint": "Trage pentru a redimensiona, dublu-clic pentru a reseta",
         "dismiss": "Închide",
-        "search": "Căutare"
+        "search": "Căutare",
+        "saved": "Salvate"
     },
     "newMessage": {
         "title": "Mesaj nou",
@@ -550,20 +551,26 @@
         "reply": "Răspunde",
         "copyMessage": "Copiază textul",
         "replyQuoteHiddenEncrypted": "Citat ascuns: originalul era criptat",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "Redirecționează mesajul",
+        "forwardLinkOnly": "Trimite comentariul tău, o copie citată a mesajului și un link către original. Toți cei din destinație pot citi citatul.",
+        "forwardQuotedCopy": "Copie citată a unui mesaj redirecționat",
+        "forwardedCopyUnknownAuthor": "un expeditor necunoscut",
+        "forwardedFromLabel": "Redirecționat de la",
+        "forwardedCopyDirectChat": "Conversație directă",
+        "forwardedCopyOpen": "Deschide mesajul original",
+        "forwardedCopyUnknownSource": "o cameră necunoscută",
+        "forwardedCopyDiffers": "Copia redirecționată diferă de mesajul original",
+        "forwardedCopyClaimed": "Copia trimisă odată cu redirecționarea:",
+        "forwardedOriginNotFound": "Mesajul original nu se află în istoricul tău",
+        "forwardQuoteOnly": "Trimite comentariul tău și o copie citată a mesajului. Toți cei din destinație pot citi citatul.",
+        "forwardEncryptedOnly": "Acest mesaj provine dintr-o conversație criptată, deci poate fi redirecționat doar către o conversație criptată.",
+        "forwardDestination": "Conversație sau cameră",
+        "forwardChoose": "Alege o conversație sau o cameră",
+        "forwardUnavailable": "Destinație indisponibilă",
+        "forwardComment": "Comentariu (opțional)",
+        "forwardSend": "Trimite",
+        "forwardSending": "Se trimite…",
+        "forwardFailed": "Mesajul nu a putut fi trimis. Selecția și comentariul tău au fost păstrate.",
         "forwardMessage": "Redirecționează mesajul (în curând)",
         "moreReactions": "Mai multe reacții",
         "reactions": "Reacții",
@@ -640,8 +647,8 @@
             "verifiedTooltip": "Cheie OpenPGP verificată",
             "tofuNewTooltip": "Contact nou. Verificați amprenta pentru încredere deplină",
             "unverifiedKeysetTooltip": "Acest contact are o cheie nouă care nu a fost verificată.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Criptare în pauză",
+            "blockedTooltip": "Cheia interlocutorului s-a schimbat. Rezolvă problema pentru a relua criptarea",
             "sendBlockedEncryptionRequired": "Mesaj netrimis. Criptarea este obligatorie pentru această conversație, dar nu este disponibilă momentan.",
             "sendBlockedKeyChanged": "Mesaj netrimis. Cheia de criptare a acestui contact s-a schimbat. Verifică schimbarea cheii înainte de a trimite.",
             "sendBlockedKeyLocked": "Mesaj netrimis. Deblochează cheia ta de criptare pentru a trimite acest mesaj.",
@@ -657,8 +664,8 @@
                 "pendingAll": "Cheile lui {{name}} nu primesc mesaje până când acest dispozitiv nu are deciziile tale de încredere dintr-o versiune anterioară sau de pe celelalte dispozitive ale tale. Până atunci nu poți trimite mesaje. Se încearcă din nou automat.",
                 "review": "Revizuiește cheile"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Criptare dezactivată",
+            "plaintextForcedTooltip": "Ai dezactivat criptarea pentru această conversație, așa că mesajele sunt trimise în text simplu",
             "keyLocked": "Criptare blocată",
             "keyLockedTooltip": "Criptare blocată. Apasă pentru a debloca",
             "encryptedClickToUnlock": "Mesaj criptat. Apasă pentru a debloca",
@@ -681,8 +688,8 @@
                 "fingerprint_mismatch": "Amprenta nu corespunde valorii anunțate",
                 "uid_mismatch": "Identitatea certificatului nu corespunde adresei interlocutorului"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Dezactivează criptarea pentru această conversație",
+            "enableEncryption": "Reactivează criptarea",
             "tooltip": {
                 "header": "Criptat",
                 "protocol": {
@@ -730,7 +737,9 @@
         "loadAudio": "Încarcă sunetul",
         "loadFilePreview": "Încarcă previzualizarea",
         "showLinkImage": "Afișează imaginea",
-        "emojiSuggestions": "Sugestii de emoji"
+        "emojiSuggestions": "Sugestii de emoji",
+        "saveMessage": "Salvează mesajul",
+        "removeFromSaved": "Elimină din salvate"
     },
     "dates": {
         "today": "Astăzi",
@@ -767,6 +776,20 @@
             "privacy": "Confidențialitate",
             "mcp": "Integrare Claude",
             "advanced": "Avansat"
+        },
+        "categoryDescriptions": {
+            "profile": "Profilul, contul și dispozitivele conectate.",
+            "appearance": "Temă, mod, densitatea afișării și culoarea de accent.",
+            "accessibility": "Dimensiunea textului, lățimea de citire, animații și transparență.",
+            "language": "Limba interfeței și formatele regionale.",
+            "notifications": "Alegeți cum și când vă anunță Fluux.",
+            "encryption": "Chei de criptare end-to-end pentru conversațiile dumneavoastră.",
+            "privacy": "Arhivarea mesajelor pe server și descărcarea automată a fișierelor media.",
+            "blocked": "Persoane care nu vă pot scrie și nu vă pot vedea starea.",
+            "storage": "Fișiere media din memoria cache a acestui dispozitiv și spațiul ocupat.",
+            "updates": "Păstrați Fluux actualizat.",
+            "mcp": "Setările punții Claude locale.",
+            "advanced": "Instrumente pentru dezvoltatori și diagnosticare."
         },
         "groups": {
             "general": "General",
@@ -1378,6 +1401,10 @@
         "search": {
             "title": "Rezultatele căutării",
             "description": "Selectați un rezultat din bara laterală pentru a vizualiza conversația."
+        },
+        "saved": {
+            "title": "Mesaje salvate",
+            "description": "Selectați un mesaj salvat în bara laterală pentru a-l deschide în conversația sa."
         }
     },
     "avatar": {
@@ -1646,7 +1673,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} a reacționat la '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} a reacționat la mesajul tău",
         "see": "Vezi"
     },
     "commands": {
@@ -1763,5 +1790,17 @@
         "edit": "{{nickname}} (editare): {{text}}",
         "retraction": "{{nickname}} a șters un mesaj",
         "messages": "{{nickname}}: {{count}} mesaje noi"
+    },
+    "saved": {
+        "title": "Mesaje salvate",
+        "marker": "Salvat",
+        "empty": "Niciun mesaj salvat",
+        "emptyHint": "Deschideți meniul Mai multe al unui mesaj și alegeți Salvează mesajul pentru a-l păstra aici.",
+        "remove": "Elimină din salvate",
+        "encrypted": "Mesaj criptat",
+        "deleted": "Mesaj șters",
+        "tryAgain": "Încearcă din nou",
+        "full": "Lista mesajelor salvate este plină ({{count}}). Eliminați unul pentru a salva altul.",
+        "refused": "Serverul dvs. a refuzat să stocheze acest mesaj."
     }
 }

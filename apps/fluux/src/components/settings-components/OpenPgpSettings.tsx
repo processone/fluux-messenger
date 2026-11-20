@@ -1031,7 +1031,7 @@ export function OpenPgpSettings() {
   )
 
   return (
-    <section className="w-full max-w-md">
+    <section className="w-full">
       <SettingsSection>
       <div className="space-y-6">
         {/* Toggle block */}
@@ -1082,7 +1082,7 @@ export function OpenPgpSettings() {
 
         {/* Web locked banner — shown when key exists but no session passphrase */}
         {webLocked && (
-          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-fluux-bg border border-fluux-border">
+          <div className="flex items-center justify-between gap-3 p-3 fluux-card">
             <p className="text-xs text-fluux-text leading-snug flex-1">
               {t('settings.encryption.lockedBannerBody')}
             </p>
@@ -1098,14 +1098,14 @@ export function OpenPgpSettings() {
 
         {openpgpEnabled && (
           <div className="space-y-3">
-            <label className="text-sm font-medium text-fluux-text">
+            <label className="type-section-title text-fluux-text">
               {t('settings.encryption.statusLabel')}
             </label>
             <div
-              className={`rounded-lg border-2 p-3 space-y-2 ${
+              className={`p-3 space-y-2 ${
                 pluginStatus === 'generation-failed' || pluginStatus === 'registration-failed'
-                  ? 'border-fluux-red/40 bg-fluux-red/5'
-                  : 'border-fluux-border bg-fluux-bg'
+                  ? 'rounded-lg border-2 border-fluux-red/40 bg-fluux-red/5'
+                  : 'fluux-card'
               }`}
             >
               <div
@@ -1169,7 +1169,7 @@ export function OpenPgpSettings() {
         {pluginStatus === 'ready' && (
           <div className="space-y-2">
             <div className="flex items-center gap-1.5">
-              <label className="text-sm font-medium text-fluux-text">
+              <label className="type-section-title text-fluux-text">
                 {t('settings.encryption.backupLabel')}
               </label>
               <button

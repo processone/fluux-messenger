@@ -106,7 +106,7 @@ export function IosNotificationsCard({
   const closedAppText = closedAppDescription(permission, isConnected, pushStatus, pushEnabled)
 
   return (
-    <div className="rounded-lg border-2 border-fluux-border bg-fluux-bg divide-y-2 divide-fluux-border">
+    <div className="fluux-card divide-y divide-[color:var(--fluux-surface-divider)]">
       <div className="flex items-center justify-between gap-3 p-4">
         <div className="flex items-center gap-3 min-w-0">
           {allowed

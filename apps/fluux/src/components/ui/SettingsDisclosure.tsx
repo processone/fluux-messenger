@@ -14,7 +14,7 @@ export function SettingsDisclosure({ title, children, stayOpen = false }: Settin
   const visible = expanded || stayOpen
 
   return (
-    <section className="rounded-lg border border-fluux-border bg-fluux-bg/40 overflow-hidden">
+    <section className="fluux-card overflow-hidden">
       <h3>
         <button
           type="button"
@@ -23,7 +23,7 @@ export function SettingsDisclosure({ title, children, stayOpen = false }: Settin
           disabled={stayOpen}
           onClick={() => setExpanded(!visible)}
           className="flex w-full items-center gap-2 px-4 py-3 text-start text-sm font-medium text-fluux-text
-                     hover:bg-fluux-hover transition-colors focus-visible:outline-none focus-visible:ring-2
+                     fluux-card-row-hover transition-colors focus-visible:outline-none focus-visible:ring-2
                      focus-visible:ring-inset focus-visible:ring-fluux-brand disabled:cursor-default"
         >
           {visible

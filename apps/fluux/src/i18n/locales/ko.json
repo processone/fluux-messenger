@@ -77,7 +77,8 @@
         "viewProfile": "프로필 보기",
         "resizeHint": "드래그하여 크기 조정, 더블클릭하여 초기화",
         "dismiss": "닫기",
-        "search": "검색"
+        "search": "검색",
+        "saved": "저장됨"
     },
     "newMessage": {
         "title": "새 메시지",
@@ -547,20 +548,26 @@
         "reply": "답장",
         "copyMessage": "텍스트 복사",
         "replyQuoteHiddenEncrypted": "인용 숨김: 원본이 암호화됨",
-        "forwardMessageLink": "Forward message",
-        "forwardLinkOnly": "Sends your comment, a quoted copy of the message and a link to the original. Everyone in the destination can read the quote.",
-        "forwardQuotedCopy": "Quoted copy from a forwarded message",
-        "forwardedCopyLabel": "Forwarded message from {{author}}",
-        "forwardedCopyUnknownAuthor": "an unknown sender",
-        "forwardQuoteOnly": "Sends your comment and a quoted copy of the message. Everyone in the destination can read the quote.",
-        "forwardEncryptedOnly": "This message is from an encrypted chat, so it can only be forwarded into an encrypted chat.",
-        "forwardDestination": "Chat or room",
-        "forwardChoose": "Choose a chat or room",
-        "forwardUnavailable": "Destination unavailable",
-        "forwardComment": "Comment (optional)",
-        "forwardSend": "Send",
-        "forwardSending": "Sending…",
-        "forwardFailed": "Could not send the message. Your selection and comment are kept.",
+        "forwardMessageLink": "메시지 전달",
+        "forwardLinkOnly": "댓글, 메시지의 인용 사본, 원본 링크를 보냅니다. 받는 곳의 모든 사람이 인용문을 읽을 수 있습니다.",
+        "forwardQuotedCopy": "전달된 메시지의 인용 사본",
+        "forwardedCopyUnknownAuthor": "알 수 없는 발신자",
+        "forwardedFromLabel": "전달한 사람",
+        "forwardedCopyDirectChat": "1:1 대화",
+        "forwardedCopyOpen": "원본 메시지 열기",
+        "forwardedCopyUnknownSource": "알 수 없는 대화방",
+        "forwardedCopyDiffers": "전달된 사본이 원본 메시지와 다릅니다",
+        "forwardedCopyClaimed": "전달과 함께 보낸 사본:",
+        "forwardedOriginNotFound": "원본 메시지가 대화 기록에 없습니다",
+        "forwardQuoteOnly": "댓글과 메시지의 인용 사본을 보냅니다. 받는 곳의 모든 사람이 인용문을 읽을 수 있습니다.",
+        "forwardEncryptedOnly": "이 메시지는 암호화된 대화에서 온 것이므로 암호화된 대화로만 전달할 수 있습니다.",
+        "forwardDestination": "대화 또는 대화방",
+        "forwardChoose": "대화 또는 대화방 선택",
+        "forwardUnavailable": "대상을 사용할 수 없음",
+        "forwardComment": "댓글(선택 사항)",
+        "forwardSend": "보내기",
+        "forwardSending": "보내는 중…",
+        "forwardFailed": "메시지를 보내지 못했습니다. 선택 항목과 댓글은 유지됩니다.",
         "forwardMessage": "메시지 전달 (곧 출시)",
         "moreReactions": "더 많은 반응",
         "reactions": "반응",
@@ -726,7 +733,9 @@
         "loadAudio": "오디오 불러오기",
         "loadFilePreview": "미리보기 불러오기",
         "showLinkImage": "이미지 표시",
-        "emojiSuggestions": "이모지 제안"
+        "emojiSuggestions": "이모지 제안",
+        "saveMessage": "메시지 저장",
+        "removeFromSaved": "저장 목록에서 제거"
     },
     "dates": {
         "today": "오늘",
@@ -763,6 +772,20 @@
             "privacy": "개인정보",
             "mcp": "Claude 통합",
             "advanced": "고급"
+        },
+        "categoryDescriptions": {
+            "profile": "내 프로필, 계정 및 연결된 기기.",
+            "appearance": "테마, 모드, 표시 밀도 및 강조 색상.",
+            "accessibility": "글자 크기, 읽기 너비, 움직임 및 투명도.",
+            "language": "인터페이스 언어 및 지역 형식.",
+            "notifications": "Fluux가 언제 어떻게 알릴지 선택하세요.",
+            "encryption": "대화를 위한 종단 간 암호화 키.",
+            "privacy": "서버 메시지 보관 및 미디어 자동 다운로드.",
+            "blocked": "나에게 메시지를 보내거나 내 상태를 볼 수 없는 사람들.",
+            "storage": "이 기기에 캐시된 미디어와 사용 중인 공간.",
+            "updates": "Fluux를 최신 상태로 유지하세요.",
+            "mcp": "로컬 Claude 브리지 설정.",
+            "advanced": "개발자 도구 및 진단."
         },
         "groups": {
             "general": "일반",
@@ -1374,6 +1397,10 @@
         "search": {
             "title": "검색 결과",
             "description": "사이드바에서 결과를 선택하여 대화를 봅니다."
+        },
+        "saved": {
+            "title": "저장된 메시지",
+            "description": "사이드바에서 저장된 메시지를 선택하면 해당 대화에서 열립니다."
         }
     },
     "avatar": {
@@ -1642,7 +1669,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}}이(가) '{{preview}}'에 반응했습니다",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}}이(가) 내 메시지에 반응했습니다",
         "see": "보기"
     },
     "commands": {
@@ -1759,5 +1786,17 @@
         "edit": "{{nickname}} (수정): {{text}}",
         "retraction": "{{nickname}}님이 메시지를 삭제했습니다",
         "messages": "{{nickname}}: 새 메시지 {{count}}개"
+    },
+    "saved": {
+        "title": "저장된 메시지",
+        "marker": "저장됨",
+        "empty": "저장된 메시지가 없습니다",
+        "emptyHint": "메시지의 더 보기 메뉴를 열고 메시지 저장을 선택하면 여기에 보관됩니다.",
+        "remove": "저장 목록에서 제거",
+        "encrypted": "암호화된 메시지",
+        "deleted": "삭제된 메시지",
+        "tryAgain": "다시 시도",
+        "full": "저장된 메시지 목록이 가득 찼습니다({{count}}개). 하나를 제거해야 다른 메시지를 저장할 수 있습니다.",
+        "refused": "서버가 이 메시지의 저장을 거부했습니다."
     }
 }

@@ -87,7 +87,7 @@ function ServerArchiveControl() {
   const disabled = !!state || !!error
   return (
     <div className="space-y-3 mb-6" aria-busy={loading || saving}>
-      <h3 id="server-archive-label" className="text-sm font-medium text-fluux-text">{t('settings.archiveConversations')}</h3>
+      <h3 id="server-archive-label" className="type-section-title text-fluux-text">{t('settings.archiveConversations')}</h3>
       <p className="text-xs text-fluux-muted">{t('settings.archiveConversationsDescription')}</p>
       {prefs && (
         <>
@@ -136,11 +136,11 @@ export function PrivacySettings() {
   const setMediaAutoDownload = useSettingsStore((s) => s.setMediaAutoDownload)
 
   return (
-    <section className="w-full max-w-md">
+    <section className="w-full">
       <SettingsSection>
         <ServerArchiveSetting />
         <div className="space-y-3">
-        <label id="media-auto-download-label" className="text-sm font-medium text-fluux-text">{t('settings.mediaAutoDownload')}</label>
+        <label id="media-auto-download-label" className="type-section-title text-fluux-text">{t('settings.mediaAutoDownload')}</label>
         <div role="group" aria-labelledby="media-auto-download-label"
           className="grid grid-cols-3 gap-1 rounded-lg border border-fluux-border bg-fluux-bg p-1">
           {mediaOptions.map((option) => {

@@ -86,6 +86,14 @@ export function ServerOverview() {
                     {t(card.secondaryLabelKey, { n: secondary as number })}
                   </div>
                 )}
+                {card.secondaryIsShare && typeof secondary === 'number' && typeof value === 'number' && value > 0 && (
+                  <div aria-hidden="true" className="mt-3 h-1.5 rounded-full bg-[color:var(--fluux-surface-divider)] overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-fluux-green"
+                      style={{ width: `${Math.min(100, (secondary / value) * 100)}%` }}
+                    />
+                  </div>
+                )}
               </>
             )
             if (card.target) {
@@ -95,14 +103,14 @@ export function ServerOverview() {
                   key={String(card.key)}
                   type="button"
                   onClick={() => adminStore.getState().setActiveCategory(target)}
-                  className="flex flex-col p-4 rounded-xl bg-fluux-surface border border-fluux-border text-start hover:bg-fluux-hover hover:border-fluux-brand/40 transition-colors tap-target"
+                  className="flex flex-col p-5 fluux-card fluux-card-row-hover text-start hover:border-fluux-brand/40 transition-colors tap-target"
                 >
                   {inner}
                 </button>
               )
             }
             return (
-              <div key={String(card.key)} className="p-4 rounded-xl bg-fluux-surface border border-fluux-border">
+              <div key={String(card.key)} className="p-5 fluux-card">
                 {inner}
               </div>
             )

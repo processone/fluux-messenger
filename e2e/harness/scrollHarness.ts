@@ -3,6 +3,7 @@ import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './demoBoot'
 import { syncEngineGeometry } from './compositorSync'
 import { AT_BOTTOM_THRESHOLD } from '../../apps/fluux/src/utils/scrollStateManager'
+import { OFFSET_POLL_IDLE_FRAMES } from '../../apps/fluux/src/components/conversation/tanstackMessageVirtualizer'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,12 @@ const DEMO_URL = '/demo.html?tutorial=false&virt=1&stress=rooms:1,messages:80,ms
 export const STRESS_ROOM_JID = 'stress-0@conference.fluux.chat'
 
 export const SETTLE_MS = 700   // time to let scroll + measurement settle after an action
+// Frames the message list must hold still before settle() returns. The list treats a scroll as
+// over only after OFFSET_POLL_IDLE_FRAMES frames without movement, and a size correction it then
+// allows lands a frame or two later.
+export const SETTLE_FRAMES = OFFSET_POLL_IDLE_FRAMES + 2
+// A list still moving after this long is left for the caller's assertion to judge.
+const SETTLE_LIMIT_MS = 10_000
 export const FRAME_SAMPLE_MS = 500   // window for scrollTop stability sampling after prepend settle
 // Drift tolerance for the virtualizer path: one final ResizeObserver callback can fire
 // just after the 60-frame re-assert loop exits and shift getOffsetForMessageId by ~16px
@@ -31,11 +38,35 @@ export const AT_BOTTOM_OK_PX = AT_BOTTOM_THRESHOLD
 export const CLEAR_OF_BOTTOM_PX = 800
 
 /**
- * Wait out an action before a settled snapshot. See syncEngineGeometry in e2e/compositorSync.ts
- * for the synchronization requirement and the timing windows where it must not be used.
+ * Wait out an action before a settled snapshot: at least SETTLE_MS, and until the message list's
+ * scroll geometry has held still for SETTLE_FRAMES frames in a row.
+ *
+ * The list settles in frames, not milliseconds. Linux WebKit painting in software has taken
+ * around 500ms per frame for a while after a scroll, so 700ms was fewer frames than the list needs
+ * to treat the scroll as over. A test's next step then landed while the list still handled the
+ * previous one: growth above a parked reader was treated as growth during an upward scroll, and a
+ * new message arrived before the list had finished the reader's wheel scroll. On a fast engine
+ * the frames fit inside SETTLE_MS and this waits no longer than before.
+ *
+ * See syncEngineGeometry in e2e/compositorSync.ts for the synchronization requirement and the
+ * timing windows where it must not be used.
  */
 export async function settle(page: Page): Promise<void> {
-  await page.waitForTimeout(SETTLE_MS)
+  await page.evaluate(({ ms, frames, limit }) => new Promise<void>((resolve) => {
+    const start = performance.now()
+    let last: string | null = null
+    let still = 0
+    const tick = () => {
+      const list = document.querySelector('[data-message-list]') as HTMLElement | null
+      const geometry = list ? `${list.scrollTop}:${list.scrollHeight}:${list.clientHeight}` : ''
+      still = geometry === last ? still + 1 : 0
+      last = geometry
+      const elapsed = performance.now() - start
+      if ((elapsed >= ms && still >= frames) || elapsed >= limit) resolve()
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }), { ms: SETTLE_MS, frames: SETTLE_FRAMES, limit: SETTLE_LIMIT_MS })
   await syncEngineGeometry(page)
 }
 

@@ -134,6 +134,11 @@ export interface ForwardedCopyInput {
   fromEncrypted?: boolean
   /** The source message's type; a copy without one is sent as a room message, as before. */
   type?: 'chat' | 'groupchat'
+  /** The original's own id (origin id or message id), so a reader can find it in local history. */
+  id?: string
+  /** The original's archive id and the archive that assigned it. */
+  stanzaId?: string
+  stanzaIdBy?: string
   /**
    * The quote and link in the sent body that stand for this copy (UTF-16 offsets in that body).
    * They go out as a XEP-0428 fallback for the copy, so a reader that shows the copy hides them.

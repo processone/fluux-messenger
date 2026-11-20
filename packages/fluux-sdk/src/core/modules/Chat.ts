@@ -11,6 +11,7 @@ import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID, generateStableMessageId } from '../../utils/uuid'
 import { toCodePointOffset } from '../../utils/xep0426'
 import { roomMessageLinkReferences } from '../../utils/roomMessageLink'
+import { forwardedCopyQuoteRange } from '../../utils/forwardedCopyQuote'
 import {
   NS_CHATSTATES,
   NS_CARBONS,
@@ -76,7 +77,7 @@ import type {
   PollClosedData,
 } from '../types'
 import { getCorrectionStanzaIds, withCorrectionStanzaId, type StoredMessage, type StoredRoomMessage } from '../types/message-internal'
-import { parseMessageContent, parseForwardedCopy, parseMessageReferences, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, correctionMarks } from './messagingUtils'
+import { parseMessageContent, parseForwardedCopy, forwardedCopyElement, parseMessageReferences, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, correctionMarks } from './messagingUtils'
 import { checkForMention } from '../mentionDetection'
 import { parsePollElement, parsePollClosedElement } from '../poll'
 import { logWarn } from '../logger'
@@ -192,19 +193,15 @@ function forwardFallbackElement(fullBody: string, shift: number, range: { begin:
     }))
 }
 
-/** XEP-0297: the standalone forwarded copy of one message, as a child of the outgoing message. */
-function forwardedCopyElement(copy: { from: string; text: string; timestamp?: number; type?: 'chat' | 'groupchat' }): Element {
-  // The type is the source message's own, never guessed from the address.
-  const inner = xml('message', { xmlns: 'jabber:client', from: copy.from, type: copy.type ?? 'groupchat' }, xml('body', {}, copy.text))
-  return xml('forwarded', { xmlns: NS_FORWARD },
-    ...(copy.timestamp !== undefined && Number.isFinite(copy.timestamp)
-      ? [xml('delay', { xmlns: NS_DELAY, stamp: new Date(copy.timestamp).toISOString() })] : []),
-    inner)
-}
+/** Error conditions a reader device answers when it does not accept a forwarded copy. */
+const FORWARD_REFUSALS = new Set(['not-allowed', 'feature-not-implemented', 'bad-request'])
+
+/** The original's ids, kept on a forwarded copy so a reader can find the original again; never routed. */
+type ForwardedCopyIds = { id?: string; stanzaId?: string; stanzaIdBy?: string }
 
 /** The stored form of a copy: the author is a room nickname or a bare address, never a routing address. */
-function forwardedCopyFor(copy: { from: string; text: string; timestamp?: number; fromEncrypted?: boolean; type?: 'chat' | 'groupchat' }): ForwardedCopy | undefined {
-  const parsed = parseForwardedCopy(xml('message', {}, forwardedCopyElement(copy)))
+function forwardedCopyFor(copy: { from: string; text: string; timestamp?: number; fromEncrypted?: boolean; type?: 'chat' | 'groupchat' } & ForwardedCopyIds): ForwardedCopy | undefined {
+  const parsed = parseForwardedCopy(xml('message', {}, forwardedCopyElement(copy, { id: copy.id, stanzaId: copy.stanzaId, stanzaIdBy: copy.stanzaIdBy })))
   // The requirement is kept on the stored copy so a retry or an edit enforces it too.
   return parsed && copy.fromEncrypted ? { ...parsed, fromEncrypted: true } : parsed
 }
@@ -248,10 +245,19 @@ export class Chat extends BaseModule {
     context: MessageEnvelopeContext = {},
   ): { handled: boolean; message?: Message | RoomMessage | null } {
     const { isCarbonCopy = false, isSentCarbon = false, delayEl } = context
-    const carbonSent = stanza.getChild('sent', NS_CARBONS)
-    const carbonReceived = stanza.getChild('received', NS_CARBONS)
+    // XEP-0280 §7/§11: a carbon is trusted only when its wrapper comes from the
+    // user's own bare address (or has no sender, as a server may omit it), and a
+    // carbon is never unwrapped from inside another carbon. Anything else would
+    // let any account forge, retract or edit messages by wrapping them.
+    const carbonSent = isCarbonCopy ? undefined : stanza.getChild('sent', NS_CARBONS)
+    const carbonReceived = isCarbonCopy ? undefined : stanza.getChild('received', NS_CARBONS)
 
     if (carbonSent || carbonReceived) {
+      const outerFrom = stanza.attrs.from as string | undefined
+      const ownBare = getBareJid(this.deps.getCurrentJid() ?? '').toLowerCase()
+      if (outerFrom && outerFrom.toLowerCase() !== ownBare) {
+        return { handled: true }
+      }
       const forwarded = (carbonSent || carbonReceived)!.getChild('forwarded', NS_FORWARD)
       const forwardedMessage = forwarded?.getChild('message')
       if (forwardedMessage) {
@@ -1058,7 +1064,7 @@ export class Chat extends BaseModule {
     }
 
     if (forwarded && options?.forwarded) {
-      children.push(forwardedCopyElement(options.forwarded))
+      children.push(forwardedCopyElement(options.forwarded, { id: options.forwarded.id, stanzaId: options.forwarded.stanzaId, stanzaIdBy: options.forwarded.stanzaIdBy }))
       if (validCopyFallback) children.push(forwardFallbackElement(fullBody, fallbackEnd, validCopyFallback, NS_FORWARD))
     }
 
@@ -1193,7 +1199,7 @@ export class Chat extends BaseModule {
 
     // A retry keeps the structured copy inside the same protection as the first send.
     if (storedForwarded) {
-      children.push(forwardedCopyElement({ from: storedForwarded.from ?? storedForwarded.author, text: storedForwarded.text, timestamp: storedForwarded.timestamp, type: storedForwarded.type }))
+      children.push(forwardedCopyElement({ from: storedForwarded.from ?? storedForwarded.author, text: storedForwarded.text, timestamp: storedForwarded.timestamp, type: storedForwarded.type }, { id: storedForwarded.id, stanzaId: storedForwarded.stanzaId, stanzaIdBy: storedForwarded.stanzaIdBy }))
       if (storedForwarded.fallback && body.slice(storedForwarded.fallback.begin, storedForwarded.fallback.end) === storedForwarded.fallback.text) {
         children.push(forwardFallbackElement(fullBody, 0, storedForwarded.fallback, NS_FORWARD))
       }
@@ -1392,6 +1398,37 @@ export class Chat extends BaseModule {
   }
 
   /**
+   * The generated quote of the forward being edited, when the new body still ends with it after a
+   * comment (or is only it): where it now sits, the copy it stands for and, for a link-only
+   * forward, which room link in the new body is the marked one.
+   */
+  private keptForwardQuote(
+    row: Partial<Pick<Message, 'forwarded' | 'body' | 'references'>> | undefined,
+    newBody: string,
+  ): { range: { begin: number; end: number }; copy?: ForwardedCopy; linkIndex?: number } | undefined {
+    if (!row || typeof row.body !== 'string') return undefined
+    const copy = row.forwarded
+    let range = copy ? forwardedCopyQuoteRange({ body: row.body, forwarded: copy }) : undefined
+    let uri: string | undefined
+    if (!range) {
+      const marked = row.references?.find(ref => ref.type === 'data' && ref.forwardFallback)
+      if (marked?.type !== 'data' || !marked.forwardFallback) return undefined
+      range = marked.forwardFallback
+      uri = marked.uri
+    }
+    // Only a quote that closes the body is kept: it is what a comment is written above.
+    if (range.begin >= range.end || range.end !== row.body.length) return undefined
+    const quote = row.body.slice(range.begin, range.end)
+    if (!newBody.endsWith(quote)) return undefined
+    const begin = newBody.length - quote.length
+    if (begin > 0 && newBody[begin - 1] !== '\n') return undefined
+    const kept = { begin, end: newBody.length }
+    if (uri === undefined) return copy ? { range: kept, copy } : undefined
+    const linkIndex = roomMessageLinkReferences(newBody).findIndex(ref => ref.uri === uri && ref.begin! >= begin)
+    return linkIndex < 0 ? undefined : { range: kept, linkIndex }
+  }
+
+  /**
    * Send a message correction (edit) for a previously sent message (XEP-0308).
    *
    * Allows correcting typos or updating content in a message you previously sent.
@@ -1400,7 +1437,9 @@ export class Chat extends BaseModule {
    *
    * @param to - Recipient JID (user for chat, room for groupchat)
    * @param target - Message ID or selected chat identity; see {@link ChatMessageTarget}
-   * @param newBody - The corrected message text
+   * @param newBody - The corrected message text. For a forward, put the comment first and keep the
+   *   stored quote and link at the end after a newline; the correction then keeps the forward's
+   *   marker and copy.
    * @param attachment - Optional replacement file attachment
    *
    * @example
@@ -1448,7 +1487,7 @@ export class Chat extends BaseModule {
     // An edit opened on a row that has since left the resident window still carries the row it
     // was opened on; read the forward's requirement from it when the store has no row.
     const editedRow = original ?? (type === 'chat' && typeof target !== 'string'
-      ? target as Partial<Pick<Message, 'forwarded' | 'securityContext'>> : undefined)
+      ? target as Partial<Pick<Message, 'forwarded' | 'securityContext' | 'body' | 'references'>> : undefined)
     const referenceId = isWhisper
       ? whisper.referenceId
       : senderReference({ originId: original?.originId, id: originalMessageId })
@@ -1517,6 +1556,18 @@ export class Chat extends BaseModule {
         begin: String(toCodePointOffset(bodyText, ref.begin!)), end: String(toCodePointOffset(bodyText, ref.end!)) }))
     }
 
+    // A forward's generated quote and link stay on its correction: an editor that shows only the
+    // comment sends the comment followed by the stored quote, and the marker and copy go with it.
+    const keptQuote = attachment ? undefined : this.keptForwardQuote(editedRow, newBody)
+    if (keptQuote?.copy) {
+      const { copy } = keptQuote
+      children.push(forwardedCopyElement({ from: copy.from ?? copy.author, text: copy.text, timestamp: copy.timestamp, type: copy.type },
+        { id: copy.id, stanzaId: copy.stanzaId, stanzaIdBy: copy.stanzaIdBy }))
+      children.push(forwardFallbackElement(bodyText, 0, keptQuote.range, NS_FORWARD))
+    } else if (keptQuote?.linkIndex !== undefined) {
+      children.push(forwardFallbackElement(bodyText, 0, keptQuote.range))
+    }
+
     const correctionStanzaId = generateUUID()
     children.push(createOriginIdElement(correctionStanzaId))
 
@@ -1555,7 +1606,8 @@ export class Chat extends BaseModule {
     if (original || type === 'chat' && typeof target !== 'string') {
       const updates = {
         body: newBody, isEdited: true, originalBody: original?.originalBody ?? original?.body, attachment,
-        references: roomMessageLinkReferences(newBody),
+        references: roomMessageLinkReferences(newBody).map((ref, index) => index === keptQuote?.linkIndex ? { ...ref, forwardFallback: keptQuote.range } : ref),
+        ...(keptQuote?.copy && { forwarded: { ...keptQuote.copy, fallback: { ...keptQuote.range, text: newBody.slice(keptQuote.range.begin, keptQuote.range.end) } } }),
         encryptedPayload: undefined,
         ...(correctionSecurityContext && { securityContext: correctionSecurityContext }),
         correctionTimestamp: undefined, correctionTimestampSource: undefined, liveCorrection: true,
@@ -1876,6 +1928,15 @@ export class Chat extends BaseModule {
     return this.mamModule.locateRoomMessage(roomJid, stanzaId)
   }
 
+  /**
+   * Locate a one-to-one message (resident window, cache, then the account
+   * archive by exact id, or by time when the entry has no archive id).
+   * A failed query is `unknown`, never `absent`.
+   */
+  async locateChatMessage(conversationId: string, ref: { id?: string; stanzaId?: string; originId?: string; sentAt?: number; from?: string }) {
+    return this.mamModule.locateChatMessage(conversationId, ref)
+  }
+
   /** Reconcile a conversation's cached history with the server archive. */
   async refreshHistory(
     conversationId: string,
@@ -1948,6 +2009,16 @@ export class Chat extends BaseModule {
     // but the server already delivered the message to other available
     // resources. Marking the message as failed would be a false alarm.
     const messageId = stanza.attrs.id
+    // A reader device that cannot take a forwarded copy (Converse.js answers not-allowed) refuses
+    // only its own copy: the other readers got the message, so it is partly delivered, not failed.
+    if (messageId && getResource(from) && FORWARD_REFUSALS.has(error.condition)
+      && this.deps.stores?.chat.getMessage(bareFrom, messageId)?.forwarded) {
+      this.deps.emitSDK('console:event', {
+        message: `A device of ${bareFrom} refused the forwarded copy (${error.condition}); the message was delivered to the other readers`,
+        category: 'error',
+      })
+      return
+    }
     if (messageId && error.condition !== 'recipient-unavailable') {
       this.deps.emitSDK('chat:message-error', {
         conversationId: bareFrom,
@@ -2015,7 +2086,7 @@ export class Chat extends BaseModule {
     conversationId: string,
     at: string,
     size = 50,
-  ): Promise<{ messages: (Message | RoomMessage)[] }> {
+  ): Promise<{ messages: (Message | RoomMessage)[]; complete: boolean }> {
     return this.mamModule.fetchContext(conversationId, this.conversationKind(conversationId) === 'groupchat', at, size)
   }
 
@@ -2180,7 +2251,7 @@ export class Chat extends BaseModule {
       const senderOccupantId = stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
       const original = candidate && this.isSameMucAuthor(candidate, from, senderOccupantId) ? candidate : undefined
       if (!original && !onMissing) return false
-      const updates = this.correctionUpdates(stanza, body, original, delayEl, correctionStanzaId, correctionExpectedBy)
+      const updates = this.correctionUpdates(stanza, body, original, delayEl, correctionStanzaId, correctionExpectedBy, true)
       if (updates) this.deps.emitSDK('room:message-updated', {
         roomJid: conversationId, messageId: originalId, updates,
         correctionActor: { actorJid: from, actorOccupantId: senderOccupantId }, ...(!original && { onCorrectionMissing }),
@@ -2213,12 +2284,14 @@ export class Chat extends BaseModule {
     delayEl: Element | undefined,
     correctionStanzaId: string | undefined,
     expectedStanzaIdBy: string,
+    room = false,
   ): (Partial<StoredMessage> & Partial<StoredRoomMessage>) | undefined {
     const authoredAt = readStashedAuthoredAt(stanza)
     const correctionData = this.correctionReceipts.withOrder(stanza, applyCorrection(stanza, body, original?.originalBody ?? original?.body ?? '', {
       ...(delayEl && { delayEl }),
       ...(authoredAt && { authoredAt }),
       expectedStanzaIdBy,
+      room,
     }))
     if (correctionStanzaId) {
       correctionData.correctionStanzaIds = withCorrectionStanzaId(original ? getCorrectionStanzaIds(original) : undefined, correctionStanzaId)

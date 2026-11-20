@@ -120,6 +120,7 @@ import { PubSub } from './modules/PubSub'
 import { Blocking } from './modules/Blocking'
 import { Ignore } from './modules/Ignore'
 import { ConversationSync } from './modules/ConversationSync'
+import { SavedMessages } from './modules/SavedMessages'
 import { Mds } from './modules/Mds'
 import { Push } from './modules/Push'
 import { EntityTime } from './modules/EntityTime'
@@ -157,6 +158,7 @@ interface InternalSurface {
   mam: MAM
   mds: Mds
   conversationSync: ConversationSync
+  savedMessages: SavedMessages
   /** Fetches and merges the conversation list outside a fresh session's setup. */
   refreshConversationList(): Promise<void>
   /**
@@ -769,10 +771,11 @@ export class XMPPClient {
     this.ignore = new Ignore(moduleDeps)
     const conversationSync = new ConversationSync(moduleDeps)
     const mds = new Mds(moduleDeps)
+    const savedMessages = new SavedMessages(moduleDeps)
     this.push = new Push(moduleDeps)
     this.#internal = {
       on: (event, handler) => this.subscribeToBus(event, handler as ClientEvents[typeof event]),
-      mam, mds, conversationSync, entityTime, lastActivity, pubsub,
+      mam, mds, conversationSync, savedMessages, entityTime, lastActivity, pubsub,
       refreshConversationList: () => this.sessionLifecycle.refreshConversationList(),
       waitForReplayIngested: (timeoutMs) => this.waitForReplayIngested(timeoutMs),
     }
