@@ -618,7 +618,7 @@ describe('MUC Whispers', () => {
       ])
       mockXmppClientInstance._emit('stanza', stanza)
 
-      const call = emitSDKSpy.mock.calls.find(c => c[0] === 'room:message-updated')
+      const call = emitSDKSpy.mock.calls.find((c: unknown[]) => c[0] === 'room:message-updated')
       expect(call).toBeDefined()
       expect((call![1] as { updates: Record<string, unknown> }).updates).toMatchObject({ body: 'new text' })
       expect((call![1] as { updates: Record<string, unknown> }).updates.forwarded).toBeUndefined()
