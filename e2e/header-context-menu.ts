@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { test, expect, type Page } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import { bootDemo } from './harness/demoBoot'
@@ -7,6 +9,12 @@ import { activateChat } from './harness/scrollHarness'
 // with the same entries as the ⋯ menu. The browser integration test proves it in both engines; the
 // native menu itself is covered by the check in the Mac app.
 const PEER = 'emma@fluux.chat'
+const SHOTS = process.env.FLUUX_CONTEXT_MENU_SHOTS
+const shot = async (page: Page, name: string, engine: string) => {
+  if (!SHOTS) return
+  mkdirSync(SHOTS, { recursive: true })
+  await page.screenshot({ path: join(SHOTS, `header-${engine}-${name}.png`), clip: { x: 0, y: 0, width: 900, height: 480 } })
+}
 
 async function setup(page: Page) {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
@@ -19,7 +27,7 @@ const menu = (page: Page) => page.getByRole('menu', { name: 'More actions' })
 const labels = (page: Page) => menu(page).getByRole('button').evaluateAll(els => els.map(e => e.textContent?.trim()))
 
 test.describe('chat header right-click menu', () => {
-  test('opens at the pointer on the name, avatar and status; Escape and an outside click close it', async ({ page }) => {
+  test('opens at the pointer on the name, avatar and status; Escape and an outside click close it', async ({ page, browserName }) => {
     await setup(page)
     const name = header(page).getByRole('heading', { level: 2 })
     const box = (await name.boundingBox())!
@@ -37,6 +45,7 @@ test.describe('chat header right-click menu', () => {
     expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('')
     await expect(menu(page).getByRole('button', { name: 'Copy', exact: true })).toHaveCount(0)
 
+    await shot(page, 'menu', browserName)
     await page.keyboard.press('Escape')
     await expect(menu(page)).toHaveCount(0)
     await page.mouse.click(at.x, at.y, { button: 'right' })
@@ -69,13 +78,14 @@ test.describe('chat header right-click menu', () => {
     await expect(menu(page)).toHaveCount(0)
   })
 
-  test('Block asks first; cancelling changes nothing', async ({ page }) => {
+  test('Block asks first; cancelling changes nothing', async ({ page, browserName }) => {
     await setup(page)
     await header(page).getByRole('heading', { level: 2 }).click({ button: 'right' })
     await menu(page).getByRole('button', { name: 'Block user' }).click()
     await expect(menu(page)).toHaveCount(0)
     const dialog = page.getByText(/won't be able to contact you/)
     await expect(dialog).toBeVisible()
+    await shot(page, 'block-confirm', browserName)
     await page.getByRole('button', { name: 'Cancel' }).click()
     await expect(dialog).toHaveCount(0)
     await header(page).getByRole('heading', { level: 2 }).click({ button: 'right' })
