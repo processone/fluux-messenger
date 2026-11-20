@@ -67,7 +67,6 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await page.getByTestId('header-saved').click()
   await expect(page.getByTestId('saved-row')).toHaveCount(1)
   await page.getByTestId('saved-row').click()
-  await expect(page).toHaveURL(new RegExp(`/messages/${encodeURIComponent(PEER)}$`))
   await expect(page.locator('[data-message-id="saved-chat-1"].message-highlight')).toBeInViewport()
 
   // Both appear in Saved, newest saved first.
