@@ -1,9 +1,10 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { SavedMessages, parseSavedItems, savedItemId } from './SavedMessages'
 import { NS_PUBSUB, NS_SAVED_MESSAGES } from '../namespaces'
 import type { SavedMessage } from '../types/saved'
+import { writeSealHint } from '../../utils/savedSealHint'
 
 const OWN = 'romeo@montague.example'
 
@@ -156,3 +157,157 @@ describe('SavedMessages fetch', () => {
   })
 })
 
+
+// FLM-341: with OpenPGP on every entry is sealed to the account's own key.
+describe('SavedMessages sealing', () => {
+  /** Stands in for the plugin: text is sealed under a marker that only "the account's key" produces. */
+  beforeEach(() => localStorage.clear())
+  function sealedHost(state: 'unavailable' | 'locked' | 'ready' = 'ready') {
+    const host = {
+      state,
+      selfSealState: () => host.state,
+      /** The plugin has joined the manager. */
+      registered: true,
+      getPlugin: (id: string) => (host.registered && id === 'openpgp' ? {} : null),
+      sealToSelf: vi.fn(async (text: string) => {
+        if (host.state !== 'ready') throw Object.assign(new Error('locked'), { name: 'E2EEPluginError', code: 'key-locked', kind: 'transient' })
+        return `SEALED:${text}`
+      }),
+      openFromSelf: vi.fn(async (armored: string) => {
+        if (host.state !== 'ready') throw Object.assign(new Error('locked'), { name: 'E2EEPluginError', code: 'key-locked', kind: 'transient' })
+        return armored.startsWith('SEALED:') ? armored.slice('SEALED:'.length) : null
+      }),
+    }
+    return host
+  }
+  function setup(host: ReturnType<typeof sealedHost> | null) {
+    const sendIQ = vi.fn().mockResolvedValue(xml('iq', { type: 'result' }))
+    const deps = { ...(makeDeps(sendIQ) as object), getE2EEManager: () => host } as never
+    return { sendIQ, saved: new SavedMessages(deps) }
+  }
+  const published = (sendIQ: ReturnType<typeof vi.fn>) => {
+    const item = sendIQ.mock.calls[0][0].getChild('pubsub', NS_PUBSUB).getChild('publish').getChild('item') as Element
+    return { item, items: xml('items', { node: NS_SAVED_MESSAGES }, item) }
+  }
+
+  it('publishes the whole entry as one opaque block: no text, no conversation, no message identity in the item', async () => {
+    const { sendIQ, saved } = setup(sealedHost())
+    await saved.publish({ ...roomEntry, id: 'random-id', encrypted: true })
+    const { item } = published(sendIQ)
+    const wire = item.toString()
+    expect(item.attrs.id).toBe('random-id')
+    for (const leaked of ['release checklist', 'team@conference.example', '1731490000123456', 'occ-alice', 'forwarded', 'body']) expect(wire).not.toContain(leaked)
+    expect(item.getChild('saved', NS_SAVED_MESSAGES)!.getChild('sealed')).toBeDefined()
+  })
+
+  it('reads a sealed item back to the entry it sealed, text of an encrypted message included, under the item id', async () => {
+    const host = sealedHost()
+    const { sendIQ, saved } = setup(host)
+    const entry = { ...chatEntry, id: 'abc', encrypted: true as const, text: 'decrypted text' }
+    await saved.publish(entry)
+    const { items } = published(sendIQ)
+    const { upserts } = parseSavedItems(items, OWN)
+    expect(upserts).toHaveLength(1)
+    expect(upserts[0].sealed).toBeDefined()
+    const opened = await saved.open(upserts)
+    expect(opened.entries).toEqual([entry])
+    expect(opened.locked).toEqual([])
+    expect(opened.rejected).toEqual([])
+  })
+
+  it('never lists a sealed item the account key did not sign, and does not count it as locked', async () => {
+    const host = sealedHost()
+    const { saved } = setup(host)
+    const forged = { id: 'f', conversationJid: '', type: 'chat' as const, from: '', text: '', savedAt: 0, sealed: btoa('FORGED:{"v":1}') }
+    const opened = await saved.open([forged])
+    expect(opened).toMatchObject({ entries: [], locked: [], rejected: ['f'], sealedSeen: 1 })
+  })
+
+  it('rejects a signed payload that is not an entry', async () => {
+    const { saved } = setup(sealedHost())
+    const odd = { id: 'o', conversationJid: '', type: 'chat' as const, from: '', text: '', savedAt: 0, sealed: btoa('SEALED:{"v":1,"entry":{"text":"no conversation"}}') }
+    expect((await saved.open([odd])).rejected).toEqual(['o'])
+  })
+
+  it('keeps the whole list locked while the key is locked, plain items included', async () => {
+    const host = sealedHost('locked')
+    const { saved } = setup(host)
+    const sealed = { id: 's', conversationJid: '', type: 'chat' as const, from: '', text: '', savedAt: 0, sealed: btoa('SEALED:{}') }
+    const opened = await saved.open([sealed, { ...roomEntry, id: 'plain' }])
+    expect(opened).toMatchObject({ entries: [], locked: ['s', 'plain'], rejected: [] })
+  })
+
+  it('does not publish while the key is locked, and never falls back to plain text', async () => {
+    const { sendIQ, saved } = setup(sealedHost('locked'))
+    await expect(saved.publish({ ...roomEntry, id: 'r' })).rejects.toThrow()
+    expect(sendIQ).not.toHaveBeenCalled()
+  })
+
+  it('flags a plain item as unverified while OpenPGP is on, and lists it as is while it is off', async () => {
+    const on = setup(sealedHost())
+    expect((await on.saved.open([{ ...roomEntry, id: 'p' }])).entries).toEqual([{ ...roomEntry, id: 'p', unverified: true }])
+    localStorage.clear() // a different account that never sealed
+    const off = setup(null)
+    expect((await off.saved.open([{ ...roomEntry, id: 'p' }])).entries).toEqual([{ ...roomEntry, id: 'p' }])
+  })
+
+  describe('before the OpenPGP plugin has joined', () => {
+    const early = () => { const host = sealedHost('unavailable'); host.registered = false; return host }
+
+    it('treats an account that sealed last time as locked, so a save is never written in clear while the plugin starts', async () => {
+      writeSealHint(true) // the OpenPGP setting is on
+      const host = early()
+      const { sendIQ, saved } = setup(host)
+      expect(saved.sealState()).toBe('locked')
+      await expect(saved.publish({ ...roomEntry, id: 'q' })).rejects.toThrow()
+      expect(sendIQ).not.toHaveBeenCalled()
+      // The plugin joins with the key unlocked: the same save is sealed.
+      host.registered = true; host.state = 'ready'
+      await saved.publish({ ...roomEntry, id: 'q' })
+      expect(sendIQ.mock.calls[0][0].toString()).toContain('<sealed')
+    })
+
+    it('treats an account with no history of sealing as plain, and a registered plugin without a key as off', async () => {
+      expect(setup(early()).saved.sealState()).toBe('unavailable')
+      writeSealHint(true)
+      const off = sealedHost('unavailable') // joined, no key
+      expect(setup(off).saved.sealState()).toBe('unavailable')
+      // Reading the state never changes the memory: only the setting does.
+      expect(setup(early()).saved.sealState()).toBe('locked')
+    })
+
+    it('is plain again once the person turned OpenPGP off', () => {
+      writeSealHint(true)
+      // The plugin stays registered after the setting goes off (offline toggle, cancelled identity choice) and reports ready.
+      expect(setup(sealedHost()).saved.sealState()).toBe('ready')
+      writeSealHint(false)
+      expect(setup(sealedHost()).saved.sealState()).toBe('ready')
+      const { saved } = setup(early())
+      expect(saved.sealState()).toBe('unavailable')
+    })
+  })
+
+  it('without a key on this device a sealed item stays locked, not discarded', async () => {
+    const { saved } = setup(null)
+    const sealed = { id: 's', conversationJid: '', type: 'chat' as const, from: '', text: '', savedAt: 0, sealed: btoa('SEALED:{}') }
+    expect(await saved.open([sealed])).toMatchObject({ entries: [], locked: ['s'], sealedSeen: 1 })
+  })
+
+  it('republishes a deleted original sealed, without its text', async () => {
+    const { sendIQ, saved } = setup(sealedHost())
+    await saved.publish({ ...roomEntry, id: 'd', text: '', deleted: true, encrypted: undefined })
+    const { items } = published(sendIQ)
+    const [stub] = parseSavedItems(items, OWN).upserts
+    const [entry] = (await saved.open([stub])).entries
+    expect(entry).toMatchObject({ id: 'd', deleted: true, text: '' })
+    expect(items.toString()).not.toContain('release checklist')
+  })
+
+  it('writes an encrypted message without its text while OpenPGP is off', async () => {
+    const { sendIQ, saved } = setup(null)
+    await saved.publish({ ...chatEntry, id: 'e', encrypted: true, text: 'decrypted text' })
+    const { items } = published(sendIQ)
+    expect(items.toString()).not.toContain('decrypted text')
+    expect(parseSavedItems(items, OWN).upserts[0]).toMatchObject({ encrypted: true, text: '' })
+  })
+})

@@ -15,7 +15,8 @@
 import type { SideEffectHost } from './sideEffectHost'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { connectionStore } from '../stores/connectionStore'
-import { savedStore } from '../stores/savedStore'
+import { savedStore, randomSavedItemId } from '../stores/savedStore'
+import { savedItemId } from '../utils/savedMessageKeys'
 import { cachedDeletions } from '../utils/savedLatestCopy'
 import type { SavedMessage } from './types/saved'
 import { getBareJid } from './jid'
@@ -37,10 +38,16 @@ export function setupSavedMessagesSideEffects(
   let epoch = 0
   let flushing = false
   let flushAgain = false
-  let refreshing = false
+  let refreshing = 0
 
   const online = () => connectionStore.getState().status === 'online'
   const state = () => savedStore.getState()
+  /** The sealing state the module reports now, recorded in the store so saves and the views follow it. */
+  const syncSealState = () => {
+    const next = client.internal.savedMessages.sealState()
+    state().setSealState(next)
+    return next
+  }
 
   /** Items the server is known to hold, including ones this device has asked to remove but not yet seen go. */
   const serverCount = () => Object.keys(state().remote).length
@@ -83,10 +90,16 @@ export function setupSavedMessagesSideEffects(
             if (op === 'publish') {
               const entry = state().entries[id]
               if (!entry) { state().settle(id, op, revision); continue }
+              const sealing = syncSealState()
+              // A locked key never falls back to plain text: the entry waits for the key.
+              if (sealing === 'locked') continue
+              // An id derived from the message is something the server can recompute: with OpenPGP on, a new item gets a random one.
+              if (sealing === 'ready' && !state().remote[id] && id === savedItemId(entry)) { state().reid(id, randomSavedItemId()); continue }
               const { limit } = state()
               if (!state().remote[id]) {
                 if (limit !== undefined && serverCount() >= limit) {
-                  state().refuse(id, op, revision)
+                  // A sealed copy of a plain item that has no free slot is not an error: the plain item simply stays.
+                  state().refuse(id, op, revision, Boolean(state().migrating[id]))
                   continue
                 }
                 // Limit unknown: only the first item of a node that does not exist yet may go (it creates the node);
@@ -111,6 +124,9 @@ export function setupSavedMessagesSideEffects(
             // The server took it, whatever this device has queued since: membership counts it either way.
             state().confirm(id, op)
             state().settle(id, op, revision)
+            // A migrated entry's plain item is queued for retraction once its sealed copy is stored: send it now.
+            // It goes before the next copy is published, so one free slot at the node is enough for the whole migration.
+            if (op === 'publish' && Object.values(state().pending).includes('retract')) { flushAgain = true; break }
             // The first publish creates the node, and only then can its limit be read: later saves wait for it.
             if (op === 'publish' && state().limit === undefined) {
               const limit = await client.internal.savedMessages.fetchMaxItems().catch(() => undefined)
@@ -151,35 +167,50 @@ export function setupSavedMessagesSideEffects(
     const mine = epoch
     // Changes that arrive while this read is in flight are newer than its answer; the read owns its own record of them.
     const read = state().beginFetch()
-    refreshing = true
+    refreshing++
     try {
       const result = await client.internal.savedMessages.fetchAll()
       if (mine !== epoch || !state().fetchCurrent(read)) return
       const limit = await client.internal.savedMessages.fetchMaxItems().catch(() => undefined)
       if (mine !== epoch || !state().fetchCurrent(read)) return
       if (result.status === 'ok' || result.status === 'absent') {
-        const items = result.status === 'ok' ? result.items : []
+        const fetched = result.status === 'ok' ? result.items : []
+        syncSealState()
+        const opened = await client.internal.savedMessages.open(fetched)
+        if (mine !== epoch || !state().fetchCurrent(read)) return
+        const items = opened.entries
         // What the cache already knows is deleted loses its text, whatever the retraction ledger still holds.
         const deleted = await cachedDeletions([...items, ...Object.values(state().entries)], connectionStore.getState().jid ?? '').catch(() => new Set<string>())
         if (mine !== epoch || !state().fetchCurrent(read)) return
         // The limit is set before the list lands: landing it triggers a flush that must see it.
         state().setLimit(limit ?? state().limit)
-        state().reconcileFetch(items, read, deleted)
+        state().reconcileFetch(items, read, deleted, opened)
+        // The list was read for the first time under a key: plain entries predating OpenPGP are sealed once, but only when the node
+        // holds nothing sealed yet, so a plain item a server adds beside sealed ones is flagged and never blessed.
+        if (state().sealState === 'ready' && opened.sealedSeen === 0) for (const entry of items) if (entry.unverified) state().migrate(entry.id)
       } else {
         state().setLimit(limit ?? state().limit)
         logInfo(`SavedMessages: fetch ${result.status}; keeping the current list`)
       }
     } finally {
-      refreshing = false
+      refreshing--
       state().endFetch(read) // a read that did not land leaves nothing behind
     }
     await flush()
   }
 
+  // A key that becomes available opens the locked list: read the node again under it.
+  const onKeyStateChange = () => {
+    const before = state().sealState
+    // A read still in flight may have opened its items under the old state: read again (a newer read supersedes it).
+    if (syncSealState() !== before && (state().loaded || refreshing > 0)) void refresh().catch(() => {})
+  }
+  const unsubscribeKeyUnlocked = client.subscribe('e2ee:key-unlocked', onKeyStateChange)
+  const unsubscribePluginRegistered = client.subscribe('e2ee:plugin-registered', onKeyStateChange)
   const unsubscribeOnline = client.internal.on('online', () => { void refresh().catch(() => {}) })
   // A resumed session keeps the stream but not this page's memory: with no list loaded, read it.
   const unsubscribeResumed = client.internal.on('resumed', () => {
-    void (state().loaded && !refreshing ? flush() : refresh()).catch(() => {})
+    void (state().loaded && refreshing === 0 ? flush() : refresh()).catch(() => {})
   })
   // Notifications apply in arrival order, after what the cache knows of deletions has been learned.
   let notifications: Promise<void> = Promise.resolve()
@@ -187,11 +218,13 @@ export function setupSavedMessagesSideEffects(
     const mine = epoch
     const generation = state().generation
     notifications = notifications.then(async () => {
-      const upserts: SavedMessage[] = update.upserts
+      syncSealState()
+      const opened = await client.internal.savedMessages.open(update.upserts)
+      const upserts: SavedMessage[] = opened.entries
       const deleted = await cachedDeletions(upserts, connectionStore.getState().jid ?? '').catch(() => new Set<string>())
       // A wipe or an account change while the cache was read means this update is not wanted any more.
       if (mine !== epoch || generation !== state().generation) return
-      state().applyNotify(update, deleted)
+      state().applyNotify({ upserts, removedIds: update.removedIds }, deleted, opened)
       await flush()
     }).catch(() => {})
   })
@@ -207,6 +240,6 @@ export function setupSavedMessagesSideEffects(
   return () => {
     epoch += 1
     flushing = false
-    unsubscribeOnline(); unsubscribeResumed(); unsubscribeNotify(); unsubscribeAccount(); unsubscribeStore()
+    unsubscribeKeyUnlocked(); unsubscribePluginRegistered(); unsubscribeOnline(); unsubscribeResumed(); unsubscribeNotify(); unsubscribeAccount(); unsubscribeStore()
   }
 }

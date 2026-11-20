@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { buildScopedStorageKey } from '@fluux/sdk'
 import { useEncryptionSettingsStore, isOpenpgpEnabled } from './encryptionSettingsStore'
 
 describe('encryptionSettingsStore', () => {
@@ -68,6 +69,27 @@ describe('encryptionSettingsStore', () => {
         .notifyPluginRegistrationFailed({ kind: 'permanent', code: 'pep-unsupported' })
       useEncryptionSettingsStore.getState().setOpenpgpEnabled(false)
       expect(useEncryptionSettingsStore.getState().registrationError).toBeNull()
+    })
+  })
+
+  describe('saved messages seal memory', () => {
+    const key = () => buildScopedStorageKey('fluux-saved-sealing')
+
+    it('follows the setting, whichever way it is turned off', () => {
+      useEncryptionSettingsStore.getState().setOpenpgpEnabled(true)
+      expect(localStorage.getItem(key())).toBe('1')
+      useEncryptionSettingsStore.getState().setOpenpgpEnabled(false)
+      expect(localStorage.getItem(key())).toBeNull()
+    })
+
+    it('is brought in step with the stored setting when it loads, memories of older builds included', () => {
+      localStorage.setItem(key(), '1') // left by an older build
+      localStorage.setItem(buildScopedStorageKey('fluux-e2ee-openpgp-enabled'), '0')
+      useEncryptionSettingsStore.getState().rehydrate()
+      expect(localStorage.getItem(key())).toBeNull()
+      localStorage.setItem(buildScopedStorageKey('fluux-e2ee-openpgp-enabled'), '1')
+      useEncryptionSettingsStore.getState().rehydrate()
+      expect(localStorage.getItem(key())).toBe('1')
     })
   })
 })

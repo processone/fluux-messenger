@@ -1801,6 +1801,10 @@
         "deleted": "Messaggio eliminato",
         "tryAgain": "Riprova",
         "full": "L'elenco dei messaggi salvati è pieno ({{count}}). Rimuovine uno per salvarne un altro.",
-        "refused": "Il tuo server ha rifiutato di archiviare questo messaggio."
+        "refused": "Il tuo server ha rifiutato di archiviare questo messaggio.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

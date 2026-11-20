@@ -161,7 +161,7 @@ Reaction-based polls for MUC rooms, built on top of XEP-0444 (Message Reactions)
 | `urn:xmpp:fluux:appearance:0`        | Theme and appearance settings sync across devices                                                                  |
 | `urn:xmpp:fluux:conversations:0`     | Conversation list sync (active and archived 1:1 conversations) with debounced publishing and merge-on-reconnect    |
 | `urn:xmpp:fluux:ignored-users:0`     | Per-room ignored users list, stored as one PEP item per room                                                       |
-| `urn:xmpp:fluux:saved-messages:0`     | Saved messages: one private item per message holding a XEP-0297 forwarded copy, synced to every client, see [XEP-SAVED_MESSAGES](docs/XEP-SAVED_MESSAGES.md) |
+| `urn:xmpp:fluux:saved-messages:0`     | Saved messages: one private item per message holding a XEP-0297 forwarded copy, synced to every client; sealed to the account's own OpenPGP key while it is on, see [XEP-SAVED_MESSAGES](docs/XEP-SAVED_MESSAGES.md) |
 | `urn:xmpp:fluux:verifications:1`     | Cross-device sync of every verified key of each contact; private PEP node (`accessModel=whitelist`), signed and encrypted to own key |
 | `urn:xmpp:fluux:verifications:0`     | Earlier one-key-per-contact verification node; read once to migrate when the `:1` node is absent, never written    |
 

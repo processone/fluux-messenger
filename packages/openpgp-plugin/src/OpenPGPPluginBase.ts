@@ -3345,6 +3345,60 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     )
   }
 
+
+  /**
+   * Whether text can be sealed to the account's own key now (FLM-341):
+   * `unavailable` when this account has no OpenPGP key at all, `locked` when it
+   * has one that cannot be used yet (a web passphrase not entered, a keychain
+   * refusal), `ready` when it can seal and open.
+   */
+  selfSealState(): 'unavailable' | 'locked' | 'ready' {
+    if (!this.ctx) return 'unavailable'
+    const locked = (this as { isLocked?: () => boolean }).isLocked?.() === true
+    if (this.ownBundle) return locked || this._ownKeyConflict ? 'locked' : 'ready'
+    return locked || this._keyRecoveryReason !== null ? 'locked' : 'unavailable'
+  }
+
+  /**
+   * Sign with the account's key and encrypt to it, as the verification sync does:
+   * {@link openFromSelf} accepts only this key's signature, so another announced key
+   * could not read what it was given, and the server could add keys to that list.
+   * Returns armored ciphertext. Throws `key-locked`
+   * while the key cannot be used, so a caller never stores the text in clear.
+   */
+  async sealToSelf(plaintext: string): Promise<string> {
+    const ctx = this.requireCtx()
+    const state = this.selfSealState()
+    if (state !== 'ready' || !this.ownBundle) {
+      throw new E2EEPluginError('transient', 'key-locked', `${this.pluginName()}: the account's key is not available`)
+    }
+    return this.encryptToRecipients(ctx.account.jid, [this.ownBundle.publicArmored], plaintext)
+  }
+
+  /**
+   * Open text sealed by {@link sealToSelf}. Returns the plaintext only when the
+   * account's own primary key signed it: a server can encrypt to a public key
+   * but cannot sign as its owner, so anything unsigned, foreign-signed or
+   * unreadable gives `null`. Throws `key-locked` while the key is unavailable,
+   * which tells a locked list from a rejected entry.
+   */
+  async openFromSelf(armored: string): Promise<string | null> {
+    const ctx = this.requireCtx()
+    const bundle = this.ownBundle
+    if (this.selfSealState() !== 'ready' || !bundle) {
+      throw new E2EEPluginError('transient', 'key-locked', `${this.pluginName()}: the account's key is not available`)
+    }
+    let out: DecryptOutput
+    try {
+      out = await this.decryptWithOwnKey(ctx.account.jid, armored, [bundle.publicArmored])
+    } catch (err) {
+      if (err instanceof E2EEPluginError && err.code === 'key-locked') throw err
+      return null
+    }
+    if (!out.signatureVerified || !out.signerFingerprint || !fingerprintsEqual(out.signerFingerprint, bundle.fingerprint)) return null
+    return out.plaintext
+  }
+
   /**
    * Ensure a fresh, complete keyset before the first send. A definitively-fresh
    * JID short-circuits. An INCOMPLETE keyset is NOT marked fresh — it stays

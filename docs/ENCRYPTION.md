@@ -134,6 +134,12 @@ Thumbnails for images and videos are encrypted with their own separate key so a 
 
 When you send an encrypted message, Fluux also encrypts copies to the active public keys announced for **your own account**. This is what lets other devices you own, and message replays from the server's [Message Archive](https://xmpp.org/extensions/xep-0313.html), decrypt your outgoing history. Without it, you could send a message from your laptop and never be able to read it back on your phone.
 
+## Saved messages
+
+While OpenPGP is on, the **Saved** list is sealed too. Each saved message is signed with your key and encrypted to it, then stored on your server under a random name, so your server keeps no text, no conversation and no message identity. A server cannot add a message to your list: anything not signed by your key is not shown as yours. Encrypted messages you saved keep their text on all your devices, even after your server's archive expired.
+
+The list needs your key. Until it is unlocked (on the web, until you type the backup code), the Saved view says it is locked and a message you save waits on this device instead of being stored in clear. Saved messages from before OpenPGP was on are sealed the first time your key is available; a plain entry that shows up later is marked "Not verified". If you lose your key and its backup, you lose the saved messages with it. See [XEP-SAVED_MESSAGES](XEP-SAVED_MESSAGES.md) §7.
+
 ## Where your key lives
 
 | Where                        | What is stored                                                                           |

@@ -402,7 +402,7 @@ const MAX_FORWARDED_AUTHOR_CODE_POINTS = 120
 const MAX_FORWARDED_ADDRESS_CODE_POINTS = 1023
 
 /** Drop control characters other than newline and tab, then bound the length in code points. */
-function boundedPlainText(value: string, limit: number): string {
+export function boundedPlainText(value: string, limit: number): string {
   // eslint-disable-next-line no-control-regex
   const cleaned = value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/g, '')
   const characters = Array.from(cleaned)

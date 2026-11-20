@@ -1797,6 +1797,10 @@
         "deleted": "Viesti poistettu",
         "tryAgain": "Yritä uudelleen",
         "full": "Tallennettujen viestien lista on täynnä ({{count}}). Poista yksi tallentaaksesi toisen.",
-        "refused": "Palvelimesi kieltäytyi tallentamasta tätä viestiä."
+        "refused": "Palvelimesi kieltäytyi tallentamasta tätä viestiä.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

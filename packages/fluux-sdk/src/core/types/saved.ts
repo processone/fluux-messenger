@@ -9,7 +9,7 @@ import type { XMLElementData } from './stanza'
  * @category Chat
  */
 export interface SavedMessage {
-  /** The PEP item id: a hash of the message identity, the same on every client. */
+  /** The PEP item id: random while OpenPGP is on, else a hash of the message identity (the same on every client). */
   id: string
   /** Bare JID of the room or of the other person. */
   conversationJid: string
@@ -20,7 +20,7 @@ export interface SavedMessage {
   to?: string
   /** Saved text (up to 4000 characters). Empty for encrypted, deleted and text-less originals. */
   text: string
-  /** The original was end-to-end encrypted: no text is stored. */
+  /** The original was end-to-end encrypted: its text is stored only sealed to the account's key. */
   encrypted?: true
   /** The original was retracted or moderated: no text is kept. (A message with no text at all is not deleted.) */
   deleted?: true
@@ -38,6 +38,14 @@ export interface SavedMessage {
   occupantId?: string
   /** Child elements of `<saved/>` this client does not know, kept on rewrite. */
   extras?: XMLElementData[]
+  /**
+   * Only on a freshly read item that is still sealed: the base64 of the armored
+   * ciphertext. Such an entry holds no other field until it is opened, and
+   * never reaches the store.
+   */
+  sealed?: string
+  /** A plain entry read while OpenPGP is on: nothing proves this account's key wrote it. */
+  unverified?: true
 }
 
 /** What a client holds for saved messages: entries plus operations not yet sent. */
