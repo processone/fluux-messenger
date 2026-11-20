@@ -121,9 +121,12 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         break
       case 'settings':
       case 'search':
-      case 'saved':
         if (currentConversationId) setActiveConversation(null)
         if (currentRoomJid) setActiveRoom(null)
+        break
+      case 'saved':
+        // A conversation's Saved button opens the tab beside that conversation, which stays open.
+        // Choosing the Saved tab itself closes it (see navigateToView).
         break
     }
   }, [sidebarView, setActiveConversation, setActiveRoom])
