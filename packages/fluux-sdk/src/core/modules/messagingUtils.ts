@@ -828,7 +828,8 @@ export function applyCorrection(
   return {
     body: parsed.processedBody,
     references: parsed.references,
-    ...(parsed.forwarded && { forwarded: parsed.forwarded }),
+    // Rooms never carry a copy (first arrival drops it too), so a correction cannot give a room message one.
+    ...(parsed.forwarded && messageEl.attrs?.type !== 'groupchat' && { forwarded: parsed.forwarded }),
     ...correctionMarks(parsed),
     originalBody,
     ...(parsed.attachment && { attachment: parsed.attachment }),

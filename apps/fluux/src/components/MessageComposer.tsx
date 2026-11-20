@@ -712,7 +712,7 @@ export function MessageComposer({
     // Check if we're editing and the result would be empty (no text, no attachment)
     const attachmentToKeep = editAttachmentRemoved ? undefined : editingMessage?.attachment
     const isEmptyEdit = editingMessage && !trimmed && !attachmentToKeep && !editingMessage.forwardQuote
-    const hasAttachmentOnly = editingMessage && !trimmed && attachmentToKeep && !editingMessage.forwardQuote
+    const hasAttachmentOnly = editingMessage && !trimmed && attachmentToKeep
 
     // For normal messages, require text OR pending attachment. For edits, allow empty to trigger retraction or attachment-only.
     const keepsForward = !!editingMessage?.forwardQuote

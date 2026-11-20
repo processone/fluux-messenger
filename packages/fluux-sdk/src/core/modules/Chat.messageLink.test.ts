@@ -654,6 +654,28 @@ describe('shared room message references', () => {
           const result = applyCorrection(correction, newBody, quotedBody)
           expect(forwardedCopyQuoteRange({ body: result.body, forwarded: result.forwarded })).toBeDefined()
         })
+
+        it('does not let a room correction give a message a copy', () => {
+          const newBody = `Edited\n${quoted}${link}`
+          const correction = xml('message', { type: 'groupchat' }, xml('body', {}, newBody), xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'm1' }),
+            xml('forwarded', { xmlns: NSF }, xml('message', { from: `${room}/Bob` }, xml('body', {}, 'Ship it 🚀'))),
+            xml('fallback', { xmlns: NSB, for: NSF }, xml('body', { start: '7', end: String(Array.from(newBody).length) })))
+          expect(applyCorrection(correction, newBody, quotedBody).forwarded).toBeUndefined()
+        })
+
+        it('keeps the private quote marker and the link when a room forward is edited', async () => {
+          const h = harness()
+          const stored = row({ forwarded: undefined, references: quotedRefs.map(ref => ({ ...ref, forwardFallback: mark })) })
+          h.stores.room.getMessage = vi.fn(() => stored) as unknown as typeof h.stores.room.getMessage
+          h.chat.conversationKind = (() => 'groupchat') as never
+          const newBody = `Edited\n${quoted}${link}`
+          await h.chat.sendCorrection(room, 'm1', newBody)
+          const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+          expect(stanza.attrs.type).toBe('groupchat')
+          expect(parseMessageContent({ messageEl: stanza, body: newBody, messageContext: 'room' }).references?.find(ref => ref.type === 'data' && ref.forwardFallback))
+            .toMatchObject({ uri: link, forwardFallback: { begin: 'Edited\n'.length, end: newBody.length } })
+          expect(stanza.getChild('forwarded', NSF)).toBeUndefined()
+        })
       })
 
       it('keeps the marker on a retry', async () => {

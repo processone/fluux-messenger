@@ -1434,7 +1434,9 @@ export class Chat extends BaseModule {
    *
    * @param to - Recipient JID (user for chat, room for groupchat)
    * @param target - Message ID or selected chat identity; see {@link ChatMessageTarget}
-   * @param newBody - The corrected message text
+   * @param newBody - The corrected message text. For a forward, put the comment first and keep the
+   *   stored quote and link at the end after a newline; the correction then keeps the forward's
+   *   marker and copy.
    * @param attachment - Optional replacement file attachment
    *
    * @example
