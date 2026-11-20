@@ -52,10 +52,20 @@ describe('message right-click menu', () => {
     expect(m).toHaveStyle({ left: '120px', top: '80px' })
     const items = within(m).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)
     expect(items.slice(0, 4)).toEqual(['chat.reactWith', 'chat.reactWith', 'chat.reactWith', 'chat.moreReactions'])
-    expect(items.slice(4)).toEqual(['chat.reply', 'chat.copyMessage', 'chat.editMessage', 'chat.deleteMessage'].filter((i) => items.includes(i)))
+    expect(items.slice(4)).toEqual(['chat.reply', 'chat.copyMessage', 'chat.saveMessage', 'chat.editMessage', 'chat.deleteMessage'].filter((i) => items.includes(i)))
     fireEvent.click(within(m).getByRole('button', { name: 'chat.reply' }))
     expect(p.onReply).toHaveBeenCalledOnce()
     expect(menu()).toBeNull()
+  })
+
+  it('marks the page while the menu is open, so no message shows its hover actions, and clears it on close', () => {
+    render(<MessageBubble {...props()} />)
+    expect(document.documentElement.dataset.messageMenu).toBeUndefined()
+    fireEvent.contextMenu(screen.getByText('Hello, world!'), { clientX: 120, clientY: 80 })
+    expect(document.documentElement.dataset.messageMenu).toBe('open')
+    fireEvent.keyDown(menu()!, { key: 'Escape' })
+    expect(menu()).toBeNull()
+    expect(document.documentElement.dataset.messageMenu).toBeUndefined()
   })
 
   it('leaves Shift + right-click to the system menu', () => {

@@ -214,6 +214,29 @@ test.describe('message right-click menu', () => {
     await expect(menu(page).getByRole('button', { name: 'Reply' })).toBeVisible()
   })
 
+  test('another message shows no hover actions while the right-click menu is open', async ({ page }) => {
+    await setup(page, [
+      { id: 'hov-a', from: 'peer', body: 'First message of the pair' },
+      { id: 'hov-b', from: 'peer', body: 'Second message of the pair' },
+    ])
+    const toolbarOf = (id: string) => page.locator(`[data-message-id="${id}"] [data-message-toolbar]`).first()
+    const shown = (id: string) => toolbarOf(id).evaluate(el => Number(getComputedStyle(el).opacity) > 0.5)
+    const a = (await row(page, 'hov-a').getByText('First message').boundingBox())!
+    const b = (await row(page, 'hov-b').getByText('Second message').boundingBox())!
+    // Without a menu, hovering a message shows its own actions.
+    await page.mouse.move(b.x + 20, b.y + b.height / 2)
+    await expect.poll(() => shown('hov-b')).toBe(true)
+    await page.mouse.move(a.x + 20, a.y + a.height / 2)
+    await page.mouse.click(a.x + 20, a.y + a.height / 2, { button: 'right' })
+    await expect(menu(page)).toBeVisible()
+    // The pointer crosses to the other message: only the right-click menu stays up.
+    await page.mouse.move(b.x + 20, b.y + b.height / 2)
+    await page.waitForTimeout(400)
+    await expect(menu(page)).toBeVisible()
+    expect(await shown('hov-b')).toBe(false)
+    expect(await shown('hov-a')).toBe(false)
+  })
+
   test('the link chooser takes focus on its first link, and Tab moves between links', async ({ page }) => {
     await setup(page, [
       { id: 'two-a', from: 'peer', body: 'Two links https://example.org/one and https://example.org/two here' },

@@ -683,6 +683,13 @@ export const MessageBubble = memo(function MessageBubble({
     reportMenus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messageMenu.isOpen])
+  // While a right-click menu is open, no message offers its hover actions; see index.css.
+  useEffect(() => {
+    if (!messageMenu.isOpen) return
+    const root = document.documentElement
+    root.dataset.messageMenu = 'open'
+    return () => { delete root.dataset.messageMenu }
+  }, [messageMenu.isOpen])
   // A message that is retracted or turns unreadable takes its open menu with it.
   useEffect(() => { if (!readable) messageMenu.close() }, [readable, messageMenu.close]) // eslint-disable-line react-hooks/exhaustive-deps
 
