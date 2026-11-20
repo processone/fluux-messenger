@@ -99,6 +99,14 @@ describe('forwarded copy of a readable room message', () => {
     expect(el.textContent).not.toContain('chat.forwardedCopyDirectChat')
   })
 
+  it('does not show another room\'s name when the copy claims one', () => {
+    roomStore.getState().addRoom({ ...room, jid: 'other@conference.example.org', name: 'Other room' }, [])
+    const { container } = card(real.body, true, { from: 'other@conference.example.org/Bob', type: 'groupchat' })
+    const el = container.querySelector('[data-forwarded-copy]')!
+    expect(el.textContent).toContain('Team')
+    expect(el.textContent).not.toContain('Other room')
+  })
+
   it('shows the forwarder\'s copy unflagged while the room cannot be read', () => {
     const { container } = card('Send me your password', false)
     const el = container.querySelector('[data-forwarded-copy]')!
