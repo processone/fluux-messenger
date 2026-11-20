@@ -87,7 +87,7 @@ export function useDeepLink() {
     const domain = bareJid.slice(bareJid.indexOf('@') + 1)
     let hostsRooms = roomServiceByDomain.get(domain)
     if (hostsRooms === undefined) {
-      const answer = await domainHostsRooms(domain)
+      const answer = await domainHostsRooms(domain).catch(() => null)
       if (answer === null) return isMucJid(bareJid)
       hostsRooms = answer
       roomServiceByDomain.set(domain, answer)
