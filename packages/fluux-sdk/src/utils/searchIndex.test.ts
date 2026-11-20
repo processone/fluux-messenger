@@ -15,6 +15,7 @@ import {
   indexMessage,
   indexMessages,
   removeMessage,
+  removeConversation,
   updateMessage,
   search,
   backfillFromMessageCache,
@@ -399,6 +400,86 @@ describe('searchIndex', () => {
       const results = await search('deploy', { conversationId: 'dev@conference.example.com' })
       expect(results).toHaveLength(1)
       expect(results[0].conversationId).toBe('dev@conference.example.com')
+    })
+  })
+
+  describe('removeConversation', () => {
+    async function storedTokens(): Promise<Map<string, string[]>> {
+      const db = await openDB('fluux-search-index:test@example.com')
+      try {
+        const rows = await db.getAll('search-tokens') as { token: string; postings: string[] }[]
+        return new Map(rows.map(row => [row.token, row.postings]))
+      } finally { db.close() }
+    }
+
+    it('drops every document and posting of a deleted chat, and nothing else', async () => {
+      await indexMessage(createChatMessage('alice@example.com', { id: 'a1', body: 'secret alpaca plans' }))
+      await indexMessage(createChatMessage('alice@example.com', { id: 'a2', body: 'secret second note' }))
+      await indexMessage(createChatMessage('bob@example.com', { id: 'b1', body: 'secret meeting' }))
+      await indexMessage(createRoomMessage('alice@example.com', { stanzaId: 's1', body: 'secret room talk' }))
+
+      await removeConversation('chat', 'alice@example.com')
+
+      const results = await search('secret')
+      expect(results.map(r => [r.conversationId, r.isRoom]).sort()).toEqual([
+        ['alice@example.com', true], ['bob@example.com', false],
+      ])
+      expect(await search('alpaca')).toEqual([])
+      const tokens = await storedTokens()
+      // A token only the deleted chat used is gone, not left with an empty list.
+      expect(tokens.has('alpaca')).toBe(false)
+      expect(tokens.get('secret')).toHaveLength(2)
+    })
+
+    it('drops a deleted room without touching a chat sharing its JID', async () => {
+      await indexMessage(createRoomMessage('dev@conference.example.com', { stanzaId: 's1', body: 'deploy tonight' }))
+      await indexMessage(createRoomMessage('dev@conference.example.com', { stanzaId: 's2', body: 'deploy tomorrow' }))
+      await indexMessage(createChatMessage('dev@conference.example.com', { id: 'c1', body: 'deploy privately' }))
+
+      await removeConversation('room', 'dev@conference.example.com')
+
+      expect(await search('deploy')).toEqual([expect.objectContaining({ isRoom: false, body: 'deploy privately' })])
+      expect((await storedTokens()).has('tonight')).toBe(false)
+    })
+
+    it('is a no-op for a conversation with no documents', async () => {
+      await indexMessage(createChatMessage('bob@example.com', { body: 'still here' }))
+      await removeConversation('chat', 'nobody@example.com')
+      expect(await search('still')).toHaveLength(1)
+    })
+
+    it('purges only the named account scope', async () => {
+      await indexMessage(createChatMessage('alice@example.com', { body: 'scoped secret' }))
+      setStorageScopeJid('other@example.com')
+      await indexMessage(createChatMessage('alice@example.com', { body: 'scoped secret' }))
+      await removeConversation('chat', 'alice@example.com', 'test@example.com')
+      expect(await search('scoped')).toHaveLength(1)
+      setStorageScopeJid('test@example.com')
+      expect(await search('scoped')).toEqual([])
+    })
+  })
+
+  describe('schema upgrade', () => {
+    it('opens a database whose docs store already has the identityKeys index', async () => {
+      // A version bump must not re-create an index an earlier upgrade made:
+      // IndexedDB throws ConstraintError and the whole index stops opening.
+      await closeSearchIndex()
+      const legacy = await openDB('fluux-search-index:test@example.com', 2, {
+        upgrade(db) {
+          db.createObjectStore('search-tokens', { keyPath: 'token' })
+          const docs = db.createObjectStore('search-docs', { keyPath: 'indexId' })
+          docs.createIndex('timestamp', 'timestamp')
+          docs.createIndex('conversationId', 'conversationId')
+          docs.createIndex('identityKeys', 'identityKeys', { multiEntry: true })
+          db.createObjectStore('search-meta', { keyPath: 'key' })
+        },
+      })
+      legacy.close()
+      _resetDBForTesting()
+
+      await expect(initSearchIndex('test@example.com')).resolves.toBeUndefined()
+      await indexMessage(createChatMessage('alice@example.com', { body: 'upgraded fine' }))
+      expect(await search('upgraded')).toHaveLength(1)
     })
   })
 

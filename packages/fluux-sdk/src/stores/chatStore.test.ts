@@ -58,6 +58,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
 
 // Import the mocked module for assertions
 import * as messageCache from '../utils/messageCache'
+import * as searchIndex from '../utils/searchIndex'
 import { exactPosition } from './shared/readState'
 
 /**
@@ -960,6 +961,15 @@ describe('chatStore', () => {
       chatStore.getState().deleteConversation('alice@example.com')
 
       expect(messageCache.deleteConversationMessages).toHaveBeenCalledWith('alice@example.com')
+    })
+
+    it('purges the deleted conversation from the search index', () => {
+      const purge = vi.spyOn(searchIndex, 'removeConversation').mockResolvedValue()
+      try {
+        chatStore.getState().addConversation(createConversation('alice@example.com'))
+        chatStore.getState().deleteConversation('alice@example.com')
+        expect(purge).toHaveBeenCalledWith('chat', 'alice@example.com')
+      } finally { purge.mockRestore() }
     })
   })
 

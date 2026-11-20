@@ -1560,6 +1560,10 @@ export const roomStore = createStore<RoomState>()(
     clearMessageIngressVersions('room', roomJid)
     // Delete messages from IndexedDB (non-blocking)
     void messageCache.deleteRoomMessages(roomJid)
+    // The search index keeps its own copy of every body: drop it too, or
+    // search keeps finding the removed room's text.
+    void searchIndex.removeConversation('room', roomJid)
+      .catch(error => logWarn(`Failed to purge search index for room: ${String(error)}`))
     // The durable cursors describe messages that no longer exist: drop them
     // with the cache, and invalidate in-flight deferred commits so one can't
     // resurrect an entry for the removed room.
