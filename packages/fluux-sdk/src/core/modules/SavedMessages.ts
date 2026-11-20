@@ -10,6 +10,7 @@ import { forwardedCopyElement, parseSavedForwardedCopy, boundedPlainText } from 
 import type { SavedMessage } from '../types/saved'
 import { savedMessageKey, savedItemId, sameSavedMessage } from '../../utils/savedMessageKeys'
 import { isE2EEPluginError } from '../e2ee/errors'
+import { readSealHint, writeSealHint } from '../../utils/savedSealHint'
 
 /**
  * Private, retained, one item per saved message. The node asks for a concrete
@@ -184,7 +185,19 @@ export class SavedMessages {
 
   /** Whether entries are sealed to the account's own key: `unavailable` means OpenPGP is off for this account. */
   sealState(): 'unavailable' | 'locked' | 'ready' {
-    return this.manager()?.selfSealState() ?? 'unavailable'
+    const manager = this.manager()
+    const state = manager?.selfSealState() ?? 'unavailable'
+    if (state !== 'unavailable') { writeSealHint(true); return state }
+    // The plugin has joined and says there is no key: OpenPGP is off for this account.
+    if (manager?.getPlugin('openpgp')) { writeSealHint(false); return 'unavailable' }
+    // The plugin has not joined yet (or the host is not up): "not known yet" is not "off". An account that sealed
+    // last time keeps its list locked, so nothing is written in clear while the plugin starts.
+    return readSealHint() ? 'locked' : 'unavailable'
+  }
+
+  /** The person turned OpenPGP off: saved messages are written plain again. */
+  forgetSealing(): void {
+    writeSealHint(false)
   }
 
   /** Seal a whole entry: signed with the account's key, encrypted to the keys it announces. Throws while locked. */

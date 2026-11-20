@@ -1787,7 +1787,7 @@
         "refused": "Votre serveur a refusé de stocker ce message.",
         "locked": "Les messages enregistrés sont verrouillés",
         "lockedHint": "Ils sont scellés avec votre clé OpenPGP. Déverrouillez votre clé pour les lire.",
-        "lockedSome": "{{count}} messages enregistrés sont verrouillés tant que votre clé OpenPGP ne l'est pas.",
+        "lockedSome": "{{count}} messages enregistrés restent verrouillés tant que votre clé OpenPGP n'est pas déverrouillée.",
         "unverified": "Non vérifié : non scellé avec votre clé"
     }
 }

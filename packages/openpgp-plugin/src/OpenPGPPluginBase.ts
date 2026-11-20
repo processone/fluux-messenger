@@ -3360,8 +3360,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   /**
-   * Sign with the account's key and encrypt to every key the account announces
-   * (this device's included). Returns armored ciphertext. Throws `key-locked`
+   * Sign with the account's key and encrypt to it, as the verification sync does:
+   * {@link openFromSelf} accepts only this key's signature, so another announced key
+   * could not read what it was given, and the server could add keys to that list.
+   * Returns armored ciphertext. Throws `key-locked`
    * while the key cannot be used, so a caller never stores the text in clear.
    */
   async sealToSelf(plaintext: string): Promise<string> {
@@ -3370,8 +3372,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (state !== 'ready' || !this.ownBundle) {
       throw new E2EEPluginError('transient', 'key-locked', `${this.pluginName()}: the account's key is not available`)
     }
-    const recipients = [...new Set([this.ownBundle.publicArmored, ...this.getOwnAnnouncedPublics()])]
-    return this.encryptToRecipients(ctx.account.jid, recipients, plaintext)
+    return this.encryptToRecipients(ctx.account.jid, [this.ownBundle.publicArmored], plaintext)
   }
 
   /**

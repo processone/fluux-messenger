@@ -760,8 +760,7 @@ export interface E2EEPlugin {
    */
   selfSealState?(): 'unavailable' | 'locked' | 'ready'
   /**
-   * Optional: sign text with the account's key and encrypt it to every key the
-   * account announces. Returns armored ciphertext; throws while locked.
+   * Optional: sign text with the account's key and encrypt it to that same key. Returns armored ciphertext; throws while locked.
    */
   sealToSelf?(plaintext: string): Promise<string>
   /**

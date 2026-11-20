@@ -18,6 +18,7 @@ function setup() {
     publish: vi.fn().mockResolvedValue(undefined),
     retract: vi.fn().mockResolvedValue(undefined),
     fetchMaxItems: vi.fn().mockResolvedValue(256),
+    forgetSealing: vi.fn(),
     sealState: vi.fn<() => 'unavailable' | 'locked' | 'ready'>().mockReturnValue('unavailable'),
     // Like the real module with OpenPGP off: every item is a plain entry.
     open: vi.fn(async (items: SavedMessage[]) => ({ entries: items, locked: [] as string[], rejected: [] as string[], sealedSeen: 0 })),
@@ -500,6 +501,35 @@ describe('saved messages sync side effect', () => {
       expect(savedStore.getState().entries).toEqual({})
       expect(savedStore.getState().lockedIds).toEqual({})
       expect(savedStore.getState().remote.f).toBe(true)
+      stop()
+    })
+
+    it('reads again when the key becomes available while a read is still in flight', async () => {
+      const { client, node, stop } = setup()
+      let answer: (value: unknown) => void = () => {}
+      node.fetchAll.mockImplementationOnce(() => new Promise((r) => { answer = r }))
+      node.sealState.mockReturnValue('locked')
+      client._emit('online')
+      await flushPromises()
+      // The key unlocks after the read began but before it landed.
+      node.sealState.mockReturnValue('ready')
+      node.fetchAll.mockResolvedValueOnce({ status: 'ok', items: [{ ...entry('s'), sealed: 'x' }] })
+      node.open.mockImplementation(async (items: SavedMessage[]) => opened(items.length ? [entry('s')] : []))
+      client._emitSDK('e2ee:key-unlocked', undefined)
+      await flushPromises()
+      answer({ status: 'ok', items: [{ ...entry('s'), sealed: 'x' }] })
+      await flushPromises()
+      expect(Object.keys(savedStore.getState().entries)).toEqual(['s'])
+      expect(savedStore.getState().lockedIds).toEqual({})
+      stop()
+    })
+
+    it('forgets that entries were sealed when the OpenPGP plugin is removed on purpose', async () => {
+      const { node, client, stop } = setup()
+      client._emitSDK('e2ee:plugin-removed', { pluginId: 'openpgp' })
+      expect(node.forgetSealing).toHaveBeenCalledTimes(1)
+      client._emitSDK('e2ee:plugin-removed', { pluginId: 'omemo' })
+      expect(node.forgetSealing).toHaveBeenCalledTimes(1)
       stop()
     })
 

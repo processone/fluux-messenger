@@ -5,6 +5,7 @@ import { retractedAtForIdentity } from '../utils/retractedIdentities'
 import { getBareJid } from '../core/jid'
 import type { SavedIdentity } from '../utils/savedMessageKeys'
 import { generateUUID } from '../utils/uuid'
+import { clearSealHint } from '../utils/savedSealHint'
 import type { SavedMessage, SavedPendingOp } from '../core/types/saved'
 
 /**
@@ -195,6 +196,7 @@ export function redactSavedCopy(probe: SavedIdentity): void {
  * local data: one account's, or every account's.
  */
 export function clearSavedLocalData(jid: string | null, allAccounts: boolean): void {
+  clearSealHint(jid, allAccounts)
   // The list in memory belongs to the connected account: another account's wipe leaves it alone.
   const current = getStorageScopeJid()
   if (allAccounts || !jid || !current || getBareJid(jid) === getBareJid(current)) savedStore.getState().reset()

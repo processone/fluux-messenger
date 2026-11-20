@@ -198,8 +198,13 @@ export function setupSavedMessagesSideEffects(
   // A key that becomes available opens the locked list: read the node again under it.
   const onKeyStateChange = () => {
     const before = state().sealState
-    if (syncSealState() !== before && state().loaded) void refresh().catch(() => {})
+    // A read still in flight may have opened its items under the old state: read again (a newer read supersedes it).
+    if (syncSealState() !== before && (state().loaded || refreshing)) void refresh().catch(() => {})
   }
+  const unsubscribePluginRemoved = client.subscribe('e2ee:plugin-removed', ({ pluginId }) => {
+    if (pluginId === 'openpgp') client.internal.savedMessages.forgetSealing()
+    onKeyStateChange()
+  })
   const unsubscribeKeyUnlocked = client.subscribe('e2ee:key-unlocked', onKeyStateChange)
   const unsubscribePluginRegistered = client.subscribe('e2ee:plugin-registered', onKeyStateChange)
   const unsubscribeOnline = client.internal.on('online', () => { void refresh().catch(() => {}) })
@@ -235,6 +240,6 @@ export function setupSavedMessagesSideEffects(
   return () => {
     epoch += 1
     flushing = false
-    unsubscribeKeyUnlocked(); unsubscribePluginRegistered(); unsubscribeOnline(); unsubscribeResumed(); unsubscribeNotify(); unsubscribeAccount(); unsubscribeStore()
+    unsubscribeKeyUnlocked(); unsubscribePluginRegistered(); unsubscribePluginRemoved(); unsubscribeOnline(); unsubscribeResumed(); unsubscribeNotify(); unsubscribeAccount(); unsubscribeStore()
   }
 }

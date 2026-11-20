@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { SavedMessages, parseSavedItems, savedItemId } from './SavedMessages'
@@ -160,10 +160,14 @@ describe('SavedMessages fetch', () => {
 // FLM-341: with OpenPGP on every entry is sealed to the account's own key.
 describe('SavedMessages sealing', () => {
   /** Stands in for the plugin: text is sealed under a marker that only "the account's key" produces. */
+  beforeEach(() => localStorage.clear())
   function sealedHost(state: 'unavailable' | 'locked' | 'ready' = 'ready') {
     const host = {
       state,
       selfSealState: () => host.state,
+      /** The plugin has joined the manager. */
+      registered: true,
+      getPlugin: (id: string) => (host.registered && id === 'openpgp' ? {} : null),
       sealToSelf: vi.fn(async (text: string) => {
         if (host.state !== 'ready') throw Object.assign(new Error('locked'), { name: 'E2EEPluginError', code: 'key-locked', kind: 'transient' })
         return `SEALED:${text}`
@@ -241,8 +245,43 @@ describe('SavedMessages sealing', () => {
   it('flags a plain item as unverified while OpenPGP is on, and lists it as is while it is off', async () => {
     const on = setup(sealedHost())
     expect((await on.saved.open([{ ...roomEntry, id: 'p' }])).entries).toEqual([{ ...roomEntry, id: 'p', unverified: true }])
+    localStorage.clear() // a different account that never sealed
     const off = setup(null)
     expect((await off.saved.open([{ ...roomEntry, id: 'p' }])).entries).toEqual([{ ...roomEntry, id: 'p' }])
+  })
+
+  describe('before the OpenPGP plugin has joined', () => {
+    const early = () => { const host = sealedHost('unavailable'); host.registered = false; return host }
+
+    it('treats an account that sealed last time as locked, so a save is never written in clear while the plugin starts', async () => {
+      const ready = sealedHost()
+      expect(setup(ready).saved.sealState()).toBe('ready')
+      const host = early()
+      const { sendIQ, saved } = setup(host)
+      expect(saved.sealState()).toBe('locked')
+      await expect(saved.publish({ ...roomEntry, id: 'q' })).rejects.toThrow()
+      expect(sendIQ).not.toHaveBeenCalled()
+      // The plugin joins with the key unlocked: the same save is sealed.
+      host.registered = true; host.state = 'ready'
+      await saved.publish({ ...roomEntry, id: 'q' })
+      expect(sendIQ.mock.calls[0][0].toString()).toContain('<sealed')
+    })
+
+    it('treats an account with no history of sealing as plain, and a registered plugin without a key as off', async () => {
+      expect(setup(early()).saved.sealState()).toBe('unavailable')
+      setup(sealedHost()) // sealed once
+      const off = sealedHost('unavailable') // joined, no key
+      expect(setup(off).saved.sealState()).toBe('unavailable')
+      expect(setup(early()).saved.sealState()).toBe('unavailable') // and the memory is dropped
+    })
+
+    it('is plain again once the person turned OpenPGP off', () => {
+      expect(setup(sealedHost()).saved.sealState()).toBe('ready')
+      const { saved } = setup(early())
+      expect(saved.sealState()).toBe('locked')
+      saved.forgetSealing()
+      expect(saved.sealState()).toBe('unavailable')
+    })
   })
 
   it('without a key on this device a sealed item stays locked, not discarded', async () => {

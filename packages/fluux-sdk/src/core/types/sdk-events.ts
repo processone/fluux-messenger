@@ -346,6 +346,9 @@ export interface ChatEvents {
    * the key was locked at receive time.
    */
   'e2ee:key-unlocked': undefined
+
+  /** Fired when a plugin is removed on purpose (the person turned it off), not when the session is torn down. */
+  'e2ee:plugin-removed': { pluginId: string }
 }
 
 // ============================================================================
