@@ -102,6 +102,17 @@ describe('i18n', () => {
       })
       expect(emptyKeys).toEqual([])
     })
+
+    // The Forward strings first shipped with their English text copied into every language.
+    // Danish and Norwegian "Send" is the language's own word, not a copied placeholder.
+    const forwardKeys = enKeys.filter(key => key.startsWith('chat.forward'))
+    const sameAsEnglish: Record<string, string[]> = { da: ['chat.forwardSend'], nb: ['chat.forwardSend'] }
+    it.each(nonEnglish)('%s should translate every Forward string', (code) => {
+      const english = forwardKeys.filter(key => !sameAsEnglish[code]?.includes(key) &&
+        resolveKey(locales[code], key) === resolveKey(locales['en'], key))
+      expect(forwardKeys.length).toBeGreaterThan(0)
+      expect(english).toEqual([])
+    })
   })
 
   // A locale is only really shipped once three lists agree: the JSON file exists,
