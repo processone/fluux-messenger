@@ -943,7 +943,9 @@ describe('MUC Module', () => {
           bookmark: expect.objectContaining({ notifyLevel: 'none' }),
         })
         const updates = mockEmitSDK.mock.calls.filter(([event]) => event === 'room:updated').map(([, payload]) => payload.updates)
-        expect(updates).toEqual([{ notifyAll: false, notifyOff: true }])
+        // The choice shows at once, as a session choice while the bookmark is saved
+        expect(updates[0]).toEqual({ notifyAll: false, notifyOff: true })
+        expect(updates.filter((u) => 'notifyAllPersistent' in u || 'notifyOffPersistent' in u)).toEqual([])
       })
 
       it('holds Off for the session without publishing when not persistent', async () => {

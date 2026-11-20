@@ -32,11 +32,14 @@ interface NotifyArgs {
 
 export function buildNotifyGroup({ room, t, setRoomNotifyLevel, onSaveFailed }: NotifyArgs): HeaderActionGroup {
   const mode = notifyModeOf(room)
-  // A level saved in the bookmark must be cleared when a session-only choice replaces it.
-  const hasSavedChoice = savedNotifyLevel(room) !== 'mentions'
   // Levels are saved to the bookmark, so a room without one (a quick chat, or a joined
   // room that is not bookmarked) keeps Off for the session only and has no saved All messages.
   const hasNoBookmark = room.isQuickChat || !room.isBookmarked
+  // A level saved in the bookmark must be cleared when a session-only choice replaces it.
+  // A saved level shows as a session choice until the bookmark stores it, so a bookmarked
+  // room showing All messages or Off may be about to save it: Mentions only is saved then
+  // too, and the bookmark ends on the latest choice.
+  const hasSavedChoice = savedNotifyLevel(room) !== 'mentions' || (!hasNoBookmark && mode !== 'mentions')
   // The menu closes on click, so a saved level the bookmark write refuses is
   // reported through onSaveFailed instead of being dropped unhandled.
   const setLevel = (level: NotifyLevel, persistent: boolean) => {
