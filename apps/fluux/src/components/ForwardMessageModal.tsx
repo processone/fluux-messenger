@@ -4,6 +4,7 @@ import type { FileAttachment } from '@fluux/sdk'
 import { useChatActions, useRoomActions, useRoster, roomStore } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { encryptionSendErrorKey, isKeysAwaitingDecision } from '@/e2ee/encryptionSendError'
+import { formatShortcutKey } from '@/hooks/useKeyboardShortcuts'
 import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
 import { trackSend } from '@/utils/pendingSends'
 import { composeForward, composeForwardWithCopy, type ForwardQuote } from '@/utils/forwardMessage'
@@ -127,7 +128,9 @@ export function ForwardMessageModal({ link, quote, attachment, onClose }: Forwar
         </div>
         <label className="block text-sm text-fluux-text">
           {t('chat.forwardComment')}
+          {/* Cmd-Enter (Ctrl-Enter off Mac) sends, as the Send button shows; Enter alone adds a line. */}
           <TextArea ref={commentRef} value={comment} onChange={event => setComment(event.target.value)} disabled={sending} rows={3}
+            onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void send() } }}
             className="mt-1 w-full p-2 rounded bg-fluux-bg text-fluux-text border border-fluux-hover resize-none" />
         </label>
         {attachment && <p className="text-xs text-fluux-muted break-all">{attachment.name ?? attachment.url}</p>}
@@ -145,9 +148,10 @@ export function ForwardMessageModal({ link, quote, attachment, onClose }: Forwar
       <div className="flex justify-end gap-2 px-4 py-3 border-t border-fluux-hover">
         <button type="button" onClick={onClose} disabled={sending}
           className="px-4 py-2 text-sm rounded text-fluux-muted hover:bg-fluux-hover disabled:opacity-50">{t('common.cancel')}</button>
-        <button type="button" onClick={() => { void send() }} disabled={!validDestination || sending}
+        <button type="button" onClick={() => { void send() }} disabled={!validDestination || sending} aria-keyshortcuts="Meta+Enter Control+Enter"
           className="px-4 py-2 text-sm rounded bg-fluux-brand text-fluux-text-on-accent hover:bg-fluux-brand-hover disabled:opacity-50 disabled:cursor-not-allowed">
           {t(sending ? 'chat.forwardSending' : 'chat.forwardSend')}
+          {!sending && <kbd aria-hidden="true" className="hidden sm:inline ms-2 font-sans text-xs opacity-75">{formatShortcutKey({ key: 'Enter', modifiers: ['meta'] })}</kbd>}
         </button>
       </div>
     </ModalShell>

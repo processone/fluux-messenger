@@ -92,7 +92,8 @@ chats and currently joined rooms where you can send messages. On phones it is in
 the long-press action menu.
 Typing narrows the list by name or by the part of the address before @, and Enter
 picks the highlighted entry; only listed destinations can be picked.
-Choose one destination, optionally add a comment, then press **Send**. Fluux sends
+Choose one destination, optionally add a comment, then press **Send**, or Cmd-Enter
+(Ctrl-Enter on Windows and Linux) in the comment; the button shows that shortcut. Fluux sends
 one ordinary message: the comment (if any), a plain-text quote attributed to the
 author (`> Nick wrote:` followed by the quoted lines, clipped at 500 characters),
 then the room message link, with the same XEP-0372 data reference as a pasted link.

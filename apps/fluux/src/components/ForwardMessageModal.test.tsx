@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { ForwardMessageModal } from './ForwardMessageModal'
 import { sendsSettled } from '@/utils/pendingSends'
+import { formatShortcutKey } from '@/hooks/useKeyboardShortcuts'
 import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
 import { ForwardMessageProvider, useForwardMessage } from './conversation/forwardMessageContext'
 
@@ -85,6 +86,24 @@ describe('ForwardMessageModal', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
     expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('emma@fluux.chat', `Please review\n${link}`, marked('Please review\n'))
     expect(fixture.roomSend).not.toHaveBeenCalled()
+  })
+
+  // Requested shortcut: Cmd-Enter (Ctrl-Enter off Mac) in the comment sends, and the Send button shows it.
+  it.each([['Cmd-Enter', { metaKey: true }], ['Ctrl-Enter', { ctrlKey: true }]])('sends once with %s from the comment, never with Enter alone or without a destination', async (_, modifier) => {
+    const onClose = vi.fn()
+    render(<ForwardMessageModal link={link} onClose={onClose} />)
+    const comment = screen.getByLabelText('chat.forwardComment')
+    fireEvent.keyDown(comment, { key: 'Enter', ...modifier })
+    choose('em')
+    fireEvent.change(comment, { target: { value: 'Please review' } })
+    fireEvent.keyDown(comment, { key: 'Enter' })
+    expect(fixture.chatSend).not.toHaveBeenCalled()
+    const button = screen.getByRole('button', { name: 'chat.forwardSend' })
+    expect(button).toHaveTextContent(formatShortcutKey({ key: 'Enter', modifiers: ['meta'] }))
+    expect(button).toHaveAttribute('aria-keyshortcuts', 'Meta+Enter Control+Enter')
+    fireEvent.keyDown(comment, { key: 'Enter', ...modifier })
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('emma@fluux.chat', `Please review\n${link}`, marked('Please review\n'))
   })
 
   it('sends the comment, an attributed quote and the link, with the quote and link marked as fallback', async () => {
