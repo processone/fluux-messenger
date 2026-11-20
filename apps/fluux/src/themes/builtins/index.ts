@@ -30,7 +30,7 @@ export const fluuxTheme: ThemeDefinition = {
     light: {},
   },
   swatches: {
-    dark: ['#0B1020', '#0E1326', '#7C8CFF', '#38E0C4', '#A78BFA'],
+    dark: ['#181B27', '#1C202E', '#7C8CFF', '#38E0C4', '#A78BFA'],
     light: ['#E7EAF4', '#EEF0F8', '#5B6CF0', '#11A88C', '#A78BFA'],
   },
   // Curated accent presets tuned to the Aurora palette — saturated jewel tones

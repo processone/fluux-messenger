@@ -46,7 +46,11 @@ function expand(value: string, vars: Record<string, string>, depth = 0): string 
   })
 }
 function resolve_(value: string, vars: Record<string, string>): RGBA {
-  const v = expand(value, vars).trim()
+  // Fold simple percentage arithmetic (`calc(64% + 8%)`) the way the browser does.
+  const v = expand(value, vars)
+    .trim()
+    .replace(/calc\(\s*([\d.]+)%\s*([+-])\s*([\d.]+)%\s*\)/g, (_, a: string, op: string, b: string) =>
+      `${op === '+' ? parseFloat(a) + parseFloat(b) : parseFloat(a) - parseFloat(b)}%`)
   if (v.startsWith('#')) {
     const h = v.slice(1)
     return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16), 1]
@@ -330,13 +334,13 @@ describe('Builtin theme popover-surface text contrast', () => {
 // --fluux-accent-2 fails the 3:1 non-text contrast floor (WCAG 1.4.11) in light
 // mode (#11A88C gives only ~2.45:1 on #E4E8F3). A dedicated token
 // --fluux-text-encryption is used instead:
-//   dark  #38E0C4 — 10.27:1 on #141B30 (--fluux-base-40 dark)
+//   dark  #38E0C4 — 8.3:1 on #272C3F (--fluux-base-40 dark)
 //   light #0D8872 — 3.58:1  on #E4E8F3 (--fluux-base-40 light)
 // These are static hex guards (token values, not resolved via CSS var) to catch
 // accidental edits to the token values in index.css.
 describe('Encryption icon non-text contrast (WCAG 1.4.11 >= 3:1)', () => {
-  it('[dark] text-encryption clears 3:1 on the composer card bg (#141B30)', () => {
-    const r = contrast('var(--fluux-text-encryption)', '#141B30', dark)
+  it('[dark] text-encryption clears 3:1 on the composer card bg (#272C3F)', () => {
+    const r = contrast('var(--fluux-text-encryption)', '#272C3F', dark)
     expect(r).toBeGreaterThanOrEqual(3)
   })
 
