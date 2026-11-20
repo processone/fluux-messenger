@@ -1163,6 +1163,8 @@ export class Chat extends BaseModule {
     attachment?: FileAttachment,
     storedReferences?: MessageReference[],
     storedForwarded?: ForwardedCopy,
+    /** The row first went out encrypted: a retry never sends its file unencrypted. */
+    wasEncrypted?: boolean,
   ): Promise<void> {
     const recipient = getBareJid(to)
 
@@ -1246,7 +1248,7 @@ export class Chat extends BaseModule {
     if (storedForwarded?.fromEncrypted && !resendSecurityContext) {
       throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
     }
-    if (attachment?.encryption && !resendSecurityContext) {
+    if ((attachment?.encryption || (attachment && wasEncrypted)) && !resendSecurityContext) {
       throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
     }
 
@@ -1592,7 +1594,7 @@ export class Chat extends BaseModule {
     if (type === 'chat' && editedRow?.forwarded && (editedRow.forwarded.fromEncrypted || editedRow.securityContext) && !correctionSecurityContext) {
       throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
     }
-    if (attachment?.encryption && !correctionSecurityContext) {
+    if ((attachment?.encryption || (attachment && type === 'chat' && editedRow?.securityContext)) && !correctionSecurityContext) {
       throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
     }
 

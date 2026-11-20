@@ -1803,6 +1803,10 @@
         "deleted": "Wiadomość usunięta",
         "tryAgain": "Spróbuj ponownie",
         "full": "Lista zapisanych wiadomości jest pełna ({{count}}). Usuń jedną, aby zapisać kolejną.",
-        "refused": "Twój serwer odmówił zapisania tej wiadomości."
+        "refused": "Twój serwer odmówił zapisania tej wiadomości.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

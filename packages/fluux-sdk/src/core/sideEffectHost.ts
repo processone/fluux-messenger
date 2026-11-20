@@ -88,6 +88,10 @@ export interface SavedMessagesSideEffectHost {
   publish(entry: SavedMessage, options?: { create?: boolean }): Promise<void>
   retract(itemId: string): Promise<void>
   fetchMaxItems(): Promise<number | undefined>
+  /** Whether entries are sealed to the account's own OpenPGP key. */
+  sealState(): 'unavailable' | 'locked' | 'ready'
+  /** Open what a read or notification carried: sealed items are verified and decrypted, plain ones flagged. */
+  open(items: SavedMessage[]): Promise<{ entries: SavedMessage[]; locked: string[]; rejected: string[]; sealedSeen: number }>
 }
 
 /** Capability discovery and search probes owned by background session preparation. */

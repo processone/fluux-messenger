@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Bookmark, Trash2, RefreshCw } from 'lucide-react'
+import { Bookmark, Lock, Trash2, RefreshCw } from 'lucide-react'
 import {
   connectionStore, chatStore, findLatestCopy, getBareJid, getLocalPart, getResource, useSavedMessages,
   type Message, type RoomMessage, type SavedMessage,
@@ -17,7 +17,7 @@ import type { SavedOpenProblem } from '@/hooks/useSavedOpener'
 /**
  * The text a row shows: the latest copy this device holds in its cache (so edits
  * and deletions that arrived while the conversation was closed show), else what
- * was saved. Encrypted entries hold no text; a message that never had text is
+ * was saved. An encrypted entry has its text only when it was sealed with the account's key; a message that never had text is
  * not a deleted one.
  */
 function useRowText(entry: SavedMessage): string {
@@ -35,8 +35,9 @@ function useRowText(entry: SavedMessage): string {
   }, [entry, chatWindow, roomWindow, copyVersion])
   if (entry.deleted || copy?.isRetracted) return t('saved.deleted')
   if (copy?.body && !copy.encryptedPayload) return copy.body
+  if (entry.text) return entry.text
   if (entry.encrypted) return t('saved.encrypted')
-  return entry.text || t('chat.attachment')
+  return t('chat.attachment')
 }
 
 function SavedRow({ entry, problem, onOpen, onRemove }: {
@@ -83,6 +84,7 @@ function SavedRow({ entry, problem, onOpen, onRemove }: {
         </div>
         {isRoom && <div className="text-xs text-fluux-muted truncate" data-testid="saved-conversation">{conversationName}</div>}
         <p className="text-sm line-clamp-2 break-words" data-testid="saved-text">{text}</p>
+        {entry.unverified && <p className="text-xs text-fluux-muted" data-testid="saved-unverified">{t('saved.unverified')}</p>}
         {problem && (
           <div role="status" className="mt-1 flex items-center gap-2 text-xs text-fluux-red">
             <span>{problem === 'absent' ? t('chat.linkedMessageUnavailable') : t('chat.linkedMessageLoadFailed')}</span>
@@ -113,8 +115,17 @@ export function SavedView({ problems, onOpen }: {
   onOpen: (entry: SavedMessage) => Promise<void>
 }) {
   const { t } = useTranslation()
-  const { saved, remove } = useSavedMessages()
+  const { saved, remove, lockedCount } = useSavedMessages()
 
+  if (lockedCount > 0 && saved.length === 0) {
+    return (
+      <ListEmpty
+        icon={Lock}
+        title={t('saved.locked')}
+        description={t('saved.lockedHint')}
+      />
+    )
+  }
   if (saved.length === 0) {
     return (
       <ListEmpty
@@ -126,6 +137,9 @@ export function SavedView({ problems, onOpen }: {
   }
   return (
     <div className="flex flex-col gap-0.5" data-testid="saved-list" aria-label={t('saved.title')}>
+      {lockedCount > 0 && (
+        <p role="status" className="px-2 py-1 text-xs text-fluux-muted" data-testid="saved-locked-note">{t('saved.lockedSome', { count: lockedCount })}</p>
+      )}
       {saved.map((entry) => (
         <SavedRow key={entry.id} entry={entry} problem={problems[entry.id]} onOpen={(e) => { void onOpen(e) }} onRemove={remove} />
       ))}

@@ -30,24 +30,28 @@ export const fluuxTheme: ThemeDefinition = {
     light: {},
   },
   swatches: {
-    dark: ['#0B1020', '#0E1326', '#7C8CFF', '#38E0C4', '#A78BFA'],
-    light: ['#E7EAF4', '#EEF0F8', '#5B6CF0', '#11A88C', '#A78BFA'],
+    dark: ['#181B27', '#1C202E', '#7C8CFF', '#38E0C4', '#A78BFA'],
+    light: ['#E7EAF4', '#F1F3F9', '#3954EF', '#11A88C', '#A78BFA'],
   },
-  // Curated accent presets tuned to the Aurora palette — saturated jewel tones
-  // that read as luminous fills on the deep-ink base. (The generic
-  // DEFAULT_ACCENT_PRESETS are paler, tuned for accent-as-foreground, and remain
-  // the fallback for themes that don't ship their own.)
+  // Curated accent presets tuned to the Aurora surfaces, one family per mode.
+  // Dark: luminous fills at an even OKLCH lightness (~0.74) that carry dark ink
+  // text (8:1 or more) and read as accent text on the chat canvas (6:1 or more).
+  // Light: deep fills at an even WCAG luminance that carry white text (~5.9:1)
+  // and stay AA as accent text on the white canvas and its hover row. Periwinkle
+  // equals the CSS default in both modes. accentPresets.test.ts guards all of it.
+  // (The generic DEFAULT_ACCENT_PRESETS remain the fallback for themes that
+  // don't ship their own.)
   accentPresets: [
-    { name: 'Periwinkle', dark: { h: 231, s: 90, l: 66 }, light: { h: 231, s: 85, l: 58 } },
-    { name: 'Violet',     dark: { h: 258, s: 85, l: 70 }, light: { h: 258, s: 72, l: 56 } },
-    { name: 'Mauve',      dark: { h: 294, s: 60, l: 73 }, light: { h: 294, s: 50, l: 58 } },
-    { name: 'Magenta',    dark: { h: 322, s: 80, l: 66 }, light: { h: 322, s: 72, l: 50 } },
-    { name: 'Rose',       dark: { h: 344, s: 85, l: 68 }, light: { h: 344, s: 78, l: 52 } },
-    { name: 'Coral',      dark: { h: 14,  s: 88, l: 66 }, light: { h: 14,  s: 82, l: 52 } },
-    { name: 'Amber',      dark: { h: 40,  s: 95, l: 60 }, light: { h: 40,  s: 90, l: 46 } },
-    { name: 'Mint',       dark: { h: 152, s: 60, l: 52 }, light: { h: 152, s: 55, l: 38 } },
-    { name: 'Teal',       dark: { h: 174, s: 70, l: 52 }, light: { h: 174, s: 65, l: 36 } },
-    { name: 'Sky',        dark: { h: 196, s: 90, l: 58 }, light: { h: 196, s: 85, l: 42 } },
+    { name: 'Periwinkle', dark: { h: 231, s: 100, l: 64 }, light: { h: 231, s: 85, l: 58 } },
+    { name: 'Violet',     dark: { h: 254, s: 98,  l: 80 }, light: { h: 259, s: 60, l: 55 } },
+    { name: 'Mauve',      dark: { h: 291, s: 62,  l: 71 }, light: { h: 292, s: 44, l: 45 } },
+    { name: 'Magenta',    dark: { h: 329, s: 94,  l: 72 }, light: { h: 324, s: 70, l: 43 } },
+    { name: 'Rose',       dark: { h: 349, s: 99,  l: 74 }, light: { h: 340, s: 78, l: 43 } },
+    { name: 'Coral',      dark: { h: 14,  s: 93,  l: 68 }, light: { h: 18,  s: 98, l: 36 } },
+    { name: 'Amber',      dark: { h: 36,  s: 74,  l: 54 }, light: { h: 38,  s: 97, l: 28 } },
+    { name: 'Mint',       dark: { h: 151, s: 55,  l: 52 }, light: { h: 156, s: 95, l: 23 } },
+    { name: 'Teal',       dark: { h: 174, s: 60,  l: 48 }, light: { h: 175, s: 95, l: 23 } },
+    { name: 'Sky',        dark: { h: 199, s: 84,  l: 59 }, light: { h: 196, s: 93, l: 29 } },
   ],
 }
 

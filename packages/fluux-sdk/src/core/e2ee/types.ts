@@ -753,6 +753,24 @@ export interface E2EEPlugin {
   isLocked?(): boolean
 
   /**
+   * Optional: whether text can be sealed to the account's own key now.
+   * `unavailable` when the account has no key for this protocol, `locked` when
+   * it has one it cannot use yet, `ready` when it can seal and open. Saved
+   * messages seal every entry while a plugin reports `ready` or `locked`.
+   */
+  selfSealState?(): 'unavailable' | 'locked' | 'ready'
+  /**
+   * Optional: sign text with the account's key and encrypt it to that same key. Returns armored ciphertext; throws while locked.
+   */
+  sealToSelf?(plaintext: string): Promise<string>
+  /**
+   * Optional: open text sealed by {@link E2EEPlugin.sealToSelf}. Returns the
+   * text only when the account's own primary key signed it, `null` for
+   * anything unsigned, foreign-signed or unreadable; throws while locked.
+   */
+  openFromSelf?(armored: string): Promise<string | null>
+
+  /**
    * Optional: record an explicit trust decision for one identity. `id` is the
    * `PeerIdentity.id` (OMEMO: the device id string). `'verified'` pins the
    * current fingerprint out-of-band; `'tofu'` accepts it without verifying

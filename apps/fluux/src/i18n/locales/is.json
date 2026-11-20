@@ -1797,6 +1797,10 @@
         "deleted": "Skilaboðum eytt",
         "tryAgain": "Reyna aftur",
         "full": "Listi vistaðra skilaboða er fullur ({{count}}). Fjarlægðu eitt til að vista annað.",
-        "refused": "Þjónninn þinn neitaði að geyma þessi skilaboð."
+        "refused": "Þjónninn þinn neitaði að geyma þessi skilaboð.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

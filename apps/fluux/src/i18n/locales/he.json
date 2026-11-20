@@ -1799,6 +1799,10 @@
         "deleted": "ההודעה נמחקה",
         "tryAgain": "נסו שוב",
         "full": "רשימת ההודעות השמורות מלאה ({{count}}). הסירו הודעה כדי לשמור אחרת.",
-        "refused": "השרת שלכם סירב לאחסן הודעה זו."
+        "refused": "השרת שלכם סירב לאחסן הודעה זו.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

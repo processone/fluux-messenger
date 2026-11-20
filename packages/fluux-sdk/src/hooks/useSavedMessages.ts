@@ -23,6 +23,9 @@ export function useSavedMessages() {
   const pending = useSavedStore(useShallow((s) => s.pending))
   const loaded = useSavedStore((s) => s.loaded)
   const limit = useSavedStore((s) => s.limit)
+  /** Items the server holds that wait for the account's OpenPGP key. */
+  const lockedCount = useSavedStore((s) => Object.keys(s.lockedIds).length)
+  const sealState = useSavedStore((s) => s.sealState)
 
   /** Newest saved first. */
   const saved: SavedMessage[] = useMemo(
@@ -55,5 +58,5 @@ export function useSavedMessages() {
     if (id) savedStore.getState().remove(id)
   }, [findSaved])
 
-  return { saved, loaded, limit, pending, isSaved, findSaved, save, remove, canSave: canSaveMessage, itemId: savedItemId }
+  return { saved, loaded, limit, lockedCount, sealState, pending, isSaved, findSaved, save, remove, canSave: canSaveMessage, itemId: savedItemId }
 }

@@ -37,7 +37,10 @@ Only the publish that may create the node carries `pubsub#max_items`. Every late
 
 ### 3.1 Item id
 
-The item id is a hash of the message identity: the conversation JID, then the XEP-0359 archive id with its `by`, else the origin id, else the client id. Two devices saving the same message publish the same item. The id is opaque; a reader never parses it.
+The item id is opaque: a reader never parses it. It depends on whether the account has an OpenPGP key (§7):
+
+- **OpenPGP off:** a hash of the message identity (the conversation JID, then the XEP-0359 archive id with its `by`, else the origin id, else the client id). Two devices saving the same message publish the same item.
+- **OpenPGP on:** a random UUID without dashes, chosen by the saving client. A hash would let the server recompute which message an item names. Two devices that save one message at once publish two items; each client shows the message once and retracts the weaker one (§5, Duplicates).
 
 ### 3.2 Server limit
 
@@ -76,12 +79,32 @@ It holds exactly one XEP-0297 `<forwarded/>`. A client that rewrites an item MUS
 
 ### 4.2 The forwarded copy
 
+With OpenPGP off the copy is written in the clear, as below. With OpenPGP on, nothing of it is written in the clear: see §4.3.
+
 - `<delay stamp/>` is the time the original was sent.
 - `<message from to type id/>` is the original. In a room, `from` is the occupant JID and `type` is `groupchat`. In a one-to-one chat, `from` and `to` are the two bare JIDs and `type` is `chat`.
 - The conversation is the room's bare JID, or the bare JID in `from`/`to` that is not the account's own.
 - `<stanza-id by id/>` (XEP-0359) is the archive id when known: the room for a room message, the account for a one-to-one message. A message just sent has none until the client learns it from the archive or a carbon.
 - `<origin-id/>` and `<occupant-id/>` (XEP-0421, rooms only) are included when known.
 - `<body/>` holds the plain text, at most 4000 characters, and only when the message was not end-to-end encrypted. Control characters and direction overrides are removed on read.
+
+### 4.3 Sealed items
+
+While the account has an OpenPGP key, an item carries one `<sealed/>` child and nothing else:
+
+```xml
+<item id="5b0e6c1f6e0a4f3e8f1d2c3b4a596877">
+  <saved xmlns="urn:xmpp:fluux:saved-messages:0">
+    <sealed>LS0tLS1CRUdJTiBQR1AgTUVTU0FHRS0tLS0t...</sealed>
+  </saved>
+</item>
+```
+
+`<sealed/>` holds the base64 of an armored OpenPGP message, signed with the account's own key and encrypted to that key alone, as the verification sync does: a reader accepts only the own primary key's signature, so another key could not use what it was given. Its plaintext is one JSON object `{"v":1,"entry":{...}}`. The entry holds every field the clear form has: `conversationJid`, `type`, `from`, `to`, `text` (up to 4000 code points), `encrypted`, `deleted`, `sentAt`, `savedAt`, `messageId`, `stanzaId`, `stanzaIdBy`, `originId`, `occupantId` and the unknown children kept as `extras`. The server therefore sees the item id, the size and the time of the write, and nothing about the message or its conversation.
+
+A reader opens a sealed item only if the account's own primary key signed it. An item that is unsigned, signed by another key, unreadable, or whose payload is not an entry is not listed. It still counts against the node's limit. A client that cannot open sealed items (the key is locked, or this device has none) lists none of them: the list is locked until the key is available (§7).
+
+An end-to-end encrypted original that this device decrypted keeps its text in the sealed entry, so the Saved view shows it on every device and after the archive expired. A message still waiting for its key is saved without text.
 
 Fluux builds the copy with the same function Forward uses and reads it with a reader that adds the identity elements to the bounds Forward's reader applies. Forward's own reader is unchanged; it reads the original's id and stanza-id that Forward now carries and ignores every other extension.
 
@@ -110,7 +133,26 @@ Prosody keeps its archive one week by default, so an entry can outlive the archi
 
 ## 7. Privacy
 
-A `whitelist` node keeps other users out, not the server operator. Plain messages store their text, which the server's archive already holds; encrypted messages store no body. XEP-0510 shows a way to encrypt private PEP data; keeping an encrypted message's OpenPGP payload in the copy is a possible later step.
+A `whitelist` node keeps other users out, not the server operator. 
+### 7.1 OpenPGP off
+
+Plain messages store their text, which the server's archive already holds. Encrypted messages store no body, and the Saved row reads "Encrypted message" until this device finds the decrypted copy.
+
+
+### 7.2 OpenPGP on
+
+Every entry, plain or encrypted, is sealed (§4.3). This replaces the earlier plan to seal only encrypted messages: the server's archive holds plain text, but a saved list also tells the server which messages the account cares about, and sealing hides that.
+
+- **Locked list.** Sealing needs the key. While a key exists but cannot be used (the web app until the backup code is typed, a refused keychain), the list shows a locked notice and no rows; items, plain ones included, are held back, and a save waits in the offline queue instead of being written in clear. Unlocking reads the node again.
+- **Not known yet.** The OpenPGP plugin joins some time after the session starts. Until it does, an account that sealed the last time it was known is treated as locked, so a save made or queued across a restart is never written in clear; the memory follows the app's OpenPGP setting alone (written when it loads and when it changes), so a plugin that stays registered after the setting went off cannot bring it back.
+- **No key on this device.** Sealed items stay locked and plain items show as they did.
+- **Authorship.** The signature, not the access model, is what a reader trusts: a server can encrypt to the account's public key but cannot sign as its owner.
+- **Not covered.** A signature per item does not stop the server from dropping an item, or from replaying one the account removed. The size of an item and the number of items remain visible.
+- **Losing the key loses the entries.** The server holds nothing a lost key can recover; they are as recoverable as the OpenPGP backup code.
+- **Plain items beside sealed ones.** A plain item read while OpenPGP is on is listed flagged "Not verified": nothing proves the account wrote it. The first time a client reads a node that holds no sealed item at all, it seals every plain item under a new random id and retracts the plain ones, so entries from before OpenPGP was on carry over. Once a sealed item exists, plain items are never sealed automatically; a plain item a server adds stays flagged until removed.
+- **Deleted originals.** The republished item is sealed; its entry carries `deleted: true` and no text, as in §5.
+
+The format follows the verification sync (`urn:xmpp:fluux:verifications:1`), which signs and encrypts to the own key in the same way. XEP-0510 (End-to-End Encrypted Contacts Metadata) builds on XEP-0473, a shared symmetric key per node with unsigned items; for a node only its owner reads, encrypting to the owner's own key does the same job and signs each item.
 
 ---
 

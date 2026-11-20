@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { savedStore, findSavedEntry, clearSavedLocalData } from './savedStore'
+import { savedItemId } from '../utils/savedMessageKeys'
 import { setStorageScopeJid } from '../utils/storageScope'
 import { noteRetractedIdentity, roomRetractionAliases, _clearRetractedIdentitiesForTesting } from '../utils/retractedIdentities'
 import type { SavedMessage } from '../core/types/saved'
@@ -224,5 +225,102 @@ describe('clearing another account', () => {
     expect(s().entries.a).toBeDefined()
     expect(localStorage.getItem('fluux-saved-pending:other@example.com')).toBeNull()
   })
-})
 
+  describe('with OpenPGP on', () => {
+    const hashed = (extra: Partial<SavedMessage> = {}) => { const e = entry('x', extra); return { ...e, id: savedItemId(e) } }
+
+    it('gives a save a random item id instead of one derived from the message', () => {
+      s().setSealState('ready')
+      const e = hashed()
+      s().save(e)
+      const [id] = Object.keys(s().entries)
+      expect(id).not.toBe(e.id)
+      expect(id).toMatch(/^[0-9a-f]{32}$/)
+      expect(s().pending).toEqual({ [id]: 'publish' })
+    })
+
+    it('keeps the derived id while OpenPGP is off', () => {
+      const e = hashed()
+      s().save(e)
+      expect(Object.keys(s().entries)).toEqual([e.id])
+    })
+
+    it('moves a never-sent entry to a new id, and leaves one the server holds alone', () => {
+      s().save(hashed())
+      const [old] = Object.keys(s().entries)
+      s().reid(old, 'fresh')
+      expect(Object.keys(s().entries)).toEqual(['fresh'])
+      expect(s().pending).toEqual({ fresh: 'publish' })
+      s().confirm('fresh', 'publish')
+      s().reid('fresh', 'other')
+      expect(Object.keys(s().entries)).toEqual(['fresh'])
+    })
+
+    it('migrates an unverified entry: sealed copy under a new id first, the plain item retracted once the copy is stored', () => {
+      s().setSealState('ready')
+      s().reconcileFetch([entry('p', { unverified: true })])
+      s().migrate('p')
+      const ids = Object.keys(s().entries)
+      expect(ids).toHaveLength(1)
+      expect(ids[0]).not.toBe('p')
+      expect(s().entries[ids[0]].unverified).toBeUndefined()
+      expect(s().pending).toEqual({ [ids[0]]: 'publish' }) // the plain item is untouched meanwhile
+      expect(s().remote.p).toBe(true)
+      s().confirm(ids[0], 'publish')
+      expect(s().pending).toEqual({ [ids[0]]: 'publish', p: 'retract' })
+    })
+
+    it('removing a sealed copy that is not stored yet removes the plain item it stands for', () => {
+      s().setSealState('ready')
+      s().reconcileFetch([entry('p', { unverified: true })])
+      s().migrate('p')
+      const [sealedId] = Object.keys(s().entries)
+      s().remove(sealedId)
+      expect(s().entries).toEqual({})
+      expect(s().pending).toEqual({ [sealedId]: 'retract', p: 'retract' })
+      expect(s().migrating).toEqual({})
+    })
+
+    it('does not migrate when the node has no free slot', () => {
+      s().setSealState('ready')
+      s().setLimit(1)
+      s().reconcileFetch([entry('p', { unverified: true })])
+      s().migrate('p')
+      expect(Object.keys(s().entries)).toEqual(['p'])
+      expect(s().pending).toEqual({})
+    })
+
+    it('lists the plain entry again when the sealed copy is refused, and does not list a plain item that is being sealed twice', () => {
+      s().setSealState('ready')
+      s().reconcileFetch([entry('p', { unverified: true })])
+      s().migrate('p')
+      const [sealedId] = Object.keys(s().entries)
+      s().reconcileFetch([entry('p', { unverified: true })]) // a read while the copy is in flight
+      expect(Object.keys(s().entries)).toEqual([sealedId])
+      expect(s().pending).toEqual({ [sealedId]: 'publish' })
+      s().refuse(sealedId, 'publish')
+      expect(Object.keys(s().entries)).toEqual(['p'])
+      expect(s().entries.p.unverified).toBe(true)
+      expect(s().pending).toEqual({})
+    })
+
+    it('does not migrate a verified entry, or anything while the key is locked', () => {
+      s().setSealState('ready')
+      s().reconcileFetch([entry('a'), entry('u', { unverified: true })])
+      s().migrate('a')
+      s().setSealState('locked')
+      s().migrate('u')
+      expect(Object.keys(s().entries).sort()).toEqual(['a', 'u'])
+      expect(s().pending).toEqual({})
+    })
+
+    it('counts locked and unlisted items as held by the server, and forgets them when the server retracts them', () => {
+      s().reconcileFetch([], undefined, undefined, { locked: ['l'], rejected: ['r'] })
+      expect(Object.keys(s().remote).sort()).toEqual(['l', 'r'])
+      expect(Object.keys(s().lockedIds)).toEqual(['l'])
+      s().applyNotify({ upserts: [], removedIds: ['l', 'r'] })
+      expect(s().remote).toEqual({})
+      expect(s().lockedIds).toEqual({})
+    })
+  })
+})

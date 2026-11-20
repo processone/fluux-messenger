@@ -23,9 +23,9 @@ vi.mock('./RoomMessageLinkPreview', () => ({
 }))
 
 // The picker itself is covered by ForwardMessageModal.test; here it only reports what the row asked to forward.
-const modal = vi.hoisted(() => ({ props: undefined as undefined | { link?: string; quote?: Record<string, unknown> } }))
+const modal = vi.hoisted(() => ({ props: undefined as undefined | { link?: string; quote?: Record<string, unknown>; attachment?: unknown } }))
 vi.mock('../ForwardMessageModal', () => ({
-  ForwardMessageModal: (props: { link?: string; quote?: Record<string, unknown> }) => { modal.props = props; return null },
+  ForwardMessageModal: (props: { link?: string; quote?: Record<string, unknown>; attachment?: unknown }) => { modal.props = props; return null },
 }))
 
 vi.mock('@/hooks/useNavigateToTarget', () => ({ useNavigateToTarget: () => ({ navigateToConversation: vi.fn() }) }))
@@ -124,11 +124,26 @@ describe('forward on a one-to-one message', () => {
       <MessageBubble {...bubble({ body: 'Ship it', references: undefined, ...message })} /></ForwardMessageProvider>)
   }
 
+  // FLM-336 finding 5: the quote names the sender by address, never by the private contact-list name.
   it('offers Forward and passes the content, the bare author address and no link', () => {
     renderDirect({ from: 'alice@example.com/phone' })
     fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
     expect(modal.props?.link).toBeUndefined()
-    expect(modal.props?.quote).toEqual({ author: 'Alice', text: 'Ship it', from: 'alice@example.com', type: 'chat', id: 'fwd', timestamp: Date.parse('2026-05-01T10:00:00Z') })
+    expect(modal.props?.quote).toEqual({ author: 'alice@example.com', text: 'Ship it', from: 'alice@example.com', type: 'chat', id: 'fwd', timestamp: Date.parse('2026-05-01T10:00:00Z') })
+  })
+
+  it('keeps your own published name on a message you sent', () => {
+    renderDirect({ from: 'me@example.com/laptop', isOutgoing: true })
+    fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
+    expect(modal.props?.quote?.author).toBe('Alice')
+  })
+
+  it('quotes a room message by its occupant nick, never by the displayed contact-list name', () => {
+    modal.props = undefined as typeof modal.props
+    render(<ForwardMessageProvider conversationId="room@conference.example.com">
+      <MessageBubble {...bubble({ type: 'groupchat', from: 'room@conference.example.com/Alicia', body: 'Ship it', references: undefined, stanzaId: '1731490000123456', roomJid: 'room@conference.example.com' } as Partial<BaseMessage>)} supportsMAM /></ForwardMessageProvider>)
+    fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
+    expect(modal.props?.quote?.author).toBe('Alicia')
   })
 
   it('marks a message from an encrypted chat so it can only go into an encrypted chat', () => {
@@ -143,20 +158,61 @@ describe('forward on a one-to-one message', () => {
     it('forwards the displayed comment and the attributed copied text, without the hidden quote', () => {
       renderDirect({ body: 'Look\n> Carol wrote:\n> Ship it', forwarded })
       fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
-      expect(modal.props?.quote).toMatchObject({ author: 'Alice', text: 'Look\nCarol wrote:\nShip it\nTonight', from: 'alice@example.com' })
+      expect(modal.props?.quote).toMatchObject({ author: 'alice@example.com', text: 'Look\nCarol wrote:\nShip it\nTonight', from: 'alice@example.com' })
       expect(modal.props?.quote).not.toHaveProperty('forwarded')
     })
 
     it('offers Forward on a copy-only message and forwards the attributed copied text', () => {
       renderDirect({ body: '', forwarded: { author: 'Carol', text: 'Ship it' } })
       fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
-      expect(modal.props?.quote).toMatchObject({ author: 'Alice', text: 'Carol wrote:\nShip it' })
+      expect(modal.props?.quote).toMatchObject({ author: 'alice@example.com', text: 'Carol wrote:\nShip it' })
     })
 
     it('keeps the protection flag of an encrypted copy-only message', () => {
       renderDirect({ body: '', forwarded: { author: 'Carol', text: 'Ship it' }, securityContext: { protocolId: 'openpgp', trust: 'verified' } })
       fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
       expect(modal.props?.quote?.fromEncrypted).toBe(true)
+    })
+  })
+
+  // FLM-336 finding 4: a photo or file goes along as the file, in a one-to-one chat as well as a room.
+  describe('message with a photo or file', () => {
+    const attachment = { url: 'https://upload.example/p.png', name: 'p.png', mediaType: 'image/png' }
+    const open = () => fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
+
+    it('offers Forward on a file without a caption and quotes its name, so the sender is named', () => {
+      renderDirect({ body: '', attachment })
+      open()
+      expect(modal.props?.attachment).toEqual(attachment)
+      expect(modal.props?.quote).toMatchObject({ author: 'Alice', text: 'p.png', from: 'alice@example.com' })
+    })
+
+    it('passes the caption as the quote beside the file', () => {
+      renderDirect({ body: 'Look at this', attachment })
+      open()
+      expect(modal.props?.attachment).toEqual(attachment)
+      expect(modal.props?.quote).toMatchObject({ text: 'Look at this' })
+    })
+
+    it('quotes the last part of the address when the file has no name', () => {
+      renderDirect({ body: '', attachment: { url: 'https://upload.example/a/b.pdf?x=1' } })
+      open()
+      expect(modal.props?.quote).toMatchObject({ text: 'b.pdf' })
+    })
+
+    it('marks an encrypted file even without a caption', () => {
+      renderDirect({ body: '', attachment, securityContext: { protocolId: 'openpgp', trust: 'verified' } })
+      open()
+      expect(modal.props?.quote?.fromEncrypted).toBe(true)
+    })
+
+    it.each([
+      ['retracted', { isRetracted: true }],
+      ['undecryptable', { encryptedPayload: '<encrypted/>' }],
+      ['failed to send', { deliveryError: 'x' }],
+    ])('offers no Forward on a %s file', (_name, message) => {
+      renderDirect({ body: '', attachment, ...message } as Partial<BaseMessage>)
+      expect(screen.queryAllByRole('button', { name: 'chat.forwardMessageLink' })).toHaveLength(0)
     })
   })
 

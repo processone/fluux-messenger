@@ -1801,6 +1801,10 @@
         "deleted": "Mesaj șters",
         "tryAgain": "Încearcă din nou",
         "full": "Lista mesajelor salvate este plină ({{count}}). Eliminați unul pentru a salva altul.",
-        "refused": "Serverul dvs. a refuzat să stocheze acest mesaj."
+        "refused": "Serverul dvs. a refuzat să stocheze acest mesaj.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

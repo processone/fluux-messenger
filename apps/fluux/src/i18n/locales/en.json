@@ -1797,6 +1797,10 @@
         "deleted": "Message deleted",
         "tryAgain": "Try again",
         "full": "Saved messages are full ({{count}}). Remove one to save another.",
-        "refused": "Your server refused to store this message."
+        "refused": "Your server refused to store this message.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

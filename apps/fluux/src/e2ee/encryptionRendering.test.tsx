@@ -17,6 +17,8 @@
  * Issue #1452 (OpenPGP half) deliberately revised the cases of a verified
  * contact with a new key: that key now waits for the user's decision and
  * receives nothing meanwhile, and every key offers its own decisions.
+ * The header of a contact whose every key waits was revised after it: it
+ * shows a yellow waiting shield that opens the keys, instead of nothing.
  *
  * The plugin is a stand-in that follows the real one's rules through the
  * plugin's own trust records and `keyStanding` (one identity per announced key,
@@ -147,6 +149,7 @@ function Surfaces() {
         <ChatHeader
           name="Bob" type="chat" jid={PEER} encryptionState={state}
           onEncryptionClick={() => {}} onDisableEncryptionClick={() => {}} onEnableEncryptionClick={() => {}}
+          onReviewKeysClick={() => {}}
         />
       </div>
       <div data-testid="composer">
@@ -414,8 +417,12 @@ describe('encryption state as people see it', () => {
           "text-fluux-text",
           "text-fluux-muted",
         ],
-        "headerButtons": [],
-        "headerColors": [],
+        "headerButtons": [
+          "contacts.encryption.needsDecisionTitle",
+        ],
+        "headerColors": [
+          "text-fluux-yellow",
+        ],
         "tabButtons": [
           "Verify fingerprint",
           "contacts.encryption.trustButton",
@@ -644,6 +651,7 @@ describe('encryption state as people see it', () => {
       await open()
       expect(notice()).toContain('chat.encryption.heldKeys.pendingAll')
       expect(seen().glance).toBe('contacts.encryption.trustPendingTitle')
+      expect(seen().headerButtons).toEqual(['contacts.encryption.trustPendingTitle'])
       expect(seen().tabText).toContain('contacts.encryption.trustPendingTitlecontacts.encryption.trustPendingDescription')
       expect(seen().tabText).not.toContain('needsDecision')
       expect(seen().tabText).toContain('contacts.encryption.notUsedReason.trust-pending')

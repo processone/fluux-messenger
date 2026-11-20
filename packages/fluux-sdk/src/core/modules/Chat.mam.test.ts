@@ -52,7 +52,7 @@ describe('XMPPClient MAM', () => {
   }
 
   // Helper to establish a mock connection
-  const connectClient = async () => {
+  const connectClient = async (jid = 'me@example.com') => {
     // Mock minimal disco responses for connect
     mockXmppClientInstance.iqCaller.request.mockResolvedValue(
       createMockElement('iq', { type: 'result' }, [
@@ -67,7 +67,7 @@ describe('XMPPClient MAM', () => {
     )
 
     const connectPromise = xmppClient.connect({
-      jid: 'me@example.com',
+      jid,
       password: 'password',
       server: 'example.com',
       skipDiscovery: true,
@@ -208,7 +208,7 @@ describe('XMPPClient MAM', () => {
         // Emit MAM message stanzas
         if (stanzaListener) {
           // First message
-          const msg1 = createMockElement('message', { from: 'example.com' }, [
+          const msg1 = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: actualQueryId, id: 'archive-id-1' },
@@ -237,7 +237,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(msg1)
 
           // Second message
-          const msg2 = createMockElement('message', { from: 'example.com' }, [
+          const msg2 = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: actualQueryId, id: 'archive-id-2' },
@@ -292,6 +292,84 @@ describe('XMPPClient MAM', () => {
       expect(result.messages[1].isOutgoing).toBe(true)
     })
 
+    it('ignores a result that names the query id but comes from another sender (XEP-0313 archive check)', async () => {
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
+
+      const result = (from: string | undefined, queryid: string, id: string, body: string) =>
+        createMockElement('message', from ? { from } : {}, [{
+          name: 'result',
+          attrs: { xmlns: 'urn:xmpp:mam:2', queryid, id },
+          children: [{
+            name: 'forwarded',
+            attrs: { xmlns: 'urn:xmpp:forward:0' },
+            children: [
+              { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:00:00Z' } },
+              {
+                name: 'message',
+                attrs: { from: 'alice@example.com/resource', to: 'me@example.com', type: 'chat', id },
+                children: [{ name: 'body', text: body }],
+              },
+            ],
+          }],
+        }])
+
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        const queryid = iq.children?.find((c: any) => c.name === 'query')?.attrs?.queryid
+        stanzaListener!(result('mallory@evil.example/phone', queryid, 'forged-1', 'forged by a contact'))
+        stanzaListener!(result('me@example.com/other-device', queryid, 'forged-2', 'forged from a resource'))
+        stanzaListener!(result('me@example.com', queryid, 'real-1', 'from the account archive'))
+        stanzaListener!(result(undefined, queryid, 'real-2', 'from the own server'))
+        return createMockElement('iq', { type: 'result' }, [{
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [{ name: 'set', attrs: { xmlns: 'http://jabber.org/protocol/rsm' }, children: [{ name: 'count', text: '2' }] }],
+        }])
+      })
+      vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
+
+      const { messages } = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
+      expect(messages.map(m => m.body).sort()).toEqual(['from the account archive', 'from the own server'])
+    })
+
+    it('accepts account results stamped with the lowercase address when the login was typed with capitals', async () => {
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient('Me@Example.com')
+
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        const queryid = iq.children?.find((c: any) => c.name === 'query')?.attrs?.queryid
+        stanzaListener!(createMockElement('message', { from: 'me@example.com' }, [{
+          name: 'result',
+          attrs: { xmlns: 'urn:xmpp:mam:2', queryid, id: 'a-1' },
+          children: [{
+            name: 'forwarded',
+            attrs: { xmlns: 'urn:xmpp:forward:0' },
+            children: [
+              { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:00:00Z' } },
+              { name: 'message', attrs: { from: 'alice@example.com/r', to: 'me@example.com', type: 'chat', id: 'a-1' }, children: [{ name: 'body', text: 'kept' }] },
+            ],
+          }],
+        }]))
+        return createMockElement('iq', { type: 'result' }, [{
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [{ name: 'set', attrs: { xmlns: 'http://jabber.org/protocol/rsm' }, children: [{ name: 'count', text: '1' }] }],
+        }])
+      })
+      const { messages } = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
+      expect(messages.map(m => m.body)).toEqual(['kept'])
+    })
+
     it('should select the stanza-id stamped by the own archive when several are present (XEP-0359 by-aware)', async () => {
       // A MAM entry in the user's 1:1 archive can carry multiple
       // <stanza-id by="..."/>. Only the one stamped by the queried archive
@@ -314,7 +392,7 @@ describe('XMPPClient MAM', () => {
         const actualQueryId = queryChild?.attrs?.queryid || 'mam_query_byaware'
 
         if (stanzaListener) {
-          const msg = createMockElement('message', { from: 'example.com' }, [
+          const msg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: actualQueryId, id: 'archive-page-id' },
@@ -460,7 +538,7 @@ describe('XMPPClient MAM', () => {
         const queryId = queryChild?.attrs?.queryid || 'test'
 
         if (stanzaListener) {
-          const msgWithReply = createMockElement('message', { from: 'example.com' }, [
+          const msgWithReply = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId },
@@ -526,7 +604,7 @@ describe('XMPPClient MAM', () => {
         const queryId = queryChild?.attrs?.queryid || 'test'
 
         if (stanzaListener) {
-          const msgWithOob = createMockElement('message', { from: 'example.com' }, [
+          const msgWithOob = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId },
@@ -597,7 +675,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Message with ONLY OOB attachment, no body text
-          const fileOnlyMsg = createMockElement('message', { from: 'example.com' }, [
+          const fileOnlyMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId },
@@ -671,7 +749,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // First: the original message with a URL
-          const originalMsg = createMockElement('message', { from: 'example.com' }, [
+          const originalMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId },
@@ -699,7 +777,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(originalMsg)
 
           // Second: the fastening message with link preview
-          const fasteningMsg = createMockElement('message', { from: 'example.com' }, [
+          const fasteningMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId },
@@ -900,7 +978,7 @@ describe('XMPPClient MAM', () => {
           // Page 1: only a reaction (fastening-style modification) — no
           // displayable message — and the archive says there is more.
           if (stanzaListener) {
-            const reactionMsg = createMockElement('message', { from: 'example.com' }, [
+            const reactionMsg = createMockElement('message', { from: 'me@example.com' }, [
               {
                 name: 'result',
                 attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
@@ -945,7 +1023,7 @@ describe('XMPPClient MAM', () => {
 
         // Page 2: a real displayable message; archive complete.
         if (stanzaListener) {
-          const realMsg = createMockElement('message', { from: 'example.com' }, [
+          const realMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
@@ -1010,7 +1088,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Message without body (e.g., chat state notification)
-          const msgNoBody = createMockElement('message', { from: 'example.com' }, [
+          const msgNoBody = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId },
@@ -1073,7 +1151,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Original message
-          const originalMsg = createMockElement('message', { from: 'example.com' }, [
+          const originalMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
@@ -1102,7 +1180,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(originalMsg)
 
           // Retraction stanza (from the same sender, targeting the original message)
-          const retractionMsg = createMockElement('message', { from: 'example.com' }, [
+          const retractionMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
@@ -1172,7 +1250,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Original message with stanza-id
-          const originalMsg = createMockElement('message', { from: 'example.com' }, [
+          const originalMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
@@ -1201,7 +1279,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(originalMsg)
 
           // Retraction targeting the stanza-id (not the client message id)
-          const retractionMsg = createMockElement('message', { from: 'example.com' }, [
+          const retractionMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
@@ -1269,7 +1347,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Original message
-          const originalMsg = createMockElement('message', { from: 'example.com' }, [
+          const originalMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
@@ -1298,7 +1376,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(originalMsg)
 
           // Correction stanza (from the same sender, targeting the original message)
-          const correctionMsg = createMockElement('message', { from: 'example.com' }, [
+          const correctionMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
@@ -1367,7 +1445,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Original message
-          const originalMsg = createMockElement('message', { from: 'example.com' }, [
+          const originalMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
@@ -1395,7 +1473,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(originalMsg)
 
           // Correction with XEP-0428 fallback text
-          const correctionMsg = createMockElement('message', { from: 'example.com' }, [
+          const correctionMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
@@ -1472,7 +1550,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Original message with stanza-id
-          const originalMsg = createMockElement('message', { from: 'example.com' }, [
+          const originalMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
@@ -1501,7 +1579,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(originalMsg)
 
           // Correction targeting the stanza-id (not the client message id)
-          const correctionMsg = createMockElement('message', { from: 'example.com' }, [
+          const correctionMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
@@ -1570,7 +1648,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Original message from alice
-          const originalMsg = createMockElement('message', { from: 'example.com' }, [
+          const originalMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
@@ -1598,7 +1676,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(originalMsg)
 
           // Malicious correction from eve trying to modify alice's message
-          const maliciousCorrectionMsg = createMockElement('message', { from: 'example.com' }, [
+          const maliciousCorrectionMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
@@ -1666,7 +1744,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Original message
-          const originalMsg = createMockElement('message', { from: 'example.com' }, [
+          const originalMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
@@ -1695,7 +1773,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(originalMsg)
 
           // Reaction stanza from bob
-          const reactionMsg = createMockElement('message', { from: 'example.com' }, [
+          const reactionMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
@@ -1771,7 +1849,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Original message with stanza-id
-          const originalMsg = createMockElement('message', { from: 'example.com' }, [
+          const originalMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
@@ -1800,7 +1878,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(originalMsg)
 
           // Reaction targeting the stanza-id (not the client message id)
-          const reactionMsg = createMockElement('message', { from: 'example.com' }, [
+          const reactionMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
@@ -1874,7 +1952,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Original message
-          const originalMsg = createMockElement('message', { from: 'example.com' }, [
+          const originalMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
@@ -1902,7 +1980,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(originalMsg)
 
           // Reaction from bob
-          const bobReaction = createMockElement('message', { from: 'example.com' }, [
+          const bobReaction = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
@@ -1936,7 +2014,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(bobReaction)
 
           // Reaction from charlie (same emoji)
-          const charlieReaction = createMockElement('message', { from: 'example.com' }, [
+          const charlieReaction = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-3' },
@@ -2014,7 +2092,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Original message
-          const originalMsg = createMockElement('message', { from: 'example.com' }, [
+          const originalMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
@@ -2042,7 +2120,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(originalMsg)
 
           // First reaction from bob: 👍
-          const bobReaction1 = createMockElement('message', { from: 'example.com' }, [
+          const bobReaction1 = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
@@ -2076,7 +2154,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(bobReaction1)
 
           // Second reaction from bob: changes to ❤️ (replaces 👍)
-          const bobReaction2 = createMockElement('message', { from: 'example.com' }, [
+          const bobReaction2 = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-3' },
@@ -2148,7 +2226,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Original message
-          const originalMsg = createMockElement('message', { from: 'example.com' }, [
+          const originalMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
@@ -2176,7 +2254,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(originalMsg)
 
           // First: bob adds a reaction
-          const bobReaction = createMockElement('message', { from: 'example.com' }, [
+          const bobReaction = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
@@ -2210,7 +2288,7 @@ describe('XMPPClient MAM', () => {
           stanzaListener(bobReaction)
 
           // Second: bob removes all reactions (empty reactions element)
-          const bobRemove = createMockElement('message', { from: 'example.com' }, [
+          const bobRemove = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-3' },
@@ -2282,7 +2360,7 @@ describe('XMPPClient MAM', () => {
         if (stanzaListener) {
           // Only a reaction stanza — no original message in this page
           // (the target message 'old-msg-1' is already in the store from a prior query)
-          const reactionMsg = createMockElement('message', { from: 'example.com' }, [
+          const reactionMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-reaction' },
@@ -2364,7 +2442,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Only a correction stanza — target message not in this page
-          const correctionMsg = createMockElement('message', { from: 'example.com' }, [
+          const correctionMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-correction' },
@@ -2443,7 +2521,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Correction stanza targeting a message already in the store
-          const correctionMsg = createMockElement('message', { from: 'example.com' }, [
+          const correctionMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-correction' },
@@ -2521,7 +2599,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Only a retraction stanza — target message not in this page
-          const retractionMsg = createMockElement('message', { from: 'example.com' }, [
+          const retractionMsg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-retraction' },
@@ -2789,7 +2867,7 @@ describe('XMPPClient MAM', () => {
         if (callCount === 1) {
           // Page 1 (before:''): signal-only, CONTAINS the record's top entry.
           if (stanzaListener) {
-            stanzaListener(createMockElement('message', { from: 'alice@example.com' }, [
+            stanzaListener(createMockElement('message', { from: 'me@example.com' }, [
               {
                 name: 'result',
                 attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'known-top' },
@@ -2833,7 +2911,7 @@ describe('XMPPClient MAM', () => {
 
         // Page 2: one real displayable message; archive complete.
         if (stanzaListener) {
-          stanzaListener(createMockElement('message', { from: 'alice@example.com' }, [
+          stanzaListener(createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'below-floor-1' },
@@ -2889,7 +2967,7 @@ describe('XMPPClient MAM', () => {
         const queryId = queryChild?.attrs?.queryid || 'test'
         // Every page: one reaction (signal), zero displayable, more available.
         if (stanzaListener) {
-          stanzaListener(createMockElement('message', { from: 'alice@example.com' }, [
+          stanzaListener(createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: `sig-${callCount}` },
@@ -2972,7 +3050,7 @@ describe('XMPPClient MAM', () => {
       await connectClient()
 
       const archived = (queryId: string, archiveId: string, stamp: string, message: { attrs: Record<string, string>; children: any[] }) =>
-        createMockElement('message', { from: 'alice@example.com' }, [
+        createMockElement('message', { from: 'me@example.com' }, [
           {
             name: 'result',
             attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: archiveId },
@@ -3079,7 +3157,7 @@ describe('XMPPClient MAM', () => {
         const queryChild = iq.children?.find((c: any) => c.name === 'query')
         const queryId = queryChild?.attrs?.queryid || 'test'
         // A bodiless page whose RSM `first` is the very cursor that was asked for.
-        stanzaListener?.(createMockElement('message', { from: 'alice@example.com' }, [
+        stanzaListener?.(createMockElement('message', { from: 'me@example.com' }, [
           {
             name: 'result',
             attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'oldest-resident' },
@@ -3145,7 +3223,7 @@ describe('XMPPClient MAM', () => {
         if (callCount === 1) {
           // Page 1 (before:''): signal-only, contains the record's top entry → jump next.
           if (stanzaListener) {
-            stanzaListener(createMockElement('message', { from: 'alice@example.com' }, [
+            stanzaListener(createMockElement('message', { from: 'me@example.com' }, [
               {
                 name: 'result',
                 attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'known-top' },
@@ -3188,7 +3266,7 @@ describe('XMPPClient MAM', () => {
 
         // Page 3: recovered on the pre-jump cursor; real message, complete.
         if (stanzaListener) {
-          stanzaListener(createMockElement('message', { from: 'alice@example.com' }, [
+          stanzaListener(createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'real-1' },
@@ -4701,7 +4779,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Message WITHOUT id attribute (like from IRC bridges via Biboumi)
-          const msg = createMockElement('message', { from: 'example.com' }, [
+          const msg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: actualQueryId, id: 'archive-no-id-1' },
@@ -4790,7 +4868,7 @@ describe('XMPPClient MAM', () => {
 
         if (stanzaListener) {
           // Message without stanza-id element — the MAM result id should be used as stanzaId
-          const msg = createMockElement('message', { from: 'example.com' }, [
+          const msg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: actualQueryId, id: 'mam-archive-uuid-123' },
@@ -4854,7 +4932,7 @@ describe('XMPPClient MAM', () => {
         const actualQueryId = queryChild?.attrs?.queryid || 'test'
 
         if (stanzaListener) {
-          const msg = createMockElement('message', { from: 'example.com' }, [
+          const msg = createMockElement('message', { from: 'me@example.com' }, [
             {
               name: 'result',
               attrs: { xmlns: 'urn:xmpp:mam:2', queryid: actualQueryId, id: 'archive-id-fallback' },

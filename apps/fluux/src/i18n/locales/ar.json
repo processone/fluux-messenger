@@ -1805,6 +1805,10 @@
         "deleted": "تم حذف الرسالة",
         "tryAgain": "إعادة المحاولة",
         "full": "قائمة الرسائل المحفوظة ممتلئة ({{count}}). أزل رسالة لتتمكن من حفظ أخرى.",
-        "refused": "رفض خادمك تخزين هذه الرسالة."
+        "refused": "رفض خادمك تخزين هذه الرسالة.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }
