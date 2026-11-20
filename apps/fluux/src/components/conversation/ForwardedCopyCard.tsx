@@ -15,7 +15,7 @@ import { renderStyledMessage } from '@/utils/messageStyles'
 
 /**
  * One forwarded copy, drawn as the source card: who wrote it, where, when, and the copied text.
- * A click (or Enter) opens the original in context, found by the room link, the ids the forward
+ * A click outside a link, or Enter, opens the original in context, found by the room link, the ids the forward
  * carries, or local history. When the copy links a room message the reader can read, that message
  * is read on display and shown in place of the copy.
  */
@@ -100,7 +100,8 @@ function CopyCardView({ message, formatTime, isDarkMode, real }: {
       title={t('chat.forwardedCopyOpen')}
       onClick={event => {
         // A click on a link in the copy follows the link (the global handler), it does not open the original.
-        if ((event.target as Element).closest('a')) return
+        // A click in the link's menu, portalled outside the card, still bubbles here through React: ignore it too.
+        if ((event.target as Element).closest('a') || !event.currentTarget.contains(event.target as Node)) return
         void open()
       }}
       onKeyDown={event => { if (event.key === 'Enter' && event.target === event.currentTarget) { event.preventDefault(); void open() } }}

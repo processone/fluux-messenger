@@ -139,7 +139,11 @@ describe('ForwardedCopyCard links', () => {
     const { container } = card({ type: 'chat', from: 'bob@example.org', text: 'https://example.org' })
     fireEvent.contextMenu(container.querySelector('a')!)
     expect(mocks.find).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('example.org')
+    // The menu is portalled out of the card; choosing an item must not open the original either.
+    const item = screen.getByText('chat.copyLink')
+    expect(container.contains(item)).toBe(false)
+    fireEvent.click(item)
+    expect(mocks.find).not.toHaveBeenCalled()
   })
 
   it('leaves a script URL as plain text', () => {
