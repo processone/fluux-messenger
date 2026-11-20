@@ -643,8 +643,8 @@
             "verifiedTooltip": "Ellenőrzött OpenPGP-kulcs",
             "tofuNewTooltip": "Új kapcsolat. Ellenőrizze az ujjlenyomatot a teljes bizalomhoz",
             "unverifiedKeysetTooltip": "Ennek a partnernek új kulcsa van, amelyet még nem ellenőriztek.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Titkosítás szüneteltetve",
+            "blockedTooltip": "A partner kulcsa megváltozott. Oldja meg a problémát a titkosítás folytatásához",
             "sendBlockedEncryptionRequired": "Az üzenet nem lett elküldve. Ehhez a beszélgetéshez titkosítás szükséges, de jelenleg nem érhető el.",
             "sendBlockedKeyChanged": "Az üzenet nem lett elküldve. Ennek a partnernek a titkosítási kulcsa megváltozott. Küldés előtt tekintse át a kulcs változását.",
             "sendBlockedKeyLocked": "Az üzenet nem lett elküldve. Oldja fel a titkosítási kulcsát az üzenet elküldéséhez.",
@@ -660,8 +660,8 @@
                 "pendingAll": "{{name}} kulcsai nem kapnak üzeneteket, amíg ez az eszköz meg nem kapja a korábbi verzióból vagy a többi eszközéről származó bizalmi döntéseit. Addig nem küldhet üzenetet. Az alkalmazás automatikusan újra megpróbálja.",
                 "review": "Kulcsok áttekintése"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Titkosítás kikapcsolva",
+            "plaintextForcedTooltip": "Kikapcsolta a titkosítást ebben a beszélgetésben, így az üzenetek titkosítatlanul mennek el",
             "keyLocked": "Titkosítás zárolva",
             "keyLockedTooltip": "Titkosítás zárolva. Kattintson a feloldáshoz",
             "encryptedClickToUnlock": "Titkosított üzenet. Kattintson a feloldáshoz",
@@ -684,8 +684,8 @@
                 "fingerprint_mismatch": "Az ujjlenyomat nem egyezik a meghirdetett értékkel",
                 "uid_mismatch": "A tanúsítvány azonosítója nem egyezik a partner címével"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Titkosítás kikapcsolása ebben a beszélgetésben",
+            "enableEncryption": "Titkosítás újbóli bekapcsolása",
             "tooltip": {
                 "header": "Titkosítva",
                 "protocol": {
@@ -1655,7 +1655,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reagált erre: '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reagált az üzenetére",
         "see": "Megtekintés"
     },
     "commands": {

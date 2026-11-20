@@ -645,8 +645,8 @@
             "verifiedTooltip": "מפתח OpenPGP מאומת",
             "tofuNewTooltip": "איש קשר חדש. אמתו את טביעת האצבע לאמון מלא",
             "unverifiedKeysetTooltip": "לאיש קשר זה יש מפתח חדש שלא אומת.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "ההצפנה מושהית",
+            "blockedTooltip": "המפתח של איש הקשר השתנה. פתור זאת כדי לחדש את ההצפנה",
             "sendBlockedEncryptionRequired": "ההודעה לא נשלחה. נדרשת הצפנה לשיחה זו אך היא אינה זמינה כעת.",
             "sendBlockedKeyChanged": "ההודעה לא נשלחה. מפתח ההצפנה של איש קשר זה השתנה. בדוק את שינוי המפתח לפני השליחה.",
             "sendBlockedKeyLocked": "ההודעה לא נשלחה. שחרר את נעילת מפתח ההצפנה שלך כדי לשלוח הודעה זו.",
@@ -662,8 +662,8 @@
                 "pendingAll": "המפתחות של {{name}} לא מקבלים הודעות עד שהמכשיר הזה יקבל את החלטות האמון שלך מגרסה קודמת או מהמכשירים האחרים שלך. עד אז לא ניתן לשלוח הודעות. הניסיון חוזר אוטומטית.",
                 "review": "סקירת מפתחות"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "ההצפנה מושבתת",
+            "plaintextForcedTooltip": "השבתת את ההצפנה עבור שיחה זו, ולכן ההודעות נשלחות ללא הצפנה",
             "keyLocked": "ההצפנה נעולה",
             "keyLockedTooltip": "ההצפנה נעולה. לחץ לפתיחה",
             "encryptedClickToUnlock": "הודעה מוצפנת. לחץ לפתיחה",
@@ -686,8 +686,8 @@
                 "fingerprint_mismatch": "טביעת האצבע אינה תואמת לערך המוצהר",
                 "uid_mismatch": "זהות האישור אינה תואמת לכתובת הצד השני"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "השבת הצפנה עבור שיחה זו",
+            "enableEncryption": "הפעל מחדש את ההצפנה",
             "tooltip": {
                 "header": "מוצפן",
                 "protocol": {
@@ -1657,7 +1657,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} הגיב על '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} הגיב על ההודעה שלך",
         "see": "הצג"
     },
     "commands": {

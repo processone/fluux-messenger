@@ -643,8 +643,8 @@
             "verifiedTooltip": "Verifisert OpenPGP-nøkkel",
             "tofuNewTooltip": "Ny kontakt. Bekreft fingeravtrykk for full tillit",
             "unverifiedKeysetTooltip": "Denne kontakten har en ny nøkkel som ikke er bekreftet.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Kryptering satt på pause",
+            "blockedTooltip": "Kontaktens nøkkel er endret. Løs dette for å gjenoppta krypteringen",
             "sendBlockedEncryptionRequired": "Meldingen ble ikke sendt. Kryptering kreves for denne samtalen, men er ikke tilgjengelig akkurat nå.",
             "sendBlockedKeyChanged": "Meldingen ble ikke sendt. Krypteringsnøkkelen til denne kontakten er endret. Gjennomgå nøkkelendringen før du sender.",
             "sendBlockedKeyLocked": "Meldingen ble ikke sendt. Lås opp krypteringsnøkkelen din for å sende denne meldingen.",
@@ -660,8 +660,8 @@
                 "pendingAll": "Nøklene til {{name}} mottar ingen meldinger før denne enheten har tillitsbeslutningene dine fra en tidligere versjon eller fra de andre enhetene dine. Til da kan du ikke sende meldinger. Det prøves på nytt automatisk.",
                 "review": "Gjennomgå nøkler"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Kryptering er slått av",
+            "plaintextForcedTooltip": "Du har slått av kryptering for denne samtalen, så meldinger sendes i klartekst",
             "keyLocked": "Kryptering låst",
             "keyLockedTooltip": "Kryptering låst. Klikk for å låse opp",
             "encryptedClickToUnlock": "Kryptert melding. Klikk for å låse opp",
@@ -684,8 +684,8 @@
                 "fingerprint_mismatch": "Fingeravtrykket samsvarer ikke med den oppgitte verdien",
                 "uid_mismatch": "Sertifikatets identitet samsvarer ikke med samtalepartnerens adresse"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Slå av kryptering for denne samtalen",
+            "enableEncryption": "Slå på kryptering igjen",
             "tooltip": {
                 "header": "Kryptert",
                 "protocol": {
@@ -1655,7 +1655,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reagerte på '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reagerte på meldingen din",
         "see": "Vis"
     },
     "commands": {

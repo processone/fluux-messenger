@@ -647,8 +647,8 @@
             "verifiedTooltip": "Clau OpenPGP verificada",
             "tofuNewTooltip": "Contacte nou. Verifiqueu l'empremta per a confiança plena",
             "unverifiedKeysetTooltip": "Aquest contacte té una clau nova que no s'ha verificat.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Xifratge en pausa",
+            "blockedTooltip": "La clau del contacte ha canviat. Resoleu-ho per reprendre el xifratge",
             "sendBlockedEncryptionRequired": "Missatge no enviat. El xifratge és obligatori per a aquesta conversa, però ara mateix no està disponible.",
             "sendBlockedKeyChanged": "Missatge no enviat. La clau de xifratge d'aquest contacte ha canviat. Reviseu el canvi de clau abans d'enviar.",
             "sendBlockedKeyLocked": "Missatge no enviat. Desbloquegeu la vostra clau de xifratge per enviar aquest missatge.",
@@ -664,8 +664,8 @@
                 "pendingAll": "Les claus de {{name}} no reben missatges fins que aquest dispositiu no tingui les vostres decisions de confiança d'una versió anterior o dels vostres altres dispositius. Fins aleshores no podeu enviar missatges. Es torna a provar automàticament.",
                 "review": "Revisa les claus"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Xifratge desactivat",
+            "plaintextForcedTooltip": "Heu desactivat el xifratge per a aquesta conversa, de manera que els missatges s'envien en text pla",
             "keyLocked": "Xifratge bloquejat",
             "keyLockedTooltip": "Xifratge bloquejat. Feu clic per desbloquejar",
             "encryptedClickToUnlock": "Missatge xifrat. Feu clic per desbloquejar",
@@ -688,8 +688,8 @@
                 "fingerprint_mismatch": "L'empremta digital no coincideix amb el valor anunciat",
                 "uid_mismatch": "La identitat del certificat no coincideix amb l'adreça del contacte"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Desactiva el xifratge per a aquesta conversa",
+            "enableEncryption": "Torna a activar el xifratge",
             "tooltip": {
                 "header": "Xifrat",
                 "protocol": {
@@ -1659,7 +1659,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} ha reaccionat a '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} ha reaccionat al vostre missatge",
         "see": "Mostra"
     },
     "commands": {

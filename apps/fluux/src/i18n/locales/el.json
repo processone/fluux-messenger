@@ -644,8 +644,8 @@
             "verifiedTooltip": "Επαληθευμένο κλειδί OpenPGP",
             "tofuNewTooltip": "Νέα επαφή. Επαληθεύστε το αποτύπωμα για πλήρη εμπιστοσύνη",
             "unverifiedKeysetTooltip": "Αυτή η επαφή έχει ένα νέο κλειδί που δεν έχει επαληθευτεί.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Η κρυπτογράφηση είναι σε παύση",
+            "blockedTooltip": "Το κλειδί του συνομιλητή άλλαξε. Επιλύστε το για να συνεχιστεί η κρυπτογράφηση",
             "sendBlockedEncryptionRequired": "Το μήνυμα δεν στάλθηκε. Η κρυπτογράφηση απαιτείται για αυτή τη συνομιλία αλλά δεν είναι διαθέσιμη αυτή τη στιγμή.",
             "sendBlockedKeyChanged": "Το μήνυμα δεν στάλθηκε. Το κλειδί κρυπτογράφησης αυτής της επαφής άλλαξε. Ελέγξτε την αλλαγή κλειδιού πριν την αποστολή.",
             "sendBlockedKeyLocked": "Το μήνυμα δεν στάλθηκε. Ξεκλειδώστε το κλειδί κρυπτογράφησής σας για να στείλετε αυτό το μήνυμα.",
@@ -661,8 +661,8 @@
                 "pendingAll": "Τα κλειδιά της επαφής {{name}} δεν λαμβάνουν μηνύματα μέχρι αυτή η συσκευή να λάβει τις αποφάσεις εμπιστοσύνης σας από προηγούμενη έκδοση ή από τις άλλες συσκευές σας. Μέχρι τότε δεν μπορείτε να στείλετε μηνύματα. Η προσπάθεια επαναλαμβάνεται αυτόματα.",
                 "review": "Έλεγχος κλειδιών"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Η κρυπτογράφηση απενεργοποιήθηκε",
+            "plaintextForcedTooltip": "Απενεργοποιήσατε την κρυπτογράφηση για αυτή τη συνομιλία, οπότε τα μηνύματα αποστέλλονται σε απλό κείμενο",
             "keyLocked": "Η κρυπτογράφηση είναι κλειδωμένη",
             "keyLockedTooltip": "Η κρυπτογράφηση είναι κλειδωμένη. Κάντε κλικ για ξεκλείδωμα",
             "encryptedClickToUnlock": "Κρυπτογραφημένο μήνυμα. Κάντε κλικ για ξεκλείδωμα",
@@ -685,8 +685,8 @@
                 "fingerprint_mismatch": "Το αποτύπωμα δεν ταιριάζει με τη δηλωμένη τιμή",
                 "uid_mismatch": "Η ταυτότητα του πιστοποιητικού δεν ταιριάζει με τη διεύθυνση του συνομιλητή"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Απενεργοποίηση κρυπτογράφησης για αυτή τη συνομιλία",
+            "enableEncryption": "Επανενεργοποίηση κρυπτογράφησης",
             "tooltip": {
                 "header": "Κρυπτογραφημένο",
                 "protocol": {
@@ -1656,7 +1656,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} αντέδρασε στο '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} αντέδρασε στο μήνυμά σας",
         "see": "Προβολή"
     },
     "commands": {

@@ -649,8 +649,8 @@
             "verifiedTooltip": "Zweryfikowany klucz OpenPGP",
             "tofuNewTooltip": "Nowy kontakt. Zweryfikuj odcisk palca, aby uzyskać pełne zaufanie",
             "unverifiedKeysetTooltip": "Ten kontakt ma nowy klucz, który nie został zweryfikowany.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Szyfrowanie wstrzymane",
+            "blockedTooltip": "Klucz rozmówcy się zmienił. Rozwiąż problem, aby wznowić szyfrowanie",
             "sendBlockedEncryptionRequired": "Wiadomość nie została wysłana. Ta rozmowa wymaga szyfrowania, ale obecnie jest ono niedostępne.",
             "sendBlockedKeyChanged": "Wiadomość nie została wysłana. Klucz szyfrowania tego kontaktu uległ zmianie. Przejrzyj zmianę klucza przed wysłaniem.",
             "sendBlockedKeyLocked": "Wiadomość nie została wysłana. Odblokuj swój klucz szyfrowania, aby wysłać tę wiadomość.",
@@ -666,8 +666,8 @@
                 "pendingAll": "Klucze kontaktu {{name}} nie otrzymują wiadomości, dopóki to urządzenie nie otrzyma Twoich decyzji dotyczących zaufania z wcześniejszej wersji lub z Twoich innych urządzeń. Do tego czasu nie możesz wysyłać wiadomości. Próba jest ponawiana automatycznie.",
                 "review": "Przejrzyj klucze"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Szyfrowanie wyłączone",
+            "plaintextForcedTooltip": "Wyłączono szyfrowanie w tej rozmowie, więc wiadomości są wysyłane jawnym tekstem",
             "keyLocked": "Szyfrowanie zablokowane",
             "keyLockedTooltip": "Szyfrowanie zablokowane. Kliknij, aby odblokować",
             "encryptedClickToUnlock": "Wiadomość zaszyfrowana. Kliknij, aby odblokować",
@@ -690,8 +690,8 @@
                 "fingerprint_mismatch": "Odcisk palca nie odpowiada zadeklarowanej wartości",
                 "uid_mismatch": "Tożsamość certyfikatu nie odpowiada adresowi rozmówcy"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Wyłącz szyfrowanie w tej rozmowie",
+            "enableEncryption": "Włącz ponownie szyfrowanie",
             "tooltip": {
                 "header": "Zaszyfrowane",
                 "protocol": {
@@ -1661,7 +1661,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} zareagował(a) na '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} zareagował(a) na Twoją wiadomość",
         "see": "Pokaż"
     },
     "commands": {

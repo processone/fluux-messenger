@@ -647,8 +647,8 @@
             "verifiedTooltip": "Patvirtintas OpenPGP raktas",
             "tofuNewTooltip": "Naujas kontaktas. Patikrinkite piršto atspaudą pilnam pasitikėjimui",
             "unverifiedKeysetTooltip": "Šis kontaktas turi naują raktą, kuris nebuvo patvirtintas.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Šifravimas pristabdytas",
+            "blockedTooltip": "Pašnekovo raktas pasikeitė. Išspręskite tai, kad atnaujintumėte šifravimą",
             "sendBlockedEncryptionRequired": "Pranešimas neišsiųstas. Šiam pokalbiui reikalingas šifravimas, bet šiuo metu jis nepasiekiamas.",
             "sendBlockedKeyChanged": "Pranešimas neišsiųstas. Šio kontakto šifravimo raktas pasikeitė. Prieš siųsdami peržiūrėkite rakto pakeitimą.",
             "sendBlockedKeyLocked": "Pranešimas neišsiųstas. Atrakinkite savo šifravimo raktą, kad galėtumėte išsiųsti šį pranešimą.",
@@ -664,8 +664,8 @@
                 "pendingAll": "{{name}} raktai negauna žinučių, kol šis įrenginys negaus jūsų pasitikėjimo sprendimų iš ankstesnės versijos ar kitų jūsų įrenginių. Iki tol negalite siųsti žinučių. Bandoma iš naujo automatiškai.",
                 "review": "Peržiūrėti raktus"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Šifravimas išjungtas",
+            "plaintextForcedTooltip": "Išjungėte šifravimą šiam pokalbiui, todėl pranešimai siunčiami atviru tekstu",
             "keyLocked": "Šifravimas užrakintas",
             "keyLockedTooltip": "Šifravimas užrakintas. Spustelėkite, kad atrakintumėte",
             "encryptedClickToUnlock": "Šifruotas pranešimas. Spustelėkite, kad atrakintumėte",
@@ -688,8 +688,8 @@
                 "fingerprint_mismatch": "Piršto antspaudas neatitinka skelbiamos reikšmės",
                 "uid_mismatch": "Sertifikato tapatybė neatitinka pašnekovo adreso"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Išjungti šifravimą šiam pokalbiui",
+            "enableEncryption": "Vėl įjungti šifravimą",
             "tooltip": {
                 "header": "Šifruota",
                 "protocol": {
@@ -1659,7 +1659,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} sureagavo į '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} sureagavo į jūsų pranešimą",
         "see": "Peržiūrėti"
     },
     "commands": {

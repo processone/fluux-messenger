@@ -645,8 +645,8 @@
             "verifiedTooltip": "Verifizierter OpenPGP-Schlüssel",
             "tofuNewTooltip": "Neuer Kontakt. Fingerabdruck prüfen für volles Vertrauen",
             "unverifiedKeysetTooltip": "Dieser Kontakt hat einen neuen Schlüssel, der nicht verifiziert wurde.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Verschlüsselung unterbrochen",
+            "blockedTooltip": "Der Schlüssel des Gesprächspartners hat sich geändert. Löse das Problem, um die Verschlüsselung fortzusetzen",
             "sendBlockedEncryptionRequired": "Nachricht nicht gesendet. Für diese Unterhaltung ist Verschlüsselung erforderlich, aber derzeit nicht verfügbar.",
             "sendBlockedKeyChanged": "Nachricht nicht gesendet. Der Verschlüsselungsschlüssel dieses Kontakts hat sich geändert. Überprüfe die Schlüsseländerung vor dem Senden.",
             "sendBlockedKeyLocked": "Nachricht nicht gesendet. Entsperre deinen Verschlüsselungsschlüssel, um diese Nachricht zu senden.",
@@ -662,8 +662,8 @@
                 "pendingAll": "Die Schlüssel von {{name}} erhalten keine Nachrichten, bis dieses Gerät deine Vertrauensentscheidungen aus einer früheren Version oder von deinen anderen Geräten hat. Bis dahin kannst du keine Nachrichten senden. Das wird automatisch erneut versucht.",
                 "review": "Schlüssel prüfen"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Verschlüsselung deaktiviert",
+            "plaintextForcedTooltip": "Du hast die Verschlüsselung für diese Unterhaltung deaktiviert, daher werden Nachrichten im Klartext gesendet",
             "keyLocked": "Verschlüsselung gesperrt",
             "keyLockedTooltip": "Verschlüsselung gesperrt. Zum Entsperren klicken",
             "encryptedClickToUnlock": "Verschlüsselte Nachricht. Zum Entsperren klicken",
@@ -686,8 +686,8 @@
                 "fingerprint_mismatch": "Fingerabdruck stimmt nicht mit dem angegebenen Wert überein",
                 "uid_mismatch": "Zertifikatsidentität stimmt nicht mit der Adresse des Gesprächspartners überein"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Verschlüsselung für diese Unterhaltung deaktivieren",
+            "enableEncryption": "Verschlüsselung wieder aktivieren",
             "tooltip": {
                 "header": "Verschlüsselt",
                 "protocol": {
@@ -1657,7 +1657,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} hat auf '{{preview}}' reagiert",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} hat auf deine Nachricht reagiert",
         "see": "Anzeigen"
     },
     "commands": {

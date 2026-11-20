@@ -643,8 +643,8 @@
             "verifiedTooltip": "Проверен OpenPGP ключ",
             "tofuNewTooltip": "Нов контакт. Проверете отпечатъка за пълно доверие",
             "unverifiedKeysetTooltip": "Този контакт има нов ключ, който не е потвърден.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Криптирането е на пауза",
+            "blockedTooltip": "Ключът на събеседника е променен. Разрешете проблема, за да възобновите криптирането",
             "sendBlockedEncryptionRequired": "Съобщението не е изпратено. За този разговор се изисква криптиране, но в момента не е налично.",
             "sendBlockedKeyChanged": "Съобщението не е изпратено. Ключът за криптиране на този контакт е променен. Прегледайте промяната на ключа преди изпращане.",
             "sendBlockedKeyLocked": "Съобщението не е изпратено. Отключете своя ключ за криптиране, за да изпратите това съобщение.",
@@ -660,8 +660,8 @@
                 "pendingAll": "Ключовете на {{name}} не получават съобщения, докато това устройство не получи решенията ви за доверие от по-стара версия или от другите ви устройства. Дотогава не можете да изпращате съобщения. Опитът се повтаря автоматично.",
                 "review": "Преглед на ключовете"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Криптирането е изключено",
+            "plaintextForcedTooltip": "Изключихте криптирането за този разговор, затова съобщенията се изпращат в чист текст",
             "keyLocked": "Криптирането е заключено",
             "keyLockedTooltip": "Криптирането е заключено. Щракнете за отключване",
             "encryptedClickToUnlock": "Шифровано съобщение. Щракнете за отключване",
@@ -684,8 +684,8 @@
                 "fingerprint_mismatch": "Отпечатъкът не съвпада с обявената стойност",
                 "uid_mismatch": "Идентичността на сертификата не съвпада с адреса на отсрещната страна"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Изключване на криптирането за този разговор",
+            "enableEncryption": "Повторно включване на криптирането",
             "tooltip": {
                 "header": "Шифровано",
                 "protocol": {
@@ -1655,7 +1655,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} реагира на '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} реагира на вашето съобщение",
         "see": "Виж"
     },
     "commands": {

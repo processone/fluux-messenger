@@ -646,8 +646,8 @@
             "verifiedTooltip": "Pārbaudīta OpenPGP atslēga",
             "tofuNewTooltip": "Jauns kontakts. Pārbaudiet pirkstu nospiedumu pilnai uzticībai",
             "unverifiedKeysetTooltip": "Šim kontaktam ir jauna atslēga, kas nav pārbaudīta.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Šifrēšana apturēta",
+            "blockedTooltip": "Sarunbiedra atslēga ir mainījusies. Atrisiniet to, lai atsāktu šifrēšanu",
             "sendBlockedEncryptionRequired": "Ziņojums nav nosūtīts. Šai sarunai ir nepieciešama šifrēšana, taču pašlaik tā nav pieejama.",
             "sendBlockedKeyChanged": "Ziņojums nav nosūtīts. Šī kontakta šifrēšanas atslēga mainījās. Pirms sūtīšanas pārskatiet atslēgas izmaiņas.",
             "sendBlockedKeyLocked": "Ziņojums nav nosūtīts. Atbloķējiet savu šifrēšanas atslēgu, lai nosūtītu šo ziņojumu.",
@@ -663,8 +663,8 @@
                 "pendingAll": "{{name}} atslēgas nesaņem ziņas, līdz šī ierīce saņem jūsu uzticēšanās lēmumus no iepriekšējās versijas vai no jūsu citām ierīcēm. Līdz tam jūs nevarat sūtīt ziņas. Mēģinājums tiek automātiski atkārtots.",
                 "review": "Pārskatīt atslēgas"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Šifrēšana izslēgta",
+            "plaintextForcedTooltip": "Jūs izslēdzāt šifrēšanu šai sarunai, tāpēc ziņojumi tiek sūtīti atklātā tekstā",
             "keyLocked": "Šifrēšana ir bloķēta",
             "keyLockedTooltip": "Šifrēšana ir bloķēta. Noklikšķiniet, lai atbloķētu",
             "encryptedClickToUnlock": "Šifrēts ziņojums. Noklikšķiniet, lai atbloķētu",
@@ -687,8 +687,8 @@
                 "fingerprint_mismatch": "Pirkstu nospiedums neatbilst norādītajai vērtībai",
                 "uid_mismatch": "Sertifikāta identitāte neatbilst sarunu biedra adresei"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Izslēgt šifrēšanu šai sarunai",
+            "enableEncryption": "Atkārtoti ieslēgt šifrēšanu",
             "tooltip": {
                 "header": "Šifrēts",
                 "protocol": {
@@ -1658,7 +1658,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reaģēja uz '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reaģēja uz jūsu ziņojumu",
         "see": "Skatīt"
     },
     "commands": {

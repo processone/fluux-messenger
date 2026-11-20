@@ -647,8 +647,8 @@
             "verifiedTooltip": "Cheie OpenPGP verificată",
             "tofuNewTooltip": "Contact nou. Verificați amprenta pentru încredere deplină",
             "unverifiedKeysetTooltip": "Acest contact are o cheie nouă care nu a fost verificată.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Criptare în pauză",
+            "blockedTooltip": "Cheia interlocutorului s-a schimbat. Rezolvă problema pentru a relua criptarea",
             "sendBlockedEncryptionRequired": "Mesaj netrimis. Criptarea este obligatorie pentru această conversație, dar nu este disponibilă momentan.",
             "sendBlockedKeyChanged": "Mesaj netrimis. Cheia de criptare a acestui contact s-a schimbat. Verifică schimbarea cheii înainte de a trimite.",
             "sendBlockedKeyLocked": "Mesaj netrimis. Deblochează cheia ta de criptare pentru a trimite acest mesaj.",
@@ -664,8 +664,8 @@
                 "pendingAll": "Cheile lui {{name}} nu primesc mesaje până când acest dispozitiv nu are deciziile tale de încredere dintr-o versiune anterioară sau de pe celelalte dispozitive ale tale. Până atunci nu poți trimite mesaje. Se încearcă din nou automat.",
                 "review": "Revizuiește cheile"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Criptare dezactivată",
+            "plaintextForcedTooltip": "Ai dezactivat criptarea pentru această conversație, așa că mesajele sunt trimise în text simplu",
             "keyLocked": "Criptare blocată",
             "keyLockedTooltip": "Criptare blocată. Apasă pentru a debloca",
             "encryptedClickToUnlock": "Mesaj criptat. Apasă pentru a debloca",
@@ -688,8 +688,8 @@
                 "fingerprint_mismatch": "Amprenta nu corespunde valorii anunțate",
                 "uid_mismatch": "Identitatea certificatului nu corespunde adresei interlocutorului"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Dezactivează criptarea pentru această conversație",
+            "enableEncryption": "Reactivează criptarea",
             "tooltip": {
                 "header": "Criptat",
                 "protocol": {
@@ -1659,7 +1659,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} a reacționat la '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} a reacționat la mesajul tău",
         "see": "Vezi"
     },
     "commands": {

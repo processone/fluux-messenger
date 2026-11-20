@@ -649,8 +649,8 @@
             "verifiedTooltip": "Preverjen ključ OpenPGP",
             "tofuNewTooltip": "Nov stik. Preverite prstni odtis za popolno zaupanje",
             "unverifiedKeysetTooltip": "Ta stik ima nov ključ, ki ni bil preverjen.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Šifriranje zaustavljeno",
+            "blockedTooltip": "Ključ sogovornika se je spremenil. Razrešite to, da nadaljujete šifriranje",
             "sendBlockedEncryptionRequired": "Sporočilo ni bilo poslano. Za ta pogovor je zahtevano šifriranje, vendar trenutno ni na voljo.",
             "sendBlockedKeyChanged": "Sporočilo ni bilo poslano. Ključ za šifriranje tega stika se je spremenil. Pred pošiljanjem preglejte spremembo ključa.",
             "sendBlockedKeyLocked": "Sporočilo ni bilo poslano. Odklenite svoj ključ za šifriranje, da pošljete to sporočilo.",
@@ -666,8 +666,8 @@
                 "pendingAll": "Ključi stika {{name}} ne prejemajo sporočil, dokler ta naprava ne dobi vaših odločitev o zaupanju iz starejše različice ali z vaših drugih naprav. Do takrat ne morete pošiljati sporočil. Poskus se samodejno ponavlja.",
                 "review": "Preglej ključe"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Šifriranje izklopljeno",
+            "plaintextForcedTooltip": "Za ta pogovor ste izklopili šifriranje, zato se sporočila pošiljajo v navadnem besedilu",
             "keyLocked": "Šifriranje zaklenjeno",
             "keyLockedTooltip": "Šifriranje zaklenjeno. Kliknite za odklepanje",
             "encryptedClickToUnlock": "Šifrirano sporočilo. Kliknite za odklepanje",
@@ -690,8 +690,8 @@
                 "fingerprint_mismatch": "Prstni odtis se ne ujema z objavljeno vrednostjo",
                 "uid_mismatch": "Identiteta potrdila se ne ujema z naslovom sogovornika"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Izklopi šifriranje za ta pogovor",
+            "enableEncryption": "Znova vklopi šifriranje",
             "tooltip": {
                 "header": "Šifrirano",
                 "protocol": {
@@ -1661,7 +1661,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} se je odzval(a) na '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} se je odzval(a) na vaše sporočilo",
         "see": "Prikaži"
     },
     "commands": {

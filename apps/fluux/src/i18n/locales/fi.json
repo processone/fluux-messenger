@@ -643,8 +643,8 @@
             "verifiedTooltip": "Vahvistettu OpenPGP-avain",
             "tofuNewTooltip": "Uusi yhteystieto. Vahvista sormenjälki täyttä luottamusta varten",
             "unverifiedKeysetTooltip": "Tällä yhteystiedolla on uusi avain, jota ei ole vahvistettu.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Salaus on tauolla",
+            "blockedTooltip": "Keskustelukumppanin avain on muuttunut. Ratkaise asia jatkaaksesi salausta",
             "sendBlockedEncryptionRequired": "Viestiä ei lähetetty. Tämä keskustelu vaatii salausta, mutta se ei ole juuri nyt käytettävissä.",
             "sendBlockedKeyChanged": "Viestiä ei lähetetty. Tämän yhteyshenkilön salausavain muuttui. Tarkista avaimen muutos ennen lähettämistä.",
             "sendBlockedKeyLocked": "Viestiä ei lähetetty. Avaa salausavaimesi lukitus lähettääksesi tämän viestin.",
@@ -660,8 +660,8 @@
                 "pendingAll": "Yhteystiedon {{name}} avaimet eivät vastaanota viestejä ennen kuin tämä laite saa luottamuspäätöksesi aiemmasta versiosta tai muilta laitteiltasi. Siihen asti et voi lähettää viestejä. Yritystä toistetaan automaattisesti.",
                 "review": "Tarkista avaimet"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Salaus poistettu käytöstä",
+            "plaintextForcedTooltip": "Olet poistanut salauksen käytöstä tässä keskustelussa, joten viestit lähetetään selkokielisinä",
             "keyLocked": "Salaus lukittu",
             "keyLockedTooltip": "Salaus lukittu. Avaa napsauttamalla",
             "encryptedClickToUnlock": "Salattu viesti. Avaa napsauttamalla",
@@ -684,8 +684,8 @@
                 "fingerprint_mismatch": "Sormenjälki ei vastaa ilmoitettua arvoa",
                 "uid_mismatch": "Varmenteen identiteetti ei vastaa keskustelukumppanin osoitetta"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Poista salaus käytöstä tässä keskustelussa",
+            "enableEncryption": "Ota salaus uudelleen käyttöön",
             "tooltip": {
                 "header": "Salattu",
                 "protocol": {
@@ -1655,7 +1655,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reagoi viestiin '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reagoi viestiisi",
         "see": "Näytä"
     },
     "commands": {

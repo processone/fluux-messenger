@@ -645,8 +645,8 @@
             "verifiedTooltip": "Provjereni OpenPGP ključ",
             "tofuNewTooltip": "Novi kontakt. Provjerite otisak za potpuno povjerenje",
             "unverifiedKeysetTooltip": "Ovaj kontakt ima novi ključ koji nije provjeren.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Šifriranje pauzirano",
+            "blockedTooltip": "Ključ sugovornika se promijenio. Riješite to kako biste nastavili šifriranje",
             "sendBlockedEncryptionRequired": "Poruka nije poslana. Za ovaj je razgovor potrebno šifriranje, ali trenutačno nije dostupno.",
             "sendBlockedKeyChanged": "Poruka nije poslana. Ključ za šifriranje ovog kontakta se promijenio. Pregledajte promjenu ključa prije slanja.",
             "sendBlockedKeyLocked": "Poruka nije poslana. Otključajte svoj ključ za šifriranje kako biste poslali ovu poruku.",
@@ -662,8 +662,8 @@
                 "pendingAll": "Ključevi kontakta {{name}} ne primaju poruke dok ovaj uređaj ne dobije vaše odluke o povjerenju iz starije verzije ili s vaših drugih uređaja. Do tada ne možete slati poruke. Pokušaj se automatski ponavlja.",
                 "review": "Pregledaj ključeve"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Šifriranje isključeno",
+            "plaintextForcedTooltip": "Isključili ste šifriranje za ovaj razgovor, pa se poruke šalju u običnom tekstu",
             "keyLocked": "Šifriranje zaključano",
             "keyLockedTooltip": "Šifriranje zaključano. Kliknite za otključavanje",
             "encryptedClickToUnlock": "Šifrirana poruka. Kliknite za otključavanje",
@@ -686,8 +686,8 @@
                 "fingerprint_mismatch": "Otisak ne odgovara objavljenoj vrijednosti",
                 "uid_mismatch": "Identitet certifikata ne odgovara adresi sugovornika"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Isključi šifriranje za ovaj razgovor",
+            "enableEncryption": "Ponovno uključi šifriranje",
             "tooltip": {
                 "header": "Šifrirano",
                 "protocol": {
@@ -1657,7 +1657,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reagirao je na '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reagirao je na vašu poruku",
         "see": "Prikaži"
     },
     "commands": {
