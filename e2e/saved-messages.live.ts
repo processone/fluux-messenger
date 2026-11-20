@@ -2035,3 +2035,54 @@ test('with OpenPGP turned off, a restart leaves the list readable and a save goe
   await emptyNode(reader)
   await one.context.close(); await bob.stop(); await reader.stop()
 })
+
+test('with OpenPGP on, a deleted original is republished sealed without a clear flag, and a plain item on a node with nothing sealed is sealed under a new id once the key is unlocked', async ({ browser }) => {
+  test.setTimeout(300_000)
+  await forgetOpenpgpIdentity('alice')
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser, 'alice', { openpgp: true })
+
+  // 1. Deletion: the saved copy of a message its sender retracts is rewritten sealed, with nothing readable and no clear flag.
+  const text = `Deleted and sealed ${stamp}`
+  const id = await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text }).last()).toBeVisible({ timeout: 30_000 })
+  await saveMessage(one, text)
+  const [original] = await nodeHolds(reader, 1)
+  expectSealed(original, [text, 'bob@localhost'])
+  await bob.retract('alice', id)
+  await expect.poll(async () => (await reader.items())[0] ?? original, { timeout: 45_000 }).not.toBe(original)
+  const [rewritten] = await nodeHolds(reader, 1)
+  expectSealed(rewritten, [text, 'bob@localhost', 'deleted', '<body'])
+  await openSaved(one)
+  await expect(savedRow(one, 'Message deleted')).toBeVisible({ timeout: 30_000 })
+  await shot(one.page, 'sealed-deleted')
+  // Clear the node by retracting its item, so the node the app created (with its own configuration) stays.
+  const rewrittenId = /<item\b[^>]*\bid=["']([^"']+)["']/.exec(rewritten)![1]
+  await reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('retract', { node: NODE, notify: 'true' }, xml('item', { id: rewrittenId })))))
+  await nodeHolds(reader, 0)
+
+  // 2. Migration: a plain item (as written before OpenPGP was on) on a node holding nothing sealed. Locked first, then unlocked.
+  await one.page.reload()
+  const prompt = one.page.getByRole('dialog', { name: 'Unlock End-to-End Encryption' })
+  await expect(prompt).toBeVisible({ timeout: 30_000 })
+  const legacy = `Plain before OpenPGP ${stamp}`
+  await reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('publish', { node: NODE },
+    xml('item', { id: `legacy-${stamp}` }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }, xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
+      xml('message', { xmlns: 'jabber:client', from: 'bob@localhost', to: 'alice@localhost', type: 'chat', id: `legacy-m-${stamp}` }, xml('body', {}, legacy)))))))))
+  await nodeHolds(reader, 1)
+  await one.page.locator('input[type=password]').first().fill(PASSPHRASE)
+  await one.page.getByRole('button', { name: 'Unlock', exact: true }).last().click()
+  await expect.poll(async () => { const items = await reader.items(); return items.length === 1 && items[0].includes('<sealed') }, { timeout: 60_000 }).toBe(true)
+  const [migrated] = await reader.items()
+  expectSealed(migrated, [legacy, 'bob@localhost', '<body'])
+  expect(migrated).not.toContain(`legacy-${stamp}`) // a new random id, the plain item is retracted
+  await openSaved(one)
+  await expect(savedRow(one, legacy)).toBeVisible({ timeout: 30_000 })
+  await expect(one.page.getByTestId('saved-unverified')).toHaveCount(0)
+  await shot(one.page, 'migrated-sealed')
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
+})
