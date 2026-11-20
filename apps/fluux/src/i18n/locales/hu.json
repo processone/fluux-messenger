@@ -1802,5 +1802,12 @@
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
         "unverified": "Not verified: not sealed with your key"
+    },
+    "errorBoundary": {
+        "title": "Hiba történt",
+        "description": "A Fluux ezen része nem jeleníthető meg. Az alkalmazás többi része tovább működik.",
+        "panel": "Ez a panel nem jeleníthető meg.",
+        "message": "Ez az üzenet nem jeleníthető meg.",
+        "retry": "Újrapróbálás"
     }
 }

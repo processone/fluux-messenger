@@ -1806,5 +1806,12 @@
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
         "unverified": "Not verified: not sealed with your key"
+    },
+    "errorBoundary": {
+        "title": "Alguna cosa ha anat malament",
+        "description": "No s'ha pogut mostrar aquesta part de Fluux. La resta de l'aplicació continua funcionant.",
+        "panel": "No s'ha pogut mostrar aquest tauler.",
+        "message": "No s'ha pogut mostrar aquest missatge.",
+        "retry": "Torna-ho a provar"
     }
 }

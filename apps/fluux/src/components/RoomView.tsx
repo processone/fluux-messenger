@@ -36,6 +36,7 @@ import { ConversationColumn, ConversationTail } from './conversation/Conversatio
 import { RoomHeader } from './RoomHeader'
 import { RoomVoiceControls } from './RoomVoiceControls'
 import { OccupantPanel } from './OccupantPanel'
+import { RegionErrorBoundary } from './RegionErrorBoundary'
 import { OccupantModerationModal } from './OccupantModerationModal'
 import { RoomBulkModerationModal } from './RoomBulkModerationModal'
 import { canBulkModerate } from './roomBulkModeration'
@@ -791,15 +792,17 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             className="fixed-below-titlebar z-30 bg-black/50 lg:hidden"
           />
           <div className="fixed bottom-0 top-[var(--fluux-window-titlebar-height)] end-0 z-40 flex shadow-xl animate-drawer-in lg:static lg:z-auto lg:shadow-none">
-            <OccupantPanel
-              room={activeRoom}
-              contactsByJid={contactsByJid}
-              ownAvatar={ownAvatar}
-              onClose={handleCloseOccupants}
-              onStartChat={onStartChat}
-              onWhisper={enterWhisperMode}
-              onShowProfile={onShowProfile}
-            />
+            <RegionErrorBoundary region="occupants" variant="panel" resetKey={activeRoom.jid}>
+              <OccupantPanel
+                room={activeRoom}
+                contactsByJid={contactsByJid}
+                ownAvatar={ownAvatar}
+                onClose={handleCloseOccupants}
+                onStartChat={onStartChat}
+                onWhisper={enterWhisperMode}
+                onShowProfile={onShowProfile}
+              />
+            </RegionErrorBoundary>
           </div>
         </>
       )}
@@ -956,6 +959,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     <>
       {roomContent}
       {renderMobileOccupants?.(
+        <RegionErrorBoundary region="occupants" variant="panel" resetKey={activeRoom.jid} onBack={onCloseMobileOccupants ?? handleCloseOccupants}>
         <OccupantPanel
           room={activeRoom}
           contactsByJid={contactsByJid}
@@ -972,7 +976,8 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             composerHandleRef.current?.focus()
           }}
           fullScreen
-        />,
+        />
+        </RegionErrorBoundary>,
       )}
     </>
   )

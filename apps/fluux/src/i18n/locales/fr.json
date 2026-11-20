@@ -1805,5 +1805,12 @@
         "lockedHint": "Ils sont scellés avec votre clé OpenPGP. Déverrouillez votre clé pour les lire.",
         "lockedSome": "{{count}} messages enregistrés restent verrouillés tant que votre clé OpenPGP n'est pas déverrouillée.",
         "unverified": "Non vérifié : non scellé avec votre clé"
+    },
+    "errorBoundary": {
+        "title": "Un problème est survenu",
+        "description": "Cette partie de Fluux n'a pas pu s'afficher. Le reste de l'application continue de fonctionner.",
+        "panel": "Ce panneau n'a pas pu s'afficher.",
+        "message": "Ce message n'a pas pu s'afficher.",
+        "retry": "Réessayer"
     }
 }

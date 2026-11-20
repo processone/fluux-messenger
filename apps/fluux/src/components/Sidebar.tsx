@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, type RefObject } from 'react'
+import { RegionErrorBoundary } from './RegionErrorBoundary'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
 import { useWindowDrag, useRouteSync, useFollowUnarchivedActive } from '@/hooks'
@@ -377,6 +378,7 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
           <div className="sidebar-scroll h-full overflow-y-auto rounded-sm py-0.5 px-0.5">
             <SidebarZoneContext.Provider value={sidebarListRef}>
               <div key={sidebarView} className="h-full md:h-auto" style={{ animation: 'sidebar-view-enter var(--fluux-duration-fast) var(--fluux-ease-standard)' }}>
+              <RegionErrorBoundary region="sidebar-list">
               {sidebarView === 'messages' ? (
                 showArchived ? <ArchiveList /> : <ConversationList />
               ) : sidebarView === 'contacts' ? (
@@ -398,6 +400,7 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
                   onCategoryChange={(category) => navigateToSettings(category)}
                 />
               ) : null}
+              </RegionErrorBoundary>
               </div>
             </SidebarZoneContext.Provider>
           </div>

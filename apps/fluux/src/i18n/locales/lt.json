@@ -1806,5 +1806,12 @@
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
         "unverified": "Not verified: not sealed with your key"
+    },
+    "errorBoundary": {
+        "title": "Kažkas nepavyko",
+        "description": "Šios Fluux dalies nepavyko parodyti. Likusi programėlės dalis veikia toliau.",
+        "panel": "Šio skydelio nepavyko parodyti.",
+        "message": "Šios žinutės nepavyko parodyti.",
+        "retry": "Bandyti dar kartą"
     }
 }

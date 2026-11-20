@@ -1802,5 +1802,12 @@
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
         "unverified": "Not verified: not sealed with your key"
+    },
+    "errorBoundary": {
+        "title": "문제가 발생했습니다",
+        "description": "Fluux의 이 부분을 표시할 수 없습니다. 앱의 나머지 부분은 계속 작동합니다.",
+        "panel": "이 패널을 표시할 수 없습니다.",
+        "message": "이 메시지를 표시할 수 없습니다.",
+        "retry": "다시 시도"
     }
 }
