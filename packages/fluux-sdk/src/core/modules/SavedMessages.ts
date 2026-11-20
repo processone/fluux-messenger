@@ -10,7 +10,7 @@ import { forwardedCopyElement, parseSavedForwardedCopy, boundedPlainText } from 
 import type { SavedMessage } from '../types/saved'
 import { savedMessageKey, savedItemId, sameSavedMessage } from '../../utils/savedMessageKeys'
 import { isE2EEPluginError } from '../e2ee/errors'
-import { readSealHint, writeSealHint } from '../../utils/savedSealHint'
+import { readSealHint } from '../../utils/savedSealHint'
 
 /**
  * Private, retained, one item per saved message. The node asks for a concrete
@@ -187,11 +187,11 @@ export class SavedMessages {
   sealState(): 'unavailable' | 'locked' | 'ready' {
     const manager = this.manager()
     const state = manager?.selfSealState() ?? 'unavailable'
-    if (state !== 'unavailable') { writeSealHint(true); return state }
-    // The plugin has joined and says there is no key: OpenPGP is off for this account.
-    if (manager?.getPlugin('openpgp')) { writeSealHint(false); return 'unavailable' }
-    // The plugin has not joined yet (or the host is not up): "not known yet" is not "off". An account that sealed
-    // last time keeps its list locked, so nothing is written in clear while the plugin starts.
+    if (state !== 'unavailable') return state
+    // The plugin has joined and says there is no key: nothing to seal with.
+    if (manager?.getPlugin('openpgp')) return 'unavailable'
+    // The plugin has not joined yet (or the host is not up): "not known yet" is not "off". While the app's OpenPGP
+    // setting is on (the app keeps this memory in step with it), the list stays locked, so nothing is written in clear while the plugin starts.
     return readSealHint() ? 'locked' : 'unavailable'
   }
 

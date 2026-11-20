@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { buildScopedStorageKey, clearSealHint, type E2EEErrorKind } from '@fluux/sdk'
+import { buildScopedStorageKey, setSavedSealing, type E2EEErrorKind } from '@fluux/sdk'
 
 /**
  * Typed snapshot of why E2EE plugin registration failed — mirrors
@@ -85,8 +85,7 @@ export const useEncryptionSettingsStore = create<EncryptionSettingsState>((set) 
       // localStorage unavailable — still update in-memory state so the
       // rest of the session behaves consistently.
     }
-    // Saved messages are sealed only while OpenPGP is on: forget that they were, so they are written plain again.
-    if (!enabled) clearSealHint(null, false)
+    setSavedSealing(enabled)
     set({ openpgpEnabled: enabled, registrationError: null })
   },
   pluginRegisteredAt: 0,
@@ -94,7 +93,11 @@ export const useEncryptionSettingsStore = create<EncryptionSettingsState>((set) 
     set((s) => ({ pluginRegisteredAt: s.pluginRegisteredAt + 1, registrationError: null })),
   registrationError: null,
   notifyPluginRegistrationFailed: (failure) => set({ registrationError: failure }),
-  rehydrate: () => set({ openpgpEnabled: loadOpenpgpEnabled() }),
+  rehydrate: () => {
+    const enabled = loadOpenpgpEnabled()
+    setSavedSealing(enabled)
+    set({ openpgpEnabled: enabled })
+  },
 }))
 
 /**

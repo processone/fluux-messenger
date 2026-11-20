@@ -71,14 +71,25 @@ describe('encryptionSettingsStore', () => {
       expect(useEncryptionSettingsStore.getState().registrationError).toBeNull()
     })
   })
+
   describe('saved messages seal memory', () => {
-    it('turning OpenPGP off forgets that saved messages were sealed, whichever way it is turned off', () => {
-      const key = buildScopedStorageKey('fluux-saved-sealing')
-      localStorage.setItem(key, '1')
+    const key = () => buildScopedStorageKey('fluux-saved-sealing')
+
+    it('follows the setting, whichever way it is turned off', () => {
       useEncryptionSettingsStore.getState().setOpenpgpEnabled(true)
-      expect(localStorage.getItem(key)).toBe('1')
+      expect(localStorage.getItem(key())).toBe('1')
       useEncryptionSettingsStore.getState().setOpenpgpEnabled(false)
-      expect(localStorage.getItem(key)).toBeNull()
+      expect(localStorage.getItem(key())).toBeNull()
+    })
+
+    it('is brought in step with the stored setting when it loads, memories of older builds included', () => {
+      localStorage.setItem(key(), '1') // left by an older build
+      localStorage.setItem(buildScopedStorageKey('fluux-e2ee-openpgp-enabled'), '0')
+      useEncryptionSettingsStore.getState().rehydrate()
+      expect(localStorage.getItem(key())).toBeNull()
+      localStorage.setItem(buildScopedStorageKey('fluux-e2ee-openpgp-enabled'), '1')
+      useEncryptionSettingsStore.getState().rehydrate()
+      expect(localStorage.getItem(key())).toBe('1')
     })
   })
 })

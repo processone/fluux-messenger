@@ -4,7 +4,7 @@ import type { Element } from '@xmpp/client'
 import { SavedMessages, parseSavedItems, savedItemId } from './SavedMessages'
 import { NS_PUBSUB, NS_SAVED_MESSAGES } from '../namespaces'
 import type { SavedMessage } from '../types/saved'
-import { clearSealHint } from '../../utils/savedSealHint'
+import { writeSealHint } from '../../utils/savedSealHint'
 
 const OWN = 'romeo@montague.example'
 
@@ -255,8 +255,7 @@ describe('SavedMessages sealing', () => {
     const early = () => { const host = sealedHost('unavailable'); host.registered = false; return host }
 
     it('treats an account that sealed last time as locked, so a save is never written in clear while the plugin starts', async () => {
-      const ready = sealedHost()
-      expect(setup(ready).saved.sealState()).toBe('ready')
+      writeSealHint(true) // the OpenPGP setting is on
       const host = early()
       const { sendIQ, saved } = setup(host)
       expect(saved.sealState()).toBe('locked')
@@ -270,17 +269,20 @@ describe('SavedMessages sealing', () => {
 
     it('treats an account with no history of sealing as plain, and a registered plugin without a key as off', async () => {
       expect(setup(early()).saved.sealState()).toBe('unavailable')
-      setup(sealedHost()) // sealed once
+      writeSealHint(true)
       const off = sealedHost('unavailable') // joined, no key
       expect(setup(off).saved.sealState()).toBe('unavailable')
-      expect(setup(early()).saved.sealState()).toBe('unavailable') // and the memory is dropped
+      // Reading the state never changes the memory: only the setting does.
+      expect(setup(early()).saved.sealState()).toBe('locked')
     })
 
     it('is plain again once the person turned OpenPGP off', () => {
+      writeSealHint(true)
+      // The plugin stays registered after the setting goes off (offline toggle, cancelled identity choice) and reports ready.
+      expect(setup(sealedHost()).saved.sealState()).toBe('ready')
+      writeSealHint(false)
       expect(setup(sealedHost()).saved.sealState()).toBe('ready')
       const { saved } = setup(early())
-      expect(saved.sealState()).toBe('locked')
-      clearSealHint(null, true)
       expect(saved.sealState()).toBe('unavailable')
     })
   })
