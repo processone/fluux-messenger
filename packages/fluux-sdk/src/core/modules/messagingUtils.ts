@@ -815,7 +815,7 @@ export function applyCorrection(
   messageEl: Element,
   body: string,
   originalBody: string,
-  options: { delayEl?: Element; authoredAt?: Date; expectedStanzaIdBy?: string; archiveId?: string } = {},
+  options: { delayEl?: Element; authoredAt?: Date; expectedStanzaIdBy?: string; archiveId?: string; room?: boolean } = {},
 ): CorrectionResult {
   const parsed = parseMessageContent({
     messageEl,
@@ -828,8 +828,9 @@ export function applyCorrection(
   return {
     body: parsed.processedBody,
     references: parsed.references,
-    // Rooms never carry a copy (first arrival drops it too), so a correction cannot give a room message one.
-    ...(parsed.forwarded && messageEl.attrs?.type !== 'groupchat' && { forwarded: parsed.forwarded }),
+    // Rooms never carry a copy (first arrival drops it too), so a correction cannot give a room message
+    // one. A caller that routes to a room says so (a whisper arrives as type chat); a groupchat stanza is one too.
+    ...(parsed.forwarded && !options.room && messageEl.attrs?.type !== 'groupchat' && { forwarded: parsed.forwarded }),
     ...correctionMarks(parsed),
     originalBody,
     ...(parsed.attachment && { attachment: parsed.attachment }),

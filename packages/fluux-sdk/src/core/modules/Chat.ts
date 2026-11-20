@@ -2238,7 +2238,7 @@ export class Chat extends BaseModule {
       const senderOccupantId = stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
       const original = candidate && this.isSameMucAuthor(candidate, from, senderOccupantId) ? candidate : undefined
       if (!original && !onMissing) return false
-      const updates = this.correctionUpdates(stanza, body, original, delayEl, correctionStanzaId, correctionExpectedBy)
+      const updates = this.correctionUpdates(stanza, body, original, delayEl, correctionStanzaId, correctionExpectedBy, true)
       if (updates) this.deps.emitSDK('room:message-updated', {
         roomJid: conversationId, messageId: originalId, updates,
         correctionActor: { actorJid: from, actorOccupantId: senderOccupantId }, ...(!original && { onCorrectionMissing }),
@@ -2271,12 +2271,14 @@ export class Chat extends BaseModule {
     delayEl: Element | undefined,
     correctionStanzaId: string | undefined,
     expectedStanzaIdBy: string,
+    room = false,
   ): (Partial<StoredMessage> & Partial<StoredRoomMessage>) | undefined {
     const authoredAt = readStashedAuthoredAt(stanza)
     const correctionData = this.correctionReceipts.withOrder(stanza, applyCorrection(stanza, body, original?.originalBody ?? original?.body ?? '', {
       ...(delayEl && { delayEl }),
       ...(authoredAt && { authoredAt }),
       expectedStanzaIdBy,
+      room,
     }))
     if (correctionStanzaId) {
       correctionData.correctionStanzaIds = withCorrectionStanzaId(original ? getCorrectionStanzaIds(original) : undefined, correctionStanzaId)
