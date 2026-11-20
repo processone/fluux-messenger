@@ -17,7 +17,7 @@
  *     deliberate fix: the panel previously sat on bg-fluux-sidebar
  *     (--fluux-sidebar-bg → --fluux-base-20), but 12 of 13 builtin themes override
  *     base-20 with their own light values (gruvbox #d5c4a1, tokyo-night #c4c8da,
- *     etc. — materially darker than Aurora's #EEF0F8), and base-20 is darker than
+ *     etc. — materially darker than Aurora's #F1F3F9), and base-20 is darker than
  *     base-30 in light mode, so the worst-case auroraSenderColor dropped below AA
  *     on five themes' light panel. Anchoring the panel to --fluux-chat-bg makes
  *     the name sit on the surface themeContrast.test.ts already guarantees is AA

@@ -34,7 +34,7 @@ export const changelog: ChangelogEntry[] = [
     }, {
       type: 'changed',
       items: [
-        'Aurora dark is a little lighter and calmer: the sidebar, frame and conversation now stand apart, text is softer on the eyes, and timestamps, code comments, keywords and the offline status dot are easier to read. Aurora light is unchanged',
+        'Aurora dark is a little lighter and calmer: the sidebar, frame and conversation now stand apart, text is softer on the eyes, and timestamps, code comments, keywords and the offline status dot are easier to read. Aurora light is cleaner too: a softer periwinkle accent, lighter sidebar, composer and quote cards, an icon rail tinted instead of grey, scrollbars that match the theme, and readable code comments and offline status dot',
         'Settings → Encryption now opens an overview with a row for OpenPGP and one for OMEMO. Each method has its own screen with a back arrow: OpenPGP keeps its switch, key backup and key controls, and OMEMO shows your devices. In the device list, a key fingerprint now wraps only between its groups of eight characters, and Remove is no longer red',
       ],
     }, {

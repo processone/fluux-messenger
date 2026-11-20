@@ -276,8 +276,8 @@
   --fluux-text-self: #A9B4FF;
   /* Encryption lock/shield icon color. Tuned to clear the 3:1 non-text contrast
      floor (WCAG 1.4.11) on the composer card (--fluux-base-40). Dark: #38E0C4
-     reaches 8.3:1 on #272C3F. Light override below uses #0D8872 (3.58:1 on
-     #E4E8F3). The global --fluux-accent-2 is NOT used here because its light
+     reaches 8.3:1 on #272C3F. Light override below uses #0D8872 (3.72:1 on
+     #E9ECF5). The global --fluux-accent-2 is NOT used here because its light
      value (#11A88C) only reaches ~2.45:1 on the card — below the 3:1 floor. */
   --fluux-text-encryption: #38E0C4;
   /* Error as text/icon (delivery failures, inline error labels). Split from the
@@ -508,18 +508,21 @@
   --fluux-base-00: #FFFFFF;
   --fluux-base-05: #F4F6FC;
   --fluux-base-10: #E7EAF4;
-  --fluux-base-20: #EEF0F8;
+  --fluux-base-20: #F1F3F9;
   --fluux-base-30: #FFFFFF;
-  --fluux-base-40: #E4E8F3;
-  --fluux-base-50: #DDE2F0;
+  --fluux-base-40: #E9ECF5;
+  --fluux-base-50: #E2E6F1;
   --fluux-base-60: #C2C9DC;
   --fluux-base-70: #79839E;
   --fluux-base-80: #5C6685;
   --fluux-base-90: #1B2233;
   --fluux-base-100: #0E1426;
 
-  /* Accent darkened for AA on light surfaces (white text on accent fills) */
-  --fluux-accent-l: 60%;
+  /* Accent for light surfaces: 85% saturation reads as periwinkle rather than
+     electric blue, and the 58% lightness keeps white text on it at ~5.7:1.
+     Matches the Periwinkle accent preset. */
+  --fluux-accent-s: 85%;
+  --fluux-accent-l: 58%;
 
   /* Palette overrides for light context */
   --fluux-color-blue: #0969da;
@@ -536,7 +539,8 @@
   --fluux-status-warning: #89600A;
   --fluux-presence-away: #A64B00;
   --fluux-presence-dnd: #C8252A;
-  --fluux-presence-offline: var(--fluux-base-60);
+  /* base-70: base-60 reached only ~1.7:1 on white. */
+  --fluux-presence-offline: var(--fluux-base-70);
   --fluux-focus-ring: hsl(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l));
   --fluux-status-error: #C8252A;
 
@@ -549,9 +553,11 @@
      (the shared --fluux-color-blue only reached ~4.2:1 there). Overrides just the
      link token; other blue uses (status-info, syntax) keep --fluux-color-blue. */
   --fluux-text-link: #0860C6;
-  /* Syntax: light keeps the original mapping (dark lifts both, see :root). */
-  --syntax-token-comment: var(--fluux-base-60);
-  --syntax-token-keyword: var(--fluux-color-purple);
+  /* Syntax: comments use the faint tier (base-60 sat at ~1.7:1 on white);
+     keywords use a deeper violet that clears AA on the message hover row too
+     (the shared purple fell to ~3.7:1 there). */
+  --syntax-token-comment: var(--fluux-text-faint);
+  --syntax-token-keyword: #6246D6;
 
   /* Error as text/icon — darkened so it clears WCAG AA on the white message
      surface and its hover row (light status-error #C8252A reached only ~4.56:1
@@ -568,7 +574,7 @@
   --fluux-private-hover: hsla(270, 70%, 55%, 0.18);
 
   /* Semantic overrides where cascade from foundation isn't sufficient */
-  --fluux-bg-secondary: #DDE2F0;
+  --fluux-bg-secondary: #E9ECF5;
   --fluux-sidebar-item-active: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.14);
   /* Black-alpha hairline on the light canvas, bumped for a clearer edge (~1.5:1). */
   --fluux-border-color: rgba(0, 0, 0, 0.18);
@@ -582,18 +588,19 @@
      gentle accent nudge (kept low so the card's muted preview text stays legible
      — the selected frame carries the actual separation guarantee). Issue #1008. */
   --fluux-quote-selected-overlay: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.14);
-  --fluux-scrollbar-thumb: #c4c9ce;
-  --fluux-scrollbar-thumb-hover: #a8adb3;
+  /* Tinted with the Aurora ramp hue instead of a neutral grey. */
+  --fluux-scrollbar-thumb: #C5CBDA;
+  --fluux-scrollbar-thumb-hover: #A9B0C4;
   /* Sidebar sits on a grayer surface than the white content area, so its thumb is
      nudged one step more prominent (the main thumb's hover shade) to keep equal
      visual weight — the convention the builtin light themes follow. */
   --fluux-scrollbar-thumb-sidebar: var(--fluux-scrollbar-thumb-hover);
-  --fluux-scrollbar-thumb-sidebar-hover: #8f949b;
+  --fluux-scrollbar-thumb-sidebar-hover: #8E96AD;
 
   /* ── Aurora identity (light) ── */
   --fluux-accent-2: #11A88C;
-  /* Encryption lock icon — #11A88C only reaches ~2.45:1 on the card bg #E4E8F3;
-     this darker teal clears 3.58:1 (non-text floor is 3:1, target 3.5+). */
+  /* Encryption lock icon — #11A88C only reaches ~2.5:1 on the card bg #E9ECF5;
+     this darker teal clears 3.72:1 (non-text floor is 3:1, target 3.5+). */
   --fluux-text-encryption: #0D8872;
   --fluux-grad: linear-gradient(135deg, #11A88C, #5B6CF0, #7C6CF0);
   /* Aurora light quartet (light) — muted dawn (D2): champagne whisper at the
@@ -621,6 +628,9 @@
      compositing --fluux-rail-overlay over --fluux-sidebar-bg at render time;
      no fixed rail token is needed in light mode. */
   --fluux-surface-divider: rgba(0, 0, 0, 0.07);
+  /* A faint ink-tinted shade for the icon rail: plain black at 0.14 turned the
+     lavender sidebar tone into a muddy grey. Still darker than the sidebar. */
+  --fluux-rail-overlay: rgba(20, 27, 64, 0.06);
 }
 
 /* Keep the whole form reachable when the keyboard leaves too little room for
