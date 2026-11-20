@@ -32,7 +32,6 @@ import { messageRowId, messageWrapIdentity } from './messageRowIdentity'
 import { useWrappedCodeBlocksStore } from '@/stores/wrappedCodeBlocksStore'
 import { messageRowRef, type MessageRowRef } from '@fluux/sdk'
 import { useRequestMessageTarget } from './messageTargetContext'
-import { useOwnGroupWidth } from './messageGroupWidth'
 import { resolveDisplayTrust } from './messageTrust'
 import { trustVisual } from '@/e2ee/trustVisual'
 import { MessageAttachments } from '../MessageAttachments'
@@ -191,12 +190,11 @@ export interface MessageBubbleProps {
   isCurrentMatch?: boolean
 
   /**
-   * Key of the consecutive own-message run this row belongs to (from
-   * {@link ownGroupKey}); undefined for incoming or solo own messages. When set,
-   * the row's tint box shares the run's widest width so the own-message tint
-   * reads as one clean rectangle instead of a ragged, per-row hug.
+   * Security context of the row that opened this row's avatar group. Set on
+   * continuation rows: when this row's displayed trust differs from the
+   * header's, the row shows its own trust badge in the avatar gutter.
    */
-  ownGroupKey?: string
+  groupSecurityContext?: BaseMessage['securityContext']
 }
 
 /**
@@ -239,6 +237,7 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   const prevSec = JSON.stringify(prev.message.securityContext ?? null)
   const nextSec = JSON.stringify(next.message.securityContext ?? null)
   if (prevSec !== nextSec) return false
+  if (JSON.stringify(prev.groupSecurityContext ?? null) !== JSON.stringify(next.groupSecurityContext ?? null)) return false
 
   // Unsupported-encryption tag — drives the muted lock hint. retryPendingDecrypts()
   // can set this on an already-rendered message (migration of stored OMEMO
@@ -320,7 +319,6 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
 
   // Own-message run identity — changes when grouping shifts, so the row can
   // (de)register from the shared-width coordinator.
-  if (prev.ownGroupKey !== next.ownGroupKey) return false
 
   // All data props are equal - skip re-render
   // (callback props like onReply, onEdit, etc. are intentionally ignored)
@@ -384,7 +382,7 @@ export const MessageBubble = memo(function MessageBubble({
   timeFormat,
   highlightTerms,
   isCurrentMatch,
-  ownGroupKey,
+  groupSecurityContext,
 }: MessageBubbleProps) {
   const { t } = useTranslation()
   // Route jumps to the list this row is rendered in, so a click inside a search/activity preview
@@ -451,6 +449,15 @@ export const MessageBubble = memo(function MessageBubble({
   // per-peer subscription is cheap.
   const keyDecisions = useKeyDecisions(message.isOutgoing ? null : getBareJid(message.from))
   const displayTrust = resolveDisplayTrust(message.securityContext, keyDecisions, message.isOutgoing)
+  // A continuation row joins its group across trust changes within one protocol
+  // (shouldShowAvatar), so it shows its own trust whenever that differs from
+  // the header's. Both sides resolve through the same live key decisions: two
+  // rows with the same stored trust can still differ once one signing key is
+  // verified.
+  const headerDisplayTrust = resolveDisplayTrust(groupSecurityContext, keyDecisions, message.isOutgoing)
+  const showTrustCue = !showAvatar && !isActionMessage(message.body) && !!message.securityContext
+    && !!groupSecurityContext
+    && (groupSecurityContext.protocolId !== message.securityContext.protocolId || headerDisplayTrust !== displayTrust)
 
   // Density-aware avatar: reads only `densityMode` (narrow selector) so this row
   // only re-renders on a density change, NOT on message append or composing toggle.
@@ -538,45 +545,11 @@ export const MessageBubble = memo(function MessageBubble({
 
   // Action capabilities — shared by the hover toolbar (MessageToolbar) and the
   // touch action menu (MessageActionSheet) so the two surfaces stay in lock-step.
-  // Own-message tint as a continuous surface across an avatar-group: `showAvatar`
-  // marks the group start (round the top), `isGroupEnd` the last row (round the
-  // bottom); interior rows stay square and the tint bridges the inter-row gap so
-  // the run reads as one panel under the group's lock indicator. Suppressed in a
-  // whisper thread (the bounded "private with X" card owns the fill there).
-  const ownTint = message.isOutgoing && !inThread
-  const ownTintClass = ownTint
-    ? `message-own-tint${showAvatar ? ' message-own-tint-start' : ''}${isGroupEnd ? ' message-own-tint-end' : ''}`
-    : ''
-  // Tighten the interior junctions of an own-message group so the merged surface
-  // reads as one block rather than messages separated by a blank line: a
-  // continuation row (no avatar) pulls up toward the message above; a row that a
-  // continuation follows (not the group end) pulls down toward the one below.
-  const ownRowClass = ownTint
-    ? `${!showAvatar ? ' message-own-cont-top' : ''}${!isGroupEnd ? ' message-own-cont-bottom' : ''}`
-    : ''
-  // Own-message tint hugs its content instead of spanning the row: `w-fit` sizes
-  // the filled surface to the widest line (body or the name+time header) and
-  // `max-w-full` still wraps long messages at the available width. The tint box
-  // sits inside a full-width content column, so incoming rows and
-  // whisper cards fill that column with `w-full`; their layout is unchanged.
-  const contentWidthClass = ownTint ? 'w-fit max-w-full' : 'w-full'
-  // A run of consecutive own messages shares its widest line's width so the tint
-  // reads as one clean rectangle rather than a ragged per-row hug. `ownGroupKey`
-  // is already undefined unless this is a MULTI-row own run; gate on `ownTint`
-  // too so a whisper-thread own message (a `flex-1` card) never gets pinned. The
-  // signature captures every field that changes the row's natural width so the
-  // group re-fits on content edits but not on hover/selection churn.
-  const ownGroupWidthSignature = `${message.body ?? ''}|${showAvatar ? 1 : 0}|${timeFormat}|${message.isRetracted ? 1 : 0}|${message.isEdited ? 1 : 0}|${JSON.stringify(message.reactions ?? {})}|${replyContext?.messageId ?? ''}|${message.attachment ? 1 : 0}|${message.linkPreview ? 1 : 0}|${message.poll ? 1 : 0}|${message.encryptedPayload ? 1 : 0}|${message.unsupportedEncryption?.name ?? ''}`
-  const { ref: ownGroupRef, remeasure: remeasureOwnGroup } = useOwnGroupWidth(ownTint ? ownGroupKey : undefined, message.id, ownGroupWidthSignature)
 
-  // Media (image/video/link-preview) reaches its final layout width only once it
-  // loads — after the own-group's initial width measure. Re-fit the group then so
-  // the loaded row's width is shared with its text siblings (else it overflows
-  // the pre-load pin and the tint reads as a ragged edge). Also forwards the
-  // parent's scroll re-pin so the timeline stays glued to the bottom.
+  // Forwards the parent's scroll re-pin when media reaches its final size, so the
+  // timeline stays glued to the bottom.
   const handleMediaLoad = () => {
     onMediaLoad?.()
-    remeasureOwnGroup()
   }
 
   const { canReply, canEdit, canDelete } = actions
@@ -653,7 +626,7 @@ export const MessageBubble = memo(function MessageBubble({
       data-message-time={formatTime(message.timestamp)}
       data-message-body={deriveCopyBody(message, t)}
       data-hover-disabled={hasKeyboardSelection || isSelected || inThread ? '' : undefined}
-      className={`relative message-hover-surface ${outerRowClass}${ownRowClass}`}
+      className={`relative message-hover-surface ${outerRowClass}`}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
@@ -692,6 +665,18 @@ export const MessageBubble = memo(function MessageBubble({
               presenceBorderColor="border-fluux-chat"
             />
           </div>
+        ) : showTrustCue ? (
+          // The trust badge holds the gutter at rest; hovering swaps it for the
+          // timestamp every continuation row reveals there. Touch has no hover,
+          // so there the badge stays and the gutter timestamp is not shown.
+          <div className="relative">
+            <span data-msg-trust-cue="" className={`flex justify-center pt-1 leading-none ${isSelected ? 'opacity-0' : hasKeyboardSelection ? 'opacity-100' : 'opacity-100 group-hover:opacity-0 touch:opacity-100'} transition-opacity`}>
+              <TrustBadge securityContext={message.securityContext!} displayTrust={displayTrust} />
+            </span>
+            <span className={`absolute inset-x-0 top-0 block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100 touch:opacity-0'} transition-opacity`}>
+              {formatTime(message.timestamp)}
+            </span>
+          </div>
         ) : (
           <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100 touch:opacity-100'} transition-opacity`}>
             {formatTime(message.timestamp)}
@@ -728,22 +713,14 @@ export const MessageBubble = memo(function MessageBubble({
         />
       )}
 
-      {/* Content. The own-message tint is suppressed inside a whisper thread
-          (`!inThread`): it sets its own `background` (overriding the bounded
-          card's purple fill) and widens the row via margin-inline, which would
-          mismatch the fill and knock the side borders 8px out of alignment with
-          the incoming rows — shattering the single "private with X" card. The
-          name header already carries the own-vs-counterpart distinction. */}
-      {/* The content column spans the conversation's real content width whatever the row
-          holds, so useRowMetrics reads it even when only hug-width own bubbles are mounted. */}
+      {/* The content column spans the conversation's real content width whatever the
+          row holds; useRowMetrics reads it to estimate row heights. */}
       <div className="relative flex-1 min-w-0" data-msg-column="">
       <div
-        ref={ownGroupRef}
         // Opacity keeps the previous focus target available while the overlay captures and restores focus.
-        className={`relative ${showActionSheet ? 'opacity-0' : ''} ${contentWidthClass} min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${ownTintClass}`}
+        className={`relative ${showActionSheet ? 'opacity-0' : ''} w-full min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''}`}
         data-msg-chrome={showAvatar ? 'header' : 'cont'}
-        // See pickWidthSampleEl in useRowMetrics for the hug-width sampling policy.
-        data-msg-own={ownTint ? '' : undefined}
+        data-msg-outgoing={message.isOutgoing ? '' : undefined}
         // Whisper borders/padding are not the ordinary row's width or chrome.
         data-msg-whisper={inThread ? '' : undefined}
         // Paint selection on the outer row without changing this content box.
@@ -797,28 +774,7 @@ export const MessageBubble = memo(function MessageBubble({
                 {formatTime(message.timestamp)}
               </span>
               {message.securityContext && (
-                <Tooltip content={formatSecurityTooltip(t, { ...message.securityContext, trust: displayTrust ?? message.securityContext.trust })} position="top" triggerMode="click">
-                  <span
-                    className={`flex items-center ${trustVisual(
-                      displayTrust === 'verified'
-                        ? 'verified'
-                        : displayTrust === 'rejected'
-                        ? 'rejected'
-                        : displayTrust === 'untrusted'
-                        ? 'decryptFailed'
-                        : 'trusted'
-                    ).colorClass}`}
-                    aria-label={`Encrypted with ${message.securityContext.protocolId}, trust ${displayTrust}`}
-                  >
-                    {displayTrust === 'verified'
-                      ? <ShieldCheck className="size-3" />
-                      : displayTrust === 'rejected'
-                      ? <ShieldX className="size-3" />
-                      : displayTrust === 'untrusted'
-                      ? <ShieldAlert className="size-3" />
-                      : <Shield className="size-3" />}
-                  </span>
-                </Tooltip>
+                <TrustBadge securityContext={message.securityContext} displayTrust={displayTrust} />
               )}
             </div>
           </div>
@@ -1027,6 +983,38 @@ export const MessageBubble = memo(function MessageBubble({
     </div>
   )
 }, arePropsEqual)
+
+/** Lock badge for an encrypted message, coloured and shaped by its displayed trust. */
+function TrustBadge({ securityContext, displayTrust }: {
+  securityContext: NonNullable<BaseMessage['securityContext']>
+  displayTrust: NonNullable<BaseMessage['securityContext']>['trust'] | undefined
+}) {
+  const { t } = useTranslation()
+  return (
+    <Tooltip content={formatSecurityTooltip(t, { ...securityContext, trust: displayTrust ?? securityContext.trust })} position="top" triggerMode="click">
+      <span
+        className={`flex items-center ${trustVisual(
+          displayTrust === 'verified'
+            ? 'verified'
+            : displayTrust === 'rejected'
+            ? 'rejected'
+            : displayTrust === 'untrusted'
+            ? 'decryptFailed'
+            : 'trusted'
+        ).colorClass}`}
+        aria-label={`Encrypted with ${securityContext.protocolId}, trust ${displayTrust}`}
+      >
+        {displayTrust === 'verified'
+          ? <ShieldCheck className="size-3" />
+          : displayTrust === 'rejected'
+          ? <ShieldX className="size-3" />
+          : displayTrust === 'untrusted'
+          ? <ShieldAlert className="size-3" />
+          : <Shield className="size-3" />}
+      </span>
+    </Tooltip>
+  )
+}
 
 /**
  * Build the tooltip shown on hover of the per-message lock indicator.

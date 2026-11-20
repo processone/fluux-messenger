@@ -138,12 +138,12 @@ function installCapture(trigger: Trigger) {
     return { at: performance.now(), top: list.scrollTop, height: list.scrollHeight, client: list.clientHeight, anchor: anchors[0] ?? null }
   }
   // The latest window leaves the trigger's rows to the pan.
-  const incoming = [...list.querySelectorAll<HTMLElement>('[data-msg-chrome]')].filter(row => !row.hasAttribute('data-msg-own'))
+  const incoming = [...list.querySelectorAll<HTMLElement>('[data-msg-chrome]')].filter(row => !row.hasAttribute('data-msg-outgoing'))
   const ready = trigger === 'own-latest' ? incoming.length === 0
     : trigger === 'own-run' ? incoming.length > 0
     : !incoming.some(row => row.dataset.msgChrome === 'cont')
   if (!ready) throw new Error(`The latest window does not leave the ${trigger} rows to the pan`)
-  const olderMounted = () => [...list.querySelectorAll<HTMLElement>('[data-msg-chrome]:not([data-msg-own]) [data-msg-text]')]
+  const olderMounted = () => [...list.querySelectorAll<HTMLElement>('[data-msg-chrome]:not([data-msg-outgoing]) [data-msg-text]')]
     .some(text => text.textContent?.includes('Older context'))
   let data: Observation | undefined
   let active = false, frame = 0, lastTop = list.scrollTop

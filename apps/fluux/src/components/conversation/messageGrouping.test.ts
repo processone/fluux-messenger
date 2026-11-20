@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { groupMessagesByDate, shouldShowAvatar, ownGroupKey, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage, canClosePoll } from './messageGrouping'
+import { groupMessagesByDate, shouldShowAvatar, groupHeaderIndex, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage, canClosePoll } from './messageGrouping'
 import { setActiveMessageListController } from './activeMessageListController'
 
 describe('groupMessagesByDate', () => {
@@ -212,7 +212,9 @@ describe('shouldShowAvatar', () => {
   })
 
   describe('security context grouping', () => {
-    it('breaks the group when trust level changes', () => {
+    // A trust change inside one protocol keeps the group: the row carries its own
+    // trust cue in the avatar gutter instead (MessageBubble's groupSecurityContext).
+    it('keeps the group when only the trust level changes within one protocol', () => {
       const messages = [
         {
           id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice',
@@ -224,7 +226,7 @@ describe('shouldShowAvatar', () => {
         },
       ]
 
-      expect(shouldShowAvatar(messages, 1)).toBe(true)
+      expect(shouldShowAvatar(messages, 1)).toBe(false)
     })
 
     it('breaks the group when protocol changes', () => {
@@ -322,61 +324,6 @@ describe('shouldShowAvatar', () => {
 
       expect(shouldShowAvatar(messages, 1)).toBe(false)
     })
-  })
-})
-
-describe('ownGroupKey', () => {
-  const own = (id: string, min: number) => ({
-    id,
-    from: 'me',
-    isOutgoing: true,
-    timestamp: new Date(`2024-01-15T10:0${min}:00`),
-  })
-  const incoming = (id: string, min: number) => ({
-    id,
-    from: 'alice',
-    isOutgoing: false,
-    timestamp: new Date(`2024-01-15T10:0${min}:00`),
-  })
-
-  it('returns undefined for incoming messages', () => {
-    const messages = [incoming('1', 0), incoming('2', 1)]
-    expect(ownGroupKey(messages, 0)).toBeUndefined()
-    expect(ownGroupKey(messages, 1)).toBeUndefined()
-  })
-
-  it('returns undefined for a solo own message (a group of one)', () => {
-    const messages = [incoming('1', 0), own('2', 1), incoming('3', 2)]
-    expect(ownGroupKey(messages, 1)).toBeUndefined()
-  })
-
-  it('returns the group-start id for every row of a multi-message own run', () => {
-    const messages = [incoming('a', 0), own('b', 1), own('c', 2), own('d', 3)]
-    // All three own rows resolve to the run's first id.
-    expect(ownGroupKey(messages, 1)).toBe('b')
-    expect(ownGroupKey(messages, 2)).toBe('b')
-    expect(ownGroupKey(messages, 3)).toBe('b')
-  })
-
-  it('starts a fresh key after a >5min gap splits the own run', () => {
-    const messages = [
-      { id: 'b', from: 'me', isOutgoing: true, timestamp: new Date('2024-01-15T10:00:00') },
-      { id: 'c', from: 'me', isOutgoing: true, timestamp: new Date('2024-01-15T10:01:00') },
-      // >5min later — shouldShowAvatar breaks the group here, so a new run begins.
-      { id: 'd', from: 'me', isOutgoing: true, timestamp: new Date('2024-01-15T10:10:00') },
-      { id: 'e', from: 'me', isOutgoing: true, timestamp: new Date('2024-01-15T10:11:00') },
-    ]
-    expect(ownGroupKey(messages, 0)).toBe('b')
-    expect(ownGroupKey(messages, 1)).toBe('b')
-    expect(ownGroupKey(messages, 2)).toBe('d')
-    expect(ownGroupKey(messages, 3)).toBe('d')
-  })
-
-  it('does not merge an own run across an incoming message', () => {
-    const messages = [own('a', 0), incoming('b', 1), own('c', 2)]
-    // Both own rows are solo (separated by the incoming), so neither groups.
-    expect(ownGroupKey(messages, 0)).toBeUndefined()
-    expect(ownGroupKey(messages, 2)).toBeUndefined()
   })
 })
 
@@ -559,5 +506,33 @@ describe('canClosePoll', () => {
 
   it('never offers close on a non-poll message', () => {
     expect(canClosePoll({ isOutgoing: true }, false)).toBe(false)
+  })
+})
+
+describe('groupHeaderIndex', () => {
+  const at = (minute: number) => new Date(`2024-01-15T10:${String(minute).padStart(2, '0')}:00`)
+
+  it('returns the row itself for a group start', () => {
+    const messages = [{ id: '1', timestamp: at(0), from: 'alice' }, { id: '2', timestamp: at(1), from: 'bob' }]
+    expect(groupHeaderIndex(messages, 0)).toBe(0)
+    expect(groupHeaderIndex(messages, 1)).toBe(1)
+  })
+
+  it('walks back across trust changes to the header that opened the group', () => {
+    const messages = [
+      { id: '1', timestamp: at(0), from: 'ava', securityContext: { protocolId: 'openpgp', trust: 'verified' as const } },
+      { id: '2', timestamp: at(1), from: 'ava', securityContext: { protocolId: 'openpgp', trust: 'tofu' as const } },
+      { id: '3', timestamp: at(2), from: 'ava', securityContext: { protocolId: 'openpgp', trust: 'verified' as const } },
+    ]
+    expect(groupHeaderIndex(messages, 2)).toBe(0)
+  })
+
+  it('stops at a protocol change, which still opens a new group', () => {
+    const messages = [
+      { id: '1', timestamp: at(0), from: 'ava', securityContext: { protocolId: 'openpgp', trust: 'tofu' as const } },
+      { id: '2', timestamp: at(1), from: 'ava', securityContext: { protocolId: 'omemo:2', trust: 'tofu' as const } },
+      { id: '3', timestamp: at(2), from: 'ava', securityContext: { protocolId: 'omemo:2', trust: 'tofu' as const } },
+    ]
+    expect(groupHeaderIndex(messages, 2)).toBe(1)
   })
 })

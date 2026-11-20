@@ -682,6 +682,43 @@ describe('MessageBubble', () => {
       ).toBeNull()
     })
 
+    describe('continuation trust cue', () => {
+      const cue = (container: HTMLElement) => container.querySelector('[data-msg-trust-cue]')
+
+      it('shows no gutter cue when the row matches its group header', () => {
+        const ctx = { protocolId: 'openpgp', trust: 'tofu' as const }
+        const props = createDefaultProps({
+          message: createTestMessage({ securityContext: ctx }),
+          showAvatar: false,
+          groupSecurityContext: ctx,
+        })
+        const { container } = render(<MessageBubble {...props} />)
+        expect(cue(container)).toBeNull()
+      })
+
+      it('shows the row trust in the gutter when it differs from its group header', () => {
+        const props = createDefaultProps({
+          message: createTestMessage({ securityContext: { protocolId: 'openpgp', trust: 'untrusted' } }),
+          showAvatar: false,
+          groupSecurityContext: { protocolId: 'openpgp', trust: 'tofu' },
+        })
+        const { container } = render(<MessageBubble {...props} />)
+        const gutterCue = cue(container)
+        expect(gutterCue).not.toBeNull()
+        expect(gutterCue!.querySelector('[aria-label="Encrypted with openpgp, trust untrusted"]')).not.toBeNull()
+      })
+
+      it('shows no gutter cue on a header row', () => {
+        const props = createDefaultProps({
+          message: createTestMessage({ securityContext: { protocolId: 'openpgp', trust: 'untrusted' } }),
+          showAvatar: true,
+          groupSecurityContext: { protocolId: 'openpgp', trust: 'tofu' },
+        })
+        const { container } = render(<MessageBubble {...props} />)
+        expect(cue(container)).toBeNull()
+      })
+    })
+
     describe('live key decisions', () => {
       // The plugin keeps the user's decision about each key in its trust
       // records; the bubble reads them through the plugin's trust view.
@@ -730,6 +767,27 @@ describe('MessageBubble', () => {
         expect(
           container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
         ).toBeNull()
+      })
+
+      it('raises a gutter cue when verifying one key splits a group whose stored trust is identical', () => {
+        const peer = 'splitkeys@example.com'
+        const headerKey = '1111AAAA1111AAAA1111AAAA1111AAAA1111AAAA'
+        const rowKey = '2222BBBB2222BBBB2222BBBB2222BBBB2222BBBB'
+        const props = createDefaultProps({
+          message: createTestMessage({ from: peer, securityContext: { protocolId: 'openpgp', trust: 'tofu', fingerprint: rowKey } }),
+          showAvatar: false,
+          groupSecurityContext: { protocolId: 'openpgp', trust: 'tofu', fingerprint: headerKey },
+        })
+        const { container } = render(<MessageBubble {...props} />)
+        expect(container.querySelector('[data-msg-trust-cue]')).toBeNull()
+
+        act(() => {
+          records.setDecision(peer, rowKey, 'verified')
+        })
+
+        expect(
+          container.querySelector('[data-msg-trust-cue] [aria-label="Encrypted with openpgp, trust verified"]'),
+        ).not.toBeNull()
       })
 
       it('downgrades a verified lock back to tofu when verification is removed', () => {
@@ -1212,175 +1270,32 @@ describe('buildReplyContext', () => {
   })
 })
 
-describe('Own-message tint', () => {
-  it('applies the own-tint class to outgoing messages', () => {
-    const props = createDefaultProps({ message: createTestMessage({ isOutgoing: true }) })
-    const { container } = render(<MessageBubble {...props} />)
-    expect(container.querySelector('.message-own-tint')).toBeInTheDocument()
-  })
-
-  it('does not apply the own-tint class to incoming messages', () => {
-    const props = createDefaultProps({ message: createTestMessage({ isOutgoing: false }) })
-    const { container } = render(<MessageBubble {...props} />)
-    expect(container.querySelector('.message-own-tint')).not.toBeInTheDocument()
-  })
-
-  // Inside a whisper thread the rows already share one bounded "private with X"
-  // container (bg-fluux-private-soft + border-x). The own-tint sets its own
-  // `background` (overriding the purple fill) and widens the row via
-  // margin-inline: -0.5rem, so an outgoing whisper row would render with a
-  // mismatched blue fill and side-borders 8px out of alignment with the
-  // incoming rows — visually shattering the single card. The name header
-  // ("You" vs the counterpart) already carries the sender identity, so the
-  // tint must be suppressed in-thread.
-  it('does not apply the own-tint class to an outgoing whisper-thread row', () => {
-    const props = createDefaultProps({
-      message: createTestMessage({ isOutgoing: true }),
-      whisperThread: 'start',
-      whisperWith: 'Emma',
-      counterpartPresent: true,
-    })
-    const { container } = render(<MessageBubble {...props} />)
-    expect(container.querySelector('.message-own-tint')).not.toBeInTheDocument()
-  })
-
-  // The tint renders a run of own messages as one continuous surface: the group
-  // start (showAvatar) rounds the top, the group end (isGroupEnd) rounds the
-  // bottom, interior rows stay square so the run reads as a single panel under
-  // the group's lock indicator.
-  it('rounds both corners of a solo own message (group start and end)', () => {
-    const props = createDefaultProps({
-      message: createTestMessage({ isOutgoing: true }),
-      showAvatar: true,
-      isGroupEnd: true,
-    })
-    const { container } = render(<MessageBubble {...props} />)
-    const tint = container.querySelector('.message-own-tint')!
-    expect(tint.className).toContain('message-own-tint-start')
-    expect(tint.className).toContain('message-own-tint-end')
-  })
-
-  it('rounds only the top of an own group-start row that continues below', () => {
-    const props = createDefaultProps({
-      message: createTestMessage({ isOutgoing: true }),
-      showAvatar: true,
-      isGroupEnd: false,
-    })
-    const { container } = render(<MessageBubble {...props} />)
-    const tint = container.querySelector('.message-own-tint')!
-    expect(tint.className).toContain('message-own-tint-start')
-    expect(tint.className).not.toContain('message-own-tint-end')
-  })
-
-  it('rounds only the bottom of an own group-end continuation row', () => {
-    const props = createDefaultProps({
-      message: createTestMessage({ isOutgoing: true }),
-      showAvatar: false,
-      isGroupEnd: true,
-    })
-    const { container } = render(<MessageBubble {...props} />)
-    const tint = container.querySelector('.message-own-tint')!
-    expect(tint.className).not.toContain('message-own-tint-start')
-    expect(tint.className).toContain('message-own-tint-end')
-  })
-
-  it('leaves an interior own continuation row square (neither corner rounded)', () => {
-    const props = createDefaultProps({
-      message: createTestMessage({ isOutgoing: true }),
-      showAvatar: false,
-      isGroupEnd: false,
-    })
-    const { container } = render(<MessageBubble {...props} />)
-    const tint = container.querySelector('.message-own-tint')!
-    expect(tint.className).not.toContain('message-own-tint-start')
-    expect(tint.className).not.toContain('message-own-tint-end')
-  })
-
-  // Interior junctions of an own group are tightened so the merged surface reads
-  // as one block: the row pulls toward neighbouring own messages, but the
-  // group's outer top (group-start separation) and bottom are left alone.
-  it('tightens an own group-start row only at the bottom (toward the continuation)', () => {
-    const props = createDefaultProps({
-      message: createTestMessage({ isOutgoing: true }),
-      showAvatar: true,
-      isGroupEnd: false,
-    })
-    const { container } = render(<MessageBubble {...props} />)
-    const row = container.firstChild as HTMLElement
-    expect(row.className).toContain('message-own-cont-bottom')
-    expect(row.className).not.toContain('message-own-cont-top')
-  })
-
-  it('tightens an interior own continuation row on both edges', () => {
-    const props = createDefaultProps({
-      message: createTestMessage({ isOutgoing: true }),
-      showAvatar: false,
-      isGroupEnd: false,
-    })
-    const { container } = render(<MessageBubble {...props} />)
-    const row = container.firstChild as HTMLElement
-    expect(row.className).toContain('message-own-cont-top')
-    expect(row.className).toContain('message-own-cont-bottom')
-  })
-
-  it('tightens an own group-end row only at the top (toward the previous message)', () => {
-    const props = createDefaultProps({
-      message: createTestMessage({ isOutgoing: true }),
-      showAvatar: false,
-      isGroupEnd: true,
-    })
-    const { container } = render(<MessageBubble {...props} />)
-    const row = container.firstChild as HTMLElement
-    expect(row.className).toContain('message-own-cont-top')
-    expect(row.className).not.toContain('message-own-cont-bottom')
-  })
-
-  it('leaves a solo own message untightened (keeps normal outer spacing)', () => {
-    const props = createDefaultProps({
-      message: createTestMessage({ isOutgoing: true }),
-      showAvatar: true,
-      isGroupEnd: true,
-    })
-    const { container } = render(<MessageBubble {...props} />)
-    const row = container.firstChild as HTMLElement
-    expect(row.className).not.toContain('message-own-cont-top')
-    expect(row.className).not.toContain('message-own-cont-bottom')
+describe('Own messages', () => {
+  // Own and incoming rows share one flat layout: the own name colour carries the
+  // distinction, with no tinted surface or hug-width content box.
+  it('lays out an outgoing row like an incoming one', () => {
+    const own = render(<MessageBubble {...createDefaultProps({ message: createTestMessage({ isOutgoing: true }) })} />)
+    const ownChrome = own.container.querySelector('[data-msg-chrome]')!
+    const incoming = render(<MessageBubble {...createDefaultProps({ message: createTestMessage({ id: 'msg-2', isOutgoing: false }) })} />)
+    const incomingChrome = incoming.container.querySelector('[data-msg-chrome]')!
+    expect(ownChrome.className).toBe(incomingChrome.className)
+    expect(ownChrome).toHaveClass('w-full')
+    expect(ownChrome.hasAttribute('data-msg-own')).toBe(false)
   })
 })
 
 describe('Hover toolbar anchoring', () => {
-  // The content-hugging own tint cannot own the toolbar's horizontal anchor;
-  // row padding cannot own its vertical anchor. Both edges belong to the row.
-  it('renders the toolbar OUTSIDE the hugging own-tint box (not a descendant of it)', () => {
-    const props = createDefaultProps({ message: createTestMessage({ isOutgoing: true }) })
-    const { container } = render(<MessageBubble {...props} />)
-
-    const toolbar = container.querySelector('[data-message-toolbar]')
-    expect(toolbar).not.toBeNull()
-    // If someone re-nests the toolbar inside the w-fit tint, this fails.
-    expect(toolbar!.closest('.message-own-tint')).toBeNull()
-  })
-
+  // Row padding cannot own the toolbar's vertical anchor, and the content box is
+  // not the row: both edges belong to the full message row.
   it('anchors the toolbar to the full message row outside the content column', () => {
     const props = createDefaultProps({ message: createTestMessage({ isOutgoing: true }) })
     const { container } = render(<MessageBubble {...props} />)
 
-    const row = container.querySelector('[data-message-toolbar]')!.parentElement!
+    const toolbar = container.querySelector('[data-message-toolbar]')!
+    const row = toolbar.parentElement!
     expect(row).toBe(container.firstChild)
     expect(row).toHaveClass('relative')
-    const tint = row.querySelector('.message-own-tint')
-    expect(tint).not.toBeNull()
-    expect(tint!.className).toContain('w-fit')
-  })
-
-  it('keeps incoming content full-width (w-full)', () => {
-    const props = createDefaultProps({ message: createTestMessage({ isOutgoing: false }) })
-    const { container } = render(<MessageBubble {...props} />)
-
-    // Incoming rows have no tint; their content fills the column.
-    expect(container.querySelector('.message-own-tint')).toBeNull()
-    const content = container.querySelector('[data-msg-chrome]')!
-    expect(content.className).toContain('w-full')
+    expect(toolbar.closest('[data-msg-chrome]')).toBeNull()
   })
 })
 

@@ -13,7 +13,7 @@ import { getRoomModerationId, archiveReference, senderReference, useRoomActive, 
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, useRoomOccupantCountBelow, isSmallScreen } from '@/hooks'
-import { MessageBubble, MessageList, RoomSystemLine, shouldShowAvatar, ownGroupKey as computeOwnGroupKey, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, decideChatStateRoute, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
+import { MessageBubble, MessageList, RoomSystemLine, shouldShowAvatar, groupHeaderIndex, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, decideChatStateRoute, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { usePendingAttachment } from '@/hooks/usePendingAttachment'
@@ -1279,7 +1279,7 @@ export const RoomMessageList = memo(function RoomMessageList({
         rowId={rowId}
         showAvatar={shouldShowAvatar(groupMessages, idx)}
         isGroupEnd={idx === groupMessages.length - 1 || shouldShowAvatar(groupMessages, idx + 1)}
-        ownGroupKey={computeOwnGroupKey(groupMessages, idx)}
+        groupSecurityContext={groupMessages[groupHeaderIndex(groupMessages, idx)].securityContext}
         whisperThread={whisperThreadPosition(groupMessages, idx)}
         roomJid={room.jid}
         myNick={room.nickname}
@@ -1388,8 +1388,8 @@ interface RoomMessageBubbleWrapperProps {
   rowId: string
   showAvatar: boolean
   isGroupEnd: boolean
-  /** Own-message run key (see ownGroupKey); undefined for incoming/solo rows. */
-  ownGroupKey?: string
+  /** Security context of this row's group header (see MessageBubble's groupSecurityContext). */
+  groupSecurityContext?: RoomMessage['securityContext']
   whisperThread: WhisperThreadPosition | null
   // Per-row resolved sender data (resolved in the list layer from cheap Map lookups).
   // `occupant` is the live, reference-stable occupant record (roomStore.addOccupant
@@ -1471,7 +1471,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   rowId,
   showAvatar,
   isGroupEnd,
-  ownGroupKey,
+  groupSecurityContext,
   whisperThread,
   roomJid,
   myNick,
@@ -1723,7 +1723,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         message={message}
         showAvatar={showAvatar}
         isGroupEnd={isGroupEnd}
-        ownGroupKey={ownGroupKey}
+        groupSecurityContext={groupSecurityContext}
         isSelected={isSelected}
         hasKeyboardSelection={hasKeyboardSelection}
         showToolbarForSelection={showToolbarForSelection}

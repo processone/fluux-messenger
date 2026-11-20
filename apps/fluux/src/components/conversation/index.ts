@@ -24,10 +24,9 @@ export type { RoomSystemLineProps } from './RoomSystemLine'
 export { MessageBubble, buildReplyContext } from './MessageBubble'
 export type { MessageBubbleProps } from './MessageBubble'
 
-export { groupMessagesByDate, shouldShowAvatar, ownGroupKey, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage, canClosePoll } from './messageGrouping'
+export { groupMessagesByDate, shouldShowAvatar, groupHeaderIndex, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage, canClosePoll } from './messageGrouping'
 export type { MessageGroup, WhisperThreadPosition } from './messageGrouping'
 
-export { OwnGroupWidthProvider, useOwnGroupWidth } from './messageGroupWidth'
 
 export { resolveWhisperTarget, whisperTargetPresent, decideWhisperSend, decideChatStateRoute } from './whisperTarget'
 export type { WhisperTarget, WhisperSendDecision, ChatStateRoute } from './whisperTarget'
