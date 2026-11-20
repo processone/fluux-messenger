@@ -3,9 +3,10 @@ import { create } from 'zustand'
 /**
  * A request to open a contact's Security details when their profile shows.
  *
- * The held-keys notice in a conversation asks for it, then opens the
- * contact's profile; the profile opens Security details for that contact and
- * clears the request.
+ * The held-keys notice in a conversation and the Forward dialog's refusal make
+ * it. A pending request navigates to the contact's profile (the chat layout
+ * does this when the contact is not already selected); the profile opens
+ * Security details for that contact and clears the request.
  */
 interface ContactSecurityRequestState {
   /** The contact whose Security details should open, if any. */

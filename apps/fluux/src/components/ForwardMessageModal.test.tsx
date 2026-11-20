@@ -178,9 +178,9 @@ describe('ForwardMessageModal', () => {
       expect(fixture.roomSend).not.toHaveBeenCalled()
     })
 
-    // FLM-319: a contact whose every key waits for a decision refuses the send; the dialog names the
-    // contact, stays encrypted-only (one send attempt, never plain text) and offers Review keys.
-    it('names the contact and offers Review keys when every key waits for a decision', async () => {
+    // A contact whose every key waits for a decision refuses the send; the dialog stays encrypted-only
+    // (one send attempt, never plain text) and offers Review keys for that contact.
+    it('offers Review keys for the contact when every key waits for a decision', async () => {
       const { E2EEPluginError } = await vi.importActual<typeof import('@fluux/sdk')>('@fluux/sdk')
       fixture.chatSend.mockRejectedValue(new E2EEPluginError('permanent', 'peer-keys-awaiting-decision', 'waiting'))
       useContactSecurityRequestStore.getState().clearContactSecurityRequest()
