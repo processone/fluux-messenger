@@ -29,7 +29,6 @@ function registerRoom(roomJid: string, account: string): void {
 /** Resolves true once the room is joined, false if `abandoned()` turns true or the wait times out. */
 function waitForJoin(roomJid: string, abandoned: () => boolean): Promise<boolean> {
   return new Promise((resolve) => {
-    let timer: ReturnType<typeof setTimeout> | undefined
     const finish = (value: boolean) => { clearTimeout(timer); unsubscribe(); unsubscribeConnection(); resolve(value) }
     const check = () => {
       if (abandoned()) finish(false)
@@ -37,7 +36,7 @@ function waitForJoin(roomJid: string, abandoned: () => boolean): Promise<boolean
     }
     const unsubscribe = roomStore.subscribe(check)
     const unsubscribeConnection = connectionStore.subscribe(check)
-    timer = setTimeout(() => finish(false), JOIN_WAIT_MS)
+    const timer = setTimeout(() => finish(false), JOIN_WAIT_MS)
     check()
   })
 }
