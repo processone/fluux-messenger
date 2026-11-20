@@ -57,7 +57,7 @@ export function useDeepLink() {
   const openRoomMessageLink = useRoomMessageLink()
   const { addConversation } = useChat()
   const { joinRoom, joinResult, getRoomInfo, isNonAnonymousRoomAcknowledged, domainHostsRooms } = useRoom()
-  const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
+  const { navigateToConversation, navigateToRoom, navigateToContactRequests } = useNavigateToTarget()
   const { t } = useTranslation()
   const addToast = useToastStore((s) => s.addToast)
   const { contacts } = useRoster()
@@ -164,7 +164,10 @@ export function useDeepLink() {
         navigateToConversation(bareJid)
         return
       }
+      // Leave the open conversation first, as the command palette does: on a narrow
+      // layout the dialog lives in the sidebar, hidden while a conversation is open.
       // Nothing is sent until the person presses Add contact.
+      navigateToContactRequests()
       useModalStore.getState().openAddContact(bareJid)
       return
     }

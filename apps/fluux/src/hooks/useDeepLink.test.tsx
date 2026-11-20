@@ -735,6 +735,8 @@ describe('useDeepLink', () => {
         await openLink('xmpp:carol@example.org?subscribe')
         expect((await modal()).addContact).toBe(true)
         expect((await modal()).addContactJid).toBe('carol@example.org')
+        expect(mockActivateConversation).toHaveBeenCalledWith(null)
+        expect(currentLocation.current.pathname).toBe('/contacts')
         expect(mockJoinRoom).not.toHaveBeenCalled()
       })
 
