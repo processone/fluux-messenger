@@ -1977,16 +1977,14 @@ test('with OpenPGP on, a save made while the key is locked waits across a restar
   const text = `Saved while locked ${stamp}`
   // A restart loses the session passphrase: the key is locked when the message is saved.
   await one.page.reload()
-  await one.page.getByRole('button', { name: 'Unlock', exact: true }).first().waitFor()
-  await one.page.keyboard.press('Escape') // leave the key locked: dismiss the passphrase prompt
-  await expect(one.page.getByRole('dialog', { name: 'Unlock End-to-End Encryption' })).toBeHidden()
+  // The startup prompt is the one that matters: wait for it, then leave the key locked.
+  const prompt = one.page.getByRole('dialog', { name: 'Unlock End-to-End Encryption' })
+  await expect(prompt).toBeVisible({ timeout: 30_000 })
+  await one.page.keyboard.press('Escape')
+  await expect(prompt).toBeHidden()
   await bob.say('alice', text)
   await openChatWith(one, 'Bob')
   await expect(one.page.locator('[data-message-body]').filter({ hasText: text }).last()).toBeVisible({ timeout: 30_000 })
-  // The prompt can come back when the chat opens: keep the key locked.
-  await one.page.waitForTimeout(1500)
-  if (await one.page.getByRole('dialog', { name: 'Unlock End-to-End Encryption' }).isVisible()) await one.page.keyboard.press('Escape')
-  await expect(one.page.getByRole('dialog', { name: 'Unlock End-to-End Encryption' })).toBeHidden()
   await saveMessage(one, text)
   await one.page.waitForTimeout(3000)
   expect(await reader.items()).toEqual([]) // nothing, plain or sealed, reached the node
