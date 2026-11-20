@@ -643,8 +643,8 @@
             "verifiedTooltip": "Staðfestur OpenPGP-lykill",
             "tofuNewTooltip": "Nýr tengiliður. Staðfestu fingrafar til fulls trausts",
             "unverifiedKeysetTooltip": "Þessi tengiliður er með nýjan lykil sem hefur ekki verið staðfestur.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Dulkóðun í bið",
+            "blockedTooltip": "Lykill viðmælanda hefur breyst. Leystu málið til að halda dulkóðun áfram",
             "sendBlockedEncryptionRequired": "Skilaboð ekki send. Dulkóðunar er krafist fyrir þetta samtal en hún er ekki tiltæk núna.",
             "sendBlockedKeyChanged": "Skilaboð ekki send. Dulkóðunarlykill þessa tengiliðs breyttist. Yfirfarðu breytinguna á lyklinum áður en þú sendir.",
             "sendBlockedKeyLocked": "Skilaboð ekki send. Aflæstu dulkóðunarlyklinum þínum til að senda þessi skilaboð.",
@@ -660,8 +660,8 @@
                 "pendingAll": "Lyklar {{name}} fá engin skilaboð fyrr en þetta tæki hefur fengið traustákvarðanir þínar úr eldri útgáfu eða frá öðrum tækjum þínum. Þangað til geturðu ekki sent skilaboð. Reynt er aftur sjálfkrafa.",
                 "review": "Yfirfara lykla"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Dulkóðun óvirk",
+            "plaintextForcedTooltip": "Þú slökktir á dulkóðun fyrir þetta samtal, svo skilaboð eru send ódulkóðuð",
             "keyLocked": "Dulkóðun læst",
             "keyLockedTooltip": "Dulkóðun læst. Smelltu til að aflæsa",
             "encryptedClickToUnlock": "Dulkóðuð skilaboð. Smelltu til að aflæsa",
@@ -684,8 +684,8 @@
                 "fingerprint_mismatch": "Fingrafar stemmir ekki við uppgefið gildi",
                 "uid_mismatch": "Auðkenni vottorðs stemmir ekki við netfang viðmælanda"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Slökkva á dulkóðun fyrir þetta samtal",
+            "enableEncryption": "Kveikja aftur á dulkóðun",
             "tooltip": {
                 "header": "Dulkóðað",
                 "protocol": {
@@ -1655,7 +1655,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} brást við '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} brást við skilaboðunum þínum",
         "see": "Skoða"
     },
     "commands": {

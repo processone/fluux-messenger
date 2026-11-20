@@ -645,8 +645,8 @@
             "verifiedTooltip": "Kinnitatud OpenPGP võti",
             "tofuNewTooltip": "Uus kontakt. Kontrollige sõrmejälge täieliku usalduse jaoks",
             "unverifiedKeysetTooltip": "Sellel kontaktil on uus võti, mida pole kinnitatud.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Krüpteerimine on peatatud",
+            "blockedTooltip": "Vestluspartneri võti on muutunud. Lahenda see, et krüpteerimist jätkata",
             "sendBlockedEncryptionRequired": "Sõnumit ei saadetud. Selle vestluse jaoks on krüpteerimine nõutav, kuid praegu pole see saadaval.",
             "sendBlockedKeyChanged": "Sõnumit ei saadetud. Selle kontakti krüpteerimisvõti muutus. Vaata võtme muutus enne saatmist üle.",
             "sendBlockedKeyLocked": "Sõnumit ei saadetud. Selle sõnumi saatmiseks ava oma krüpteerimisvõti.",
@@ -662,8 +662,8 @@
                 "pendingAll": "Kontakti {{name}} võtmed ei saa sõnumeid enne, kui see seade on saanud sinu usaldusotsused varasemast versioonist või sinu teistest seadmetest. Seni ei saa sa sõnumeid saata. Seda proovitakse automaatselt uuesti.",
                 "review": "Vaata võtmed üle"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Krüpteerimine on välja lülitatud",
+            "plaintextForcedTooltip": "Lülitasid selle vestluse krüpteerimise välja, seega saadetakse sõnumid selgelt loetavana",
             "keyLocked": "Krüpteerimine on lukus",
             "keyLockedTooltip": "Krüpteerimine on lukus. Vajuta avamiseks",
             "encryptedClickToUnlock": "Krüpteeritud sõnum. Vajuta avamiseks",
@@ -686,8 +686,8 @@
                 "fingerprint_mismatch": "Sõrmejälg ei ühti reklaamitud väärtusega",
                 "uid_mismatch": "Sertifikaadi identiteet ei ühti vestluspartneri aadressiga"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Lülita selle vestluse krüpteerimine välja",
+            "enableEncryption": "Lülita krüpteerimine uuesti sisse",
             "tooltip": {
                 "header": "Krüptitud",
                 "protocol": {
@@ -1657,7 +1657,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reageeris sõnumile '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reageeris sinu sõnumile",
         "see": "Vaata"
     },
     "commands": {

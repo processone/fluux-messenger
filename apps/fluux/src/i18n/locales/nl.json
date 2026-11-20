@@ -643,8 +643,8 @@
             "verifiedTooltip": "Geverifieerde OpenPGP-sleutel",
             "tofuNewTooltip": "Nieuw contact. Verifieer de vingerafdruk voor volledig vertrouwen",
             "unverifiedKeysetTooltip": "Dit contact heeft een nieuwe sleutel die niet is geverifieerd.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Versleuteling gepauzeerd",
+            "blockedTooltip": "De sleutel van je gesprekspartner is gewijzigd. Los dit op om de versleuteling te hervatten",
             "sendBlockedEncryptionRequired": "Bericht niet verzonden. Versleuteling is vereist voor dit gesprek, maar is op dit moment niet beschikbaar.",
             "sendBlockedKeyChanged": "Bericht niet verzonden. De versleutelingssleutel van dit contact is gewijzigd. Controleer de sleutelwijziging voordat je verzendt.",
             "sendBlockedKeyLocked": "Bericht niet verzonden. Ontgrendel je versleutelingssleutel om dit bericht te verzenden.",
@@ -660,8 +660,8 @@
                 "pendingAll": "De sleutels van {{name}} ontvangen geen berichten totdat dit apparaat je vertrouwensbeslissingen uit een eerdere versie of van je andere apparaten heeft. Tot die tijd kun je geen berichten verzenden. Dit wordt automatisch opnieuw geprobeerd.",
                 "review": "Sleutels bekijken"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Versleuteling uitgeschakeld",
+            "plaintextForcedTooltip": "Je hebt de versleuteling voor dit gesprek uitgeschakeld, dus berichten worden in platte tekst verzonden",
             "keyLocked": "Versleuteling vergrendeld",
             "keyLockedTooltip": "Versleuteling vergrendeld. Klik om te ontgrendelen",
             "encryptedClickToUnlock": "Versleuteld bericht. Klik om te ontgrendelen",
@@ -684,8 +684,8 @@
                 "fingerprint_mismatch": "Vingerafdruk komt niet overeen met de opgegeven waarde",
                 "uid_mismatch": "Certificaatidentiteit komt niet overeen met het adres van de gesprekspartner"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Versleuteling uitschakelen voor dit gesprek",
+            "enableEncryption": "Versleuteling weer inschakelen",
             "tooltip": {
                 "header": "Versleuteld",
                 "protocol": {
@@ -1655,7 +1655,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reageerde op '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reageerde op je bericht",
         "see": "Bekijken"
     },
     "commands": {

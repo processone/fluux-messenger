@@ -651,8 +651,8 @@
             "verifiedTooltip": "Ċavetta OpenPGP verifikata",
             "tofuNewTooltip": "Kuntatt ġdid. Ivverifika l-marka tas-saba' għal fiduċja sħiħa",
             "unverifiedKeysetTooltip": "Dan il-kuntatt għandu ċavetta ġdida li ma ġietx ivverifikata.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Il-kriptaġġ huwa sospiż",
+            "blockedTooltip": "Iċ-ċavetta tal-kuntatt inbidlet. Irriżolvi dan biex terġa' tibda l-kriptaġġ",
             "sendBlockedEncryptionRequired": "Il-messaġġ ma ntbagħatx. L-encryption huwa meħtieġ għal din il-konversazzjoni iżda bħalissa mhuwiex disponibbli.",
             "sendBlockedKeyChanged": "Il-messaġġ ma ntbagħatx. Iċ-ċavetta tal-encryption ta' dan il-kuntatt inbidlet. Irrevedi l-bidla taċ-ċavetta qabel ma tibgħat.",
             "sendBlockedKeyLocked": "Il-messaġġ ma ntbagħatx. Iftaħ iċ-ċavetta tal-encryption tiegħek biex tibgħat dan il-messaġġ.",
@@ -668,8 +668,8 @@
                 "pendingAll": "Iċ-ċwievet ta' {{name}} ma jirċievu l-ebda messaġġ sakemm dan l-apparat ikollu d-deċiżjonijiet ta' fiduċja tiegħek minn verżjoni preċedenti jew mill-apparati l-oħra tiegħek. Sa dakinhar ma tistax tibgħat messaġġi. Jerġa' jiġi ppruvat awtomatikament.",
                 "review": "Irrevedi ċ-ċwievet"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Il-kriptaġġ mitfi",
+            "plaintextForcedTooltip": "Tfajt il-kriptaġġ għal din il-konversazzjoni, għalhekk il-messaġġi jintbagħtu f'test ċar",
             "keyLocked": "L-encryption huwa msakkar",
             "keyLockedTooltip": "L-encryption huwa msakkar. Ikklikkja biex tiftaħ",
             "encryptedClickToUnlock": "Messaġġ kriptat. Ikklikkja biex tiftaħ",
@@ -692,8 +692,8 @@
                 "fingerprint_mismatch": "Il-fingerprint ma jaqbilx mal-valur iddikkjarat",
                 "uid_mismatch": "L-identità taċ-ċertifikat ma taqbilx mal-indirizz tal-persuna l-oħra"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Itfi l-kriptaġġ għal din il-konversazzjoni",
+            "enableEncryption": "Erġa' ixgħel il-kriptaġġ",
             "tooltip": {
                 "header": "Encrypted",
                 "protocol": {
@@ -1663,7 +1663,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} irreaġixxa għal '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} irreaġixxa għall-messaġġ tiegħek",
         "see": "Ara"
     },
     "commands": {

@@ -649,8 +649,8 @@
             "verifiedTooltip": "Eochair OpenPGP fíoraithe",
             "tofuNewTooltip": "Teagmháil nua. Fíoraigh an mhéarlorg le haghaidh muiníne iomlán",
             "unverifiedKeysetTooltip": "Tá eochair nua ag an teagmháil seo nach bhfuil fíoraithe.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Tá an criptiú ar sos",
+            "blockedTooltip": "Athraíodh eochair an teagmhálaí. Réitigh é chun leanúint leis an gcriptiú",
             "sendBlockedEncryptionRequired": "Níor seoladh an teachtaireacht. Tá criptiú ag teastáil don chomhrá seo ach níl sé ar fáil faoi láthair.",
             "sendBlockedKeyChanged": "Níor seoladh an teachtaireacht. Athraíodh eochair chriptithe an teagmhálaí seo. Déan athbhreithniú ar athrú na heochrach sula seolann tú.",
             "sendBlockedKeyLocked": "Níor seoladh an teachtaireacht. Díghlasáil d'eochair chriptithe chun an teachtaireacht seo a sheoladh.",
@@ -666,8 +666,8 @@
                 "pendingAll": "Ní fhaigheann eochracha {{name}} aon teachtaireacht go dtí go mbíonn do chinntí muiníne ó leagan níos luaithe nó ó do ghléasanna eile ag an ngléas seo. Ní féidir leat teachtaireachtaí a sheoladh go dtí sin. Déantar iarracht arís go huathoibríoch.",
                 "review": "Athbhreithnigh eochracha"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Tá an criptiú díchumasaithe",
+            "plaintextForcedTooltip": "Dhíchumasaigh tú criptiú don chomhrá seo, mar sin seoltar teachtaireachtaí sa ghnáth-théacs",
             "keyLocked": "Tá an criptiú faoi ghlas",
             "keyLockedTooltip": "Tá an criptiú faoi ghlas. Cliceáil chun é a dhíghlasáil",
             "encryptedClickToUnlock": "Teachtaireacht chriptithe. Cliceáil chun é a dhíghlasáil",
@@ -690,8 +690,8 @@
                 "fingerprint_mismatch": "Ní mheaitseálann an méarlorg leis an luach fógartha",
                 "uid_mismatch": "Ní mheaitseálann céannacht an teastais le seoladh an chomhpháirtí"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Díchumasaigh criptiú don chomhrá seo",
+            "enableEncryption": "Athchumasaigh criptiú",
             "tooltip": {
                 "header": "Criptithe",
                 "protocol": {
@@ -1661,7 +1661,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} d'imoibrigh {{name}} le '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} d'imoibrigh {{name}} le do theachtaireacht",
         "see": "Amharc"
     },
     "commands": {

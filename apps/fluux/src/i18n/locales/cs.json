@@ -649,8 +649,8 @@
             "verifiedTooltip": "Ověřený klíč OpenPGP",
             "tofuNewTooltip": "Nový kontakt. Ověřte otisk pro plnou důvěru",
             "unverifiedKeysetTooltip": "Tento kontakt má nový klíč, který nebyl ověřen.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Šifrování pozastaveno",
+            "blockedTooltip": "Klíč protistrany se změnil. Vyřešte to, abyste obnovili šifrování",
             "sendBlockedEncryptionRequired": "Zpráva nebyla odeslána. Pro tuto konverzaci je vyžadováno šifrování, ale momentálně není k dispozici.",
             "sendBlockedKeyChanged": "Zpráva nebyla odeslána. Šifrovací klíč tohoto kontaktu se změnil. Před odesláním zkontrolujte změnu klíče.",
             "sendBlockedKeyLocked": "Zpráva nebyla odeslána. Pro odeslání této zprávy odemkněte svůj šifrovací klíč.",
@@ -666,8 +666,8 @@
                 "pendingAll": "Klíče kontaktu {{name}} nedostávají zprávy, dokud toto zařízení nezíská vaše rozhodnutí o důvěře ze starší verze nebo z vašich dalších zařízení. Do té doby nemůžete odesílat zprávy. Pokus se automaticky opakuje.",
                 "review": "Zkontrolovat klíče"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Šifrování vypnuto",
+            "plaintextForcedTooltip": "Pro tuto konverzaci jste vypnuli šifrování, takže zprávy se odesílají v prostém textu",
             "keyLocked": "Šifrování uzamčeno",
             "keyLockedTooltip": "Šifrování uzamčeno. Odemkněte kliknutím",
             "encryptedClickToUnlock": "Šifrovaná zpráva. Odemkněte kliknutím",
@@ -690,8 +690,8 @@
                 "fingerprint_mismatch": "Otisk se neshoduje s oznámenou hodnotou",
                 "uid_mismatch": "Identita certifikátu se neshoduje s adresou protistrany"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Vypnout šifrování pro tuto konverzaci",
+            "enableEncryption": "Znovu zapnout šifrování",
             "tooltip": {
                 "header": "Šifrováno",
                 "protocol": {
@@ -1661,7 +1661,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} zareagoval na '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} zareagoval na vaši zprávu",
         "see": "Zobrazit"
     },
     "commands": {

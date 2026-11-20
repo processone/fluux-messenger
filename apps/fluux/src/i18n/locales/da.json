@@ -643,8 +643,8 @@
             "verifiedTooltip": "Verificeret OpenPGP-nøgle",
             "tofuNewTooltip": "Ny kontakt. Bekræft fingeraftryk for fuld tillid",
             "unverifiedKeysetTooltip": "Denne kontakt har en ny nøgle, som ikke er blevet bekræftet.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Kryptering sat på pause",
+            "blockedTooltip": "Kontaktens nøgle er ændret. Løs det for at genoptage krypteringen",
             "sendBlockedEncryptionRequired": "Beskeden blev ikke sendt. Kryptering er påkrævet for denne samtale, men er ikke tilgængelig lige nu.",
             "sendBlockedKeyChanged": "Beskeden blev ikke sendt. Denne kontakts krypteringsnøgle er ændret. Gennemgå nøgleændringen, før du sender.",
             "sendBlockedKeyLocked": "Beskeden blev ikke sendt. Lås din krypteringsnøgle op for at sende denne besked.",
@@ -660,8 +660,8 @@
                 "pendingAll": "Nøglerne fra {{name}} modtager ingen beskeder, før denne enhed har dine tillidsbeslutninger fra en tidligere version eller fra dine andre enheder. Indtil da kan du ikke sende beskeder. Det forsøges igen automatisk.",
                 "review": "Gennemgå nøgler"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Kryptering deaktiveret",
+            "plaintextForcedTooltip": "Du har deaktiveret kryptering for denne samtale, så beskeder sendes i klartekst",
             "keyLocked": "Kryptering låst",
             "keyLockedTooltip": "Kryptering låst. Klik for at låse op",
             "encryptedClickToUnlock": "Krypteret besked. Klik for at låse op",
@@ -684,8 +684,8 @@
                 "fingerprint_mismatch": "Fingeraftrykket matcher ikke den annoncerede værdi",
                 "uid_mismatch": "Certifikatets identitet matcher ikke modpartens adresse"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Deaktiver kryptering for denne samtale",
+            "enableEncryption": "Genaktiver kryptering",
             "tooltip": {
                 "header": "Krypteret",
                 "protocol": {
@@ -1655,7 +1655,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reagerede på '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reagerede på din besked",
         "see": "Vis"
     },
     "commands": {

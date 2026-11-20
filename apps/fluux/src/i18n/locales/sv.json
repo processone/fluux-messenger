@@ -643,8 +643,8 @@
             "verifiedTooltip": "Verifierad OpenPGP-nyckel",
             "tofuNewTooltip": "Ny kontakt. Verifiera fingeravtryck för fullt förtroende",
             "unverifiedKeysetTooltip": "Den här kontakten har en ny nyckel som inte har verifierats.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Kryptering pausad",
+            "blockedTooltip": "Kontaktens nyckel har ändrats. Lös det för att återuppta krypteringen",
             "sendBlockedEncryptionRequired": "Meddelandet skickades inte. Kryptering krävs för den här konversationen men är inte tillgänglig just nu.",
             "sendBlockedKeyChanged": "Meddelandet skickades inte. Den här kontaktens krypteringsnyckel har ändrats. Granska nyckeländringen innan du skickar.",
             "sendBlockedKeyLocked": "Meddelandet skickades inte. Lås upp din krypteringsnyckel för att skicka det här meddelandet.",
@@ -660,8 +660,8 @@
                 "pendingAll": "Nycklarna för {{name}} tar inte emot några meddelanden förrän den här enheten har dina förtroendebeslut från en tidigare version eller från dina andra enheter. Fram till dess kan du inte skicka meddelanden. Det försöks igen automatiskt.",
                 "review": "Granska nycklar"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Kryptering inaktiverad",
+            "plaintextForcedTooltip": "Du har inaktiverat krypteringen för den här konversationen, så meddelanden skickas i klartext",
             "keyLocked": "Kryptering låst",
             "keyLockedTooltip": "Kryptering låst. Klicka för att låsa upp",
             "encryptedClickToUnlock": "Krypterat meddelande. Klicka för att låsa upp",
@@ -684,8 +684,8 @@
                 "fingerprint_mismatch": "Fingeravtrycket matchar inte det angivna värdet",
                 "uid_mismatch": "Certifikatets identitet matchar inte samtalspartnerns adress"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Inaktivera kryptering för den här konversationen",
+            "enableEncryption": "Återaktivera kryptering",
             "tooltip": {
                 "header": "Krypterat",
                 "protocol": {
@@ -1655,7 +1655,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reagerade på '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reagerade på ditt meddelande",
         "see": "Visa"
     },
     "commands": {

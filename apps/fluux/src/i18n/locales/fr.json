@@ -1658,7 +1658,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} a réagi à « {{preview}} »",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} a réagi à votre message",
         "see": "Voir"
     },
     "commands": {

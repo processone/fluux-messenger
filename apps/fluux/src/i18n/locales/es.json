@@ -647,8 +647,8 @@
             "verifiedTooltip": "Clave OpenPGP verificada",
             "tofuNewTooltip": "Contacto nuevo. Verifique la huella para confianza plena",
             "unverifiedKeysetTooltip": "Este contacto tiene una clave nueva que no se ha verificado.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Cifrado en pausa",
+            "blockedTooltip": "La clave del contacto ha cambiado. Resuélvelo para reanudar el cifrado",
             "sendBlockedEncryptionRequired": "Mensaje no enviado. El cifrado es obligatorio para esta conversación, pero ahora mismo no está disponible.",
             "sendBlockedKeyChanged": "Mensaje no enviado. La clave de cifrado de este contacto ha cambiado. Revisa el cambio de clave antes de enviar.",
             "sendBlockedKeyLocked": "Mensaje no enviado. Desbloquea tu clave de cifrado para enviar este mensaje.",
@@ -664,8 +664,8 @@
                 "pendingAll": "Las claves de {{name}} no reciben mensajes hasta que este dispositivo tenga tus decisiones de confianza de una versión anterior o de tus otros dispositivos. Hasta entonces no puedes enviar mensajes. Se vuelve a intentar automáticamente.",
                 "review": "Revisar claves"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Cifrado desactivado",
+            "plaintextForcedTooltip": "Has desactivado el cifrado en esta conversación, así que los mensajes se envían en texto plano",
             "keyLocked": "Cifrado bloqueado",
             "keyLockedTooltip": "Cifrado bloqueado. Haz clic para desbloquear",
             "encryptedClickToUnlock": "Mensaje cifrado. Haz clic para desbloquear",
@@ -688,8 +688,8 @@
                 "fingerprint_mismatch": "La huella digital no coincide con el valor anunciado",
                 "uid_mismatch": "La identidad del certificado no coincide con la dirección del contacto"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Desactivar el cifrado en esta conversación",
+            "enableEncryption": "Reactivar el cifrado",
             "tooltip": {
                 "header": "Cifrado",
                 "protocol": {
@@ -1659,7 +1659,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reaccionó a '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} reaccionó a tu mensaje",
         "see": "Ver"
     },
     "commands": {

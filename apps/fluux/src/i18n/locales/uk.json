@@ -647,8 +647,8 @@
             "verifiedTooltip": "Перевірений ключ OpenPGP",
             "tofuNewTooltip": "Новий контакт. Перевірте відбиток для повної довіри",
             "unverifiedKeysetTooltip": "Цей контакт має новий ключ, який не було перевірено.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Шифрування призупинено",
+            "blockedTooltip": "Ключ співрозмовника змінився. Усуньте проблему, щоб відновити шифрування",
             "sendBlockedEncryptionRequired": "Повідомлення не надіслано. Для цієї розмови потрібне шифрування, але зараз воно недоступне.",
             "sendBlockedKeyChanged": "Повідомлення не надіслано. Ключ шифрування цього контакту змінився. Перегляньте зміну ключа перед надсиланням.",
             "sendBlockedKeyLocked": "Повідомлення не надіслано. Розблокуйте свій ключ шифрування, щоб надіслати це повідомлення.",
@@ -664,8 +664,8 @@
                 "pendingAll": "Ключі {{name}} не отримують повідомлень, доки цей пристрій не отримає ваші рішення щодо довіри з попередньої версії або з інших ваших пристроїв. Доти ви не можете надсилати повідомлення. Спроба повторюється автоматично.",
                 "review": "Переглянути ключі"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Шифрування вимкнено",
+            "plaintextForcedTooltip": "Ви вимкнули шифрування для цієї розмови, тому повідомлення надсилаються у відкритому вигляді",
             "keyLocked": "Шифрування заблоковано",
             "keyLockedTooltip": "Шифрування заблоковано. Натисніть для розблокування",
             "encryptedClickToUnlock": "Зашифроване повідомлення. Натисніть для розблокування",
@@ -688,8 +688,8 @@
                 "fingerprint_mismatch": "Відбиток не збігається із заявленим значенням",
                 "uid_mismatch": "Ідентичність сертифіката не збігається з адресою співрозмовника"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Вимкнути шифрування для цієї розмови",
+            "enableEncryption": "Знову увімкнути шифрування",
             "tooltip": {
                 "header": "Зашифровано",
                 "protocol": {
@@ -1659,7 +1659,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} відреагував(ла) на '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} відреагував(ла) на ваше повідомлення",
         "see": "Показати"
     },
     "commands": {

@@ -647,8 +647,8 @@
             "verifiedTooltip": "Проверенный ключ OpenPGP",
             "tofuNewTooltip": "Новый контакт. Проверьте отпечаток для полного доверия",
             "unverifiedKeysetTooltip": "У этого контакта есть новый ключ, который не был проверен.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "Шифрование приостановлено",
+            "blockedTooltip": "Ключ собеседника изменился. Устраните проблему, чтобы возобновить шифрование",
             "sendBlockedEncryptionRequired": "Сообщение не отправлено. Для этого разговора требуется шифрование, но сейчас оно недоступно.",
             "sendBlockedKeyChanged": "Сообщение не отправлено. Ключ шифрования этого контакта изменился. Проверьте изменение ключа перед отправкой.",
             "sendBlockedKeyLocked": "Сообщение не отправлено. Разблокируйте свой ключ шифрования, чтобы отправить это сообщение.",
@@ -664,8 +664,8 @@
                 "pendingAll": "Ключи {{name}} не получают сообщений, пока это устройство не получит ваши решения о доверии из предыдущей версии или с других ваших устройств. До тех пор вы не можете отправлять сообщения. Попытка повторяется автоматически.",
                 "review": "Просмотреть ключи"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "Шифрование отключено",
+            "plaintextForcedTooltip": "Вы отключили шифрование для этого разговора, поэтому сообщения отправляются в открытом виде",
             "keyLocked": "Шифрование заблокировано",
             "keyLockedTooltip": "Шифрование заблокировано. Нажмите, чтобы разблокировать",
             "encryptedClickToUnlock": "Зашифрованное сообщение. Нажмите, чтобы разблокировать",
@@ -688,8 +688,8 @@
                 "fingerprint_mismatch": "Отпечаток не совпадает с заявленным значением",
                 "uid_mismatch": "Удостоверение сертификата не совпадает с адресом собеседника"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Отключить шифрование для этого разговора",
+            "enableEncryption": "Снова включить шифрование",
             "tooltip": {
                 "header": "Зашифровано",
                 "protocol": {
@@ -1659,7 +1659,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} отреагировал(а) на '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} отреагировал(а) на ваше сообщение",
         "see": "Показать"
     },
     "commands": {

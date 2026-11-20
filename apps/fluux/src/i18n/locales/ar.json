@@ -651,8 +651,8 @@
             "verifiedTooltip": "مفتاح OpenPGP موثّق",
             "tofuNewTooltip": "جهة اتصال جديدة. تحقّق من البصمة للثقة الكاملة",
             "unverifiedKeysetTooltip": "لدى جهة الاتصال هذه مفتاح جديد لم يتم التحقق منه.",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed. Resolve to resume encryption",
+            "blocked": "التشفير متوقف مؤقتًا",
+            "blockedTooltip": "تغيّر مفتاح هذا المراسل. عالِج ذلك لاستئناف التشفير",
             "sendBlockedEncryptionRequired": "لم تُرسل الرسالة. التشفير مطلوب لهذه المحادثة لكنه غير متاح حاليًا.",
             "sendBlockedKeyChanged": "لم تُرسل الرسالة. تغيّر مفتاح تشفير هذا المراسل. راجِع تغيير المفتاح قبل الإرسال.",
             "sendBlockedKeyLocked": "لم تُرسل الرسالة. افتح قفل مفتاح التشفير الخاص بك لإرسال هذه الرسالة.",
@@ -668,8 +668,8 @@
                 "pendingAll": "مفاتيح {{name}} لا تتلقى أي رسائل حتى يحصل هذا الجهاز على قرارات الثقة الخاصة بك من إصدار سابق أو من أجهزتك الأخرى. لا يمكنك إرسال الرسائل حتى ذلك الحين. تتم إعادة المحاولة تلقائيًا.",
                 "review": "مراجعة المفاتيح"
             },
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation, messages are sent in plaintext",
+            "plaintextForced": "التشفير معطّل",
+            "plaintextForcedTooltip": "عطّلتَ التشفير لهذه المحادثة، لذا تُرسل الرسائل بنص عادي",
             "keyLocked": "التشفير مقفل",
             "keyLockedTooltip": "التشفير مقفل. انقر للفتح",
             "encryptedClickToUnlock": "رسالة مشفرة. انقر للفتح",
@@ -692,8 +692,8 @@
                 "fingerprint_mismatch": "البصمة لا تتطابق مع القيمة المُعلَنة",
                 "uid_mismatch": "هوية الشهادة لا تتطابق مع عنوان الطرف الآخر"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "تعطيل التشفير لهذه المحادثة",
+            "enableEncryption": "إعادة تفعيل التشفير",
             "tooltip": {
                 "header": "مُشفَّر",
                 "protocol": {
@@ -1663,7 +1663,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} تفاعل مع '{{preview}}'",
-        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
+        "mentionNoPreview": "{{emoji}} {{name}} تفاعل مع رسالتك",
         "see": "عرض"
     },
     "commands": {
