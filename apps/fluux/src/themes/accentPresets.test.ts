@@ -159,17 +159,10 @@ describe('Default accent presets, on every theme that uses them', () => {
  * readable text on fills.
  */
 describe('Theme default accents', () => {
-  // Below AA as text today, pinned at their current ratio so they can only
-  // improve. Aurora dark is the deliberate white-text periwinkle (see above).
-  const BELOW_AA_AS_TEXT: Record<string, number> = {
-    'fluux/dark': 3.2,
-    'solarized/dark': 3.0,
-    'solarized/light': 4.4,
-    'one-dark/dark': 3.7,
-    'catppuccin-mocha/dark': 4.4,
-    'tokyo-night/light': 3.9,
-    'rose-pine/light': 3.6,
-  }
+  // Aurora dark keeps its white-text periwinkle on purpose (see above): it reads
+  // as a fill and an icon (3:1) but not as body text. Every other default
+  // accent clears AA as text.
+  const BELOW_AA_AS_TEXT: Record<string, number> = { 'fluux/dark': 3.2 }
 
   for (const theme of builtinThemes) {
     for (const mode of ['dark', 'light'] as const) {

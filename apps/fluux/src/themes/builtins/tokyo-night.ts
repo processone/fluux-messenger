@@ -69,10 +69,11 @@ export const tokyoNightTheme: ThemeDefinition = {
       '--fluux-base-80': '#68709a', // dark5
       '--fluux-base-90': '#3760bf', // fg
       '--fluux-base-100': '#1a1b26',
-      // Foundation — accent (blue, adjusted for light)
+      // Foundation — accent: blue, deepened for this theme's grey-blue content
+      // surface (#e1e2e7): 4.9:1 as text (was 4.0:1), white text on fills 6.3:1.
       '--fluux-accent-h': '220',
       '--fluux-accent-s': '72%',
-      '--fluux-accent-l': '52%',
+      '--fluux-accent-l': '46%',
       // Foundation — palette (Day)
       '--fluux-color-red': '#f52a65',
       '--fluux-color-green': '#587539',
