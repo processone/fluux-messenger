@@ -256,7 +256,7 @@ describe('clearing another account', () => {
       expect(Object.keys(s().entries)).toEqual(['fresh'])
     })
 
-    it('migrates an unverified entry: sealed copy under a new id, plain item retracted', () => {
+    it('migrates an unverified entry: sealed copy under a new id first, the plain item retracted once the copy is stored', () => {
       s().setSealState('ready')
       s().reconcileFetch([entry('p', { unverified: true })])
       s().migrate('p')
@@ -264,7 +264,24 @@ describe('clearing another account', () => {
       expect(ids).toHaveLength(1)
       expect(ids[0]).not.toBe('p')
       expect(s().entries[ids[0]].unverified).toBeUndefined()
-      expect(s().pending).toEqual({ p: 'retract', [ids[0]]: 'publish' })
+      expect(s().pending).toEqual({ [ids[0]]: 'publish' }) // the plain item is untouched meanwhile
+      expect(s().remote.p).toBe(true)
+      s().confirm(ids[0], 'publish')
+      expect(s().pending).toEqual({ [ids[0]]: 'publish', p: 'retract' })
+    })
+
+    it('lists the plain entry again when the sealed copy is refused, and does not list a plain item that is being sealed twice', () => {
+      s().setSealState('ready')
+      s().reconcileFetch([entry('p', { unverified: true })])
+      s().migrate('p')
+      const [sealedId] = Object.keys(s().entries)
+      s().reconcileFetch([entry('p', { unverified: true })]) // a read while the copy is in flight
+      expect(Object.keys(s().entries)).toEqual([sealedId])
+      expect(s().pending).toEqual({ [sealedId]: 'publish' })
+      s().refuse(sealedId, 'publish')
+      expect(Object.keys(s().entries)).toEqual(['p'])
+      expect(s().entries.p.unverified).toBe(true)
+      expect(s().pending).toEqual({})
     })
 
     it('does not migrate a verified entry, or anything while the key is locked', () => {

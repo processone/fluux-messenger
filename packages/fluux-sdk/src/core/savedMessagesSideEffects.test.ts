@@ -538,6 +538,28 @@ describe('saved messages sync side effect', () => {
       stop()
     })
 
+    it('keeps the plain items, listed, when the server refuses the sealed copies, and retracts them only after the copies are stored', async () => {
+      const { client, node, stop } = setup()
+      node.sealState.mockReturnValue('ready')
+      node.fetchAll.mockResolvedValue({ status: 'ok', items: [entry('p1')] })
+      node.open.mockImplementationOnce(async (items: SavedMessage[]) => opened(items.map((i) => ({ ...i, unverified: true as const })), { sealedSeen: 0 }))
+      const order: string[] = []
+      node.publish.mockImplementationOnce(async () => { order.push('publish'); throw Object.assign(new Error('internal-server-error'), { name: 'StanzaError' }) })
+      node.retract.mockImplementation(async (id: string) => { order.push(`retract ${id}`) })
+      client._emit('online')
+      await flushPromises()
+      expect(node.retract).not.toHaveBeenCalled() // the refused copy leaves the plain item alone
+      expect(Object.keys(savedStore.getState().entries)).toEqual(['p1'])
+      expect(savedStore.getState().entries.p1.unverified).toBe(true)
+      // A later read finds it again and the copy is stored this time: only then is the plain item retracted.
+      node.publish.mockImplementation(async () => { order.push('publish') })
+      node.open.mockImplementationOnce(async (items: SavedMessage[]) => opened(items.map((i) => ({ ...i, unverified: true as const })), { sealedSeen: 0 }))
+      client._emit('online')
+      await flushPromises()
+      expect(order).toEqual(['publish', 'publish', 'retract p1'])
+      stop()
+    })
+
     it('flags a plain item beside sealed ones and neither seals nor retracts it', async () => {
       const { client, node, stop } = setup()
       node.sealState.mockReturnValue('ready')

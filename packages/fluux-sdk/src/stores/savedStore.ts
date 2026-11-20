@@ -43,6 +43,8 @@ export interface SavedState {
   sealState: 'unavailable' | 'locked' | 'ready'
   /** Items the server holds that this device cannot list yet because the key is not available. */
   lockedIds: Record<string, true>
+  /** Plain entries being sealed, by the id of the sealed copy: the plain item stays on the server (and listed again if the copy is refused) until the copy is stored. */
+  migrating: Record<string, SavedMessage>
 
   /** Save an entry (replaces an entry naming the same message). Returns false at the server limit. */
   save: (entry: SavedMessage) => boolean
@@ -68,7 +70,7 @@ export interface SavedState {
   setSealState: (state: 'unavailable' | 'locked' | 'ready') => void
   /** Give a not yet published entry a new item id (a hash id made while OpenPGP was off must not reach the server). */
   reid: (oldId: string, newId: string) => void
-  /** Re-save a plain entry sealed under a new id, retracting the plain item. */
+  /** Re-save a plain entry sealed under a new id; the plain item is retracted only once the sealed copy is stored. */
   migrate: (id: string) => void
   /** The server definitively refused this operation: undo a refused save, note the refusal. */
   refuse: (id: string, op: SavedPendingOp, revision?: number) => void
@@ -109,7 +111,7 @@ function writeQueue(state: Pick<SavedState, 'pending' | 'entries'>): void {
   } catch { /* storage unavailable: the queue stays in memory only */ }
 }
 
-const initial = { entries: {}, pending: {}, remote: {}, removed: {}, revisions: {}, loaded: false, limit: undefined, refusals: 0, hydrated: false, copyVersion: 0, generation: 0, sealState: 'unavailable' as const, lockedIds: {} }
+const initial = { entries: {}, pending: {}, remote: {}, removed: {}, revisions: {}, loaded: false, limit: undefined, refusals: 0, hydrated: false, copyVersion: 0, generation: 0, sealState: 'unavailable' as const, lockedIds: {}, migrating: {} }
 
 /** Is this message already saved (by any of its identities)? */
 export function findSavedEntry(entries: Record<string, SavedMessage>, probe: SavedIdentity): SavedMessage | undefined {
@@ -267,6 +269,15 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     if (op === 'publish') nextRemote[id] = true
     else { delete nextRemote[id]; delete nextRemoved[id] }
     track(id)
+    // The sealed copy of a migrated entry is stored: now the plain item can go.
+    const plain = op === 'publish' ? get().migrating[id] : undefined
+    if (plain) {
+      const nextMigrating = { ...get().migrating }
+      delete nextMigrating[id]
+      track(plain.id)
+      set({ remote: nextRemote, removed: { ...nextRemoved, [plain.id]: plain }, pending: { ...get().pending, [plain.id]: 'retract' }, revisions: bump(get().revisions, plain.id), migrating: nextMigrating })
+      return
+    }
     set({ remote: nextRemote, removed: nextRemoved })
   },
 
@@ -279,7 +290,9 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     const cleared = [...clearedFetched]
     const merged: Record<string, SavedMessage> = {}
     const removedNow: Record<string, SavedMessage> = {}
+    const heldBack = new Set(Object.values(get().migrating).map((plain) => plain.id)) // plain items being sealed: not listed twice
     for (const entry of fetched) {
+      if (heldBack.has(entry.id)) continue
       // A removal this device queued: keep the server's copy to bring back if the server refuses it.
       if (pending[entry.id] === 'retract') { if (!get().removed[entry.id]) removedNow[entry.id] = entry }
       else if (!keepCurrent.has(entry.id)) merged[entry.id] = entry
@@ -316,7 +329,8 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     const nextLocked = { ...get().lockedIds }
     for (const id of removedIds) { track(id); delete nextRemote[id]; delete nextLocked[id]; if (pending[id] === undefined) delete next[id] }
     for (const id of [...(hidden?.locked ?? []), ...(hidden?.rejected ?? [])]) { track(id); nextRemote[id] = true; if (hidden?.locked.includes(id)) nextLocked[id] = true }
-    for (const entry of upserts) { track(entry.id); nextRemote[entry.id] = true; if (pending[entry.id] === undefined) next[entry.id] = entry }
+    const heldBack = new Set(Object.values(get().migrating).map((plain) => plain.id))
+    for (const entry of upserts) { track(entry.id); nextRemote[entry.id] = true; if (pending[entry.id] === undefined && !heldBack.has(entry.id)) next[entry.id] = entry }
     const { entries: unique, weaker } = dedupe(next)
     const nextPending = { ...pending }
     for (const id of weaker) if (nextPending[id] === undefined) nextPending[id] = 'retract'
@@ -355,8 +369,13 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     const entry = get().entries[id]
     if (!entry?.unverified || get().sealState !== 'ready') return
     const { unverified: _unverified, ...sealed } = entry
-    get().remove(id)
-    get().save({ ...sealed, id: randomSavedItemId() })
+    get().hydratePending()
+    const { entries, pending, revisions, migrating } = get()
+    const newId = randomSavedItemId()
+    const next = { ...entries }
+    delete next[id]
+    track(id); track(newId)
+    set({ entries: { ...next, [newId]: { ...sealed, id: newId } }, pending: { ...pending, [newId]: 'publish' }, migrating: { ...migrating, [newId]: entry }, revisions: bump(revisions, newId) })
   },
 
   hydratePending: () => {
@@ -393,6 +412,15 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     } else if (remote[id] || entries[id]?.deleted) {
       // An item the server already holds stays listed (a deleted one keeps its tombstone); only the change was refused.
       set({ pending: nextPending, refusals: refusals + 1 })
+    } else if (get().migrating[id]) {
+      // A refused sealed copy: the plain entry it was to replace is still on the server, and listed again.
+      const plain = get().migrating[id]
+      const next = { ...entries, [plain.id]: plain }
+      delete next[id]
+      const nextMigrating = { ...get().migrating }
+      delete nextMigrating[id]
+      track(plain.id)
+      set({ entries: next, pending: nextPending, migrating: nextMigrating, refusals: refusals + 1 })
     } else {
       const next = { ...entries }
       delete next[id]

@@ -123,6 +123,8 @@ export function setupSavedMessagesSideEffects(
             // The server took it, whatever this device has queued since: membership counts it either way.
             state().confirm(id, op)
             state().settle(id, op, revision)
+            // A migrated entry's plain item is queued for retraction once its sealed copy is stored: send it now.
+            if (op === 'publish' && Object.values(state().pending).includes('retract')) flushAgain = true
             // The first publish creates the node, and only then can its limit be read: later saves wait for it.
             if (op === 'publish' && state().limit === undefined) {
               const limit = await client.internal.savedMessages.fetchMaxItems().catch(() => undefined)
