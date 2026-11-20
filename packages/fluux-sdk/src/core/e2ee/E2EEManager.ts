@@ -1,6 +1,6 @@
 import { getDomain } from '../jid'
 import { CapabilityCache, type CapabilityCacheOptions } from './CapabilityCache'
-import { isE2EEPluginError } from './errors'
+import { isE2EEPluginError, E2EEPluginError } from './errors'
 import { createPluginStorage, type StorageBackend } from './PluginStorage'
 import type {
   AccountInfo,
@@ -275,6 +275,43 @@ export class E2EEManager {
   /** Get a specific plugin by id, or `null`. */
   getPlugin(id: string): E2EEPlugin | null {
     return this.plugins.get(id) ?? null
+  }
+
+  /**
+   * The state of sealing text to the account's own key: the best state any
+   * plugin that can seal reports (`ready` over `locked` over `unavailable`).
+   */
+  selfSealState(): 'unavailable' | 'locked' | 'ready' {
+    let best: 'unavailable' | 'locked' | 'ready' = 'unavailable'
+    for (const plugin of this.plugins.values()) {
+      if (!plugin.sealToSelf || !plugin.selfSealState) continue
+      let state: 'unavailable' | 'locked' | 'ready'
+      try { state = plugin.selfSealState() } catch { continue }
+      if (state === 'ready') return 'ready'
+      if (state === 'locked') best = 'locked'
+    }
+    return best
+  }
+
+  private sealingPlugin(): E2EEPlugin | null {
+    for (const plugin of this.plugins.values()) {
+      if (plugin.sealToSelf && plugin.openFromSelf && plugin.selfSealState?.() === 'ready') return plugin
+    }
+    return null
+  }
+
+  /** Seal text to the account's own key. Throws `key-locked` when no plugin can now. */
+  async sealToSelf(plaintext: string): Promise<string> {
+    const plugin = this.sealingPlugin()
+    if (!plugin?.sealToSelf) throw new E2EEPluginError('transient', 'key-locked', 'no plugin can seal to the account key now')
+    return plugin.sealToSelf(plaintext)
+  }
+
+  /** Open sealed text: the text, or `null` when the account's own key did not sign it. Throws `key-locked` when no plugin can now. */
+  async openFromSelf(armored: string): Promise<string | null> {
+    const plugin = this.sealingPlugin()
+    if (!plugin?.openFromSelf) throw new E2EEPluginError('transient', 'key-locked', 'no plugin can open sealed text now')
+    return plugin.openFromSelf(armored)
   }
 
   /** True when at least one plugin is registered. */

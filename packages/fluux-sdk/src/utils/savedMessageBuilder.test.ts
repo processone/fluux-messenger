@@ -28,8 +28,10 @@ describe('buildSavedMessage', () => {
     expect(buildSavedMessage(chat({ isOutgoing: true }), OWN)).toMatchObject({ from: 'romeo@montague.example', to: 'juliet@capulet.example' })
   })
 
-  it('stores no text for an encrypted message and at most 4000 characters otherwise', () => {
-    expect(buildSavedMessage(chat({ encryptedPayload: '<x/>' }), OWN)).toMatchObject({ text: '', encrypted: true })
+  it('keeps the text of an encrypted message this device decrypted, and none for one still waiting for its key; at most 4000 characters', () => {
+    expect(buildSavedMessage(chat({ encryptedPayload: '<x/>', body: '' }), OWN)).toMatchObject({ text: '', encrypted: true })
+    expect(buildSavedMessage(chat({ securityContext: { kind: 'encrypted' } as never, body: 'decrypted text' }), OWN))
+      .toMatchObject({ text: 'decrypted text', encrypted: true })
     expect(Array.from(buildSavedMessage(chat({ body: 'é'.repeat(5000) }), OWN).text)).toHaveLength(4000)
   })
 

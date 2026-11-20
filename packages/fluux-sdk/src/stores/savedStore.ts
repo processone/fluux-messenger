@@ -1,9 +1,10 @@
 import { createStore } from 'zustand/vanilla'
-import { sameSavedMessage, savedCandidateKeys } from '../utils/savedMessageKeys'
+import { sameSavedMessage, savedCandidateKeys, savedItemId } from '../utils/savedMessageKeys'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
 import { retractedAtForIdentity } from '../utils/retractedIdentities'
 import { getBareJid } from '../core/jid'
 import type { SavedIdentity } from '../utils/savedMessageKeys'
+import { generateUUID } from '../utils/uuid'
 import type { SavedMessage, SavedPendingOp } from '../core/types/saved'
 
 /**
@@ -38,6 +39,10 @@ export interface SavedState {
   copyVersion: number
   /** Counts up on every reset, so work started before a wipe can tell it must not land. */
   generation: number
+  /** OpenPGP sealing of entries (docs/XEP-SAVED_MESSAGES.md §7): `unavailable` means plain entries, `locked` means the list waits for the key. */
+  sealState: 'unavailable' | 'locked' | 'ready'
+  /** Items the server holds that this device cannot list yet because the key is not available. */
+  lockedIds: Record<string, true>
 
   /** Save an entry (replaces an entry naming the same message). Returns false at the server limit. */
   save: (entry: SavedMessage) => boolean
@@ -48,7 +53,7 @@ export interface SavedState {
   /** A fresh read of the node begins: its list is unknown until it lands, and changes from now on outrank its answer. */
   beginFetch: () => SavedFetch
   /** Land a read. A read that a reset or a newer owner outlived is dropped (returns false). */
-  reconcileFetch: (entries: SavedMessage[], fetch?: SavedFetch, deleted?: ReadonlySet<string>) => boolean
+  reconcileFetch: (entries: SavedMessage[], fetch?: SavedFetch, deleted?: ReadonlySet<string>, hidden?: SavedHidden) => boolean
   /** The read is over without landing (refused, unanswered or abandoned). */
   endFetch: (fetch: SavedFetch) => void
   /** Is this read still the one the store is waiting for? */
@@ -56,15 +61,28 @@ export interface SavedState {
   /** The server took (or lost) this item, whatever this device has queued since. */
   confirm: (id: string, op: SavedPendingOp) => void
   /** Apply a `+notify` event, leaving ids with a pending local operation alone. */
-  applyNotify: (update: { upserts: SavedMessage[]; removedIds: string[] }, deleted?: ReadonlySet<string>) => void
+  applyNotify: (update: { upserts: SavedMessage[]; removedIds: string[] }, deleted?: ReadonlySet<string>, hidden?: SavedHidden) => void
   /** The server took (or no longer needs) the operation for this id. */
   settle: (id: string, op: SavedPendingOp, revision?: number) => void
   setLimit: (limit: number | undefined) => void
+  setSealState: (state: 'unavailable' | 'locked' | 'ready') => void
+  /** Give a not yet published entry a new item id (a hash id made while OpenPGP was off must not reach the server). */
+  reid: (oldId: string, newId: string) => void
+  /** Re-save a plain entry sealed under a new id, retracting the plain item. */
+  migrate: (id: string) => void
   /** The server definitively refused this operation: undo a refused save, note the refusal. */
   refuse: (id: string, op: SavedPendingOp, revision?: number) => void
   /** Merge the queue stored by an earlier session of this account (local operations win). */
   hydratePending: () => void
   reset: () => void
+}
+
+/** Items the server holds that are not listed: `locked` ones wait for the key, `rejected` ones failed the signature check. */
+export interface SavedHidden { locked: string[]; rejected: string[] }
+
+/** A fresh item id nobody can recompute from the message. */
+export function randomSavedItemId(): string {
+  return generateUUID().replace(/-/g, '')
 }
 
 const PENDING_KEY = 'fluux-saved-pending'
@@ -91,7 +109,7 @@ function writeQueue(state: Pick<SavedState, 'pending' | 'entries'>): void {
   } catch { /* storage unavailable: the queue stays in memory only */ }
 }
 
-const initial = { entries: {}, pending: {}, remote: {}, removed: {}, revisions: {}, loaded: false, limit: undefined, refusals: 0, hydrated: false, copyVersion: 0, generation: 0 }
+const initial = { entries: {}, pending: {}, remote: {}, removed: {}, revisions: {}, loaded: false, limit: undefined, refusals: 0, hydrated: false, copyVersion: 0, generation: 0, sealState: 'unavailable' as const, lockedIds: {} }
 
 /** Is this message already saved (by any of its identities)? */
 export function findSavedEntry(entries: Record<string, SavedMessage>, probe: SavedIdentity): SavedMessage | undefined {
@@ -197,9 +215,11 @@ export function clearSavedLocalData(jid: string | null, allAccounts: boolean): v
 export const savedStore = createStore<SavedState>()((set, get) => ({
   ...initial,
 
-  save: (entry) => {
+  save: (entryIn) => {
     get().hydratePending()
     const state = get()
+    // With OpenPGP on the item id must not be a hash of the message identity, which the server can recompute.
+    const entry = state.sealState !== 'unavailable' && entryIn.id === savedItemId(entryIn) ? { ...entryIn, id: randomSavedItemId() } : entryIn
     const existing = findSavedEntry(state.entries, entry)
     if (existing) return true
     if (state.limit !== undefined && Object.keys(state.entries).length >= state.limit) return false
@@ -250,7 +270,7 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     set({ remote: nextRemote, removed: nextRemoved })
   },
 
-  reconcileFetch: (fetchedRaw, fetch, deleted) => {
+  reconcileFetch: (fetchedRaw, fetch, deleted, hidden) => {
     if (fetch && !fetches.has(fetch)) return false
     const keepCurrent = fetch ?? new Set<string>()
     if (fetch) fetches.delete(fetch)
@@ -279,23 +299,29 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     // What the server holds: its answer, except for ids that changed while it was in flight.
     const nextRemote: Record<string, true> = {}
     for (const entry of fetchedRaw) if (!keepCurrent.has(entry.id)) nextRemote[entry.id] = true
+    // Items that are held but not listed still count against the node's limit.
+    for (const id of [...(hidden?.locked ?? []), ...(hidden?.rejected ?? [])]) if (!keepCurrent.has(id)) nextRemote[id] = true
     for (const id of keepCurrent) if (remote[id]) nextRemote[id] = true
-    set({ entries: unique, pending: nextPending, remote: nextRemote, loaded: true, revisions: cleared.reduce(bump, get().revisions), removed: { ...get().removed, ...removedNow } })
+    const lockedIds: Record<string, true> = {}
+    for (const id of hidden?.locked ?? []) lockedIds[id] = true
+    set({ lockedIds, entries: unique, pending: nextPending, remote: nextRemote, loaded: true, revisions: cleared.reduce(bump, get().revisions), removed: { ...get().removed, ...removedNow } })
     return true
   },
 
-  applyNotify: ({ upserts: upsertsRaw, removedIds }, deleted) => {
+  applyNotify: ({ upserts: upsertsRaw, removedIds }, deleted, hidden) => {
     const { entries, pending, remote } = get()
     const { entries: upserts, cleared } = redactRetracted(upsertsRaw, deleted)
     const next = { ...entries }
     const nextRemote = { ...remote }
-    for (const id of removedIds) { track(id); delete nextRemote[id]; if (pending[id] === undefined) delete next[id] }
+    const nextLocked = { ...get().lockedIds }
+    for (const id of removedIds) { track(id); delete nextRemote[id]; delete nextLocked[id]; if (pending[id] === undefined) delete next[id] }
+    for (const id of [...(hidden?.locked ?? []), ...(hidden?.rejected ?? [])]) { track(id); nextRemote[id] = true; if (hidden?.locked.includes(id)) nextLocked[id] = true }
     for (const entry of upserts) { track(entry.id); nextRemote[entry.id] = true; if (pending[entry.id] === undefined) next[entry.id] = entry }
     const { entries: unique, weaker } = dedupe(next)
     const nextPending = { ...pending }
     for (const id of weaker) if (nextPending[id] === undefined) nextPending[id] = 'retract'
     for (const id of cleared) if (unique[id] && nextPending[id] === undefined) nextPending[id] = 'publish'
-    set({ entries: unique, pending: nextPending, remote: nextRemote, revisions: cleared.reduce(bump, get().revisions) })
+    set({ entries: unique, pending: nextPending, remote: nextRemote, lockedIds: nextLocked, revisions: cleared.reduce(bump, get().revisions) })
   },
 
   settle: (id, op, revision) => {
@@ -310,6 +336,28 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
   },
 
   setLimit: (limit) => set({ limit }),
+
+  setSealState: (sealState) => { if (get().sealState !== sealState) set({ sealState }) },
+
+  reid: (oldId, newId) => {
+    const { entries, pending, revisions, remote } = get()
+    const entry = entries[oldId]
+    if (!entry || remote[oldId] || pending[oldId] !== 'publish' || entries[newId]) return
+    const nextEntries = { ...entries }
+    delete nextEntries[oldId]
+    const nextPending = { ...pending }
+    delete nextPending[oldId]
+    track(oldId); track(newId)
+    set({ entries: { ...nextEntries, [newId]: { ...entry, id: newId } }, pending: { ...nextPending, [newId]: 'publish' }, revisions: bump(revisions, newId) })
+  },
+
+  migrate: (id) => {
+    const entry = get().entries[id]
+    if (!entry?.unverified || get().sealState !== 'ready') return
+    const { unverified: _unverified, ...sealed } = entry
+    get().remove(id)
+    get().save({ ...sealed, id: randomSavedItemId() })
+  },
 
   hydratePending: () => {
     if (get().hydrated) return

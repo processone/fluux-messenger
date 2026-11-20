@@ -1786,6 +1786,10 @@
         "deleted": "Správa bola odstránená",
         "tryAgain": "Skúsiť znova",
         "full": "Zoznam uložených správ je plný ({{count}}). Odstráňte jednu, aby ste mohli uložiť ďalšiu.",
-        "refused": "Váš server odmietol túto správu uložiť."
+        "refused": "Váš server odmietol túto správu uložiť.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

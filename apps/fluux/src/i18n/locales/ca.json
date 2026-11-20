@@ -1785,6 +1785,10 @@
         "deleted": "Missatge suprimit",
         "tryAgain": "Torna-ho a provar",
         "full": "La llista de missatges desats és plena ({{count}}). Traieu-ne un per desar-ne un altre.",
-        "refused": "El vostre servidor ha refusat emmagatzemar aquest missatge."
+        "refused": "El vostre servidor ha refusat emmagatzemar aquest missatge.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

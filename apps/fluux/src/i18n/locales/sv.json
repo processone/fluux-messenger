@@ -1781,6 +1781,10 @@
         "deleted": "Meddelandet har tagits bort",
         "tryAgain": "Försök igen",
         "full": "Listan över sparade meddelanden är full ({{count}}). Ta bort ett för att spara ett annat.",
-        "refused": "Din server vägrade lagra det här meddelandet."
+        "refused": "Din server vägrade lagra det här meddelandet.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

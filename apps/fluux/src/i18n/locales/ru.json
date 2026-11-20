@@ -1785,6 +1785,10 @@
         "deleted": "Сообщение удалено",
         "tryAgain": "Повторить",
         "full": "Список сохранённых сообщений заполнен ({{count}}). Уберите одно, чтобы сохранить другое.",
-        "refused": "Ваш сервер отказался сохранить это сообщение."
+        "refused": "Ваш сервер отказался сохранить это сообщение.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

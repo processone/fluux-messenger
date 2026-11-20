@@ -1789,6 +1789,10 @@
         "deleted": "Messaġġ imħassar",
         "tryAgain": "Erġa' pprova",
         "full": "Il-lista tal-messaġġi msejvin hija mimlija ({{count}}). Neħħi wieħed biex tsejvja ieħor.",
-        "refused": "Is-server tiegħek irrifjuta li jaħżen dan il-messaġġ."
+        "refused": "Is-server tiegħek irrifjuta li jaħżen dan il-messaġġ.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

@@ -1785,6 +1785,10 @@
         "deleted": "Mensagem eliminada",
         "tryAgain": "Tentar novamente",
         "full": "A lista de mensagens guardadas está cheia ({{count}}). Remova uma para guardar outra.",
-        "refused": "O seu servidor recusou armazenar esta mensagem."
+        "refused": "O seu servidor recusou armazenar esta mensagem.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

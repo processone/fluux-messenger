@@ -20,13 +20,16 @@ export function canSaveMessage(message: Message | RoomMessage): boolean {
 }
 
 /**
- * Build the entry for a message. Plain messages keep their text (up to 4000
- * characters, as Forward); end-to-end encrypted ones keep none.
+ * Build the entry for a message, with its text (up to 4000 characters, as Forward).
+ * An end-to-end encrypted message that this device decrypted keeps its text too;
+ * it leaves the device only sealed to the account's own key, never in clear
+ * (SavedMessages writes none of it without OpenPGP).
  */
 export function buildSavedMessage(message: Message | RoomMessage, ownJid: string, now: number = Date.now()): SavedMessage {
   const ownBare = getBareJid(ownJid)
   const encrypted = Boolean(message.securityContext || message.encryptedPayload)
-  const text = encrypted ? '' : Array.from(message.body ?? '').slice(0, MAX_SAVED_CODE_POINTS).join('')
+  // A message still waiting to be decrypted has no text to keep.
+  const text = message.encryptedPayload ? '' : Array.from(message.body ?? '').slice(0, MAX_SAVED_CODE_POINTS).join('')
   const base = {
     text, savedAt: now, sentAt: message.timestamp.getTime(), messageId: message.id,
     ...(encrypted && { encrypted: true as const }),

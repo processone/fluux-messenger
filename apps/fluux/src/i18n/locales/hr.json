@@ -1783,6 +1783,10 @@
         "deleted": "Poruka je izbrisana",
         "tryAgain": "Pokušaj ponovno",
         "full": "Popis spremljenih poruka je pun ({{count}}). Uklonite jednu da biste spremili drugu.",
-        "refused": "Vaš je poslužitelj odbio pohraniti ovu poruku."
+        "refused": "Vaš je poslužitelj odbio pohraniti ovu poruku.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

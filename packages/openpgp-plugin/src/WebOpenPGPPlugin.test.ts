@@ -3295,3 +3295,70 @@ describe('key expiration (XEP-0373 §5 cross-client restore)', () => {
     expect(out.signatureVerified).toBe(true)
   })
 })
+
+// FLM-341: saved messages are sealed to the account's own key.
+describe('WebOpenPGPPlugin seal to self', () => {
+  async function readyPlugin() {
+    const plugin = new TestableWebOpenPGPPlugin()
+    const { ctx } = makeCtx('alice@example.com')
+    setSessionPassphrase('hunter2-strong-passphrase')
+    await plugin.init(ctx)
+    const ownBundle = await plugin.callEnsureKeyMaterial('alice@example.com')
+    return { plugin, ownBundle }
+  }
+
+  afterEach(() => clearSessionPassphrase())
+
+  it('reports no key, a locked key and a usable key', async () => {
+    const plugin = new TestableWebOpenPGPPlugin()
+    expect(plugin.selfSealState()).toBe('unavailable')
+    const { plugin: ready } = await readyPlugin()
+    expect(ready.selfSealState()).toBe('ready')
+    clearSessionPassphrase()
+    expect(ready.selfSealState()).toBe('locked')
+  })
+
+  it('opens what it sealed, as the text it was given', async () => {
+    const { plugin } = await readyPlugin()
+    const sealed = await plugin.sealToSelf('{"text":"the door code is 1234"}')
+    expect(sealed).not.toContain('door code')
+    expect(await plugin.openFromSelf(sealed)).toBe('{"text":"the door code is 1234"}')
+  })
+
+  it('discards text sealed to the key but signed by another key', async () => {
+    const { plugin, ownBundle } = await readyPlugin()
+    const { generateKey, createMessage, encrypt, readKey } = await import('openpgp')
+    const { privateKey: stranger } = await generateKey({ type: 'ecc', curve: 'curve25519Legacy', userIDs: [{ name: 'xmpp:mallory@example.com' }], format: 'object' })
+    const forged = await encrypt({
+      message: await createMessage({ text: 'forged entry' }),
+      encryptionKeys: await readKey({ armoredKey: ownBundle.publicArmored }),
+      signingKeys: stranger,
+      format: 'armored',
+    })
+    expect(await plugin.openFromSelf(forged)).toBeNull()
+  })
+
+  it('discards text sealed to the key with no signature at all', async () => {
+    const { plugin, ownBundle } = await readyPlugin()
+    const { createMessage, encrypt, readKey } = await import('openpgp')
+    const unsigned = await encrypt({
+      message: await createMessage({ text: 'unsigned entry' }),
+      encryptionKeys: await readKey({ armoredKey: ownBundle.publicArmored }),
+      format: 'armored',
+    })
+    expect(await plugin.openFromSelf(unsigned)).toBeNull()
+  })
+
+  it('discards text that is not a sealed message', async () => {
+    const { plugin } = await readyPlugin()
+    expect(await plugin.openFromSelf('not a pgp message')).toBeNull()
+  })
+
+  it('neither seals nor opens while the key is locked, so nothing is stored in clear', async () => {
+    const { plugin } = await readyPlugin()
+    const sealed = await plugin.sealToSelf('secret')
+    clearSessionPassphrase()
+    await expect(plugin.sealToSelf('secret')).rejects.toMatchObject({ code: 'key-locked' })
+    await expect(plugin.openFromSelf(sealed)).rejects.toMatchObject({ code: 'key-locked' })
+  })
+})

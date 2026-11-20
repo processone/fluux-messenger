@@ -14,7 +14,8 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   useSavedMessages: () => {
     const entries = useStore(savedStore, (s) => s.entries)
     const saved = Object.values(entries).sort((a, b) => b.savedAt - a.savedAt)
-    return { saved, remove: (id: string) => savedStore.getState().remove(id) }
+    const lockedCount = useStore(savedStore, (s) => Object.keys(s.lockedIds).length)
+    return { saved, lockedCount, remove: (id: string) => savedStore.getState().remove(id) }
   },
   findLatestCopy: (...args: unknown[]) => latestCopy(...args),
 }))
@@ -109,5 +110,32 @@ describe('SavedView', () => {
     latestCopy.mockResolvedValue({ body: 'edited later' })
     act(() => { savedStore.setState((state) => ({ copyVersion: state.copyVersion + 1 })) })
     await waitFor(() => expect(screen.getByTestId('saved-text').textContent).toBe('edited later'))
+  })
+
+  it('shows the text of an encrypted entry that was sealed with it, and the placeholder when there is none', () => {
+    savedStore.setState({ entries: {
+      a: entry('a', { text: 'the decrypted words', encrypted: true }),
+      b: entry('b', { text: '', encrypted: true, savedAt: 500 }),
+    } })
+    render(<SavedView problems={{}} onOpen={open} />)
+    const rows = screen.getAllByTestId('saved-row')
+    expect(within(rows[0]).getByTestId('saved-text')).toHaveTextContent('the decrypted words')
+    expect(within(rows[1]).getByTestId('saved-text')).toHaveTextContent('saved.encrypted')
+  })
+
+  it('shows a locked state, not an empty list, while sealed entries wait for the key', () => {
+    savedStore.setState({ lockedIds: { s1: true, s2: true } })
+    render(<SavedView problems={{}} onOpen={open} />)
+    expect(screen.getByText('saved.locked')).toBeInTheDocument()
+    expect(screen.getByText('saved.lockedHint')).toBeInTheDocument()
+    expect(screen.queryByText('saved.empty')).toBeNull()
+  })
+
+  it('marks an entry nothing proves the account key wrote', () => {
+    savedStore.setState({ entries: { a: entry('a', { unverified: true }), b: entry('b', { savedAt: 10 }) } })
+    render(<SavedView problems={{}} onOpen={open} />)
+    const rows = screen.getAllByTestId('saved-row')
+    expect(within(rows[0]).getByTestId('saved-unverified')).toBeInTheDocument()
+    expect(within(rows[1]).queryByTestId('saved-unverified')).toBeNull()
   })
 })

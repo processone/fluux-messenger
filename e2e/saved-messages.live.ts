@@ -192,6 +192,14 @@ async function forgetOpenpgpIdentity(name: 'alice' | 'bob') {
   await peer.stop()
 }
 
+/** A stored item that is one opaque block under a random id: nothing of the message, its conversation or its identity in clear. */
+function expectSealed(rawItem: string, hidden: string[]) {
+  expect(rawItem).toMatch(/<item\b[^>]*\bid=["'][0-9a-f]{32}["']/)
+  expect(rawItem).toContain('<sealed')
+  expect(rawItem).not.toMatch(/encrypted=["']true["']/)
+  for (const text of hidden) expect(rawItem).not.toContain(text)
+}
+
 test.describe.configure({ mode: 'serial' })
 test.beforeAll(() => befriend())
 // Sessions left waiting for resumption by an earlier test would also receive (and miss) notifications: start from none.
@@ -786,7 +794,7 @@ test('a saved room message without an archive id opens in a room this device nev
   await one.context.close(); await two.context.close(); await bob.stop(); await reader.stop()
 })
 
-test('a message really decrypted on this device is saved without its text, and a later edit and a fetch keep it out', async ({ browser }) => {
+test('with OpenPGP on, a decrypted message is saved only sealed, and a later edit and a fetch keep its text off the server', async ({ browser }) => {
   test.setTimeout(240_000)
   await forgetOpenpgpIdentity('alice'); await forgetOpenpgpIdentity('bob')
   const reader = await script('alice')
@@ -821,10 +829,7 @@ test('a message really decrypted on this device is saved without its text, and a
   await expect(row).toBeVisible({ timeout: 30_000 }) // decrypted here
   await saveMessage(one, text)
   const [item] = await nodeHolds(reader, 1)
-  expect(item).toContain('encrypted="true"')
-  expect(item).not.toContain('<body')
-  expect(item).not.toContain(text)
-  expect(item).not.toContain('Really encrypted')
+  expectSealed(item, [text, 'Really encrypted', 'bob@localhost', 'forwarded', '<body'])
 
   // Bob corrects it (an encrypted correction); the stored item never gains plaintext.
   const bobRow = bobApp.page.locator('[data-message-body]').filter({ hasText: text }).last()
@@ -837,6 +842,9 @@ test('a message really decrypted on this device is saved without its text, and a
   await expect(one.page.locator('[data-message-body]').filter({ hasText: edited })).toBeVisible({ timeout: 30_000 })
   await new Promise(resolve => setTimeout(resolve, 3000))
   for (const raw of await reader.items()) { expect(raw).not.toContain('Really encrypted'); expect(raw).not.toContain('Edited and encrypted') }
+  // The sealed copy carries the text this device decrypted, so the row reads it whatever the archive keeps.
+  await openSaved(one)
+  await expect(savedRow(one, edited)).toBeVisible({ timeout: 30_000 })
 
   // The app itself reads the node again: a reconnect makes it fetch the saved items (counted on its own socket), and the
   // fetched copy must neither show nor write back anything readable.
@@ -867,11 +875,12 @@ test('a message really decrypted on this device is saved without its text, and a
   await expect(savedRow(one, fetchedOnly)).toHaveCount(0) // not known to the page yet
   kick('alice') // ends the reader's session too
   await expect.poll(() => one.frames.filter(f => f.includes(`<items node="${NODE}"`)).length, { timeout: 60_000 }).toBeGreaterThan(fetchesBefore)
-  // The server's successful answer to that read reaches the page, and carries the encrypted copy and the new item.
-  await expect.poll(() => one.received.slice(answersBefore).some(f => isItemsResult(f) && /encrypted=["']true["']/.test(f) && f.includes(fetchedOnly)), { timeout: 60_000 }).toBe(true)
+  // The server's successful answer to that read reaches the page, and carries the sealed copy and the new item.
+  await expect.poll(() => one.received.slice(answersBefore).some(f => isItemsResult(f) && f.includes('<sealed') && f.includes(fetchedOnly)), { timeout: 60_000 }).toBe(true)
   expect(one.received.slice(answersBefore).filter(isItemsResult).every(f => !f.includes('Really encrypted') && !f.includes('Edited and encrypted'))).toBe(true)
-  // The answer was applied: the item that only it carried is now listed, beside the encrypted one.
+  // The answer was applied: the item that only it carried is now listed, flagged, beside the sealed one.
   await expect(savedRow(one, fetchedOnly)).toBeVisible({ timeout: 30_000 })
+  await expect(savedRow(one, fetchedOnly).getByTestId('saved-unverified')).toBeVisible()
   expect(await one.page.getByTestId('saved-row').count()).toBe(2)
   dropPushes = false
   await reader2.stop().catch(() => {})
@@ -879,10 +888,12 @@ test('a message really decrypted on this device is saved without its text, and a
   await new Promise(resolve => setTimeout(resolve, 3000))
   const after = await again.items()
   expect(after.length).toBe(2)
-  const encryptedItems = after.filter(raw => raw.includes('encrypted="true"'))
-  expect(encryptedItems).toHaveLength(1)
+  // A plain item beside a sealed one is flagged, never sealed or retracted for the server: it is still there, still plain.
+  const sealedItems = after.filter(raw => raw.includes('<sealed'))
+  expect(sealedItems).toHaveLength(1)
+  expect(after.filter(raw => raw.includes(fetchedOnly))).toHaveLength(1)
   for (const raw of after) { expect(raw).not.toContain('Edited and encrypted'); expect(raw).not.toContain('Really encrypted') }
-  expect(encryptedItems[0]).not.toContain('<body')
+  expectSealed(sealedItems[0], ['<body', 'bob@localhost'])
   await shot(one.page, 'decrypted-saved-row')
   await emptyNode(again)
   await one.context.close(); await bobApp.context.close(); await again.stop()
@@ -1913,4 +1924,44 @@ test('a saved room message opened but not yet joined is not continued once anoth
   await bob.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('retract', { node: BOOKMARKS, notify: 'true' }, xml('item', { id: room }))))).catch(() => {})
   await emptyNode(reader)
   await one.context.close(); await two.context.close(); await bob.stop(); await reader.stop()
+})
+
+test('with OpenPGP on, a saved message is stored sealed, the list stays locked until the key is unlocked, and an item the key did not sign is never listed', async ({ browser }) => {
+  test.setTimeout(240_000)
+  await forgetOpenpgpIdentity('alice')
+  const bob = await script('bob')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser, 'alice', { openpgp: true })
+  const text = `Sealed in the node ${stamp}`
+  await bob.say('alice', text)
+  await openChatWith(one, 'Bob')
+  await expect(one.page.locator('[data-message-body]').filter({ hasText: text }).last()).toBeVisible({ timeout: 30_000 })
+  await saveMessage(one, text)
+  const [item] = await nodeHolds(reader, 1)
+  expectSealed(item, [text, 'bob@localhost', 'forwarded', '<body', '<delay', 'stanza-id'])
+  await openSaved(one)
+  await expect(savedRow(one, text)).toBeVisible()
+
+  // Anything a server (or another account's client) can write: a block that is not a message sealed by this key.
+  await reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('publish', { node: NODE },
+    xml('item', { id: `forged-${stamp}` }, xml('saved', { xmlns: NODE }, xml('sealed', {}, Buffer.from('-----BEGIN PGP MESSAGE-----\nnot a message\n-----END PGP MESSAGE-----').toString('base64'))))))))
+  await nodeHolds(reader, 2)
+
+  // A reload loses the session passphrase: the list is locked, not empty, and nothing readable is shown.
+  await one.page.reload()
+  await one.page.getByRole('button', { name: 'Unlock', exact: true }).first().waitFor()
+  await expect(one.page.getByText('Saved messages are locked')).toBeVisible({ timeout: 30_000 })
+  await expect(savedRow(one, text)).toHaveCount(0)
+  await shot(one.page, 'sealed-locked')
+  await one.page.locator('input[type=password]').first().fill(PASSPHRASE)
+  await one.page.getByRole('button', { name: 'Unlock', exact: true }).last().click()
+  await expect(one.page.getByText('Unlock End-to-End Encryption')).toBeHidden()
+  await expect(savedRow(one, text)).toBeVisible({ timeout: 30_000 })
+  await expect(one.page.getByTestId('saved-row')).toHaveCount(1) // the forged item is not listed
+  await expect(one.page.getByTestId('saved-unverified')).toHaveCount(0)
+  await shot(one.page, 'sealed-unlocked')
+  expect((await reader.items()).length).toBe(2) // and it is left alone
+  await emptyNode(reader)
+  await one.context.close(); await bob.stop(); await reader.stop()
 })

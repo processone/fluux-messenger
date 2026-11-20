@@ -3,6 +3,7 @@ import { createMockClient } from './sideEffects.testHelpers'
 import { setupSavedMessagesSideEffects } from './savedMessagesSideEffects'
 import { savedStore, redactSavedCopy, clearSavedLocalData } from '../stores/savedStore'
 import { connectionStore } from '../stores/connectionStore'
+import { savedItemId } from '../utils/savedMessageKeys'
 import type { SavedMessage } from './types/saved'
 
 const entry = (id: string, extra: Partial<SavedMessage> = {}): SavedMessage => ({
@@ -17,6 +18,9 @@ function setup() {
     publish: vi.fn().mockResolvedValue(undefined),
     retract: vi.fn().mockResolvedValue(undefined),
     fetchMaxItems: vi.fn().mockResolvedValue(256),
+    sealState: vi.fn<() => 'unavailable' | 'locked' | 'ready'>().mockReturnValue('unavailable'),
+    // Like the real module with OpenPGP off: every item is a plain entry.
+    open: vi.fn(async (items: SavedMessage[]) => ({ entries: items, locked: [] as string[], rejected: [] as string[], sealedSeen: 0 })),
   }
   ;(client.internal as unknown as { savedMessages: typeof node }).savedMessages = node
   const stop = setupSavedMessagesSideEffects(client)
@@ -412,5 +416,131 @@ describe('saved messages sync side effect', () => {
     expect(savedStore.getState().fetchCurrent(read)).toBe(true)
     stop()
   })
-})
 
+  describe('sealing to the account key (OpenPGP on)', () => {
+    const opened = (entries: SavedMessage[], extra: Partial<{ locked: string[]; rejected: string[]; sealedSeen: number }> = {}) =>
+      ({ entries, locked: [], rejected: [], sealedSeen: entries.length, ...extra })
+
+    it('gives a new save a random item id and sends it, not an id the server could recompute', async () => {
+      const { client, node, stop } = setup()
+      node.sealState.mockReturnValue('ready')
+      client._emit('online')
+      await flushPromises()
+      const base = entry('x')
+      const probe = { ...base, id: savedItemId(base) }
+      savedStore.getState().save(probe)
+      await flushPromises()
+      expect(node.publish).toHaveBeenCalledTimes(1)
+      const sent = node.publish.mock.calls[0][0] as SavedMessage
+      expect(sent.id).not.toBe(probe.id)
+      expect(sent.id).toMatch(/^[0-9a-f]{32}$/)
+      stop()
+    })
+
+    it('gives a new id to an entry saved before OpenPGP was on, before it first reaches the server', async () => {
+      const { client, node, stop } = setup()
+      savedStore.getState().reconcileFetch([])
+      const base = entry('x')
+      const hashed = { ...base, id: savedItemId(base) }
+      node.sealState.mockReturnValue('ready')
+      savedStore.getState().save(hashed)
+      client._emit('online')
+      await flushPromises()
+      const ids = node.publish.mock.calls.map(([e]) => (e as SavedMessage).id)
+      expect(ids).toHaveLength(1)
+      expect(ids[0]).not.toBe(hashed.id)
+      stop()
+    })
+
+    it('keeps a save waiting while the key is locked and sends it once the key is available', async () => {
+      const { client, node, stop } = setup()
+      node.sealState.mockReturnValue('locked')
+      node.fetchAll.mockResolvedValue({ status: 'ok', items: [] })
+      node.open.mockImplementation(async (items: SavedMessage[]) => opened(items.length ? [] : [], { locked: items.map((i) => i.id) }))
+      client._emit('online')
+      await flushPromises()
+      savedStore.getState().save(entry('a'))
+      await flushPromises()
+      expect(node.publish).not.toHaveBeenCalled()
+      expect(Object.keys(savedStore.getState().pending)).toHaveLength(1)
+      node.sealState.mockReturnValue('ready')
+      client._emitSDK('e2ee:key-unlocked', undefined)
+      await flushPromises()
+      expect(node.publish).toHaveBeenCalledTimes(1)
+      stop()
+    })
+
+    it('leaves the list locked, and reads it after the key becomes available', async () => {
+      const { client, node, stop } = setup()
+      const sealedItem = { ...entry('s'), sealed: 'x' }
+      node.fetchAll.mockResolvedValue({ status: 'ok', items: [sealedItem] })
+      node.sealState.mockReturnValue('locked')
+      node.open.mockResolvedValueOnce(opened([], { locked: ['s'], sealedSeen: 1 }))
+      client._emit('online')
+      await flushPromises()
+      expect(savedStore.getState().entries).toEqual({})
+      expect(Object.keys(savedStore.getState().lockedIds)).toEqual(['s'])
+      expect(savedStore.getState().remote.s).toBe(true) // still counts against the node's limit
+      node.sealState.mockReturnValue('ready')
+      node.open.mockResolvedValueOnce(opened([entry('s')]))
+      client._emitSDK('e2ee:key-unlocked', undefined)
+      await flushPromises()
+      expect(Object.keys(savedStore.getState().entries)).toEqual(['s'])
+      expect(savedStore.getState().lockedIds).toEqual({})
+      stop()
+    })
+
+    it('does not list an item that failed the signature check, but counts it against the limit', async () => {
+      const { client, node, stop } = setup()
+      node.fetchAll.mockResolvedValue({ status: 'ok', items: [{ ...entry('f'), sealed: 'x' }] })
+      node.sealState.mockReturnValue('ready')
+      node.open.mockResolvedValueOnce(opened([], { rejected: ['f'], sealedSeen: 1 }))
+      client._emit('online')
+      await flushPromises()
+      expect(savedStore.getState().entries).toEqual({})
+      expect(savedStore.getState().lockedIds).toEqual({})
+      expect(savedStore.getState().remote.f).toBe(true)
+      stop()
+    })
+
+    it('seals plain entries once when the node holds nothing sealed, retracting the plain items', async () => {
+      const { client, node, stop } = setup()
+      node.sealState.mockReturnValue('ready')
+      node.fetchAll.mockResolvedValue({ status: 'ok', items: [entry('p1'), entry('p2')] })
+      node.open.mockImplementationOnce(async (items: SavedMessage[]) => opened(items.map((i) => ({ ...i, unverified: true as const })), { sealedSeen: 0 }))
+      client._emit('online')
+      await flushPromises()
+      expect(node.retract.mock.calls.map(([id]) => id).sort()).toEqual(['p1', 'p2'])
+      const sent = node.publish.mock.calls.map(([e]) => e as SavedMessage)
+      expect(sent).toHaveLength(2)
+      expect(sent.every((e) => !e.unverified && /^[0-9a-f]{32}$/.test(e.id))).toBe(true)
+      expect(Object.values(savedStore.getState().entries).map((e) => e.text).sort()).toEqual(['text p1', 'text p2'])
+      stop()
+    })
+
+    it('flags a plain item beside sealed ones and neither seals nor retracts it', async () => {
+      const { client, node, stop } = setup()
+      node.sealState.mockReturnValue('ready')
+      node.fetchAll.mockResolvedValue({ status: 'ok', items: [entry('s'), entry('injected')] })
+      node.open.mockImplementationOnce(async () => opened([entry('s'), { ...entry('injected'), unverified: true }], { sealedSeen: 1 }))
+      client._emit('online')
+      await flushPromises()
+      expect(node.publish).not.toHaveBeenCalled()
+      expect(node.retract).not.toHaveBeenCalled()
+      expect(savedStore.getState().entries.injected?.unverified).toBe(true)
+      stop()
+    })
+
+    it('republishes a deleted original through the same sealing path, without text', async () => {
+      const { client, node, stop } = setup()
+      node.sealState.mockReturnValue('ready')
+      client._emit('online')
+      await flushPromises()
+      savedStore.getState().reconcileFetch([entry('a', { text: 'secret text' })])
+      redactSavedCopy({ conversationJid: 'team@conference.example', type: 'groupchat', from: 'team@conference.example/Alice', stanzaId: 's-a', stanzaIdBy: 'team@conference.example' })
+      await flushPromises()
+      expect(node.publish).toHaveBeenCalledWith(expect.objectContaining({ id: 'a', text: '', deleted: true }), expect.anything())
+      stop()
+    })
+  })
+})

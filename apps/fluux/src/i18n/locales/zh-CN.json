@@ -1781,6 +1781,10 @@
         "deleted": "消息已删除",
         "tryAgain": "重试",
         "full": "已保存消息的列表已满（{{count}} 条）。请移除一条后再保存其他消息。",
-        "refused": "你的服务器拒绝存储这条消息。"
+        "refused": "你的服务器拒绝存储这条消息。",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

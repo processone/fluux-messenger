@@ -1783,6 +1783,10 @@
         "deleted": "Nachricht gelöscht",
         "tryAgain": "Erneut versuchen",
         "full": "Die gespeicherten Nachrichten sind voll ({{count}}). Entfernen Sie eine, um eine weitere zu speichern.",
-        "refused": "Ihr Server hat die Speicherung dieser Nachricht abgelehnt."
+        "refused": "Ihr Server hat die Speicherung dieser Nachricht abgelehnt.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

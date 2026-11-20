@@ -1436,3 +1436,38 @@ describe('E2EEManager — per-plugin storage backend routing', () => {
     expect(await second.get('e2ee/openpgp k')).toEqual(new Uint8Array([3]))
   })
 })
+
+describe('E2EEManager sealing to the account key', () => {
+  async function managerWith(state: 'unavailable' | 'locked' | 'ready' | null) {
+    const manager = makeManager()
+    const plugin = new DummyPlaintextPlugin()
+    if (state !== null) {
+      const sealing = plugin as unknown as E2EEPlugin
+      sealing.selfSealState = () => state
+      sealing.sealToSelf = async (text) => `sealed:${text}`
+      sealing.openFromSelf = async (armored) => (armored.startsWith('sealed:') ? armored.slice(7) : null)
+    }
+    await manager.register(plugin)
+    return manager
+  }
+
+  it('reports unavailable when no plugin can seal, and the best state any plugin reports', async () => {
+    expect((await managerWith(null)).selfSealState()).toBe('unavailable')
+    expect((await managerWith('locked')).selfSealState()).toBe('locked')
+    expect((await managerWith('ready')).selfSealState()).toBe('ready')
+  })
+
+  it('seals and opens through the plugin that is ready', async () => {
+    const manager = await managerWith('ready')
+    expect(await manager.openFromSelf(await manager.sealToSelf('hello'))).toBe('hello')
+    expect(await manager.openFromSelf('unsigned')).toBeNull()
+  })
+
+  it('refuses to seal or open with a key-locked error while no plugin is ready', async () => {
+    for (const state of [null, 'locked'] as const) {
+      const manager = await managerWith(state)
+      await expect(manager.sealToSelf('x')).rejects.toMatchObject({ code: 'key-locked' })
+      await expect(manager.openFromSelf('x')).rejects.toMatchObject({ code: 'key-locked' })
+    }
+  })
+})

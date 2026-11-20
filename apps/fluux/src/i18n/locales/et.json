@@ -1783,6 +1783,10 @@
         "deleted": "Sõnum kustutatud",
         "tryAgain": "Proovi uuesti",
         "full": "Salvestatud sõnumite loend on täis ({{count}}). Eemaldage üks, et salvestada järgmine.",
-        "refused": "Teie server keeldus selle sõnumi salvestamisest."
+        "refused": "Teie server keeldus selle sõnumi salvestamisest.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

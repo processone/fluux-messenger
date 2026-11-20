@@ -1787,6 +1787,10 @@
         "deleted": "Sporočilo je izbrisano",
         "tryAgain": "Poskusi znova",
         "full": "Seznam shranjenih sporočil je poln ({{count}}). Odstranite eno, da shranite drugo.",
-        "refused": "Vaš strežnik je zavrnil shranjevanje tega sporočila."
+        "refused": "Vaš strežnik je zavrnil shranjevanje tega sporočila.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }

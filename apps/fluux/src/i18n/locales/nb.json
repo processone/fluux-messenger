@@ -1781,6 +1781,10 @@
         "deleted": "Meldingen er slettet",
         "tryAgain": "Prøv igjen",
         "full": "Listen over lagrede meldinger er full ({{count}}). Fjern én for å lagre en annen.",
-        "refused": "Serveren din nektet å lagre denne meldingen."
+        "refused": "Serveren din nektet å lagre denne meldingen.",
+        "locked": "Saved messages are locked",
+        "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
+        "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
+        "unverified": "Not verified: not sealed with your key"
     }
 }
