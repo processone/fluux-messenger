@@ -77,7 +77,8 @@
         "viewProfile": "Se profil",
         "resizeHint": "Træk for at ændre størrelse, dobbeltklik for at nulstille",
         "dismiss": "Afvis",
-        "search": "Søg"
+        "search": "Søg",
+        "saved": "Gemte"
     },
     "newMessage": {
         "title": "Ny besked",
@@ -730,7 +731,9 @@
         "loadAudio": "Indlæs lyd",
         "loadFilePreview": "Indlæs forhåndsvisning",
         "showLinkImage": "Vis billede",
-        "emojiSuggestions": "Emoji-forslag"
+        "emojiSuggestions": "Emoji-forslag",
+        "saveMessage": "Gem besked",
+        "removeFromSaved": "Fjern fra gemte"
     },
     "dates": {
         "today": "I dag",
@@ -1378,6 +1381,10 @@
         "search": {
             "title": "Søgeresultater",
             "description": "Vælg et resultat i sidebjælken for at se samtalen."
+        },
+        "saved": {
+            "title": "Gemte beskeder",
+            "description": "Vælg en gemt besked i sidepanelet for at åbne den i sin samtale."
         }
     },
     "avatar": {
@@ -1763,5 +1770,17 @@
         "edit": "{{nickname}} (redigeret): {{text}}",
         "retraction": "{{nickname}} slettede en besked",
         "messages": "{{nickname}}: {{count}} nye beskeder"
+    },
+    "saved": {
+        "title": "Gemte beskeder",
+        "marker": "Gemt",
+        "empty": "Ingen gemte beskeder",
+        "emptyHint": "Åbn en besked menu Mere, og vælg Gem besked for at beholde den her.",
+        "remove": "Fjern fra gemte",
+        "encrypted": "Krypteret besked",
+        "deleted": "Beskeden er slettet",
+        "tryAgain": "Prøv igen",
+        "full": "Listen over gemte beskeder er fuld ({{count}}). Fjern én for at gemme en anden.",
+        "refused": "Din server nægtede at gemme denne besked."
     }
 }

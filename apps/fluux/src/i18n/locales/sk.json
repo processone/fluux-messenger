@@ -77,7 +77,8 @@
         "viewProfile": "Zobraziť profil",
         "resizeHint": "Potiahnutím zmeníte veľkosť, dvojklikom obnovíte",
         "dismiss": "Zamietnuť",
-        "search": "Hľadať"
+        "search": "Hľadať",
+        "saved": "Uložené"
     },
     "newMessage": {
         "title": "Nová správa",
@@ -735,7 +736,9 @@
         "loadAudio": "Načítať zvuk",
         "loadFilePreview": "Načítať náhľad",
         "showLinkImage": "Zobraziť obrázok",
-        "emojiSuggestions": "Návrhy emoji"
+        "emojiSuggestions": "Návrhy emoji",
+        "saveMessage": "Uložiť správu",
+        "removeFromSaved": "Odstrániť z uložených"
     },
     "dates": {
         "today": "Dnes",
@@ -1383,6 +1386,10 @@
         "search": {
             "title": "Výsledky vyhľadávania",
             "description": "Vyberte výsledok v bočnom paneli na zobrazenie konverzácie."
+        },
+        "saved": {
+            "title": "Uložené správy",
+            "description": "Vyberte uloženú správu v bočnom paneli, aby sa otvorila vo svojej konverzácii."
         }
     },
     "avatar": {
@@ -1768,5 +1775,17 @@
         "edit": "{{nickname}} (upravené): {{text}}",
         "retraction": "{{nickname}} odstránil(a) správu",
         "messages": "{{nickname}}: nové správy — {{count}}"
+    },
+    "saved": {
+        "title": "Uložené správy",
+        "marker": "Uložené",
+        "empty": "Žiadne uložené správy",
+        "emptyHint": "Otvorte ponuku Viac pri správe a vyberte Uložiť správu, aby sa tu uchovala.",
+        "remove": "Odstrániť z uložených",
+        "encrypted": "Šifrovaná správa",
+        "deleted": "Správa bola odstránená",
+        "tryAgain": "Skúsiť znova",
+        "full": "Zoznam uložených správ je plný ({{count}}). Odstráňte jednu, aby ste mohli uložiť ďalšiu.",
+        "refused": "Váš server odmietol túto správu uložiť."
     }
 }

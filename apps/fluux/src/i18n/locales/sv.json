@@ -77,7 +77,8 @@
         "viewProfile": "Visa profil",
         "resizeHint": "Dra för att ändra storlek, dubbelklicka för att återställa",
         "dismiss": "Avfärda",
-        "search": "Sök"
+        "search": "Sök",
+        "saved": "Sparade"
     },
     "newMessage": {
         "title": "Nytt meddelande",
@@ -730,7 +731,9 @@
         "loadAudio": "Läs in ljud",
         "loadFilePreview": "Läs in förhandsgranskning",
         "showLinkImage": "Visa bild",
-        "emojiSuggestions": "Emoji-förslag"
+        "emojiSuggestions": "Emoji-förslag",
+        "saveMessage": "Spara meddelande",
+        "removeFromSaved": "Ta bort från sparade"
     },
     "dates": {
         "today": "Idag",
@@ -1378,6 +1381,10 @@
         "search": {
             "title": "Sökresultat",
             "description": "Välj ett resultat i sidofältet för att visa konversationen."
+        },
+        "saved": {
+            "title": "Sparade meddelanden",
+            "description": "Välj ett sparat meddelande i sidofältet för att öppna det i sin konversation."
         }
     },
     "avatar": {
@@ -1763,5 +1770,17 @@
         "edit": "{{nickname}} (redigerat): {{text}}",
         "retraction": "{{nickname}} raderade ett meddelande",
         "messages": "{{nickname}}: {{count}} nya meddelanden"
+    },
+    "saved": {
+        "title": "Sparade meddelanden",
+        "marker": "Sparat",
+        "empty": "Inga sparade meddelanden",
+        "emptyHint": "Öppna menyn Mer för ett meddelande och välj Spara meddelande för att behålla det här.",
+        "remove": "Ta bort från sparade",
+        "encrypted": "Krypterat meddelande",
+        "deleted": "Meddelandet har tagits bort",
+        "tryAgain": "Försök igen",
+        "full": "Listan över sparade meddelanden är full ({{count}}). Ta bort ett för att spara ett annat.",
+        "refused": "Din server vägrade lagra det här meddelandet."
     }
 }

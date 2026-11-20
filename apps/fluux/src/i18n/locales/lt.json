@@ -77,7 +77,8 @@
         "viewProfile": "Peržiūrėti profilį",
         "resizeHint": "Vilkite, kad pakeistumėte dydį, dukart spustelėkite, kad atstatytumėte",
         "dismiss": "Atmesti",
-        "search": "Paieška"
+        "search": "Paieška",
+        "saved": "Išsaugoti"
     },
     "newMessage": {
         "title": "Naujas pranešimas",
@@ -734,7 +735,9 @@
         "loadAudio": "Įkelti garsą",
         "loadFilePreview": "Įkelti peržiūrą",
         "showLinkImage": "Rodyti nuotrauką",
-        "emojiSuggestions": "Emoji pasiūlymai"
+        "emojiSuggestions": "Emoji pasiūlymai",
+        "saveMessage": "Išsaugoti žinutę",
+        "removeFromSaved": "Pašalinti iš išsaugotų"
     },
     "dates": {
         "today": "Šiandien",
@@ -1382,6 +1385,10 @@
         "search": {
             "title": "Paieškos rezultatai",
             "description": "Pasirinkite rezultatą šoninėje juostoje, kad peržiūrėtumėte pokalbį."
+        },
+        "saved": {
+            "title": "Išsaugotos žinutės",
+            "description": "Šoninėje juostoje pasirinkite išsaugotą žinutę, kad atvertumėte ją jos pokalbyje."
         }
     },
     "avatar": {
@@ -1767,5 +1774,17 @@
         "edit": "{{nickname}} (redaguota): {{text}}",
         "retraction": "{{nickname}} ištrynė žinutę",
         "messages": "{{nickname}}: {{count}} naujų žinučių"
+    },
+    "saved": {
+        "title": "Išsaugotos žinutės",
+        "marker": "Išsaugota",
+        "empty": "Nėra išsaugotų žinučių",
+        "emptyHint": "Atverkite žinutės meniu Daugiau ir pasirinkite Išsaugoti žinutę, kad ją čia laikytumėte.",
+        "remove": "Pašalinti iš išsaugotų",
+        "encrypted": "Užšifruota žinutė",
+        "deleted": "Žinutė ištrinta",
+        "tryAgain": "Bandyti dar kartą",
+        "full": "Išsaugotų žinučių sąrašas pilnas ({{count}}). Pašalinkite vieną, kad išsaugotumėte kitą.",
+        "refused": "Jūsų serveris atsisakė saugoti šią žinutę."
     }
 }

@@ -77,7 +77,8 @@
         "viewProfile": "Prikaži profil",
         "resizeHint": "Povucite za promjenu veličine, dvostruki klik za resetiranje",
         "dismiss": "Odbaci",
-        "search": "Traži"
+        "search": "Traži",
+        "saved": "Spremljeno"
     },
     "newMessage": {
         "title": "Nova poruka",
@@ -732,7 +733,9 @@
         "loadAudio": "Učitaj zvuk",
         "loadFilePreview": "Učitaj pretpregled",
         "showLinkImage": "Prikaži sliku",
-        "emojiSuggestions": "Prijedlozi emojija"
+        "emojiSuggestions": "Prijedlozi emojija",
+        "saveMessage": "Spremi poruku",
+        "removeFromSaved": "Ukloni iz spremljenih"
     },
     "dates": {
         "today": "Danas",
@@ -1380,6 +1383,10 @@
         "search": {
             "title": "Rezultati pretraživanja",
             "description": "Odaberite rezultat u bočnoj traci za prikaz razgovora."
+        },
+        "saved": {
+            "title": "Spremljene poruke",
+            "description": "Odaberite spremljenu poruku na bočnoj traci da biste je otvorili u njezinu razgovoru."
         }
     },
     "avatar": {
@@ -1765,5 +1772,17 @@
         "edit": "{{nickname}} (uređeno): {{text}}",
         "retraction": "{{nickname}} je izbrisao/la poruku",
         "messages": "{{nickname}}: nove poruke — {{count}}"
+    },
+    "saved": {
+        "title": "Spremljene poruke",
+        "marker": "Spremljeno",
+        "empty": "Nema spremljenih poruka",
+        "emptyHint": "Otvorite izbornik Više za poruku i odaberite Spremi poruku da je zadržite ovdje.",
+        "remove": "Ukloni iz spremljenih",
+        "encrypted": "Šifrirana poruka",
+        "deleted": "Poruka je izbrisana",
+        "tryAgain": "Pokušaj ponovno",
+        "full": "Popis spremljenih poruka je pun ({{count}}). Uklonite jednu da biste spremili drugu.",
+        "refused": "Vaš je poslužitelj odbio pohraniti ovu poruku."
     }
 }

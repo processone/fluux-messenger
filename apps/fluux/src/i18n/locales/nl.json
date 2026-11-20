@@ -77,7 +77,8 @@
         "viewProfile": "Profiel bekijken",
         "resizeHint": "Sleep om te verkleinen, dubbelklik om te herstellen",
         "dismiss": "Sluiten",
-        "search": "Zoeken"
+        "search": "Zoeken",
+        "saved": "Bewaard"
     },
     "newMessage": {
         "title": "Nieuw bericht",
@@ -730,7 +731,9 @@
         "loadAudio": "Audio laden",
         "loadFilePreview": "Voorbeeld laden",
         "showLinkImage": "Afbeelding tonen",
-        "emojiSuggestions": "Emoji-suggesties"
+        "emojiSuggestions": "Emoji-suggesties",
+        "saveMessage": "Bericht bewaren",
+        "removeFromSaved": "Verwijderen uit bewaard"
     },
     "dates": {
         "today": "Vandaag",
@@ -1378,6 +1381,10 @@
         "search": {
             "title": "Zoekresultaten",
             "description": "Selecteer een resultaat in de zijbalk om het gesprek te bekijken."
+        },
+        "saved": {
+            "title": "Bewaarde berichten",
+            "description": "Kies een bewaard bericht in de zijbalk om het in zijn gesprek te openen."
         }
     },
     "avatar": {
@@ -1763,5 +1770,17 @@
         "edit": "{{nickname}} (bewerkt): {{text}}",
         "retraction": "{{nickname}} heeft een bericht verwijderd",
         "messages": "{{nickname}}: {{count}} nieuwe berichten"
+    },
+    "saved": {
+        "title": "Bewaarde berichten",
+        "marker": "Bewaard",
+        "empty": "Geen bewaarde berichten",
+        "emptyHint": "Open het menu Meer van een bericht en kies Bericht bewaren om het hier te houden.",
+        "remove": "Verwijderen uit bewaard",
+        "encrypted": "Versleuteld bericht",
+        "deleted": "Bericht verwijderd",
+        "tryAgain": "Opnieuw proberen",
+        "full": "De lijst met bewaarde berichten is vol ({{count}}). Verwijder er een om een ander te bewaren.",
+        "refused": "Je server weigerde dit bericht op te slaan."
     }
 }

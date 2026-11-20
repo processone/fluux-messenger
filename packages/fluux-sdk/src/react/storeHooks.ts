@@ -18,6 +18,7 @@ import { roomStore } from '../stores/roomStore'
 import { adminStore } from '../stores/adminStore'
 import { blockingStore } from '../stores/blockingStore'
 import { ignoreStore } from '../stores/ignoreStore'
+import { savedStore, type SavedState } from '../stores/savedStore'
 import { searchStore } from '../stores/searchStore'
 import type { ConnectionState } from '../stores/connectionStore'
 import type { ChatState } from '../stores/chatStore'
@@ -115,6 +116,17 @@ export function useBlockingStore<T = BlockingState>(
   selector: (state: BlockingState) => T = (state) => state as unknown as T
 ): T {
   return useStore(blockingStore, selector)
+}
+
+/**
+ * React hook for the saved messages store.
+ *
+ * @category Hooks
+ */
+export function useSavedStore<T = SavedState>(
+  selector: (state: SavedState) => T = (state) => state as unknown as T
+): T {
+  return useStore(savedStore, selector)
 }
 
 /**

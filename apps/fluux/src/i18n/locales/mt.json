@@ -77,7 +77,8 @@
         "viewProfile": "Ara profil",
         "resizeHint": "Iġbed biex tibdel id-daqs, ikklikkja darbtejn biex tirrisettja",
         "dismiss": "Warrab",
-        "search": "Fittex"
+        "search": "Fittex",
+        "saved": "Imsejvin"
     },
     "newMessage": {
         "title": "Messaġġ ġdid",
@@ -738,7 +739,9 @@
         "loadAudio": "Itgħabba l-awdjo",
         "loadFilePreview": "Itgħabba l-anteprima",
         "showLinkImage": "Uri l-immaġni",
-        "emojiSuggestions": "Suġġerimenti ta' emoji"
+        "emojiSuggestions": "Suġġerimenti ta' emoji",
+        "saveMessage": "Issejvja l-messaġġ",
+        "removeFromSaved": "Neħħi mill-imsejvin"
     },
     "dates": {
         "today": "Illum",
@@ -1386,6 +1389,10 @@
         "search": {
             "title": "Riżultati tat-tfittxija",
             "description": "Agħżel riżultat fil-bar tal-ġenb biex tara l-konversazzjoni."
+        },
+        "saved": {
+            "title": "Messaġġi msejvin",
+            "description": "Agħżel messaġġ misjuv fil-bar tal-ġenb biex tiftaħ fil-konversazzjoni tiegħu."
         }
     },
     "avatar": {
@@ -1771,5 +1778,17 @@
         "edit": "{{nickname}} (editjat): {{text}}",
         "retraction": "{{nickname}} ħassar messaġġ",
         "messages": "{{nickname}}: {{count}} messaġġi ġodda"
+    },
+    "saved": {
+        "title": "Messaġġi msejvin",
+        "marker": "Misjuv",
+        "empty": "Ebda messaġġ misjuv",
+        "emptyHint": "Iftaħ il-menu Aktar ta' messaġġ u agħżel Issejvja l-messaġġ biex iżżommu hawn.",
+        "remove": "Neħħi mill-imsejvin",
+        "encrypted": "Messaġġ ikkriptat",
+        "deleted": "Messaġġ imħassar",
+        "tryAgain": "Erġa' pprova",
+        "full": "Il-lista tal-messaġġi msejvin hija mimlija ({{count}}). Neħħi wieħed biex tsejvja ieħor.",
+        "refused": "Is-server tiegħek irrifjuta li jaħżen dan il-messaġġ."
     }
 }

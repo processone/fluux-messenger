@@ -77,7 +77,8 @@
         "viewProfile": "Skatīt profilu",
         "resizeHint": "Velciet, lai mainītu izmēru, dubultklikšķis, lai atiestatītu",
         "dismiss": "Noraidīt",
-        "search": "Meklēt"
+        "search": "Meklēt",
+        "saved": "Saglabātie"
     },
     "newMessage": {
         "title": "Jauna ziņa",
@@ -733,7 +734,9 @@
         "loadAudio": "Ielādēt audio",
         "loadFilePreview": "Ielādēt priekšskatījumu",
         "showLinkImage": "Rādīt attēlu",
-        "emojiSuggestions": "Emoji ieteikumi"
+        "emojiSuggestions": "Emoji ieteikumi",
+        "saveMessage": "Saglabāt ziņojumu",
+        "removeFromSaved": "Noņemt no saglabātajiem"
     },
     "dates": {
         "today": "Šodien",
@@ -1381,6 +1384,10 @@
         "search": {
             "title": "Meklēšanas rezultāti",
             "description": "Izvēlieties rezultātu sānjoslā, lai skatītu sarunu."
+        },
+        "saved": {
+            "title": "Saglabātie ziņojumi",
+            "description": "Izvēlieties saglabātu ziņojumu sānjoslā, lai atvērtu to tā sarunā."
         }
     },
     "avatar": {
@@ -1766,5 +1773,17 @@
         "edit": "{{nickname}} (rediģēts): {{text}}",
         "retraction": "{{nickname}} izdzēsa ziņojumu",
         "messages": "{{nickname}}: {{count}} jauni ziņojumi"
+    },
+    "saved": {
+        "title": "Saglabātie ziņojumi",
+        "marker": "Saglabāts",
+        "empty": "Nav saglabātu ziņojumu",
+        "emptyHint": "Atveriet ziņojuma izvēlni Vairāk un izvēlieties Saglabāt ziņojumu, lai to paturētu šeit.",
+        "remove": "Noņemt no saglabātajiem",
+        "encrypted": "Šifrēts ziņojums",
+        "deleted": "Ziņojums dzēsts",
+        "tryAgain": "Mēģināt vēlreiz",
+        "full": "Saglabāto ziņojumu saraksts ir pilns ({{count}}). Noņemiet vienu, lai saglabātu citu.",
+        "refused": "Jūsu serveris atteicās glabāt šo ziņojumu."
     }
 }

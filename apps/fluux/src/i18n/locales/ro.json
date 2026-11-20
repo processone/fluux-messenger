@@ -77,7 +77,8 @@
         "viewProfile": "Vezi profil",
         "resizeHint": "Trage pentru a redimensiona, dublu-clic pentru a reseta",
         "dismiss": "Închide",
-        "search": "Căutare"
+        "search": "Căutare",
+        "saved": "Salvate"
     },
     "newMessage": {
         "title": "Mesaj nou",
@@ -734,7 +735,9 @@
         "loadAudio": "Încarcă sunetul",
         "loadFilePreview": "Încarcă previzualizarea",
         "showLinkImage": "Afișează imaginea",
-        "emojiSuggestions": "Sugestii de emoji"
+        "emojiSuggestions": "Sugestii de emoji",
+        "saveMessage": "Salvează mesajul",
+        "removeFromSaved": "Elimină din salvate"
     },
     "dates": {
         "today": "Astăzi",
@@ -1382,6 +1385,10 @@
         "search": {
             "title": "Rezultatele căutării",
             "description": "Selectați un rezultat din bara laterală pentru a vizualiza conversația."
+        },
+        "saved": {
+            "title": "Mesaje salvate",
+            "description": "Selectați un mesaj salvat în bara laterală pentru a-l deschide în conversația sa."
         }
     },
     "avatar": {
@@ -1767,5 +1774,17 @@
         "edit": "{{nickname}} (editare): {{text}}",
         "retraction": "{{nickname}} a șters un mesaj",
         "messages": "{{nickname}}: {{count}} mesaje noi"
+    },
+    "saved": {
+        "title": "Mesaje salvate",
+        "marker": "Salvat",
+        "empty": "Niciun mesaj salvat",
+        "emptyHint": "Deschideți meniul Mai multe al unui mesaj și alegeți Salvează mesajul pentru a-l păstra aici.",
+        "remove": "Elimină din salvate",
+        "encrypted": "Mesaj criptat",
+        "deleted": "Mesaj șters",
+        "tryAgain": "Încearcă din nou",
+        "full": "Lista mesajelor salvate este plină ({{count}}). Eliminați unul pentru a salva altul.",
+        "refused": "Serverul dvs. a refuzat să stocheze acest mesaj."
     }
 }

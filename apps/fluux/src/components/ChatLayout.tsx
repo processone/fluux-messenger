@@ -42,6 +42,7 @@ import { useSoundNotification } from '@/hooks/useSoundNotification'
 import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
 import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotifications'
 import { useSDKErrorToasts } from '@/hooks/useSDKErrorToasts'
+import { useSavedRefusalToast } from '@/hooks/useSavedRefusalToast'
 import { useReactionNotifications } from '@/hooks/useReactionNotifications'
 import { reportStartupShell } from '@/utils/startupRecovery'
 import { useEasterEggNotifications } from '@/hooks/useEasterEggNotifications'
@@ -51,7 +52,7 @@ import { useIosPaneNavigation } from '@/hooks/useIosPaneNavigation'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/utils/sessionStorage'
 import { useModalStore } from '@/stores/modalStore'
-import { Server, ShieldOff, MessageCircle, Hash, Users, Search, Settings, Plus, ArrowLeft, Loader2, type LucideIcon } from 'lucide-react'
+import { Server, ShieldOff, MessageCircle, Hash, Users, Search, Bookmark, Settings, Plus, ArrowLeft, Loader2, type LucideIcon } from 'lucide-react'
 
 /**
  * ChatLayout wrapper. The actual layout logic is in ChatLayoutContent; modal state
@@ -110,6 +111,7 @@ function GlobalEffects() {
 
   // Surface SDK error events as toast notifications
   useSDKErrorToasts()
+  useSavedRefusalToast()
 
   // Notify received reactions via toast (inactive conversation) or in-flow mention (active, off-screen)
   useReactionNotifications()
@@ -1209,6 +1211,12 @@ function EmptyState({ sidebarView, primaryAction }: { sidebarView: SidebarView; 
           Icon: Server,
           title: t('emptyState.admin.title'),
           description: t('emptyState.admin.description'),
+        }
+      case 'saved':
+        return {
+          Icon: Bookmark,
+          title: t('emptyState.saved.title'),
+          description: t('emptyState.saved.description'),
         }
       case 'search':
         return {

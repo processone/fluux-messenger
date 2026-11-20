@@ -21,9 +21,10 @@ import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { getBareJid } from '../jid'
-import { NS_PUBSUB, NS_NICK, NS_OPENPGP_PUBLIC_KEYS, NS_BOOKMARKS, NS_MDS, NS_CONVERSATIONS } from '../namespaces'
+import { NS_PUBSUB, NS_NICK, NS_OPENPGP_PUBLIC_KEYS, NS_BOOKMARKS, NS_MDS, NS_CONVERSATIONS, NS_SAVED_MESSAGES } from '../namespaces'
 import { parseMdsItems } from './Mds'
 import { parseConversationsItem } from './ConversationSync'
+import { parseSavedItems } from './SavedMessages'
 import { generateUUID } from '../../utils/uuid'
 import { dataToElement, elementToData } from '../e2ee/stanzaAdapter'
 import type { PEPItem, Subscription, XMLElementData } from '../e2ee'
@@ -152,6 +153,11 @@ export class PubSub extends BaseModule {
     // the list in sync live instead of only on the next reconnect's fetch.
     if (node === NS_CONVERSATIONS) {
       this.handleConversationsUpdate(bareFrom, items)
+    }
+
+    // Fluux saved messages: another of our own clients saved or removed one.
+    if (node === NS_SAVED_MESSAGES) {
+      this.handleSavedMessagesUpdate(bareFrom, items)
     }
 
     // Dispatch to any user-registered subscribers for (bareFrom, node).
@@ -400,6 +406,15 @@ export class PubSub extends BaseModule {
     this.deps.emitSDK('conversation:list-synced', {
       conversations: parseConversationsItem(item),
     })
+  }
+
+  /** Saved messages: apply a notification from our own node (other entities' nodes are ignored). */
+  private handleSavedMessagesUpdate(bareFrom: string, items: Element): void {
+    const ownBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
+    if (!ownBareJid || bareFrom !== ownBareJid) return
+    const { upserts, removedIds } = parseSavedItems(items, ownBareJid)
+    if (upserts.length === 0 && removedIds.length === 0) return
+    this.deps.emitSDK('saved:synced', { upserts, removedIds })
   }
 
   private dispatchToSubscribers(bareFrom: string, node: string, items: Element): void {

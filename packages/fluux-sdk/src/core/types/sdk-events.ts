@@ -19,6 +19,7 @@ import type { Contact, PresenceShow, ProfileDetails } from './roster'
 import type { Room, RoomOccupant, RoomMember, RoomMessage, RoomAffiliation, RoomRole } from './room'
 import type { RoomJoinReason } from '../errors'
 import type { ServerInfo } from './discovery'
+import type { SavedMessage } from './saved'
 import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
 import type { PushStatus } from './push'
@@ -210,6 +211,15 @@ export interface ChatEvents {
    */
   'conversation:list-synced': {
     conversations: Array<{ jid: string; archived: boolean }>
+  }
+
+  /**
+   * Fluux private PEP: another device of the same account saved, rewrote or
+   * removed saved messages. Carries only what the notification named.
+   */
+  'saved:synced': {
+    upserts: SavedMessage[]
+    removedIds: string[]
   }
 
   /** Message delivery error received from server */

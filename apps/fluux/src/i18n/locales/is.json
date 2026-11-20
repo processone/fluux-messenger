@@ -77,7 +77,8 @@
         "viewProfile": "Skoða prófíl",
         "resizeHint": "Dragðu til að breyta stærð, tvísmelltu til að endurstilla",
         "dismiss": "Hafna",
-        "search": "Leita"
+        "search": "Leita",
+        "saved": "Vistuð"
     },
     "newMessage": {
         "title": "Ný skilaboð",
@@ -730,7 +731,9 @@
         "loadAudio": "Hlaða hljóð",
         "loadFilePreview": "Hlaða forskoðun",
         "showLinkImage": "Sýna mynd",
-        "emojiSuggestions": "Emoji-tillögur"
+        "emojiSuggestions": "Emoji-tillögur",
+        "saveMessage": "Vista skilaboð",
+        "removeFromSaved": "Fjarlægja úr vistuðum"
     },
     "dates": {
         "today": "Í dag",
@@ -1378,6 +1381,10 @@
         "search": {
             "title": "Leitarniðurstöður",
             "description": "Veldu niðurstöðu á hliðarstikunni til að skoða samtalið."
+        },
+        "saved": {
+            "title": "Vistuð skilaboð",
+            "description": "Veldu vistuð skilaboð í hliðarstikunni til að opna þau í samtalinu sínu."
         }
     },
     "avatar": {
@@ -1763,5 +1770,17 @@
         "edit": "{{nickname}} (breytt): {{text}}",
         "retraction": "{{nickname}} eyddi skilaboðum",
         "messages": "{{nickname}}: {{count}} ný skilaboð"
+    },
+    "saved": {
+        "title": "Vistuð skilaboð",
+        "marker": "Vistað",
+        "empty": "Engin vistuð skilaboð",
+        "emptyHint": "Opnaðu Meira-valmynd skilaboða og veldu Vista skilaboð til að geyma þau hér.",
+        "remove": "Fjarlægja úr vistuðum",
+        "encrypted": "Dulrituð skilaboð",
+        "deleted": "Skilaboðum eytt",
+        "tryAgain": "Reyna aftur",
+        "full": "Listi vistaðra skilaboða er fullur ({{count}}). Fjarlægðu eitt til að vista annað.",
+        "refused": "Þjónninn þinn neitaði að geyma þessi skilaboð."
     }
 }

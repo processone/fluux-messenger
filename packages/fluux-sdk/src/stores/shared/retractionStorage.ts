@@ -31,6 +31,9 @@ import {
   roomRetractionAliases,
   type RetractionScope,
 } from '../../utils/retractedIdentities'
+import { redactSavedCopy } from '../savedStore'
+import { connectionStore } from '../connectionStore'
+import { buildSavedMessage } from '../../utils/savedMessageBuilder'
 import { getStorageScopeJid } from '../../utils/storageScope'
 import { canonicalReference, chatMessageAuthor, correctionReferences, roomMessageAuthor } from '../../utils/messageIdentity'
 import { type PendingRetraction } from './pendingRetractions'
@@ -112,6 +115,7 @@ export async function retractChatMessageInStorage(
       cacheKey || target
     )
     await searchIndex.removeMessage(target, storageScope, { ids, identityKeys })
+    redactSavedCopy(buildSavedMessage({ ...target, isRetracted: true }, connectionStore.getState().jid ?? ''))
   }
 }
 
@@ -163,6 +167,7 @@ export async function retractRoomMessageInStorage(
       storageScope,
       { identityKeys: target.identityKeys, ids: target.ids }
     )
+    redactSavedCopy(buildSavedMessage({ ...target.message, isRetracted: true }, connectionStore.getState().jid ?? ''))
   }
 }
 

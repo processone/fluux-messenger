@@ -56,6 +56,7 @@ vi.mock('./settings-components', () => ({
   DEFAULT_SETTINGS_CATEGORY: 'profile',
 }))
 vi.mock('@/utils/performLogout', () => ({ performLogout: vi.fn() }))
+vi.mock('@/hooks/useSavedOpener', () => ({ useSavedOpener: () => ({ problems: {}, open: vi.fn() }) }))
 
 // Mock SDK stores and hooks
 vi.mock('@fluux/sdk', () => ({

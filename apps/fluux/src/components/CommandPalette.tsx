@@ -11,6 +11,7 @@ import {
   Terminal,
   Users,
   Search,
+  Bookmark,
 } from 'lucide-react'
 import { useChat, useRoom, useRoster, matchNameOrJid, getLocalPart, searchStore, roomActivityTone } from '@fluux/sdk'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
@@ -424,6 +425,7 @@ function CommandPaletteContent({
     const views: Array<{ id: string; label: string; icon: React.ReactNode; view: SidebarView; keywords: string[] }> = [
       { id: 'view-messages', label: t('sidebar.messages'), icon: <MessageSquare />, view: 'messages', keywords: ['messages', 'conversations', 'chat'] },
       { id: 'view-rooms', label: t('sidebar.rooms'), icon: <Hash />, view: 'rooms', keywords: ['rooms', 'channels', 'muc'] },
+      { id: 'view-saved', label: t('saved.title'), icon: <Bookmark />, view: 'saved', keywords: ['saved', 'bookmark', 'bookmarks', 'starred'] },
       { id: 'view-connections', label: t('sidebar.contacts'), icon: <Users />, view: 'contacts', keywords: ['connections', 'contacts', 'roster'] },
     ]
 

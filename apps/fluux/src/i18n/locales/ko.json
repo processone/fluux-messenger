@@ -77,7 +77,8 @@
         "viewProfile": "프로필 보기",
         "resizeHint": "드래그하여 크기 조정, 더블클릭하여 초기화",
         "dismiss": "닫기",
-        "search": "검색"
+        "search": "검색",
+        "saved": "저장됨"
     },
     "newMessage": {
         "title": "새 메시지",
@@ -730,7 +731,9 @@
         "loadAudio": "오디오 불러오기",
         "loadFilePreview": "미리보기 불러오기",
         "showLinkImage": "이미지 표시",
-        "emojiSuggestions": "이모지 제안"
+        "emojiSuggestions": "이모지 제안",
+        "saveMessage": "메시지 저장",
+        "removeFromSaved": "저장 목록에서 제거"
     },
     "dates": {
         "today": "오늘",
@@ -1378,6 +1381,10 @@
         "search": {
             "title": "검색 결과",
             "description": "사이드바에서 결과를 선택하여 대화를 봅니다."
+        },
+        "saved": {
+            "title": "저장된 메시지",
+            "description": "사이드바에서 저장된 메시지를 선택하면 해당 대화에서 열립니다."
         }
     },
     "avatar": {
@@ -1763,5 +1770,17 @@
         "edit": "{{nickname}} (수정): {{text}}",
         "retraction": "{{nickname}}님이 메시지를 삭제했습니다",
         "messages": "{{nickname}}: 새 메시지 {{count}}개"
+    },
+    "saved": {
+        "title": "저장된 메시지",
+        "marker": "저장됨",
+        "empty": "저장된 메시지가 없습니다",
+        "emptyHint": "메시지의 더 보기 메뉴를 열고 메시지 저장을 선택하면 여기에 보관됩니다.",
+        "remove": "저장 목록에서 제거",
+        "encrypted": "암호화된 메시지",
+        "deleted": "삭제된 메시지",
+        "tryAgain": "다시 시도",
+        "full": "저장된 메시지 목록이 가득 찼습니다({{count}}개). 하나를 제거해야 다른 메시지를 저장할 수 있습니다.",
+        "refused": "서버가 이 메시지의 저장을 거부했습니다."
     }
 }

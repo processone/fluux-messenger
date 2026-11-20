@@ -77,7 +77,8 @@
         "viewProfile": "Visualizza profilo",
         "resizeHint": "Trascina per ridimensionare, doppio clic per reimpostare",
         "dismiss": "Ignora",
-        "search": "Cerca"
+        "search": "Cerca",
+        "saved": "Salvati"
     },
     "newMessage": {
         "title": "Nuovo messaggio",
@@ -734,7 +735,9 @@
         "loadAudio": "Carica audio",
         "loadFilePreview": "Carica anteprima",
         "showLinkImage": "Mostra immagine",
-        "emojiSuggestions": "Suggerimenti emoji"
+        "emojiSuggestions": "Suggerimenti emoji",
+        "saveMessage": "Salva messaggio",
+        "removeFromSaved": "Rimuovi dai salvati"
     },
     "dates": {
         "today": "Oggi",
@@ -1382,6 +1385,10 @@
         "search": {
             "title": "Risultati di ricerca",
             "description": "Seleziona un risultato dalla barra laterale per visualizzare la conversazione."
+        },
+        "saved": {
+            "title": "Messaggi salvati",
+            "description": "Seleziona un messaggio salvato nella barra laterale per aprirlo nella sua conversazione."
         }
     },
     "avatar": {
@@ -1767,5 +1774,17 @@
         "edit": "{{nickname}} (modifica): {{text}}",
         "retraction": "{{nickname}} ha eliminato un messaggio",
         "messages": "{{nickname}}: {{count}} nuovi messaggi"
+    },
+    "saved": {
+        "title": "Messaggi salvati",
+        "marker": "Salvato",
+        "empty": "Nessun messaggio salvato",
+        "emptyHint": "Apri il menu Altro di un messaggio e scegli Salva messaggio per conservarlo qui.",
+        "remove": "Rimuovi dai salvati",
+        "encrypted": "Messaggio cifrato",
+        "deleted": "Messaggio eliminato",
+        "tryAgain": "Riprova",
+        "full": "L'elenco dei messaggi salvati è pieno ({{count}}). Rimuovine uno per salvarne un altro.",
+        "refused": "Il tuo server ha rifiutato di archiviare questo messaggio."
     }
 }

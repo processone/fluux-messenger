@@ -43,6 +43,7 @@ export interface ViewNavigationResult {
   navigateToAdmin: (category?: string, options?: NavigateOptions) => void
   navigateToSettings: (category?: string, options?: SettingsNavigateOptions) => void
   navigateToSearch: (options?: NavigateOptions) => void
+  navigateToSaved: (options?: NavigateOptions) => void
 }
 
 /**
@@ -74,6 +75,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
     navigateToAdmin,
     navigateToSettings,
     navigateToSearch,
+    navigateToSaved,
   } = useRouteSync()
 
   // Per-tab memory state
@@ -119,6 +121,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         break
       case 'settings':
       case 'search':
+      case 'saved':
         if (currentConversationId) setActiveConversation(null)
         if (currentRoomJid) setActiveRoom(null)
         break
@@ -225,11 +228,16 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         setActiveRoom(null)
         navigateToSearch()
         break
+      case 'saved':
+        setActiveConversation(null)
+        setActiveRoom(null)
+        navigateToSaved()
+        break
     }
   }, [sidebarView, selectedContact, lastMessagesConversation, lastRoomsRoom, lastDirectoryContact,
       setActiveConversation, setActiveRoom, activateConversation, activateRoom,
       navigateToMessages, navigateToRooms, navigateToContacts,
-      navigateToAdmin, navigateToSettings, navigateToSearch])
+      navigateToAdmin, navigateToSettings, navigateToSearch, navigateToSaved])
 
   const perTabMemory: PerTabMemory = {
     lastMessagesConversation,
@@ -252,5 +260,6 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
     navigateToAdmin,
     navigateToSettings,
     navigateToSearch,
+    navigateToSaved,
   }
 }

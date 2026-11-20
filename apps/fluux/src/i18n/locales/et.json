@@ -77,7 +77,8 @@
         "viewProfile": "Vaata profiili",
         "resizeHint": "Lohista suuruse muutmiseks, topeltklõps lähtestamiseks",
         "dismiss": "Loobu",
-        "search": "Otsing"
+        "search": "Otsing",
+        "saved": "Salvestatud"
     },
     "newMessage": {
         "title": "Uus sõnum",
@@ -732,7 +733,9 @@
         "loadAudio": "Laadi heli",
         "loadFilePreview": "Laadi eelvaade",
         "showLinkImage": "Kuva pilt",
-        "emojiSuggestions": "Emoji soovitused"
+        "emojiSuggestions": "Emoji soovitused",
+        "saveMessage": "Salvesta sõnum",
+        "removeFromSaved": "Eemalda salvestatutest"
     },
     "dates": {
         "today": "Täna",
@@ -1380,6 +1383,10 @@
         "search": {
             "title": "Otsingutulemused",
             "description": "Valige külgribal tulemus, et vaadata vestlust."
+        },
+        "saved": {
+            "title": "Salvestatud sõnumid",
+            "description": "Valige külgribal salvestatud sõnum, et avada see oma vestluses."
         }
     },
     "avatar": {
@@ -1765,5 +1772,17 @@
         "edit": "{{nickname}} (muudetud): {{text}}",
         "retraction": "{{nickname}} kustutas sõnumi",
         "messages": "{{nickname}}: {{count}} uut sõnumit"
+    },
+    "saved": {
+        "title": "Salvestatud sõnumid",
+        "marker": "Salvestatud",
+        "empty": "Salvestatud sõnumeid pole",
+        "emptyHint": "Avage sõnumi menüü „Veel“ ja valige „Salvesta sõnum“, et see siia jätta.",
+        "remove": "Eemalda salvestatutest",
+        "encrypted": "Krüptitud sõnum",
+        "deleted": "Sõnum kustutatud",
+        "tryAgain": "Proovi uuesti",
+        "full": "Salvestatud sõnumite loend on täis ({{count}}). Eemaldage üks, et salvestada järgmine.",
+        "refused": "Teie server keeldus selle sõnumi salvestamisest."
     }
 }

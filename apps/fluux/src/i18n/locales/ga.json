@@ -77,7 +77,8 @@
         "viewProfile": "Féach ar phróifíl",
         "resizeHint": "Tarraing chun méid a athrú, cliceáil faoi dhó chun athshocrú",
         "dismiss": "Díbir",
-        "search": "Cuardach"
+        "search": "Cuardach",
+        "saved": "Sábháilte"
     },
     "newMessage": {
         "title": "Teachtaireacht nua",
@@ -736,7 +737,9 @@
         "loadAudio": "Luchtaigh fuaim",
         "loadFilePreview": "Luchtaigh réamhamharc",
         "showLinkImage": "Taispeáin íomhá",
-        "emojiSuggestions": "Moltaí emoji"
+        "emojiSuggestions": "Moltaí emoji",
+        "saveMessage": "Sábháil an teachtaireacht",
+        "removeFromSaved": "Bain de na cinn shábháilte"
     },
     "dates": {
         "today": "Inniu",
@@ -1384,6 +1387,10 @@
         "search": {
             "title": "Torthaí cuardaigh",
             "description": "Roghnaigh toradh sa bharra taoibh chun an comhrá a fheiceáil."
+        },
+        "saved": {
+            "title": "Teachtaireachtaí sábháilte",
+            "description": "Roghnaigh teachtaireacht shábháilte sa bharra taoibh chun í a oscailt ina comhrá."
         }
     },
     "avatar": {
@@ -1769,5 +1776,17 @@
         "edit": "{{nickname}} (curtha in eagar): {{text}}",
         "retraction": "Scrios {{nickname}} teachtaireacht",
         "messages": "{{nickname}}: {{count}} teachtaireacht nua"
+    },
+    "saved": {
+        "title": "Teachtaireachtaí sábháilte",
+        "marker": "Sábháilte",
+        "empty": "Gan teachtaireachtaí sábháilte",
+        "emptyHint": "Oscail roghchlár Tuilleadh teachtaireachta agus roghnaigh Sábháil an teachtaireacht chun í a choinneáil anseo.",
+        "remove": "Bain de na cinn shábháilte",
+        "encrypted": "Teachtaireacht chriptithe",
+        "deleted": "Scriosadh an teachtaireacht",
+        "tryAgain": "Bain triail eile as",
+        "full": "Tá liosta na dteachtaireachtaí sábháilte lán ({{count}}). Bain ceann amach chun ceann eile a shábháil.",
+        "refused": "Dhiúltaigh do fhreastalaí an teachtaireacht seo a stóráil."
     }
 }

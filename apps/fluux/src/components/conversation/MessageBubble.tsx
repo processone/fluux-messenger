@@ -7,7 +7,7 @@ import { iosHaptic } from '@/platform/ios/haptics'
  */
 import { useState, useMemo, useRef, useEffect, useContext, memo, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX } from 'lucide-react'
+import { Bookmark, CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { useKeyDecisions } from '@/e2ee/openpgpTrustView'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -48,6 +48,7 @@ import { MessageInteractionContext, useMessageInteractionHeld } from './useMessa
 import { downloadAttachment } from '@/utils/download'
 import { roomMessageLinkFor } from '@/utils/roomMessageLink'
 import { copyToClipboard } from '@/utils/clipboard'
+import { useSavedMessageAction } from './useSavedMessageAction'
 
 type ReplyQuoteCardStyle = CSSProperties & {
   '--fluux-quote-frame-color': string
@@ -580,6 +581,7 @@ export const MessageBubble = memo(function MessageBubble({
 
   const { canReply, canEdit, canDelete } = actions
   const messageLink = roomMessageLinkFor(message, supportsMAM)
+  const { isSaved, onToggleSaved } = useSavedMessageAction(message)
   const onCopyMessageLink = messageLink ? () => { void copyToClipboard(messageLink) } : undefined
   // A source that cannot be read, such as an undecryptable one, is forwarded as a link only.
   const readable = !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
@@ -608,7 +610,7 @@ export const MessageBubble = memo(function MessageBubble({
   useEffect(() => {
     if (!hasViewableReactions) setReactorEmoji(null)
   }, [hasViewableReactions])
-  const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody || !!saveableAttachment || hasViewableReactions || !!messageLink || !!onForward)
+  const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody || !!saveableAttachment || hasViewableReactions || !!messageLink || !!onForward || !!onToggleSaved)
 
   // Long-press (touch) → open the action menu; scrolling (touchmove) or lifting
   // before the threshold cancels it. longPressFired suppresses the click that a
@@ -655,6 +657,11 @@ export const MessageBubble = memo(function MessageBubble({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
+      {isSaved && !message.isRetracted && (
+        <span data-testid="saved-marker" role="img" aria-label={t('saved.marker')} title={t('saved.marker')} className="absolute end-2 top-0.5 text-fluux-muted pointer-events-none">
+          <Bookmark className="size-3 fill-current" />
+        </span>
+      )}
       {/* Avatar, timestamp (when selected), or spacer - width adapts to time format and density */}
       <div className={`${avatarColWidth} flex-shrink-0 flex flex-col`}>
         {/* /me action messages always show timestamp instead of avatar */}
@@ -700,6 +707,8 @@ export const MessageBubble = memo(function MessageBubble({
           onEdit={onEdit}
           onDelete={onDelete}
           onCopyMessageLink={onCopyMessageLink}
+          onToggleSaved={onToggleSaved}
+          isSaved={isSaved}
           onForward={onForward}
           myReactions={reactionsEnabled ? myReactions : []}
           canReply={canReply}
@@ -1004,6 +1013,8 @@ export const MessageBubble = memo(function MessageBubble({
           onEdit={onEdit}
           onDelete={onDelete}
           onCopyMessageLink={onCopyMessageLink}
+          onToggleSaved={onToggleSaved}
+          isSaved={isSaved}
           onForward={onForward}
           onSaveAttachment={saveableAttachment
             ? () => downloadAttachment(saveableAttachment, { errorMessage: t('common.downloadFailed') })

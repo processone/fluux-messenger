@@ -6,6 +6,7 @@ export { ConversationList, ArchiveList, ConversationItem } from './ConversationL
 export { ContactList } from './ContactList'
 export { RoomsList } from './RoomsList'
 export { SearchView } from './SearchView'
+export { SavedView } from './SavedView'
 export { UserMenu } from './UserMenu'
 export { MessagesHeaderActions } from './MessagesHeaderActions'
 export { ContactsHeaderActions } from './ContactsHeaderActions'

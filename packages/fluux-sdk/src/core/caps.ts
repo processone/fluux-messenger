@@ -14,6 +14,7 @@ import {
   NS_FLUUX_VERIFICATIONS_NOTIFY,
   NS_FLUUX_VERIFICATION_SETS_NOTIFY,
   NS_CONVERSATIONS_NOTIFY,
+  NS_SAVED_MESSAGES_NOTIFY,
   NS_FORWARD,
   NS_IDLE,
   NS_MDS_NOTIFY,
@@ -73,6 +74,7 @@ export const CLIENT_FEATURES = [
   NS_FLUUX_VERIFICATIONS_NOTIFY, // Fluux private PEP notify (cross-device verification sync)
   NS_FLUUX_VERIFICATION_SETS_NOTIFY, // Fluux private PEP notify (cross-device sync of verified key sets)
   NS_CONVERSATIONS_NOTIFY,   // Fluux private PEP notify (conversation archive/unarchive sync)
+  NS_SAVED_MESSAGES_NOTIFY,  // Fluux private PEP notify (saved messages sync)
   NS_MDS_NOTIFY,             // XEP-0490 PEP notify (read-position sync)
   NS_OPENPGP_PUBLIC_KEYS_NOTIFY, // XEP-0373 PEP notify (OpenPGP public keys)
   NS_FORWARD,               // XEP-0297 Stanza Forwarding (shows a forwarded copy)

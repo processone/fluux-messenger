@@ -77,7 +77,8 @@
         "viewProfile": "Zobacz profil",
         "resizeHint": "Przeciągnij, aby zmienić rozmiar, kliknij dwukrotnie, aby zresetować",
         "dismiss": "Odrzuć",
-        "search": "Szukaj"
+        "search": "Szukaj",
+        "saved": "Zapisane"
     },
     "newMessage": {
         "title": "Nowa wiadomość",
@@ -736,7 +737,9 @@
         "loadAudio": "Załaduj audio",
         "loadFilePreview": "Załaduj podgląd",
         "showLinkImage": "Pokaż obraz",
-        "emojiSuggestions": "Podpowiedzi emoji"
+        "emojiSuggestions": "Podpowiedzi emoji",
+        "saveMessage": "Zapisz wiadomość",
+        "removeFromSaved": "Usuń z zapisanych"
     },
     "dates": {
         "today": "Dzisiaj",
@@ -1384,6 +1387,10 @@
         "search": {
             "title": "Wyniki wyszukiwania",
             "description": "Wybierz wynik na pasku bocznym, aby wyświetlić rozmowę."
+        },
+        "saved": {
+            "title": "Zapisane wiadomości",
+            "description": "Wybierz zapisaną wiadomość na pasku bocznym, aby otworzyć ją w jej rozmowie."
         }
     },
     "avatar": {
@@ -1769,5 +1776,17 @@
         "edit": "{{nickname}} (edycja): {{text}}",
         "retraction": "{{nickname}} usunął/usunęła wiadomość",
         "messages": "{{nickname}}: nowe wiadomości — {{count}}"
+    },
+    "saved": {
+        "title": "Zapisane wiadomości",
+        "marker": "Zapisano",
+        "empty": "Brak zapisanych wiadomości",
+        "emptyHint": "Otwórz menu Więcej wiadomości i wybierz Zapisz wiadomość, aby zachować ją tutaj.",
+        "remove": "Usuń z zapisanych",
+        "encrypted": "Zaszyfrowana wiadomość",
+        "deleted": "Wiadomość usunięta",
+        "tryAgain": "Spróbuj ponownie",
+        "full": "Lista zapisanych wiadomości jest pełna ({{count}}). Usuń jedną, aby zapisać kolejną.",
+        "refused": "Twój serwer odmówił zapisania tej wiadomości."
     }
 }

@@ -1,7 +1,7 @@
 /** Touch actions and quick reactions anchored to the selected message. */
 import { useState, useRef, Suspense, lazy } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Reply, Pencil, Trash2, Copy, SmilePlus, Link2, Forward } from 'lucide-react'
+import { Reply, Pencil, Trash2, Copy, SmilePlus, Link2, Forward, BookmarkPlus, BookmarkMinus } from 'lucide-react'
 import { TouchMenu } from '../ui/TouchMenu'
 import { SelectedMessagePreview } from './SelectedMessagePreview'
 import { MenuButton } from '../sidebar-components/SidebarListMenu'
@@ -30,6 +30,9 @@ export interface MessageActionSheetProps {
   onDelete: () => void | Promise<void>
   /** Copies the message's room location, not a URL in its body. */
   onCopyMessageLink?: () => void | Promise<void>
+  /** Save to, or remove from, the saved messages. Undefined when the message cannot be saved. */
+  onToggleSaved?: () => void
+  isSaved?: boolean
   onForward?: () => void
   /** Saves or shares the message's attachment; undefined hides the action. */
   onSaveAttachment?: () => void | Promise<void>
@@ -50,6 +53,8 @@ export function MessageActionSheet({
   onEdit,
   onDelete,
   onCopyMessageLink,
+  onToggleSaved,
+  isSaved = false,
   onForward,
   onSaveAttachment,
   canReply,
@@ -192,6 +197,14 @@ export function MessageActionSheet({
                 onClick={() => runAction(onForward)}
                 icon={<Forward className="rtl-mirror size-5" />}
                 label={t('chat.forwardMessageLink')}
+                className="py-3"
+              />
+            )}
+            {onToggleSaved && (
+              <MenuButton
+                onClick={() => runAction(onToggleSaved)}
+                icon={isSaved ? <BookmarkMinus className="size-5" /> : <BookmarkPlus className="size-5" />}
+                label={isSaved ? t('chat.removeFromSaved') : t('chat.saveMessage')}
                 className="py-3"
               />
             )}

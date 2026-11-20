@@ -80,6 +80,11 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   chatStore: { subscribe: () => () => {}, getState: () => ({}) },
   // The list resolves row handles through the SDK's own lookup; keep the real one.
   findMessageRowIndex: (await importOriginal<typeof import('@fluux/sdk')>()).findMessageRowIndex,
+  // Saving a message uses the SDK's own identity and builder; keep the real ones.
+  buildSavedMessage: (await importOriginal<typeof import('@fluux/sdk')>()).buildSavedMessage,
+  canSaveMessage: (await importOriginal<typeof import('@fluux/sdk')>()).canSaveMessage,
+  findSavedEntry: (await importOriginal<typeof import('@fluux/sdk')>()).findSavedEntry,
+  savedStore: (await importOriginal<typeof import('@fluux/sdk')>()).savedStore,
   findRoomMessageLink: (await importOriginal<typeof import('@fluux/sdk')>()).findRoomMessageLink,
   messageRowRef: (message: { id: string; stanzaId?: string; originId?: string }) => ({
     id: message.id,
@@ -206,6 +211,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
 
 // Mock React store hooks (from @fluux/sdk/react)
 vi.mock('@fluux/sdk/react', () => ({
+  useSavedStore: (selector: (state: { entries: Record<string, never> }) => unknown) => selector({ entries: {} }),
   useChatStore: (selector: (state: {
     activeConversationId: null
     interiorPlacementVersions: Map<string, number>

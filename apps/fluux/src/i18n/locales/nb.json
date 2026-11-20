@@ -77,7 +77,8 @@
         "viewProfile": "Vis profil",
         "resizeHint": "Dra for å endre størrelse, dobbeltklikk for å tilbakestille",
         "dismiss": "Avvis",
-        "search": "Søk"
+        "search": "Søk",
+        "saved": "Lagrede"
     },
     "newMessage": {
         "title": "Ny melding",
@@ -730,7 +731,9 @@
         "loadAudio": "Last inn lyd",
         "loadFilePreview": "Last inn forhåndsvisning",
         "showLinkImage": "Vis bilde",
-        "emojiSuggestions": "Emoji-forslag"
+        "emojiSuggestions": "Emoji-forslag",
+        "saveMessage": "Lagre melding",
+        "removeFromSaved": "Fjern fra lagrede"
     },
     "dates": {
         "today": "I dag",
@@ -1378,6 +1381,10 @@
         "search": {
             "title": "Søkeresultater",
             "description": "Velg et resultat i sidefeltet for å vise samtalen."
+        },
+        "saved": {
+            "title": "Lagrede meldinger",
+            "description": "Velg en lagret melding i sidefeltet for å åpne den i samtalen sin."
         }
     },
     "avatar": {
@@ -1763,5 +1770,17 @@
         "edit": "{{nickname}} (redigert): {{text}}",
         "retraction": "{{nickname}} slettet en melding",
         "messages": "{{nickname}}: {{count}} nye meldinger"
+    },
+    "saved": {
+        "title": "Lagrede meldinger",
+        "marker": "Lagret",
+        "empty": "Ingen lagrede meldinger",
+        "emptyHint": "Åpne Mer-menyen til en melding og velg Lagre melding for å beholde den her.",
+        "remove": "Fjern fra lagrede",
+        "encrypted": "Kryptert melding",
+        "deleted": "Meldingen er slettet",
+        "tryAgain": "Prøv igjen",
+        "full": "Listen over lagrede meldinger er full ({{count}}). Fjern én for å lagre en annen.",
+        "refused": "Serveren din nektet å lagre denne meldingen."
     }
 }

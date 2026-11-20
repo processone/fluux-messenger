@@ -77,7 +77,8 @@
         "viewProfile": "Prikaži profil",
         "resizeHint": "Povlecite za spreminjanje velikosti, dvokliknite za ponastavitev",
         "dismiss": "Opusti",
-        "search": "Iskanje"
+        "search": "Iskanje",
+        "saved": "Shranjeno"
     },
     "newMessage": {
         "title": "Novo sporočilo",
@@ -736,7 +737,9 @@
         "loadAudio": "Naloži zvok",
         "loadFilePreview": "Naloži predogled",
         "showLinkImage": "Prikaži sliko",
-        "emojiSuggestions": "Predlogi emojijev"
+        "emojiSuggestions": "Predlogi emojijev",
+        "saveMessage": "Shrani sporočilo",
+        "removeFromSaved": "Odstrani iz shranjenih"
     },
     "dates": {
         "today": "Danes",
@@ -1384,6 +1387,10 @@
         "search": {
             "title": "Rezultati iskanja",
             "description": "Izberite rezultat v stranski vrstici za prikaz pogovora."
+        },
+        "saved": {
+            "title": "Shranjena sporočila",
+            "description": "V stranski vrstici izberite shranjeno sporočilo, da ga odprete v njegovem pogovoru."
         }
     },
     "avatar": {
@@ -1769,5 +1776,17 @@
         "edit": "{{nickname}} (urejeno): {{text}}",
         "retraction": "{{nickname}} je izbrisal(a) sporočilo",
         "messages": "{{nickname}}: nova sporočila — {{count}}"
+    },
+    "saved": {
+        "title": "Shranjena sporočila",
+        "marker": "Shranjeno",
+        "empty": "Ni shranjenih sporočil",
+        "emptyHint": "Odprite meni Več pri sporočilu in izberite Shrani sporočilo, da ga obdržite tukaj.",
+        "remove": "Odstrani iz shranjenih",
+        "encrypted": "Šifrirano sporočilo",
+        "deleted": "Sporočilo je izbrisano",
+        "tryAgain": "Poskusi znova",
+        "full": "Seznam shranjenih sporočil je poln ({{count}}). Odstranite eno, da shranite drugo.",
+        "refused": "Vaš strežnik je zavrnil shranjevanje tega sporočila."
     }
 }

@@ -77,7 +77,8 @@
         "viewProfile": "Näytä profiili",
         "resizeHint": "Vedä muuttaaksesi kokoa, kaksoisnapsauta nollataksesi",
         "dismiss": "Hylkää",
-        "search": "Haku"
+        "search": "Haku",
+        "saved": "Tallennetut"
     },
     "newMessage": {
         "title": "Uusi viesti",
@@ -730,7 +731,9 @@
         "loadAudio": "Lataa ääni",
         "loadFilePreview": "Lataa esikatselu",
         "showLinkImage": "Näytä kuva",
-        "emojiSuggestions": "Emoji-ehdotukset"
+        "emojiSuggestions": "Emoji-ehdotukset",
+        "saveMessage": "Tallenna viesti",
+        "removeFromSaved": "Poista tallennetuista"
     },
     "dates": {
         "today": "Tänään",
@@ -1378,6 +1381,10 @@
         "search": {
             "title": "Hakutulokset",
             "description": "Valitse tulos sivupalkista nähdäksesi keskustelun."
+        },
+        "saved": {
+            "title": "Tallennetut viestit",
+            "description": "Valitse tallennettu viesti sivupalkista avataksesi sen keskustelussaan."
         }
     },
     "avatar": {
@@ -1763,5 +1770,17 @@
         "edit": "{{nickname}} (muokattu): {{text}}",
         "retraction": "{{nickname}} poisti viestin",
         "messages": "{{nickname}}: {{count}} uutta viestiä"
+    },
+    "saved": {
+        "title": "Tallennetut viestit",
+        "marker": "Tallennettu",
+        "empty": "Ei tallennettuja viestejä",
+        "emptyHint": "Avaa viestin Lisää-valikko ja valitse Tallenna viesti säilyttääksesi sen täällä.",
+        "remove": "Poista tallennetuista",
+        "encrypted": "Salattu viesti",
+        "deleted": "Viesti poistettu",
+        "tryAgain": "Yritä uudelleen",
+        "full": "Tallennettujen viestien lista on täynnä ({{count}}). Poista yksi tallentaaksesi toisen.",
+        "refused": "Palvelimesi kieltäytyi tallentamasta tätä viestiä."
     }
 }

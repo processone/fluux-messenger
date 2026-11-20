@@ -77,7 +77,8 @@
         "viewProfile": "Profil megtekintése",
         "resizeHint": "Húzza az átméretezéshez, dupla kattintás a visszaállításhoz",
         "dismiss": "Elvetés",
-        "search": "Keresés"
+        "search": "Keresés",
+        "saved": "Mentettek"
     },
     "newMessage": {
         "title": "Új üzenet",
@@ -730,7 +731,9 @@
         "loadAudio": "Hang betöltése",
         "loadFilePreview": "Előnézet betöltése",
         "showLinkImage": "Kép megjelenítése",
-        "emojiSuggestions": "Emoji javaslatok"
+        "emojiSuggestions": "Emoji javaslatok",
+        "saveMessage": "Üzenet mentése",
+        "removeFromSaved": "Eltávolítás a mentettek közül"
     },
     "dates": {
         "today": "Ma",
@@ -1378,6 +1381,10 @@
         "search": {
             "title": "Keresési eredmények",
             "description": "Válasszon egy eredményt az oldalsávban a beszélgetés megtekintéséhez."
+        },
+        "saved": {
+            "title": "Mentett üzenetek",
+            "description": "Válasszon ki egy mentett üzenetet az oldalsávon, hogy megnyissa a beszélgetésében."
         }
     },
     "avatar": {
@@ -1763,5 +1770,17 @@
         "edit": "{{nickname}} (szerkesztve): {{text}}",
         "retraction": "{{nickname}} törölt egy üzenetet",
         "messages": "{{nickname}}: {{count}} új üzenet"
+    },
+    "saved": {
+        "title": "Mentett üzenetek",
+        "marker": "Mentve",
+        "empty": "Nincsenek mentett üzenetek",
+        "emptyHint": "Nyissa meg egy üzenet Továbbiak menüjét, és válassza az Üzenet mentése lehetőséget, hogy itt megőrizze.",
+        "remove": "Eltávolítás a mentettek közül",
+        "encrypted": "Titkosított üzenet",
+        "deleted": "Az üzenet törölve",
+        "tryAgain": "Próbálja újra",
+        "full": "A mentett üzenetek listája megtelt ({{count}}). Távolítson el egyet, hogy másikat menthessen.",
+        "refused": "A szerver megtagadta az üzenet tárolását."
     }
 }

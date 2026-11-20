@@ -1456,7 +1456,7 @@ export class MAM extends BaseModule {
     isRoom: boolean,
     targetTimestamp: string,
     contextSize: number = 50
-  ): Promise<{ messages: (Message | RoomMessage)[] }> {
+  ): Promise<{ messages: (Message | RoomMessage)[]; complete: boolean }> {
     const session = this.captureQuery()
     // Fetch messages before and after the target timestamp
     const oneHourBefore = new Date(new Date(targetTimestamp).getTime() - 3600000).toISOString()
@@ -1478,7 +1478,7 @@ export class MAM extends BaseModule {
         maxAutoPages: 1,
       })
       session.assertCurrent()
-      return { messages: result.messages }
+      return { messages: result.messages, complete: result.complete }
     } else {
       const result = await this.queryArchive({
         with: conversationId,
@@ -1488,7 +1488,7 @@ export class MAM extends BaseModule {
         preserveGapMarker: true,
       })
       session.assertCurrent()
-      return { messages: result.messages }
+      return { messages: result.messages, complete: result.complete }
     }
   }
 
@@ -3697,6 +3697,80 @@ export class MAM extends BaseModule {
     if (!await this.deps.stores.room.saveMessageLinkContext?.(roomJid, reconciled)) return { kind: 'unknown' }
     session.assertCurrent()
     return { kind: 'found', message: target, source: 'archive' }
+  }
+
+  /**
+   * Locate a one-to-one message for a saved entry: the resident window, then the
+   * cache, then the account archive by exact archive id. An entry without an
+   * archive id falls back to the time-window lookup search uses. Fetched context
+   * lands in the cache, so the caller can open the conversation at the message.
+   *
+   * `absent` is only said when the archive answered and does not hold the
+   * message; a failed query is `unknown`.
+   */
+  async locateChatMessage(conversationId: string, ref: { id?: string; stanzaId?: string; originId?: string; sentAt?: number; from?: string }): Promise<
+    { kind: 'found'; message: Message; source: 'resident' | 'cache' | 'archive' } | { kind: 'absent' | 'unknown' }
+  > {
+    const session = this.captureQuery()
+    const chat = this.deps.stores?.chat
+    if (!chat) return { kind: 'unknown' }
+    const matches = (message: Message) => {
+      // A known archive identity or sender that disagrees settles it: a shared client or origin id is only a hint.
+      // The saved id names the account's own archive entry: when the message knows that one, a foreign alias must not stand in for it.
+      const archiveIds = (message.ownArchiveId ? [message.ownArchiveId] : [message.stanzaId]).filter(Boolean)
+      if (ref.stanzaId && archiveIds.length > 0 && !archiveIds.includes(ref.stanzaId)) return false
+      if (ref.originId && message.originId && message.originId !== ref.originId) return false
+      if (ref.from && getBareJid(message.from) !== getBareJid(ref.from)) return false
+      return (!!ref.stanzaId && archiveIds.includes(ref.stanzaId))
+        || (!!ref.originId && message.originId === ref.originId)
+        || (!!ref.id && message.id === ref.id)
+    }
+    const settle = (message: Message, source: 'resident' | 'cache') =>
+      message.isRetracted ? { kind: 'absent' as const } : { kind: 'found' as const, message, source }
+    const targets = [ref.stanzaId, ref.originId, ref.id].filter((target): target is string => !!target)
+    for (const target of targets) {
+      const resident = chat.getMessage(conversationId, target)
+      if (resident && matches(resident)) return settle(resident, 'resident')
+    }
+    for (const target of targets) {
+      if (!chat.resolveReactionTarget) break
+      const cached = await chat.resolveReactionTarget(conversationId, target)
+      session.assertCurrent()
+      if (cached && matches(cached)) return settle(cached, 'cache')
+    }
+
+    if (ref.stanzaId) {
+      const found = await this.lookUpArchivedMessage(conversationId, false, ref.stanzaId)
+      session.assertCurrent()
+      if (found.kind !== 'found') return found
+      const { messages } = await this.fetchContext(conversationId, false, new Date(found.timestamp).toISOString())
+      session.assertCurrent()
+      // The context query stores what it fetched; prefer that reconciled copy
+      // over the raw archive row, which nothing retains for the jump that follows.
+      const stored = chat.resolveReactionTarget ? await chat.resolveReactionTarget(conversationId, ref.stanzaId) : undefined
+      session.assertCurrent()
+      let message = (stored && matches(stored) ? stored : undefined) ?? (messages as Message[]).find((m) => matches(m))
+      if (!message) {
+        // The bounded context page missed the target: store the exact entry so the jump can load it.
+        const row = found.row as Message | undefined
+        if (!row) return { kind: 'unknown' }
+        const [reconciled] = (await chat.reconcileHistoryMessages?.([row])) ?? [row]
+        session.assertCurrent()
+        message = reconciled ?? row
+        this.deps.emitSDK('chat:history-messages', {
+          conversationId, messages: [message], page: { first: message.stanzaId, last: message.stanzaId, count: 1 },
+          complete: false, direction: 'backward', preserveGapMarker: true,
+        })
+      }
+      return message.isRetracted ? { kind: 'absent' } : { kind: 'found', message, source: 'archive' }
+    }
+    if (ref.sentAt === undefined) return { kind: 'unknown' }
+    const { messages, complete } = await this.fetchContext(conversationId, false, new Date(ref.sentAt).toISOString())
+    session.assertCurrent()
+    const message = (messages as Message[]).find((m) => matches(m))
+    // A bounded slice that did not reach the end of its window proves nothing about absence.
+    if (!message) return { kind: complete ? 'absent' : 'unknown' }
+    return message.isRetracted ? { kind: 'absent' } : { kind: 'found', message, source: 'archive' }
   }
 
   /**

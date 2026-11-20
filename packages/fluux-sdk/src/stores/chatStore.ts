@@ -71,6 +71,7 @@ import { getResidentWindowSize } from './shared/residentWindow'
 import { lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
 import { backfillArchiveIds, sortMessagesByTimestamp } from './shared/messageArrayUtils'
 import { archiveMoment, revivesArchivedConversation } from './shared/archiveRevival'
+import { noteSavedCopyChanged } from './savedStore'
 
 const STORAGE_KEY_BASE = 'xmpp-chat-storage'
 
@@ -2298,6 +2299,7 @@ export const chatStore = createStore<ChatState>()(
           void messageCache.applyChatCorrection(conversationId, targetId, pendingUpdates, correctionActor, scope.jid, typeof selectedTarget === 'string' ? undefined : selectedTarget)
             .then(message => {
               if (message) {
+                noteSavedCopyChanged()
                 if (isCurrent()) reconcileStoredMessage(message, scope.jid)
                 void searchIndex.updateMessage(message, scope.jid).catch(error => logWarn(`Failed to index correction: ${String(error)}`))
                 if (isCurrent()) onCorrectionResolved?.(message, isCurrent)
