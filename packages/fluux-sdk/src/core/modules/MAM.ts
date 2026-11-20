@@ -2523,9 +2523,11 @@ export class MAM extends BaseModule {
    */
   private isFromQueriedArchive(from: string | undefined, archiveJid: string | undefined): boolean {
     if (!from) return true
-    if (archiveJid) return from === archiveJid
+    // JIDs compare case-insensitively: the server's session address is lowercase even when the
+    // login was typed with capitals. A sender with no resource equals its bare JID.
     const own = this.deps.getCurrentJid()
-    return !!own && getBareJid(from) === getBareJid(own) && !getResource(from)
+    const expected = archiveJid ?? (own ? getBareJid(own) : undefined)
+    return !!expected && from.toLowerCase() === expected.toLowerCase()
   }
 
   /**

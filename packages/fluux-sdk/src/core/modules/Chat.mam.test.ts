@@ -52,7 +52,7 @@ describe('XMPPClient MAM', () => {
   }
 
   // Helper to establish a mock connection
-  const connectClient = async () => {
+  const connectClient = async (jid = 'me@example.com') => {
     // Mock minimal disco responses for connect
     mockXmppClientInstance.iqCaller.request.mockResolvedValue(
       createMockElement('iq', { type: 'result' }, [
@@ -67,7 +67,7 @@ describe('XMPPClient MAM', () => {
     )
 
     const connectPromise = xmppClient.connect({
-      jid: 'me@example.com',
+      jid,
       password: 'password',
       server: 'example.com',
       skipDiscovery: true,
@@ -335,6 +335,39 @@ describe('XMPPClient MAM', () => {
 
       const { messages } = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
       expect(messages.map(m => m.body).sort()).toEqual(['from the account archive', 'from the own server'])
+    })
+
+    it('accepts account results stamped with the lowercase address when the login was typed with capitals', async () => {
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient('Me@Example.com')
+
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        const queryid = iq.children?.find((c: any) => c.name === 'query')?.attrs?.queryid
+        stanzaListener!(createMockElement('message', { from: 'me@example.com' }, [{
+          name: 'result',
+          attrs: { xmlns: 'urn:xmpp:mam:2', queryid, id: 'a-1' },
+          children: [{
+            name: 'forwarded',
+            attrs: { xmlns: 'urn:xmpp:forward:0' },
+            children: [
+              { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:00:00Z' } },
+              { name: 'message', attrs: { from: 'alice@example.com/r', to: 'me@example.com', type: 'chat', id: 'a-1' }, children: [{ name: 'body', text: 'kept' }] },
+            ],
+          }],
+        }]))
+        return createMockElement('iq', { type: 'result' }, [{
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [{ name: 'set', attrs: { xmlns: 'http://jabber.org/protocol/rsm' }, children: [{ name: 'count', text: '1' }] }],
+        }])
+      })
+      const { messages } = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
+      expect(messages.map(m => m.body)).toEqual(['kept'])
     })
 
     it('should select the stanza-id stamped by the own archive when several are present (XEP-0359 by-aware)', async () => {
