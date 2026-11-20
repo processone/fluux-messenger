@@ -152,3 +152,52 @@ describe('Default accent presets, on every theme that uses them', () => {
     }
   }
 })
+
+/**
+ * Each theme's own default accent is also its text and icon color
+ * (text-fluux-brand), so it must read on the theme's chat canvas and carry
+ * readable text on fills.
+ */
+describe('Theme default accents', () => {
+  // Below AA as text today, pinned at their current ratio so they can only
+  // improve. Aurora dark is the deliberate white-text periwinkle (see above).
+  const BELOW_AA_AS_TEXT: Record<string, number> = {
+    'fluux/dark': 3.2,
+    'solarized/dark': 3.0,
+    'solarized/light': 4.4,
+    'one-dark/dark': 3.7,
+    'catppuccin-mocha/dark': 4.4,
+    'tokyo-night/light': 3.9,
+    'rose-pine/light': 3.6,
+  }
+
+  for (const theme of builtinThemes) {
+    for (const mode of ['dark', 'light'] as const) {
+      const sel = mode === 'dark' ? ':root' : '.light'
+      const vars = theme.variables[mode] ?? {}
+      const read = (name: string): string => {
+        const v = vars[name]
+        if (v?.startsWith('var(')) return read(v.slice(4, -1))
+        return v ?? token(sel, name)
+      }
+      const num = (name: string): number => {
+        const own = vars[name]
+        if (own) return parseFloat(own)
+        const pick = (s: string) => parseFloat(css.match(new RegExp(`${s.replace('.', '\\.')}\\s*\\{[\\s\\S]*?${name}:\\s*([\\d.]+)`))?.[1] ?? 'NaN')
+        const v = mode === 'light' ? pick('.light') : NaN
+        return Number.isNaN(v) ? pick(':root') : v
+      }
+      const fill = luminance(hslToRgb(num('--fluux-accent-h'), num('--fluux-accent-s'), num('--fluux-accent-l')))
+      const chatToken = vars['--fluux-chat-bg']
+      const chat = luminance(hexToRgb(chatToken?.startsWith('#') ? chatToken : read('--fluux-base-30')))
+      const key = `${theme.id}/${mode}`
+
+      it(`[${mode}] ${theme.name}: text on the accent fill clears AA`, () => {
+        expect(Math.max(ratio(fill, 0), ratio(fill, 1))).toBeGreaterThanOrEqual(4.5)
+      })
+      it(`[${mode}] ${theme.name}: accent reads as text on the chat canvas`, () => {
+        expect(ratio(fill, chat)).toBeGreaterThanOrEqual(BELOW_AA_AS_TEXT[key] ?? 4.5)
+      })
+    }
+  }
+})
