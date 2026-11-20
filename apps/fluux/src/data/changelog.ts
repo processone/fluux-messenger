@@ -60,6 +60,7 @@ export const changelog: ChangelogEntry[] = [
         'Scrolling to the latest message right after opening a conversation or room now ends at the bottom. Before, it could stop a little short, with the last line of the latest message hidden',
         'OpenPGP: when another of your devices updates your verified contacts while this device is still saving a verification, the server can no longer later hand this device an older list of verified contacts, which could bring back a verification you had removed',
         'The chat header\'s choices to turn encryption off and back on, its lock and tooltip once encryption is off, and the notice that someone reacted to your message when it has no text to quote now appear in your language instead of English',
+        'Replying to someone in a one-to-one chat no longer sends the name you gave them in your contacts. The quote that other apps show above your reply now names them by their address',
       ],
     }],
   },
