@@ -174,4 +174,34 @@ describe('IndexedDBStorageBackend', () => {
     expect(got).not.toBeNull()
     expect(Array.from(got!)).toEqual(Array.from(original))
   })
+
+  it('does not block another tab upgrading the database', async () => {
+    const backend = new IndexedDBStorageBackend('alice@example.com')
+    await backend.open()
+
+    const upgraded = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('fluux-e2ee-alice@example.com', 2)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+
+    expect(upgraded.version).toBe(2)
+    upgraded.close()
+  })
+
+  it('reopens after another tab deletes the database', async () => {
+    const backend = new IndexedDBStorageBackend('alice@example.com')
+    await backend.open()
+    await backend.put('identity', new Uint8Array([1, 2, 3]))
+
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.deleteDatabase('fluux-e2ee-alice@example.com')
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+
+    expect(await backend.get('identity')).toBeNull()
+    await backend.put('identity', new Uint8Array([4]))
+    expect(await backend.get('identity')).toEqual(new Uint8Array([4]))
+  })
 })

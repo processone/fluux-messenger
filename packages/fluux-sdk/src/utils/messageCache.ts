@@ -11,6 +11,7 @@ import { withoutLegacyRoomAuthority, backfillRoomStanzaId, getRoomModerationId, 
 
 import { moderationMetadata, roomRetractionAuthorized, roomRetractionRecordApplies, type ModerationMetadata } from './moderation'
 import { openDB, type IDBPDatabase, type DBSchema, type IDBPObjectStore } from 'idb'
+import { openGuarded } from './idbConnection'
 import { beginCacheMigration, resetCacheMigration } from '../stores/cacheMigrationStore'
 // Imported from the declaring modules rather than the `core/types` barrel:
 // the barrel also re-exports the store-binding port, which names
@@ -285,8 +286,12 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
   dbNameForPromise = targetDbName
   const scope = captureStorageScope()
   let migration: ReturnType<typeof beginCacheMigration> | undefined
-  const opening = openDB<MessageCacheSchema>(targetDbName, DB_VERSION, {
+  const opening = openGuarded((hooks) => openDB<MessageCacheSchema>(targetDbName, DB_VERSION, {
     upgrade(db, oldVersion, _newVersion, transaction) {
+      if (!hooks.proceed()) {
+        transaction.abort()
+        return
+      }
       if (oldVersion > 0 && scope.isCurrent() && scope.jid === scopeJid) {
         migration = beginCacheMigration()
       }
@@ -381,7 +386,10 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
       })
 
     },
-  })
+    blocked: hooks.blocked,
+    blocking: (_currentVersion, _blockedVersion, event) => hooks.release(event.target as IDBDatabase),
+    terminated: hooks.lost,
+  }), { database: targetDbName, onClosed: () => forgetConnection(ready) })
 
   // Every write this connection serves consults the retraction ledger, so the
   // connection is not ready before the account's stored records are in memory.
@@ -394,12 +402,16 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
     migration?.finish()
     // An interrupted upgrade must be retryable. A superseded account's failure
     // must not invalidate the connection opened for the new account.
-    if (dbPromise === ready) {
-      dbPromise = null
-      dbNameForPromise = null
-    }
+    forgetConnection(ready)
   })
   return ready
+}
+
+/** Drop a connection that failed or closed, unless another one replaced it. */
+function forgetConnection(connection: Promise<IDBPDatabase<MessageCacheSchema>>): void {
+  if (dbPromise !== connection) return
+  dbPromise = null
+  dbNameForPromise = null
 }
 
 // =============================================================================
