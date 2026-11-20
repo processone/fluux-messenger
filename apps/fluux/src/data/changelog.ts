@@ -45,6 +45,7 @@ export const changelog: ChangelogEntry[] = [
         'A room bookmarked without a nickname in another XMPP app now joins under your profile name or account name instead of "user"',
         'When changing a room\'s Auto-join or removing its bookmark from the rooms list fails, Fluux now shows an error. Before, nothing told you that the change did not go through',
         'When a notification setting you choose in a room\'s header cannot be saved to the room\'s bookmark, Fluux now shows an error. Before, nothing told you that the setting was not saved',
+        'When a notification setting you choose in a room\'s header cannot be saved to the room\'s bookmark, the header now goes back to the setting the room had, and a later change to the room\'s Auto-join or bookmark no longer saves the refused setting. Before, the header kept showing it as saved',
         'Reloading Fluux while a Settings page such as Encryption is open now keeps that page open instead of switching to Profile',
         'After a page reload or a reconnection, your server no longer sends again what Fluux had already received, and servers that limit how much they keep waiting for confirmation no longer disconnect Fluux during a long session',
         'Dialogs in Chrome, Edge and other Chromium-based browsers now blur the conversation behind them, as they already did in Safari. Before, the conversation stayed sharp behind the dialog',

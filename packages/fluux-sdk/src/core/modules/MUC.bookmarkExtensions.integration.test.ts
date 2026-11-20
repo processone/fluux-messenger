@@ -761,6 +761,23 @@ describe('bookmark extensions Fluux does not own', () => {
         expect(reasons.slice(1).map((e) => e.name)).toEqual(['AbortError', 'AbortError'])
         expect(reasons[0]!.name).toBe(outcome === 'fail' ? 'Error' : 'AbortError')
       })
+
+      // A notification level the old account could not save shows the room's
+      // earlier choice again, but only on that account.
+      it('leaves the new account\'s room as it is when the old account\'s notification save then fails', async () => {
+        const off = muc.setRoomNotifyLevel(ROOM, 'none', true)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(unansweredReads).toHaveLength(1)
+
+        switchAccount()
+        sendIQ.mockClear()
+        const before = roomStore.getState().getRoom(ROOM)
+        unansweredReads.shift()!.fail()
+
+        await expect(off).rejects.toThrow('timeout')
+        expect(sentKinds()).toEqual([])
+        expect(roomStore.getState().getRoom(ROOM)).toBe(before)
+      })
     })
   })
 })

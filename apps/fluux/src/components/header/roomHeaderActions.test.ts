@@ -60,7 +60,7 @@ describe('buildNotifyGroup', () => {
   })
 
   it('marks the active mode and wires onSelect', () => {
-    const { g, setRoomNotifyLevel } = group({ notifyAll: true })
+    const { g, setRoomNotifyLevel } = group({ notifyAll: true, isBookmarked: false })
     expect(g.items.find((i) => i.key === 'all-session')!.active).toBe(true)
     choose(g, 'mentions')
     expect(setRoomNotifyLevel).toHaveBeenCalledWith('room@conf.example.com', 'mentions', false)
@@ -94,11 +94,35 @@ describe('buildNotifyGroup', () => {
   it('clears a saved level when Mentions only or a session All messages replaces it', () => {
     const saved = group({ notifyOffPersistent: true })
     choose(saved.g, 'mentions')
-    expect(saved.setRoomNotifyLevel).toHaveBeenCalledWith('room@conf.example.com', 'mentions', true)
+    // Only the save: if it is refused, the room shows the stored Off again
+    expect(saved.setRoomNotifyLevel.mock.calls).toEqual([['room@conf.example.com', 'mentions', true]])
 
     const all = group({ notifyAllPersistent: true })
     choose(all.g, 'all-session')
     expect(all.setRoomNotifyLevel.mock.calls).toEqual([
+      ['room@conf.example.com', 'mentions', true],
+      ['room@conf.example.com', 'all', false],
+    ])
+  })
+
+  // A saved All messages or Off shows as a session choice until the bookmark stores it.
+  // Leaving it for Mentions only must save Mentions only, or the bookmark would end on
+  // the level the user moved away from. Mentions only applies for the session first,
+  // so it stays applied when that save is refused.
+  it.each([
+    ['All messages', { notifyAll: true }],
+    ['Off', { notifyAll: false, notifyOff: true }],
+  ] as const)('applies and saves Mentions only when it replaces %s shown on a bookmarked room storing Mentions only', (_shown, partial) => {
+    const mentions = group(partial)
+    choose(mentions.g, 'mentions')
+    expect(mentions.setRoomNotifyLevel.mock.calls).toEqual([
+      ['room@conf.example.com', 'mentions', false],
+      ['room@conf.example.com', 'mentions', true],
+    ])
+
+    const session = group(partial)
+    choose(session.g, 'all-session')
+    expect(session.setRoomNotifyLevel.mock.calls).toEqual([
       ['room@conf.example.com', 'mentions', true],
       ['room@conf.example.com', 'all', false],
     ])
