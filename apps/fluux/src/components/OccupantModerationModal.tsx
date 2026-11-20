@@ -238,7 +238,7 @@ export function OccupantModerationModal({
                   onChange={(e) => setReason(e.target.value)}
                   placeholder={t('rooms.reason')}
                   className="w-full px-3 py-1.5 text-sm rounded-md bg-fluux-bg border border-fluux-hover
-                    text-fluux-text placeholder:text-fluux-muted focus:outline-none focus:ring-1 focus:ring-fluux-brand"
+                    text-fluux-text placeholder:text-fluux-muted"
                 />
                 <div className="flex gap-2">
                   <button

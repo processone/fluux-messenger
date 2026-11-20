@@ -107,7 +107,7 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
             disabled={creating}
             required
             placeholder="my-room"
-            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 disabled:opacity-50"
+            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted disabled:opacity-50"
           />
           <p className="text-xs text-fluux-muted mt-1">
             @{mucService || <Loader2 className="size-3 inline animate-spin" />}
@@ -127,7 +127,7 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
             disabled={creating}
             required
             placeholder={t('rooms.roomNamePlaceholder')}
-            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 disabled:opacity-50"
+            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted disabled:opacity-50"
           />
         </div>
 
@@ -142,7 +142,7 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
             disabled={creating}
             placeholder={t('rooms.roomDescriptionPlaceholder')}
             rows={2}
-            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 disabled:opacity-50 resize-y"
+            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted disabled:opacity-50 resize-y"
           />
         </div>
 
@@ -159,7 +159,7 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
             disabled={creating}
             required
             placeholder={t('rooms.nicknamePlaceholder')}
-            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 disabled:opacity-50"
+            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted disabled:opacity-50"
           />
         </div>
 

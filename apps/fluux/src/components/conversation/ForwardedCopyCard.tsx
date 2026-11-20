@@ -121,7 +121,7 @@ function CopyCardView({ message, formatTime, isDarkMode, onMediaLoad, isOwnMessa
         void open()
       }}
       onKeyDown={event => { if (event.key === 'Enter' && event.target === event.currentTarget) { event.preventDefault(); void open() } }}
-      className="mt-1.5 max-w-full cursor-pointer rounded-e border-s-[3px] bg-fluux-bg-secondary px-3 py-2 text-start shadow-sm transition-colors hover:bg-fluux-hover/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-fluux-brand"
+      className="mt-1.5 max-w-full cursor-pointer rounded-e border-s-[3px] bg-fluux-bg-secondary px-3 py-2 text-start shadow-sm transition-colors hover:bg-fluux-hover/50"
       style={{ borderInlineStartColor: color }}
     >
       <div className="flex items-center gap-1 text-xs text-fluux-muted">

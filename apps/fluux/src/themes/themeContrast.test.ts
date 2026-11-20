@@ -3,6 +3,8 @@ import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, resolve } from 'path'
 import { builtinThemes } from './builtins'
+import { DEFAULT_ACCENT_PRESETS } from './defaultAccents'
+import { FOCUS_SURFACES, focusHslToRgb, guardedFocusRing } from './focusRing'
 import { auroraSenderColor } from '@/utils/senderColor'
 import type { ThemeDefinition } from './types'
 
@@ -128,7 +130,7 @@ describe('Aurora theme contrast invariants', () => {
 
     // Pattern E — the focus ring is a non-text UI indicator and must clear the
     // WCAG 1.4.11 non-text contrast minimum (3:1) against the surfaces it rings.
-    // It drives the universal `.user-interacted *:focus` outline, so this one
+    // It drives the universal `.user-interacted :focus-visible` outline, so this one
     // token governs focus visibility app-wide. (Was accent @ 0.5 alpha, ~1.9:1.)
     it(`[${mode}] focus ring clears 3:1 non-text contrast on the hover surface`, () => {
       const r = contrast('var(--fluux-focus-ring)', 'var(--fluux-bg-hover)', vars)
@@ -390,6 +392,42 @@ describe('Builtin theme accent text on an accent tint', () => {
           const text = [0, 1, 2].map((k) => accent[k] * p + toward * (1 - p))
           const l1 = relLum(text), l2 = relLum(tint)
           expect((Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)).toBeGreaterThanOrEqual(4.5)
+        })
+      }
+    }
+  }
+})
+
+// Accepted keyboard-focus design: one solid accent indicator with at least 3:1
+// against each adjacent surface. Use the shipped palettes and preset values,
+// resolved exactly like the existing contrast checks rather than invented colours.
+describe('Guarded keyboard focus contrast', () => {
+  for (const theme of builtinThemes) {
+    for (const mode of ['dark', 'light'] as const) {
+      const presets = [null, ...(theme.accentPresets ?? DEFAULT_ACCENT_PRESETS)]
+      for (const preset of presets) {
+        it(`[${theme.id}/${mode}/${preset?.name ?? 'theme'}] guards every focus surface`, () => {
+          const vars = themeTokens(theme, mode)
+          const accent = preset?.[mode] ?? {
+            h: parseFloat(vars['--fluux-accent-h']),
+            s: parseFloat(vars['--fluux-accent-s']),
+            l: parseFloat(vars['--fluux-accent-l']),
+          }
+          const surfaces = FOCUS_SURFACES.map(token => {
+            const [r, g, b] = resolve_(`var(${token})`, vars)
+            return [r, g, b] as const
+          })
+          const ring = guardedFocusRing(accent, mode, surfaces)
+          const initial = focusHslToRgb({ ...accent, l: Math.min(100, accent.l + (mode === 'dark' ? 8 : 0)) })
+          const alreadyReadable = surfaces.every(surface => {
+            const a = relLum([...initial]), b = relLum([...surface])
+            return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 3
+          })
+          if (alreadyReadable) expect(ring).toEqual(initial)
+          for (const surface of surfaces) {
+            const a = relLum([...ring]), b = relLum([...surface])
+            expect((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toBeGreaterThanOrEqual(3)
+          }
         })
       }
     }

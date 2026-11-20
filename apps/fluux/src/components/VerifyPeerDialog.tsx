@@ -155,7 +155,7 @@ export function VerifyPeerDialog({
                 onChange={(e) => setInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
                 placeholder={t('chat.verifyPeer.theirCodePlaceholder')}
                 aria-invalid={inputMismatch}
-                className={`w-full rounded-lg border bg-fluux-bg p-3 text-center text-2xl font-mono font-semibold tracking-widest text-fluux-text placeholder:text-fluux-muted/50 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 ${
+                className={`w-full rounded-lg border bg-fluux-bg p-3 text-center text-2xl font-mono font-semibold tracking-widest text-fluux-text placeholder:text-fluux-muted/50 placeholder:font-normal ${
                   inputMatches
                     ? 'border-green-500/60'
                     : inputMismatch

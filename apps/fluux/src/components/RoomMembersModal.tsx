@@ -267,7 +267,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t('rooms.searchMembers')}
             className="w-full ps-8 pe-8 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
-                       focus:border-fluux-brand/50 focus:outline-none text-fluux-text placeholder-fluux-muted"
+                       text-fluux-text placeholder-fluux-muted"
           />
           {search && (
             <button
@@ -352,7 +352,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
               value={addingAffiliation}
               onChange={(e) => setAddingAffiliation(e.target.value as RoomAffiliation)}
               className="px-2 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
-                         focus:border-fluux-brand/50 focus:outline-none text-fluux-text"
+                         text-fluux-text"
             >
               {canAddAffiliations.map(aff => (
                 <option key={aff} value={aff}>{getAffiliationLabel(aff, t)}</option>

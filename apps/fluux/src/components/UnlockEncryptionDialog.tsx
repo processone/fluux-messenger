@@ -251,7 +251,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
               if (error) setError(null)
             }}
             placeholder={t('settings.encryption.restorePassphrasePlaceholder')}
-            className="w-full px-3 py-2 mb-3 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
+            className="w-full px-3 py-2 mb-3 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text disabled:opacity-50"
           />
 
           {mode === 'setup' && (
@@ -270,7 +270,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
                   if (error) setError(null)
                 }}
                 placeholder={t('settings.encryption.restorePassphrasePlaceholder')}
-                className="w-full px-3 py-2 mb-3 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
+                className="w-full px-3 py-2 mb-3 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text disabled:opacity-50"
               />
             </>
           )}

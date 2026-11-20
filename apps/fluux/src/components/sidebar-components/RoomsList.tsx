@@ -409,11 +409,11 @@ export const RoomItem = memo(function RoomItem({
           onTouchCancel={menu.handleTouchEnd}
           onMouseEnter={onMouseEnter}
           onMouseMove={onMouseMove}
-          className={`w-full relative px-2 sidebar-row touch-menu-row rounded border flex items-center
+          className={`w-full relative px-2 sidebar-row touch-menu-row ${isSelected && isKeyboardNav ? 'keyboard-focus-row' : ''} rounded border flex items-center
                    transition-colors cursor-pointer group
                    ${room.isJoining
                      ? isSelected
-                       ? 'bg-fluux-hover text-fluux-text border-fluux-brand opacity-70'
+                       ? 'bg-fluux-hover text-fluux-text border-transparent opacity-70'
                        : isKeyboardNav
                          ? 'text-fluux-muted border-transparent opacity-70'
                          : 'text-fluux-muted border-transparent hover:bg-fluux-hover hover:text-fluux-text opacity-70'
@@ -421,14 +421,14 @@ export const RoomItem = memo(function RoomItem({
                        ? isActive
                          ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"
                          : isSelected
-                           ? 'bg-fluux-hover text-fluux-text border-fluux-brand'
+                           ? 'bg-fluux-hover text-fluux-text border-transparent'
                            : isKeyboardNav
                              ? 'text-fluux-muted border-transparent'
                              : 'text-fluux-muted border-transparent hover:bg-fluux-hover hover:text-fluux-text'
                        : isActive
                          ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent opacity-80 before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"
                          : isSelected
-                           ? 'bg-fluux-hover text-fluux-text border-fluux-brand opacity-80'
+                           ? 'bg-fluux-hover text-fluux-text border-transparent opacity-80'
                            : isKeyboardNav
                              ? 'text-fluux-muted border-transparent opacity-60'
                              : 'text-fluux-muted border-transparent hover:bg-fluux-hover hover:text-fluux-text opacity-60 hover:opacity-100'

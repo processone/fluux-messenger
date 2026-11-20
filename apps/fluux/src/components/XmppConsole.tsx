@@ -564,7 +564,7 @@ export function XmppConsole() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('console.filter')}
-              className="w-32 ps-7 pe-2 py-1 text-xs bg-fluux-sidebar text-fluux-text rounded border border-fluux-bg/50 focus:outline-none focus:border-fluux-brand placeholder:text-fluux-muted"
+              className="w-32 ps-7 pe-2 py-1 text-xs bg-fluux-sidebar text-fluux-text rounded border border-fluux-bg/50 placeholder:text-fluux-muted"
             />
             {searchQuery && (
               <button
@@ -716,7 +716,7 @@ export function XmppConsole() {
             onKeyDown={handleKeyDown}
             placeholder={isConnected ? t('console.enterStanza', { modifier: isMac ? '⌘' : 'Ctrl' }) : t('console.connectToSend')}
             disabled={!isConnected}
-            className="flex-1 bg-fluux-bg text-fluux-text text-sm font-mono px-3 py-2 rounded resize-none focus:outline-none focus:ring-1 focus:ring-fluux-brand disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
+            className="flex-1 bg-fluux-bg text-fluux-text text-sm font-mono px-3 py-2 rounded resize-none disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
             rows={1}
           />
           <Tooltip content={t('console.sendStanza', { modifier: isMac ? '⌘' : 'Ctrl' })} position="top">

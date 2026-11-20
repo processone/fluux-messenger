@@ -124,7 +124,7 @@ export function ProfileDetailsSection() {
                     disabled={saving}
                     placeholder={label}
                     className="flex-1 text-sm text-fluux-text bg-fluux-bg rounded px-2 py-0.5
-                               border border-fluux-brand focus:outline-none disabled:opacity-50"
+                               border border-fluux-brand disabled:opacity-50"
                   />
                 </div>
               ) : (
@@ -175,7 +175,7 @@ export function ProfileDetailsSection() {
                   disabled={saving}
                   placeholder={editingNewField.label}
                   className="flex-1 text-sm text-fluux-text bg-fluux-bg rounded px-2 py-0.5
-                             border border-fluux-brand focus:outline-none disabled:opacity-50"
+                             border border-fluux-brand disabled:opacity-50"
                 />
               </div>
             )

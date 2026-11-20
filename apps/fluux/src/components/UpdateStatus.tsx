@@ -64,7 +64,7 @@ export function UpdateStatus({ scope, target, visible: headerVisible = true, chi
         {text ? t('status.retrievingMessages') : children}
       </div>
       {visible && !text && (
-        <Tooltip content={explanation} position="bottom" showOnMobile triggerMode="click" className="pointer-events-auto inline-flex shrink-0 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-fluux-brand">
+        <Tooltip content={explanation} position="bottom" showOnMobile triggerMode="click" className="pointer-events-auto inline-flex shrink-0 rounded">
           <span title={explanation} className="inline-flex text-fluux-muted" data-testid="update-icon">
             <RefreshCw className="size-3" aria-hidden="true" />
             <span className="sr-only">{explanation}</span>

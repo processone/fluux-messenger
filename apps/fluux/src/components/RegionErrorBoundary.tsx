@@ -92,7 +92,7 @@ function RegionErrorFallback({ variant, onRetry, onBack }: RegionErrorFallbackPr
         <button
           type="button"
           onClick={onRetry}
-          className="rounded px-1 text-fluux-link underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-fluux-brand"
+          className="rounded px-1 text-fluux-link underline-offset-2 hover:underline"
         >
           {t('errorBoundary.retry')}
         </button>
@@ -113,7 +113,7 @@ function RegionErrorFallback({ variant, onRetry, onBack }: RegionErrorFallbackPr
             type="button"
             onClick={onBack}
             aria-label={t('common.back')}
-            className="size-11 flex items-center justify-center rounded-lg text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-fluux-brand"
+            className="size-11 flex items-center justify-center rounded-lg text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover"
           >
             <ArrowLeft className="size-5 rtl-mirror" aria-hidden="true" />
           </button>
@@ -128,7 +128,7 @@ function RegionErrorFallback({ variant, onRetry, onBack }: RegionErrorFallbackPr
         <button
           type="button"
           onClick={onRetry}
-          className="mt-1 inline-flex items-center gap-2 rounded-lg bg-fluux-brand px-4 py-2 text-sm font-medium text-fluux-text-on-accent hover:bg-fluux-brand/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fluux-brand"
+          className="mt-1 inline-flex items-center gap-2 rounded-lg bg-fluux-brand px-4 py-2 text-sm font-medium text-fluux-text-on-accent hover:bg-fluux-brand/80"
         >
           <RotateCcw className="size-4" aria-hidden="true" />
           {t('errorBoundary.retry')}

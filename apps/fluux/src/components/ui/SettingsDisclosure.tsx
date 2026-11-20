@@ -23,8 +23,8 @@ export function SettingsDisclosure({ title, children, stayOpen = false }: Settin
           disabled={stayOpen}
           onClick={() => setExpanded(!visible)}
           className="flex w-full items-center gap-2 px-4 py-3 text-start text-sm font-medium text-fluux-text
-                     fluux-card-row-hover transition-colors focus-visible:outline-none focus-visible:ring-2
-                     focus-visible:ring-inset focus-visible:ring-fluux-brand disabled:cursor-default"
+                     fluux-card-row-hover transition-colors
+                     focus-ring-inset disabled:cursor-default"
         >
           {visible
             ? <ChevronDown className="size-4 shrink-0 text-fluux-muted" />

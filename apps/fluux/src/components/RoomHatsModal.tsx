@@ -348,7 +348,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
             onChange={(e) => setSearch(e.target.value)}
             placeholder={activeTab === 'definitions' ? t('rooms.hatTitlePlaceholder') : t('rooms.hatJidPlaceholder')}
             className="w-full ps-8 pe-8 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
-                       focus:border-fluux-brand/50 focus:outline-none text-fluux-text placeholder-fluux-muted"
+                       text-fluux-text placeholder-fluux-muted"
           />
           {search && (
             <button
@@ -464,7 +464,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
                 onKeyDown={(e) => { if (e.key === 'Enter') void handleCreate() }}
                 placeholder={t('rooms.hatTitlePlaceholder')}
                 className="w-full px-3 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
-                           focus:border-fluux-brand/50 focus:outline-none text-fluux-text placeholder-fluux-muted"
+                           text-fluux-text placeholder-fluux-muted"
               />
             </div>
           </div>
@@ -478,7 +478,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
                 onKeyDown={(e) => { if (e.key === 'Enter') void handleCreate() }}
                 placeholder={t('rooms.hatUriPlaceholder')}
                 className="w-full px-3 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
-                           focus:border-fluux-brand/50 focus:outline-none text-fluux-text placeholder-fluux-muted"
+                           text-fluux-text placeholder-fluux-muted"
               />
             </div>
             <button
@@ -556,7 +556,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
               value={assignUri}
               onChange={(e) => setAssignUri(e.target.value)}
               className="px-2 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
-                         focus:border-fluux-brand/50 focus:outline-none text-fluux-text"
+                         text-fluux-text"
             >
               {hats.length === 0 ? (
                 <option value="">{t('rooms.noHats')}</option>

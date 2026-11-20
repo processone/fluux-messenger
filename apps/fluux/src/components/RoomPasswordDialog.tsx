@@ -47,7 +47,7 @@ export function RoomPasswordDialog({ message, onSubmit, onCancel }: RoomPassword
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full px-3 py-2 mb-4 bg-fluux-bg text-fluux-text rounded
-                       border border-transparent focus:border-fluux-brand
+                       border border-transparent
                        placeholder:text-fluux-muted"
           />
 

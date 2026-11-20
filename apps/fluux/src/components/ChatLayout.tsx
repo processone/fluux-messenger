@@ -163,7 +163,7 @@ function ViewLoadingFallback({ onBack }: { onBack?: () => void }) {
       <div className="h-12 px-4 flex items-center border-b border-fluux-bg">
         {onBack && (
           <button type="button" onClick={onBack} aria-label={t('common.back')}
-            className="size-11 flex items-center justify-center rounded-lg text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-fluux-brand">
+            className="size-11 flex items-center justify-center rounded-lg text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover">
             <ArrowLeft className="size-5 rtl-mirror" aria-hidden="true" />
           </button>
         )}

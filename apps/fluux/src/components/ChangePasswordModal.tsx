@@ -87,7 +87,7 @@ export function ChangePasswordModal({ onClose }: ChangePasswordModalProps) {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             className="w-full px-3 py-2 bg-fluux-bg border border-fluux-hover rounded-lg text-fluux-text
-                       placeholder:text-fluux-muted focus:outline-none focus:border-fluux-brand"
+                       placeholder:text-fluux-muted"
             placeholder="••••••••"
             disabled={saving}
           />
@@ -103,7 +103,7 @@ export function ChangePasswordModal({ onClose }: ChangePasswordModalProps) {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             className="w-full px-3 py-2 bg-fluux-bg border border-fluux-hover rounded-lg text-fluux-text
-                       placeholder:text-fluux-muted focus:outline-none focus:border-fluux-brand"
+                       placeholder:text-fluux-muted"
             placeholder="••••••••"
             disabled={saving}
           />

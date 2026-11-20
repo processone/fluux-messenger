@@ -189,8 +189,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                   checked={cleanLocalData}
                   onChange={(e) => setCleanLocalData(e.target.checked)}
                   className="size-4 rounded border border-fluux-border bg-fluux-bg
-                             checked:bg-fluux-brand checked:border-fluux-brand
-                             focus:ring-fluux-brand focus:ring-offset-0"
+                             checked:bg-fluux-brand checked:border-fluux-brand"
                 />
                 {t('menu.cleanLocalData')}
               </label>

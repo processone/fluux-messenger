@@ -333,13 +333,13 @@ export const ConversationItem = memo(function ConversationItem({
         onDrop={handleDrop}
         onMouseEnter={onMouseEnter}
         onMouseMove={onMouseMove}
-        className={`w-full relative px-2 sidebar-row touch-menu-row rounded border flex items-center text-start cursor-pointer
+        className={`w-full relative px-2 sidebar-row touch-menu-row ${isSelected && isKeyboardNav ? 'keyboard-focus-row' : ''} rounded border flex items-center text-start cursor-pointer
                     transition-colors ${isDropTarget ? 'ring-2 ring-fluux-brand ring-inset z-10' : ''} ${isMenuTarget ? 'ring-2 ring-fluux-brand ring-inset z-10' : ''} ${isActive
                       ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"
                       : isMenuTarget
                         ? 'bg-fluux-hover text-fluux-text border-transparent'
                         : isSelected
-                          ? 'bg-fluux-hover text-fluux-text border-fluux-brand'
+                          ? 'bg-fluux-hover text-fluux-text border-transparent'
                           : isKeyboardNav
                             ? 'text-fluux-muted border-transparent'
                             : 'text-fluux-muted border-transparent hover:bg-fluux-hover hover:text-fluux-text'}`}

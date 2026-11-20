@@ -182,7 +182,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
                 onChange={(e) => setStatusInput(e.target.value)}
                 placeholder={t('presence.statusPlaceholder')}
                 maxLength={100}
-                className="flex-1 min-w-0 px-2 py-1.5 text-sm bg-fluux-sidebar text-fluux-text rounded border border-fluux-hover focus:outline-none focus:border-fluux-brand placeholder:text-fluux-muted"
+                className="flex-1 min-w-0 px-2 py-1.5 text-sm bg-fluux-sidebar text-fluux-text rounded border border-fluux-hover placeholder:text-fluux-muted"
               />
             </div>
             <div className="flex gap-2 mt-2">

@@ -68,7 +68,7 @@ function restoreTextareaCursor(
 }
 
 // Base textarea classes - exported for custom renderInput implementations to reuse.
-// `no-focus-ring` opts the textarea out of the global `.user-interacted *:focus`
+// `no-focus-ring` opts the textarea out of the global `.user-interacted :focus-visible`
 // outline (index.css): the composer card's own `:focus-within` accent edge is the
 // focus affordance now, so the textarea's inner outline would be a doubled ring.
 // The action buttons keep their outlines for keyboard navigation.

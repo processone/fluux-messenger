@@ -62,8 +62,9 @@ interface UseListKeyboardNavReturn {
   }
   /** Data attribute value for the item at given index */
   getItemAttribute: (index: number) => Record<string, string>
-  /** Props to spread on the list container for mouse leave handling */
+  /** Props to spread on the list container for pointer modality and mouse leave. */
   getContainerProps: () => {
+    onMouseDown: () => void
     onMouseLeave: () => void
   }
 }
@@ -463,6 +464,9 @@ export function useListKeyboardNav<T>({
 
   // Helper to get props for the list container (clears hover on mouse leave)
   const getContainerProps = () => ({
+    // A click exits keyboard mode even when the pointer has not moved since
+    // arrow navigation. Keep selection/activation behavior unchanged.
+    onMouseDown: () => setIsKeyboardNav(false),
     onMouseLeave: () => {
       // Clear hover highlight when mouse leaves the list (unless in keyboard nav mode)
       if (!isKeyboardNav) {

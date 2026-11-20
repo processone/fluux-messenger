@@ -31,6 +31,7 @@ import { streamManagementMaxSeconds } from './platform/capabilities'
 import { detectWindowChrome } from './platform/windowChrome'
 import { installMobileViewport } from './utils/mobileViewport'
 import { installScrollbarReveal } from './utils/scrollbarReveal'
+import { installFocusRings } from './utils/focusRings'
 import { installKeychainFastTokens } from './utils/keychainFastTokenStorage'
 
 
@@ -46,6 +47,7 @@ if (platform().shell === 'desktop') document.documentElement.dataset.tauri = 'tr
 void detectWindowChrome()
 installMobileViewport()
 installScrollbarReveal()
+installFocusRings()
 startBadgeDiagnostics()
 
 // Enable native TCP/TLS proxy in Tauri unless explicitly disabled
@@ -79,17 +81,6 @@ if (platform().shell === 'web') {
     useLoginPrefillStore.getState().setPrefill(webPrefill)
   }
 }
-
-// Add 'user-interacted' class to html on first user interaction
-// This enables focus rings only after the user has interacted with the app
-const enableFocusRings = () => {
-  document.documentElement.classList.add('user-interacted')
-  // Remove listeners after first interaction
-  document.removeEventListener('mousedown', enableFocusRings)
-  document.removeEventListener('keydown', enableFocusRings)
-}
-document.addEventListener('mousedown', enableFocusRings)
-document.addEventListener('keydown', enableFocusRings)
 
 // Emergency reload shortcut (Cmd/Ctrl+Alt+Shift+R)
 // Works outside React when the app is frozen due to render loops

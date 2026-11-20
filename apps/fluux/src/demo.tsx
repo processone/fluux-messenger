@@ -45,9 +45,11 @@ import { installNotificationSettingsFixture } from './demo/notificationSettingsF
 import { ShellSettledProbe } from './demo/shellSettledProbe'
 import { installMobileViewport } from './utils/mobileViewport'
 import { installScrollbarReveal } from './utils/scrollbarReveal'
+import { installFocusRings } from './utils/focusRings'
 
 installMobileViewport()
 installScrollbarReveal()
+installFocusRings()
 
 // Parse URL parameters
 const params = new URLSearchParams(window.location.search)

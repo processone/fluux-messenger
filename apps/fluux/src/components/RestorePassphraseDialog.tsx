@@ -223,7 +223,7 @@ export function RestorePassphraseDialog({
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="characters"
-              className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text font-mono tracking-widest focus:outline-none focus:border-fluux-brand disabled:opacity-50"
+              className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text font-mono tracking-widest disabled:opacity-50"
             />
           ) : (
             <div className="relative mb-4">
@@ -243,7 +243,7 @@ export function RestorePassphraseDialog({
                   if (error) setError(null)
                 }}
                 placeholder={t('settings.encryption.restorePassphrasePlaceholder')}
-                className="w-full px-3 py-2 pe-10 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
+                className="w-full px-3 py-2 pe-10 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text disabled:opacity-50"
               />
               {isImport && (
                 <button

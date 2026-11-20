@@ -41,8 +41,7 @@ interface RoomSettingsPanelProps extends RoomSettingsActions {
   onDestroyClick: () => void
 }
 
-const inputClass = 'w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 disabled:opacity-50'
-const ring = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fluux-brand'
+const inputClass = 'w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted disabled:opacity-50'
 
 /** Arrow keys move through a radio group (wrapping), Home and End jump to its ends. Returns the new index, or null. */
 function radioKey(e: KeyboardEvent, index: number, count: number): number | null {
@@ -83,7 +82,7 @@ function Choice({ id, field, value, onChange, disabled, labelledBy }: {
           <button key={o.value} type="button" role="radio" aria-checked={on} tabIndex={i === tabbable ? 0 : -1} disabled={disabled}
             onClick={() => onChange(o.value)}
             onKeyDown={e => { const n = radioKey(e, i, options.length); if (n !== null) onChange(options[n].value) }}
-            className={`px-3 py-1 text-sm rounded-md transition-colors ${ring} ${on ? 'bg-fluux-brand text-fluux-text-on-accent' : 'text-fluux-muted hover:text-fluux-text'}`}>
+            className={`px-3 py-1 text-sm rounded-md transition-colors ${on ? 'bg-fluux-brand text-fluux-text-on-accent' : 'text-fluux-muted hover:text-fluux-text'}`}>
             {capitalize(o.label || o.value)}
           </button>
         )
@@ -103,7 +102,7 @@ function Chips({ field, value, onChange, disabled, labelledBy }: {
         return (
           <button key={o.value} type="button" aria-pressed={on} disabled={disabled}
             onClick={() => onChange(on ? value.filter(v => v !== o.value) : [...value, o.value])}
-            className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${ring} ${on ? 'border-fluux-brand bg-fluux-brand/15 text-fluux-text' : 'border-fluux-border text-fluux-muted hover:text-fluux-text'}`}>
+            className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${on ? 'border-fluux-brand bg-fluux-brand/15 text-fluux-text' : 'border-fluux-border text-fluux-muted hover:text-fluux-text'}`}>
             {on && <span aria-hidden="true">✓ </span>}{capitalize(o.label || o.value)}
           </button>
         )
@@ -251,7 +250,7 @@ export function RoomSettingsPanel({
               </div>
               {onAvatar && (
                 <button type="button" onClick={onAvatar}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-fluux-border text-fluux-text hover:bg-fluux-hover ${ring}`}>
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-fluux-border text-fluux-text hover:bg-fluux-hover`}>
                   <Image className="size-4" />{t('rooms.changeAvatar')}
                 </button>
               )}
@@ -278,7 +277,7 @@ export function RoomSettingsPanel({
                   <button key={item.key} type="button" role="radio" aria-checked={!!item.active} tabIndex={i === tabbable ? 0 : -1}
                     onClick={item.onSelect}
                     onKeyDown={e => { const n = radioKey(e, i, notifyGroup.items.length); if (n !== null) notifyGroup.items[n].onSelect() }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-start fluux-card-row-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fluux-brand">
+                    className="w-full flex items-center gap-3 px-4 py-3 text-start fluux-card-row-hover focus-ring-inset">
                     <Icon className={`size-4 flex-shrink-0 ${item.active ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
                     <span className="flex-1 min-w-0">
                       <span className="block text-sm text-fluux-text">{item.label}</span>
@@ -318,7 +317,7 @@ export function RoomSettingsPanel({
                 <p className="text-xs text-fluux-muted">{t('rooms.destroyRoomConfirm')}</p>
               </div>
               <button type="button" onClick={onDestroyClick} disabled={saving}
-                className={`flex items-center gap-2 px-3 py-1.5 text-sm text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg disabled:opacity-50 ${ring}`}>
+                className={`flex items-center gap-2 px-3 py-1.5 text-sm text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg disabled:opacity-50`}>
                 <Trash2 className="size-4" />{t('rooms.destroyRoom')}
               </button>
             </div>
@@ -407,8 +406,8 @@ function SectionBrowser({ sections, dirty, desktop, renderSection }: {
           return (
             <button key={s.id} type="button" data-rs-section={s.id} aria-current={on ? 'page' : undefined} onClick={() => open(s.id)}
               className={desktop
-                ? `w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-start transition-colors ${ring} ${on ? 'bg-fluux-brand/15 text-fluux-text font-medium' : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'} ${danger ? '!text-red-400 mt-3' : ''}`
-                : 'w-full flex items-center gap-3 px-4 py-3 text-start fluux-card-row-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fluux-brand'}>
+                ? `w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-start transition-colors ${on ? 'bg-fluux-brand/15 text-fluux-text font-medium' : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'} ${danger ? '!text-red-400 mt-3' : ''}`
+                : 'w-full flex items-center gap-3 px-4 py-3 text-start fluux-card-row-hover focus-ring-inset '}>
               <Icon className={`size-4 flex-shrink-0 ${danger ? 'text-red-400' : on ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
               {desktop ? (
                 <><span className="flex-1 min-w-0 truncate">{label}</span>{dot}</>
@@ -435,14 +434,14 @@ function SectionBrowser({ sections, dirty, desktop, renderSection }: {
       {desktop && nav}
       <div ref={paneRef} className="flex-1 min-w-0 overflow-y-auto px-4 py-4 md:px-8 md:py-6">
         {!desktop && (
-          <button type="button" data-rs-back onClick={back} className={`flex items-center gap-1 -ms-1 mb-3 text-sm text-fluux-brand rounded ${ring}`}>
+          <button type="button" data-rs-back onClick={back} className={`flex items-center gap-1 -ms-1 mb-3 text-sm text-fluux-brand rounded`}>
             <ChevronLeft className="size-4 rtl-mirror" />{t('common.back')}
           </button>
         )}
         <section aria-labelledby={`rs-h-${current.id}`} className="space-y-5 max-w-2xl">
           <div>
             <h3 ref={headingRef} id={`rs-h-${current.id}`} tabIndex={-1}
-              className={`text-lg font-semibold focus:outline-none ${current.id === 'danger' ? 'text-red-400' : 'text-fluux-text'}`}>
+              className={`text-lg font-semibold ${current.id === 'danger' ? 'text-red-400' : 'text-fluux-text'}`}>
               {t(`rooms.settings.sections.${current.id}.label`)}
             </h3>
             <p className="text-sm text-fluux-muted">{t(`rooms.settings.sections.${current.id}.description`)}</p>

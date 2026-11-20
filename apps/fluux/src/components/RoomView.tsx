@@ -1852,7 +1852,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
                     if (e.key === 'Enter') confirmModeration()
                   }}
                   placeholder={t('chat.moderateReasonPlaceholder')}
-                  className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder:text-fluux-muted focus:border-fluux-brand"
+                  className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder:text-fluux-muted"
                   autoFocus
                 />
               </div>
@@ -1863,7 +1863,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
                   type="checkbox"
                   checked={banAfterModerate}
                   onChange={(e) => setBanAfterModerate(e.target.checked)}
-                  className="size-4 rounded border-fluux-border text-fluux-brand focus:ring-fluux-brand/50"
+                  className="size-4 rounded border-fluux-border text-fluux-brand"
                 />
                 <span className="text-sm text-fluux-text">{t('chat.moderateAndBan')}</span>
               </label>
