@@ -428,7 +428,6 @@ export const MessageBubble = memo(function MessageBubble({
   const forwardMessage = useForwardMessage()
   // A forward's quote and link stay until its source is on screen; then the preview replaces them.
   const [sourceShown, setSourceShown] = useState(false)
-  const showsForwardedCard = !!message.forwarded && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
   const hasForwardFallback = !!forwardFallbackRange(message.references)
   const hideForwardFallback = hasForwardFallback && sourceShown
   // A copy that is shown replaces the quote it came with; a copy that is missing, retracted or
@@ -905,7 +904,7 @@ export const MessageBubble = memo(function MessageBubble({
             </>
           )}
 
-          {showsForwardedCard && (
+          {copyShown && (
             <ForwardedCopyCard message={message} formatTime={formatTime} isDarkMode={isDarkMode} onMediaLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />
           )}
 
@@ -914,7 +913,7 @@ export const MessageBubble = memo(function MessageBubble({
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
           {/* A forwarded copy draws the file inside its own quote. */}
-          {!message.isRetracted && !showsForwardedCard && <MessageAttachments attachment={message.attachment} onMediaLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}
+          {!message.isRetracted && !copyShown && <MessageAttachments attachment={message.attachment} onMediaLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}
 
           {/* Link preview - hidden for retracted */}
           {!message.isRetracted && message.linkPreview && <LinkPreviewCard preview={message.linkPreview} onLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}
