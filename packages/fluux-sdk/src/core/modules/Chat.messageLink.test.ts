@@ -667,7 +667,7 @@ describe('shared room message references', () => {
           const h = harness()
           const stored = row({ forwarded: undefined, references: quotedRefs.map(ref => ({ ...ref, forwardFallback: mark })) })
           h.stores.room.getMessage = vi.fn(() => stored) as unknown as typeof h.stores.room.getMessage
-          h.chat.conversationKind = (() => 'groupchat') as never
+          (h.chat as unknown as { conversationKind: () => string }).conversationKind = () => 'groupchat'
           const newBody = `Edited\n${quoted}${link}`
           await h.chat.sendCorrection(room, 'm1', newBody)
           const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
