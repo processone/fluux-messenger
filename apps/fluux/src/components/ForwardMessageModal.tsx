@@ -151,7 +151,7 @@ export function ForwardMessageModal({ link, quote, attachment, onClose }: Forwar
         <button type="button" onClick={() => { void send() }} disabled={!validDestination || sending} aria-keyshortcuts="Meta+Enter Control+Enter"
           className="px-4 py-2 text-sm rounded bg-fluux-brand text-fluux-text-on-accent hover:bg-fluux-brand-hover disabled:opacity-50 disabled:cursor-not-allowed">
           {t(sending ? 'chat.forwardSending' : 'chat.forwardSend')}
-          {!sending && <kbd aria-hidden="true" className="hidden sm:inline ms-2 font-sans text-xs opacity-75">{formatShortcutKey({ key: 'Enter', modifiers: ['meta'] })}</kbd>}
+          {!sending && <kbd aria-hidden="true" className="hidden sm:inline ms-2 font-sans text-xs">{formatShortcutKey({ key: 'Enter', modifiers: ['meta'] })}</kbd>}
         </button>
       </div>
     </ModalShell>
