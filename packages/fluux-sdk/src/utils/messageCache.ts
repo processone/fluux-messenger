@@ -109,7 +109,9 @@ const DB_NAME = 'fluux-message-cache'
 // v8: authenticated archive signals and their target writes share one transaction.
 // v10: `ownArchive` index over [conversationId, ownArchiveId], so a forwarded copy's own-archive id
 // resolves without reading the conversation's history.
-const DB_VERSION = 10
+// v11: no bare `timestamp` index on either message store. The compound
+// conv_timestamp / room_timestamp indexes serve every time-ordered read.
+const DB_VERSION = 11
 const ARCHIVE_SIGNALS_STORE = 'archive-signals'
 // The canonical chat store (v5+). Keyed by the conversation-qualified canonical key.
 const MESSAGES_STORE = 'messages-canonical'
@@ -191,7 +193,6 @@ interface MessageCacheSchema extends DBSchema {
       identityKeys: string
       // multiEntry over ids[] — a merged row is findable by EVERY absorbed client id.
       ids: string
-      timestamp: number
       conv_timestamp: [string, number]
       // Sparse: only rows carrying an own-archive id.
       ownArchive: [string, string]
@@ -208,7 +209,6 @@ interface MessageCacheSchema extends DBSchema {
       identityKeys: string
       // multiEntry over ids[] — a merged row is findable by EVERY absorbed client id.
       ids: string
-      timestamp: number
       room_timestamp: [string, number]
       // Stable room order key (roomJid, timestamp, from, id) for the archive read path.
       room_ts_from_id: [string, number, string, string]
@@ -314,6 +314,13 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
         }
       }
 
+      // An existing store may still carry the bare timestamp index; nothing reads it.
+      for (const name of [MESSAGES_STORE, ROOM_MESSAGES_STORE] as const) {
+        if (!db.objectStoreNames.contains(name)) continue
+        const store = transaction.objectStore(name)
+        if ((store.indexNames as DOMStringList).contains('timestamp')) store.deleteIndex('timestamp')
+      }
+
       // Chat messages store (v5 canonical). Same shape and same reasoning as the v4
       // room store below.
       if (!db.objectStoreNames.contains(MESSAGES_STORE)) {
@@ -321,7 +328,6 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
         msgStore.createIndex('conversationId', 'conversationId', { unique: false })
         msgStore.createIndex('identityKeys', 'identityKeys', { unique: false, multiEntry: true })
         msgStore.createIndex('ids', 'ids', { unique: false, multiEntry: true })
-        msgStore.createIndex('timestamp', 'timestamp', { unique: false })
         msgStore.createIndex('conv_timestamp', ['conversationId', 'timestamp'], {
           unique: false,
         })
@@ -348,7 +354,6 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
         // updateRoomMessageReactions).
         s.createIndex('identityKeys', 'identityKeys', { unique: false, multiEntry: true })
         s.createIndex('ids', 'ids', { unique: false, multiEntry: true })
-        s.createIndex('timestamp', 'timestamp', { unique: false })
         s.createIndex('room_timestamp', ['roomJid', 'timestamp'], { unique: false })
         s.createIndex('room_ts_from_id', ['roomJid', 'timestamp', 'from', 'id'], { unique: false })
 

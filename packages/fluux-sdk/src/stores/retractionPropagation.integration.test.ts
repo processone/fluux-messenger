@@ -1726,7 +1726,7 @@ describe('retraction propagates to the cache and the search index', () => {
 
       const cache = await openDB(`fluux-message-cache:${SCOPE}`)
       try {
-        expect(cache.version).toBe(10)
+        expect(cache.version).toBe(11)
         expect([...cache.objectStoreNames]).not.toContain('retractions')
       } finally { cache.close() }
       const ledger = await openDB(`fluux-retraction-ledger:${SCOPE}`)
@@ -2403,7 +2403,7 @@ describe('the v7 upgrade scrubs bodies left on earlier tombstones', () => {
     await messageCache.getMessages(CHAT)
 
     const db = await openDB(`fluux-message-cache:${SCOPE}`)
-    expect(db.version).toBe(10)
+    expect(db.version).toBe(11)
     db.close()
     for (const [store, group] of [[CHAT_STORE, rows.chat], [ROOM_STORE, rows.room]] as const) {
       for (const [name, row] of Object.entries(group)) {

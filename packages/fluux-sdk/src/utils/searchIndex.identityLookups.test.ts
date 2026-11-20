@@ -138,7 +138,7 @@ describe('indexed room retraction identities', () => {
     migrationReads.mockRestore()
     const db = await openDB(DB_NAME)
     try {
-      expect(db.version).toBe(3)
+      expect(db.version).toBe(4)
       expect(await db.count('search-docs')).toBe(rows.length)
       expect(await db.getAll('search-docs')).toEqual(expect.arrayContaining(
         rows.map(row => expect.objectContaining(document(row))),
@@ -181,7 +181,7 @@ describe('indexed room retraction identities', () => {
     await initSearchIndex(SCOPE)
     const upgraded = await openDB(DB_NAME)
     try {
-      expect(upgraded.version).toBe(3)
+      expect(upgraded.version).toBe(4)
       expect(await upgraded.count('search-docs')).toBe(2)
     } finally { upgraded.close() }
   })

@@ -41,7 +41,7 @@ import {
 } from './messageIdentity'
 
 const DB_NAME = 'fluux-search-index'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const TOKENS_STORE = 'search-tokens'
 const DOCS_STORE = 'search-docs'
 const META_STORE = 'search-meta'
@@ -122,7 +122,6 @@ interface SearchIndexSchema extends DBSchema {
     key: string
     value: DocEntry
     indexes: {
-      timestamp: number
       conversationId: string
       identityKeys: string
     }
@@ -230,7 +229,6 @@ function getDB(
       }
       if (!db.objectStoreNames.contains(DOCS_STORE)) {
         const docsStore = db.createObjectStore(DOCS_STORE, { keyPath: 'indexId' })
-        docsStore.createIndex('timestamp', 'timestamp', { unique: false })
         docsStore.createIndex('conversationId', 'conversationId', { unique: false })
       }
       if (!db.objectStoreNames.contains(META_STORE)) {
@@ -240,6 +238,8 @@ function getDB(
       // already has the index, and re-creating it throws ConstraintError,
       // which aborts the upgrade and leaves search unable to open.
       const docsStore = tx.objectStore(DOCS_STORE)
+      // Results are sorted in memory, so nothing reads a timestamp index.
+      if ((docsStore.indexNames as DOMStringList).contains('timestamp')) docsStore.deleteIndex('timestamp')
       if (docsStore.indexNames.contains('identityKeys')) return
       docsStore.createIndex('identityKeys', 'identityKeys', { multiEntry: true })
       if (oldVersion > 0) {
