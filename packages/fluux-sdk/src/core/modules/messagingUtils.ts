@@ -777,6 +777,8 @@ export function correctionMarks(parsed: ParsedMessageContent): MessageImplState 
  */
 export interface CorrectionResult extends MessageImplState {
   references?: MessageReference[]
+  /** A copy the correction carries again, so the edited forward keeps its source. */
+  forwarded?: ForwardedCopy
   body: string
   isEdited: true
   originalBody: string
@@ -826,6 +828,7 @@ export function applyCorrection(
   return {
     body: parsed.processedBody,
     references: parsed.references,
+    ...(parsed.forwarded && { forwarded: parsed.forwarded }),
     ...correctionMarks(parsed),
     originalBody,
     ...(parsed.attachment && { attachment: parsed.attachment }),

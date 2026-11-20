@@ -1,4 +1,5 @@
 import { iosHaptic } from '@/platform/ios/haptics'
+import { editableForward } from '../utils/forwardMessage'
 import { getActiveMessageListController } from './conversation/activeMessageListController'
 import type { ChatMessageTarget, GapInterval } from '@fluux/sdk'
 import type { MessageRowRef } from '@fluux/sdk'
@@ -1295,7 +1296,7 @@ export const MessageInput = memo(function MessageInput({
     ? {
         id: editingMessage.id,
         rowId: messageRowId(editingMessage),
-        body: editingMessage.body,
+        ...editableForward(editingMessage),
         attachment: editingMessage.attachment,
       }
     : null

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { forwardSourceIds, buildForwardedCopy, forwardableText, composeForwardWithCopy, forwardedCopyFallbackRange, composeForward, forwardFallbackRange, withoutForwardFallback } from './forwardMessage'
+import { forwardSourceIds, buildForwardedCopy, forwardableText, composeForwardWithCopy, forwardedCopyFallbackRange, composeForward, forwardFallbackRange, withoutForwardFallback, editableForward } from './forwardMessage'
 
 const link = 'xmpp:design@conference.fluux.chat?join;msg=1731490000123456'
 
@@ -118,5 +118,27 @@ describe('ids of the original in a forward', () => {
     const quote = { author: 'Bob', text: 'Ship it', from: 'bob@example.org', type: 'chat' as const, id: 'c1', stanzaId: 's1', stanzaIdBy: 'me@example.org' }
     expect(composeForwardWithCopy('', undefined, quote)!.forwarded).toMatchObject({ id: 'c1', stanzaId: 's1', stanzaIdBy: 'me@example.org' })
     expect(buildForwardedCopy({ ...quote, stanzaIdBy: undefined })).toEqual({ from: 'bob@example.org', text: 'Ship it', type: 'chat', id: 'c1' })
+  })
+})
+
+describe('editing a forward', () => {
+  const quoted = '> Bob wrote:\n> Ship it\n'
+  it('offers only the comment of a forward with a link, and sets its quote aside', () => {
+    const { body, references } = composeForward('Look', link, { author: 'Bob', text: 'Ship it' })
+    expect(editableForward({ body, references })).toEqual({ body: 'Look', forwardQuote: `${quoted}${link}` })
+  })
+
+  it('offers only the comment of a forward with a shown copy', () => {
+    const composed = composeForwardWithCopy('Look', undefined, { author: 'Bob', text: 'Ship it', from: 'bob@example.org' })!
+    const range = composed.forwarded.fallback
+    const forwarded = { author: 'Bob', text: 'Ship it', fallback: { ...range, text: composed.body.slice(range.begin, range.end) } }
+    expect(editableForward({ body: composed.body, forwarded })).toEqual({ body: 'Look', forwardQuote: quoted.trimEnd() })
+  })
+
+  it('leaves an ordinary message, a retracted copy and an edited-away quote whole', () => {
+    expect(editableForward({ body: 'Just text' })).toEqual({ body: 'Just text' })
+    const composed = composeForwardWithCopy('Look', undefined, { author: 'Bob', text: 'Ship it', from: 'bob@example.org' })!
+    const forwarded = { author: 'Bob', text: 'Ship it', fallback: { ...composed.forwarded.fallback, text: 'something else' } }
+    expect(editableForward({ body: composed.body, forwarded })).toEqual({ body: composed.body })
   })
 })

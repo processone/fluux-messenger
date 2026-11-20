@@ -11,6 +11,7 @@ import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID, generateStableMessageId } from '../../utils/uuid'
 import { toCodePointOffset } from '../../utils/xep0426'
 import { roomMessageLinkReferences } from '../../utils/roomMessageLink'
+import { forwardedCopyQuoteRange } from '../../utils/forwardedCopyQuote'
 import {
   NS_CHATSTATES,
   NS_CARBONS,
@@ -1394,6 +1395,37 @@ export class Chat extends BaseModule {
   }
 
   /**
+   * The generated quote of the forward being edited, when the new body still ends with it after a
+   * comment (or is only it): where it now sits, the copy it stands for and, for a link-only
+   * forward, which room link in the new body is the marked one.
+   */
+  private keptForwardQuote(
+    row: Partial<Pick<Message, 'forwarded' | 'body' | 'references'>> | undefined,
+    newBody: string,
+  ): { range: { begin: number; end: number }; copy?: ForwardedCopy; linkIndex?: number } | undefined {
+    if (!row || typeof row.body !== 'string') return undefined
+    const copy = row.forwarded
+    let range = copy ? forwardedCopyQuoteRange({ body: row.body, forwarded: copy }) : undefined
+    let uri: string | undefined
+    if (!range) {
+      const marked = row.references?.find(ref => ref.type === 'data' && ref.forwardFallback)
+      if (marked?.type !== 'data' || !marked.forwardFallback) return undefined
+      range = marked.forwardFallback
+      uri = marked.uri
+    }
+    // Only a quote that closes the body is kept: it is what a comment is written above.
+    if (range.begin >= range.end || range.end !== row.body.length) return undefined
+    const quote = row.body.slice(range.begin, range.end)
+    if (!newBody.endsWith(quote)) return undefined
+    const begin = newBody.length - quote.length
+    if (begin > 0 && newBody[begin - 1] !== '\n') return undefined
+    const kept = { begin, end: newBody.length }
+    if (uri === undefined) return copy ? { range: kept, copy } : undefined
+    const linkIndex = roomMessageLinkReferences(newBody).findIndex(ref => ref.uri === uri && ref.begin! >= begin)
+    return linkIndex < 0 ? undefined : { range: kept, linkIndex }
+  }
+
+  /**
    * Send a message correction (edit) for a previously sent message (XEP-0308).
    *
    * Allows correcting typos or updating content in a message you previously sent.
@@ -1450,7 +1482,7 @@ export class Chat extends BaseModule {
     // An edit opened on a row that has since left the resident window still carries the row it
     // was opened on; read the forward's requirement from it when the store has no row.
     const editedRow = original ?? (type === 'chat' && typeof target !== 'string'
-      ? target as Partial<Pick<Message, 'forwarded' | 'securityContext'>> : undefined)
+      ? target as Partial<Pick<Message, 'forwarded' | 'securityContext' | 'body' | 'references'>> : undefined)
     const referenceId = isWhisper
       ? whisper.referenceId
       : senderReference({ originId: original?.originId, id: originalMessageId })
@@ -1519,6 +1551,18 @@ export class Chat extends BaseModule {
         begin: String(toCodePointOffset(bodyText, ref.begin!)), end: String(toCodePointOffset(bodyText, ref.end!)) }))
     }
 
+    // A forward's generated quote and link stay on its correction: an editor that shows only the
+    // comment sends the comment followed by the stored quote, and the marker and copy go with it.
+    const keptQuote = attachment ? undefined : this.keptForwardQuote(editedRow, newBody)
+    if (keptQuote?.copy) {
+      const { copy } = keptQuote
+      children.push(forwardedCopyElement({ from: copy.from ?? copy.author, text: copy.text, timestamp: copy.timestamp, type: copy.type },
+        { id: copy.id, stanzaId: copy.stanzaId, stanzaIdBy: copy.stanzaIdBy }))
+      children.push(forwardFallbackElement(bodyText, 0, keptQuote.range, NS_FORWARD))
+    } else if (keptQuote?.linkIndex !== undefined) {
+      children.push(forwardFallbackElement(bodyText, 0, keptQuote.range))
+    }
+
     const correctionStanzaId = generateUUID()
     children.push(createOriginIdElement(correctionStanzaId))
 
@@ -1557,7 +1601,8 @@ export class Chat extends BaseModule {
     if (original || type === 'chat' && typeof target !== 'string') {
       const updates = {
         body: newBody, isEdited: true, originalBody: original?.originalBody ?? original?.body, attachment,
-        references: roomMessageLinkReferences(newBody),
+        references: roomMessageLinkReferences(newBody).map((ref, index) => index === keptQuote?.linkIndex ? { ...ref, forwardFallback: keptQuote.range } : ref),
+        ...(keptQuote?.copy && { forwarded: { ...keptQuote.copy, fallback: { ...keptQuote.range, text: newBody.slice(keptQuote.range.begin, keptQuote.range.end) } } }),
         encryptedPayload: undefined,
         ...(correctionSecurityContext && { securityContext: correctionSecurityContext }),
         correctionTimestamp: undefined, correctionTimestampSource: undefined, liveCorrection: true,

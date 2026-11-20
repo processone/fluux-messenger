@@ -86,6 +86,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   findSavedEntry: (await importOriginal<typeof import('@fluux/sdk')>()).findSavedEntry,
   savedStore: (await importOriginal<typeof import('@fluux/sdk')>()).savedStore,
   findRoomMessageLink: (await importOriginal<typeof import('@fluux/sdk')>()).findRoomMessageLink,
+  forwardedCopyQuoteRange: (await importOriginal<typeof import('@fluux/sdk')>()).forwardedCopyQuoteRange,
   messageRowRef: (message: { id: string; stanzaId?: string; originId?: string }) => ({
     id: message.id,
     ...(message.stanzaId ? { stanzaId: message.stanzaId } : message.originId ? { originId: message.originId } : {}),

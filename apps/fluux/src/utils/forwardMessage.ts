@@ -148,3 +148,14 @@ export function withoutForwardFallback(message: Pick<BaseMessage, 'body' | 'refe
       : mention.begin >= afterStart ? [{ ...mention, begin: mention.begin + moved, end: mention.end + moved }] : []),
   }
 }
+
+/**
+ * What an editor shows of a message: for a forward, only its comment, with its generated quote
+ * and link set aside to be sent again unchanged. Other messages show their whole body.
+ */
+export function editableForward(message: Pick<BaseMessage, 'body' | 'references' | 'forwarded' | 'isRetracted'>): { body: string; forwardQuote?: string } {
+  const range = forwardedCopyQuoteRange(message) ?? forwardFallbackRange(message.references)
+  // Only a quote that closes the body can be set aside from the comment above it.
+  if (!range || range.begin >= range.end || range.end !== message.body.length) return { body: message.body }
+  return { body: message.body.slice(0, range.begin).trimEnd(), forwardQuote: message.body.slice(range.begin, range.end) }
+}
