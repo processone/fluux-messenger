@@ -111,10 +111,18 @@ export interface ReplyInfo {
   senderColor?: string
 }
 
+/** A forward's edited comment followed by its unchanged quote and link, as it is sent. */
+function withForwardQuote(comment: string, quote?: string): string {
+  return quote ? (comment ? `${comment}\n${quote}` : quote) : comment
+}
+
 export interface EditInfo {
   id: string
   rowId?: string
+  /** The text the editor holds; for a forward, only its comment. */
   body: string
+  /** A forward's generated quote and link: kept as sent, never shown or edited here. */
+  forwardQuote?: string
   attachment?: FileAttachment
 }
 
@@ -400,7 +408,7 @@ export function MessageComposer({
     if (!editingMessage) return false
     const hasText = text.trim().length > 0
     const hasAttachment = editingMessage.attachment && !editAttachmentRemoved
-    return !hasText && !hasAttachment
+    return !hasText && !hasAttachment && !editingMessage.forwardQuote
   })()
   // Brief "press + glow pulse" gesture fired on a successful send; cleared when
   // the CSS `send-press` animation ends. Keeps the aurora glow mounted for the
@@ -703,11 +711,12 @@ export function MessageComposer({
 
     // Check if we're editing and the result would be empty (no text, no attachment)
     const attachmentToKeep = editAttachmentRemoved ? undefined : editingMessage?.attachment
-    const isEmptyEdit = editingMessage && !trimmed && !attachmentToKeep
+    const isEmptyEdit = editingMessage && !trimmed && !attachmentToKeep && !editingMessage.forwardQuote
     const hasAttachmentOnly = editingMessage && !trimmed && attachmentToKeep
 
     // For normal messages, require text OR pending attachment. For edits, allow empty to trigger retraction or attachment-only.
-    if (!trimmed && !isEmptyEdit && !hasAttachmentOnly && !pendingAttachment) return
+    const keepsForward = !!editingMessage?.forwardQuote
+    if (!trimmed && !isEmptyEdit && !hasAttachmentOnly && !pendingAttachment && !keepsForward) return
     if (submitting.current || photoBlocked) return
 
     // Transfer ownership out of the draft before any asynchronous work. Otherwise
@@ -750,7 +759,7 @@ export function MessageComposer({
       } else if (editingMessage && onSendCorrection) {
         // Pass the kept attachment, or undefined to remove it.
         failureKey = 'chat.failedToEditMessage'
-        const handled = await onSendCorrection(editingMessage.id, trimmed, attachmentToKeep)
+        const handled = await onSendCorrection(editingMessage.id, withForwardQuote(trimmed, editingMessage.forwardQuote), attachmentToKeep)
         if (handled) {
           setText('')
           setLaunching(true)

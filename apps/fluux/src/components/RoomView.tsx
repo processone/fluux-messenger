@@ -1,4 +1,5 @@
 import { iosHaptic } from '@/platform/ios/haptics'
+import { editableForward } from '../utils/forwardMessage'
 import { getActiveMessageListController } from './conversation/activeMessageListController'
 import { isSpamModerated } from '@/utils/spamModeration'
 import { SpamModerationOption } from './SpamModerationOption'
@@ -2140,7 +2141,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   const editInfo: EditInfo | null = editingMessage?.roomJid === roomJid
     ? {
         id: editingMessage.id,
-        body: editingMessage.body,
+        ...editableForward(editingMessage),
         attachment: editingMessage.attachment,
       }
     : null

@@ -597,6 +597,33 @@ describe('MUC Whispers', () => {
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:whisper', expect.anything())
     })
 
+    it('incoming whisper correction cannot give the whisper a forwarded copy', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(createMockRoom(ROOM, { joined: true, nickname: 'me' }))
+      vi.mocked(mockStores.room.getMessage).mockReturnValue({
+        id: 'bw-1', originId: 'bw-1', from: `${ROOM}/bob`, nick: 'bob', body: 'old',
+        isPrivate: true, whisperWith: 'bob', occupantId: 'occ-bob', timestamp: new Date(),
+      } as any)
+
+      const stanza = createMockElement('message', {
+        from: `${ROOM}/bob`, to: 'user@example.com', type: 'chat', id: 'corr-2',
+      }, [
+        { name: 'body', text: 'new text' },
+        { name: 'replace', attrs: { xmlns: 'urn:xmpp:message-correct:0', id: 'bw-1' } },
+        { name: 'forwarded', attrs: { xmlns: 'urn:xmpp:forward:0' }, children: [
+          { name: 'message', attrs: { from: 'carol@example.com' }, children: [{ name: 'body', text: 'Forged' }] },
+        ] },
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc#user' } },
+        { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occ-bob' } },
+      ])
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      const call = emitSDKSpy.mock.calls.find((c: unknown[]) => c[0] === 'room:message-updated')
+      expect(call).toBeDefined()
+      expect((call![1] as { updates: Record<string, unknown> }).updates).toMatchObject({ body: 'new text' })
+      expect((call![1] as { updates: Record<string, unknown> }).updates.forwarded).toBeUndefined()
+    })
+
     it('incoming whisper retraction marks the whisper retracted (not a new whisper)', async () => {
       await connectClient()
       vi.mocked(mockStores.room.getRoom).mockReturnValue(createMockRoom(ROOM, { joined: true, nickname: 'me' }))

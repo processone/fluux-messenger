@@ -303,4 +303,29 @@ describe('submitted draft ownership', () => {
     await act(async () => { command.resolve(BODY) })
     expect(onSend).toHaveBeenCalledExactlyOnceWith(BODY)
   })
+
+  // FLM-336 finding 6: editing a forward edits only its comment.
+  it('edits only the comment of a forward and sends it with its quote unchanged', async () => {
+    const { Input } = fixture()
+    const onSendCorrection = vi.fn().mockResolvedValue(true)
+    const quote = '> Bob wrote:\n> Ship it\n'
+    render(<Input onSend={vi.fn()} editingMessage={{ id: 'fwd', body: 'Look', forwardQuote: quote }} onSendCorrection={onSendCorrection} />)
+    expect(field().value).toBe('Look')
+    fireEvent.change(field(), { target: { value: 'Look again' } })
+    await act(async () => { submit() })
+    expect(onSendCorrection).toHaveBeenCalledExactlyOnceWith('fwd', `Look again\n${quote}`, undefined)
+  })
+
+  it('keeps a forward when its comment is cleared, instead of retracting it', async () => {
+    const { Input } = fixture()
+    const onSendCorrection = vi.fn().mockResolvedValue(true)
+    const onRetractMessage = vi.fn()
+    const quote = '> Bob wrote:\n> Ship it\n'
+    render(<Input onSend={vi.fn()} editingMessage={{ id: 'fwd', body: 'Look', forwardQuote: quote }} onSendCorrection={onSendCorrection}
+      {...{ onRetractMessage } as object} />)
+    fireEvent.change(field(), { target: { value: '' } })
+    await act(async () => { submit() })
+    expect(onRetractMessage).not.toHaveBeenCalled()
+    expect(onSendCorrection).toHaveBeenCalledExactlyOnceWith('fwd', quote, undefined)
+  })
 })

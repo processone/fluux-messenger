@@ -603,6 +603,81 @@ describe('shared room message references', () => {
         }
       })
 
+      describe('editing the comment of a forward', () => {
+        const row = (extra: object = {}) => ({ id: 'm1', originId: 'm1', body: quotedBody, from: 'alice@example.org',
+          forwarded: { author: 'Bob', from: `${room}/Bob`, text: 'Ship it 🚀', fallback: { ...mark, text: `${quoted}${link}` } }, ...extra })
+        const edit = async (stored: object, body: string) => {
+          const h = harness()
+          h.stores.chat.getMessage = vi.fn(() => stored) as unknown as typeof h.stores.chat.getMessage
+          await h.chat.sendCorrection('bob@example.org', 'm1', body)
+          return { h, stanza: vi.mocked(h.deps.sendStanza).mock.calls[0][0] }
+        }
+
+        it('sends the new comment with the same quote, copy and marker, and keeps the copy locally', async () => {
+          const newBody = `Look again, please\n${quoted}${link}`
+          const { h, stanza } = await edit(row(), newBody)
+          expect(stanza.getChildText('body')).toBe(newBody)
+          const parsed = parseMessageContent({ messageEl: stanza, body: newBody })
+          expect(parsed.forwarded).toMatchObject({ text: 'Ship it 🚀', fallback: { begin: 'Look again, please\n'.length, end: newBody.length } })
+          const updates = vi.mocked(h.deps.emitSDK).mock.calls.find(call => call[0] === 'chat:message-updated')![1] as { updates: { forwarded: unknown } }
+          expect(forwardedCopyQuoteRange({ body: newBody, forwarded: updates.updates.forwarded as never })).toEqual({ begin: 'Look again, please\n'.length, end: newBody.length })
+        })
+
+        it('keeps a forward that has no comment, and lets an edit add one', async () => {
+          const bare = `${quoted}${link}`
+          const stored = row({ body: bare, forwarded: { author: 'Bob', from: `${room}/Bob`, text: 'Ship it 🚀', fallback: { begin: 0, end: bare.length, text: bare } } })
+          const { stanza } = await edit(stored, `Now with words\n${bare}`)
+          expect(parseMessageContent({ messageEl: stanza, body: stanza.getChildText('body')! }).forwarded?.fallback).toMatchObject({ begin: 'Now with words\n'.length })
+        })
+
+        it('marks the link of a forward that has no copy', async () => {
+          const stored = row({ forwarded: undefined, references: quotedRefs.map(ref => ({ ...ref, forwardFallback: mark })) })
+          const newBody = `Edited\n${quoted}${link}`
+          const { stanza } = await edit(stored, newBody)
+          const marked = parseMessageContent({ messageEl: stanza, body: newBody }).references?.find(ref => ref.type === 'data' && ref.forwardFallback)
+          expect(marked).toMatchObject({ forwardFallback: { begin: 'Edited\n'.length, end: newBody.length } })
+        })
+
+        it('does not treat an ordinary message, or a body that lost the quote, as a forward', async () => {
+          const { stanza } = await edit(row({ forwarded: undefined }), 'plain text')
+          expect(copyFallbacks(stanza)).toHaveLength(0)
+          expect(stanza.getChild('forwarded', NSF)).toBeUndefined()
+          const lost = await edit(row(), 'Look again')
+          expect(lost.stanza.getChild('forwarded', NSF)).toBeUndefined()
+        })
+
+        it('replaces the stored copy when a correction carries it again', () => {
+          const newBody = `Edited\n${quoted}${link}`
+          const correction = xml('message', { type: 'chat' }, xml('body', {}, newBody), xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'm1' }),
+            xml('forwarded', { xmlns: NSF }, xml('message', { from: `${room}/Bob` }, xml('body', {}, 'Ship it 🚀'))),
+            xml('fallback', { xmlns: NSB, for: NSF }, xml('body', { start: '7', end: String(Array.from(newBody).length) })))
+          const result = applyCorrection(correction, newBody, quotedBody)
+          expect(forwardedCopyQuoteRange({ body: result.body, forwarded: result.forwarded })).toBeDefined()
+        })
+
+        it('does not let a room correction give a message a copy', () => {
+          const newBody = `Edited\n${quoted}${link}`
+          const correction = xml('message', { type: 'groupchat' }, xml('body', {}, newBody), xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'm1' }),
+            xml('forwarded', { xmlns: NSF }, xml('message', { from: `${room}/Bob` }, xml('body', {}, 'Ship it 🚀'))),
+            xml('fallback', { xmlns: NSB, for: NSF }, xml('body', { start: '7', end: String(Array.from(newBody).length) })))
+          expect(applyCorrection(correction, newBody, quotedBody).forwarded).toBeUndefined()
+        })
+
+        it('keeps the private quote marker and the link when a room forward is edited', async () => {
+          const h = harness()
+          const stored = row({ forwarded: undefined, references: quotedRefs.map(ref => ({ ...ref, forwardFallback: mark })) })
+          h.stores.room.getMessage = vi.fn(() => stored) as unknown as typeof h.stores.room.getMessage
+          (h.chat as unknown as { conversationKind: () => string }).conversationKind = () => 'groupchat'
+          const newBody = `Edited\n${quoted}${link}`
+          await h.chat.sendCorrection(room, 'm1', newBody)
+          const stanza = vi.mocked(h.deps.sendStanza).mock.calls[0][0]
+          expect(stanza.attrs.type).toBe('groupchat')
+          expect(parseMessageContent({ messageEl: stanza, body: newBody, messageContext: 'room' }).references?.find(ref => ref.type === 'data' && ref.forwardFallback))
+            .toMatchObject({ uri: link, forwardFallback: { begin: 'Edited\n'.length, end: newBody.length } })
+          expect(stanza.getChild('forwarded', NSF)).toBeUndefined()
+        })
+      })
+
       it('keeps the marker on a retry', async () => {
         const h = harness()
         const stored = { author: 'Bob', from: `${room}/Bob`, text: 'Ship it 🚀', fallback: { ...mark, text: `${quoted}${link}` } }
