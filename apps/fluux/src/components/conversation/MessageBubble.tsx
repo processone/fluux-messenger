@@ -567,13 +567,19 @@ export const MessageBubble = memo(function MessageBubble({
   // A source that cannot be read, such as an undecryptable one, is forwarded as a link only.
   const readable = !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
   // A message holding a copy forwards its displayed comment and the copied text as one readable quote.
-  const forwardText = readable ? (copyShown ? forwardableText(shown.body, message.forwarded) : message.body) : ''
+  const forwardAttachment = readable && !message.deliveryError ? message.attachment : undefined
+  // A file without a caption is quoted by its name, so the forward still names its sender.
+  const fileName = forwardAttachment ? (forwardAttachment.name || forwardAttachment.url.split(/[?#]/)[0].split('/').filter(Boolean).pop() || '') : ''
+  const sourceText = readable ? (copyShown ? forwardableText(shown.body, message.forwarded) : message.body) : ''
+  const forwardText = sourceText.trim() ? sourceText : fileName
   const quotable = !!forwardText.trim()
   // A room message forwards with its link; a one-to-one message has none, so it forwards its readable
   // content. A message read from an encrypted chat is marked so it can only go into an encrypted chat.
   const directForward = message.type === 'chat' && quotable && !message.deliveryError
+  // A photo or file goes along as the file itself, whether the source is a room or a one-to-one chat.
   const onForward = forwardMessage && (messageLink || directForward) ? () => forwardMessage({
     ...(messageLink && { link: messageLink }),
+    ...(forwardAttachment && { attachment: forwardAttachment }),
     ...(quotable && { quote: {
       // The displayed name can be the private contact-list name (a one-to-one sender, or a room
       // sender who has left), which must not leave this device. Quote others by what they published:
