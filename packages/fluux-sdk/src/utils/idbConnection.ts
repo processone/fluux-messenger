@@ -9,6 +9,18 @@ import { logWarn } from '../core/logger'
  */
 export const BLOCKED_OPEN_TIMEOUT_MS = 10_000
 
+let defaultBlockedTimeoutMs: number | null = BLOCKED_OPEN_TIMEOUT_MS
+
+/**
+ * Set the deadline used when an open does not pass its own; null disables it.
+ * The SDK test setup disables it: tests that advance fake timers while a real
+ * open is in flight would otherwise trip it.
+ * @internal
+ */
+export function _setBlockedOpenTimeoutForTesting(ms: number | null): void {
+  defaultBlockedTimeoutMs = ms
+}
+
 /** An IndexedDB open gave up waiting for another connection to close. */
 export class StorageBlockedError extends Error {
   constructor(readonly database: string) {
@@ -44,7 +56,8 @@ export interface GuardedOpenOptions {
    * connection promise here so the next access reopens.
    */
   onClosed: () => void
-  blockedTimeoutMs?: number
+  /** Overrides the default deadline; null disables it. */
+  blockedTimeoutMs?: number | null
 }
 
 /**
@@ -57,7 +70,7 @@ export interface GuardedOpenOptions {
  */
 export function openGuarded<T extends { close(): void }>(
   open: (hooks: GuardedOpenHooks) => Promise<T>,
-  { database, onClosed, blockedTimeoutMs = BLOCKED_OPEN_TIMEOUT_MS }: GuardedOpenOptions,
+  { database, onClosed, blockedTimeoutMs = defaultBlockedTimeoutMs }: GuardedOpenOptions,
 ): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   let settled = false
@@ -72,12 +85,14 @@ export function openGuarded<T extends { close(): void }>(
 
   // Armed before the request: an open queued behind another client's pending
   // upgrade or deletion waits without ever receiving `blocked`.
-  timer = setTimeout(() => {
-    timer = undefined
-    abandoned = true
-    logWarn(`[Storage] ${database}: not open after ${blockedTimeoutMs}ms, continuing without it`)
-    giveUp(new StorageBlockedError(database))
-  }, blockedTimeoutMs)
+  if (blockedTimeoutMs !== null) {
+    timer = setTimeout(() => {
+      timer = undefined
+      abandoned = true
+      logWarn(`[Storage] ${database}: not open after ${blockedTimeoutMs}ms, continuing without it`)
+      giveUp(new StorageBlockedError(database))
+    }, blockedTimeoutMs)
+  }
 
   const hooks: GuardedOpenHooks = {
     blocked: () => {

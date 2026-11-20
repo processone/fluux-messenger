@@ -1,10 +1,11 @@
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Message } from '../core/types'
 import * as cache from './messageCache'
 import { setStorageScopeJid } from './storageScope'
 import { _clearRetractedIdentitiesForTesting } from './retractedIdentities'
+import { _setBlockedOpenTimeoutForTesting } from './idbConnection'
 
 const OWN = 'self@example.test'
 const PEER = 'peer@example.test'
@@ -70,5 +71,22 @@ describe('message cache under another client upgrade', () => {
 
     expect(await cache.getMessages(PEER)).toEqual([])
     expect(await currentVersion()).toBe(version)
+  })
+
+  describe('when another connection never lets it open', () => {
+    afterEach(() => _setBlockedOpenTimeoutForTesting(null))
+
+    it('gives up and reports the write as not cached', async () => {
+      _setBlockedOpenTimeoutForTesting(20)
+      // A client predating versionchange handling, holding a newer schema open
+      // while its own upgrade is still pending.
+      const holder = await upgradeFromAnotherTab(1)
+      const pendingUpgrade = upgradeFromAnotherTab(2)
+
+      await expect(cache.saveMessages([row('a')])).resolves.toBe(false)
+
+      holder.close()
+      ;(await pendingUpgrade).close()
+    })
   })
 })

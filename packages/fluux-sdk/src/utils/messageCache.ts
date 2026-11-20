@@ -289,6 +289,8 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
   const opening = openGuarded((hooks) => openDB<MessageCacheSchema>(targetDbName, DB_VERSION, {
     upgrade(db, oldVersion, _newVersion, transaction) {
       if (!hooks.proceed()) {
+        // The abort rejects `done`; the open's own rejection reports the outcome.
+        void transaction.done.catch(() => {})
         transaction.abort()
         return
       }

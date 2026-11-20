@@ -5,6 +5,7 @@
  */
 
 import { vi } from 'vitest'
+import { _setBlockedOpenTimeoutForTesting } from './utils/idbConnection'
 
 // Mock global fetch to prevent real network calls in tests
 // This prevents XEP-0156 WebSocket discovery from making actual HTTP requests
@@ -19,3 +20,7 @@ global.fetch = mockFetch as typeof fetch
 vi.spyOn(console, 'log').mockImplementation(() => {})
 vi.spyOn(console, 'warn').mockImplementation(() => {})
 vi.spyOn(console, 'error').mockImplementation(() => {})
+
+// A real IndexedDB open in flight while a test advances fake timers would trip
+// the give-up deadline; tests that exercise it enable it themselves.
+_setBlockedOpenTimeoutForTesting(null)

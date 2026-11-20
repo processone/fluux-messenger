@@ -65,6 +65,8 @@ function getDB(scopeJid: string | null): Promise<IDBPDatabase<RetractionLedgerSc
   const opening = openGuarded((hooks) => openDB<RetractionLedgerSchema>(targetDbName, DB_VERSION, {
     upgrade(db, _oldVersion, _newVersion, transaction) {
       if (!hooks.proceed()) {
+        // The abort rejects `done`; the open's own rejection reports the outcome.
+        void transaction.done.catch(() => {})
         transaction.abort()
         return
       }
