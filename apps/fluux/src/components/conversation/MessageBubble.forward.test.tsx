@@ -23,7 +23,7 @@ vi.mock('./RoomMessageLinkPreview', () => ({
 }))
 
 // The picker itself is covered by ForwardMessageModal.test; here it only reports what the row asked to forward.
-const modal = vi.hoisted(() => ({ props: undefined as undefined | { link?: string; quote?: Record<string, unknown> } }))
+const modal = vi.hoisted(() => ({ props: undefined as undefined | { link?: string; quote?: Record<string, unknown>; attachment?: unknown; fromEncrypted?: boolean } }))
 vi.mock('../ForwardMessageModal', () => ({
   ForwardMessageModal: (props: { link?: string; quote?: Record<string, unknown>; attachment?: unknown; fromEncrypted?: boolean }) => { modal.props = props; return null },
 }))
