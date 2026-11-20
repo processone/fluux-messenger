@@ -236,7 +236,11 @@ function getDB(
       if (!db.objectStoreNames.contains(META_STORE)) {
         db.createObjectStore(META_STORE, { keyPath: 'key' })
       }
+      // Guarded: a later version bump re-runs this callback on a store that
+      // already has the index, and re-creating it throws ConstraintError,
+      // which aborts the upgrade and leaves search unable to open.
       const docsStore = tx.objectStore(DOCS_STORE)
+      if (docsStore.indexNames.contains('identityKeys')) return
       docsStore.createIndex('identityKeys', 'identityKeys', { multiEntry: true })
       if (oldVersion > 0) {
         // The version-change transaction makes the backfill atomic with the
@@ -852,6 +856,55 @@ export async function removeMessage(
 ): Promise<void> {
   if (!isIndexedDBAvailable()) return
   await writeIndexBatch([], scopeJid, { message, identityClosure })
+}
+
+/**
+ * Remove every indexed document of one conversation or room, with its token
+ * postings. Called when the conversation itself is deleted: the message cache
+ * drops its rows, and without this the search results would keep serving the
+ * deleted text. `kind` keeps a 1:1 chat and a room that share a JID apart.
+ */
+export async function removeConversation(
+  kind: 'chat' | 'room',
+  conversationId: string,
+  scopeJid: string | null = getStorageScopeJid()
+): Promise<void> {
+  if (!isIndexedDBAvailable()) return
+  const isRoom = kind === 'room'
+  await mutateIndex(scopeJid, async () => {
+    const db = await getDB(scopeJid)
+    const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readwrite')
+    void tx.done.catch(() => {})
+    const tokensStore = tx.objectStore(TOKENS_STORE)
+    const docsStore = tx.objectStore(DOCS_STORE)
+    try {
+      const docs = (await docsStore.index('conversationId').getAll(conversationId))
+        .filter(doc => doc.isRoom === isRoom)
+      const dropped = new Map<string, Set<string>>()
+      for (const doc of docs) {
+        await docsStore.delete(doc.indexId)
+        for (const token of doc.tokens) {
+          let ids = dropped.get(token)
+          if (!ids) dropped.set(token, ids = new Set())
+          ids.add(doc.indexId)
+        }
+      }
+      for (const [token, ids] of dropped) {
+        const entry = await tokensStore.get(token)
+        if (!entry) continue
+        const postings = entry.postings.filter(id => !ids.has(id))
+        if (postings.length) await tokensStore.put({ token, postings })
+        else await tokensStore.delete(token)
+      }
+      await tx.done
+    } catch (error) {
+      try { tx.abort() } catch {
+        // An already completed or aborted transaction cannot be aborted again.
+      }
+      await tx.done.catch(() => {})
+      throw error
+    }
+  })
 }
 
 async function removeMessageEntries(

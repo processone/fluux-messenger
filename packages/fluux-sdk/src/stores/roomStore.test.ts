@@ -66,6 +66,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
 
 // Import the mocked module for assertions
 import * as messageCache from '../utils/messageCache'
+import * as searchIndex from '../utils/searchIndex'
 import { exactPosition } from './shared/readState'
 
 /**
@@ -291,6 +292,15 @@ describe('roomStore', () => {
       roomStore.getState().removeRoom(roomJid)
 
       expect(roomStore.getState().lastArrivedMessage.has(roomJid)).toBe(false)
+    })
+
+    it('purges the removed room from the search index', () => {
+      const purge = vi.spyOn(searchIndex, 'removeConversation').mockResolvedValue()
+      try {
+        roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+        roomStore.getState().removeRoom('test@conference.example.com')
+        expect(purge).toHaveBeenCalledWith('room', 'test@conference.example.com')
+      } finally { purge.mockRestore() }
     })
   })
 
