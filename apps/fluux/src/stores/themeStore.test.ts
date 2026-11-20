@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useThemeStore } from './themeStore'
+import { resolveAccentPreset, useThemeStore } from './themeStore'
 import type { ThemeDefinition, AccentPreset } from '@/themes/types'
 import { DEFAULT_ACCENT_PRESETS } from '@/themes/defaultAccents'
 
@@ -286,5 +286,25 @@ describe('themeStore', () => {
 
       expect(useThemeStore.getState().activeThemeId).toBe('nord')
     })
+  })
+})
+
+describe('resolveAccentPreset', () => {
+  const presets: AccentPreset[] = [
+    { name: 'Teal', dark: { h: 168, s: 60, l: 61 }, light: { h: 172, s: 85, l: 23 } },
+  ]
+
+  it('paints the current values of a preset stored before a retune', () => {
+    const stale: AccentPreset = { name: 'Teal', dark: { h: 170, s: 57, l: 73 }, light: { h: 170, s: 57, l: 38 } }
+    expect(resolveAccentPreset(stale, presets)).toBe(presets[0])
+  })
+
+  it('keeps the snapshot of a preset the active list does not carry', () => {
+    const foreign: AccentPreset = { name: 'Periwinkle', dark: { h: 231, s: 100, l: 64 }, light: { h: 231, s: 85, l: 58 } }
+    expect(resolveAccentPreset(foreign, presets)).toBe(foreign)
+  })
+
+  it('returns null without a stored choice', () => {
+    expect(resolveAccentPreset(null, presets)).toBeNull()
   })
 })

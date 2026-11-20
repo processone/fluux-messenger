@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
-import { useThemeStore } from '@/stores/themeStore'
+import { resolveAccentPreset, useThemeStore } from '@/stores/themeStore'
 import type { AccentPreset } from '@/themes/types'
 import { resolveTransparency } from '@/themes/transparency'
 import { platform } from '@/platform'
@@ -221,7 +221,11 @@ export function useTheme() {
 
   const activeThemeId = useThemeStore((s) => s.activeThemeId)
   const getActiveTheme = useThemeStore((s) => s.getActiveTheme)
-  const accentPreset = useThemeStore((s) => s.accentPreset)
+  const storedAccent = useThemeStore((s) => s.accentPreset)
+  // Stable references: the active theme's own list or the shared default list.
+  const accentPresets = useThemeStore((s) => s.getAccentPresets())
+  // Paint the preset's current values, not the snapshot stored when it was picked.
+  const accentPreset = resolveAccentPreset(storedAccent, accentPresets)
   const snippets = useThemeStore((s) => s.snippets)
 
   // Track which CSS variables we've set inline so we can clean them up on theme change
