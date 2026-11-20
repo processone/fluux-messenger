@@ -113,7 +113,7 @@ export function RoomHeader({
   })
 
   return (
-    <header className="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-2 md:gap-3" {...dragRegionProps}>
+    <header className="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg gap-2 md:gap-3" {...dragRegionProps}>
       {/* Back button - mobile only */}
       {onBack && (
         <button
