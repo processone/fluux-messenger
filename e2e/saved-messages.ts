@@ -145,7 +145,7 @@ test('pressing Enter on Remove removes the entry and does not open the original'
   await expect(page).toHaveURL(/\/saved/)
 })
 
-test('on a phone the header button shows the narrowed list and Back from a row returns to it', async ({ page }) => {
+test('on a phone the header button shows the narrowed list and Back from a row returns to the Saved list', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
   await page.setViewportSize({ width: 390, height: 844 })
   await bootDemo(page, `/demo.html?tutorial=false#/messages/${encodeURIComponent(PEER)}`)
@@ -179,5 +179,32 @@ test('on a phone the header button shows the narrowed list and Back from a row r
   await expect(page).toHaveURL(new RegExp(`/messages/${encodeURIComponent(PEER)}$`))
   await page.goBack()
   await expect(page).toHaveURL(/\/saved/)
-  await expect(page.getByTestId('saved-row').first()).toBeVisible()
+  // Leaving the Saved tab ended the narrowing: Back shows the full list.
+  await expect(page.getByTestId('saved-row')).toHaveCount(2)
+  await expect(page.getByTestId('saved-scope')).toHaveCount(0)
+})
+
+test('removing the last saved message of the narrowed conversation shows the full list', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+  await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(ROOM)}`)
+  await activateChat(page, PEER)
+  await page.evaluate(peer => {
+    const scope = window as unknown as { __demoClient: DemoClient; __savedStore: typeof savedStore }
+    scope.__demoClient.stopAnimation()
+    scope.__savedStore.getState().save({
+      id: 'only1', conversationJid: peer, type: 'chat', from: peer, text: 'The only one here',
+      savedAt: Date.now(), sentAt: Date.now(), messageId: 'saved-only-1', stanzaId: 'archive-only-1',
+    })
+    scope.__savedStore.getState().save({
+      id: 'other1', conversationJid: 'room@conference.example', type: 'groupchat', from: 'room@conference.example/Al', text: 'Elsewhere',
+      savedAt: Date.now() - 1000, stanzaId: 'archive-elsewhere', stanzaIdBy: 'room@conference.example',
+    })
+  }, PEER)
+  await page.getByTestId('header-saved').click()
+  await expect(page.getByTestId('saved-scope')).toBeVisible()
+  await expect(page.getByTestId('saved-row')).toHaveCount(1)
+  await page.getByTestId('saved-row').getByRole('button', { name: 'Remove from saved' }).click()
+  await expect(page.getByTestId('saved-scope')).toHaveCount(0)
+  await expect(page.getByTestId('saved-row')).toHaveCount(1)
+  await expect(page.getByTestId('saved-row')).toContainText('Elsewhere')
 })
