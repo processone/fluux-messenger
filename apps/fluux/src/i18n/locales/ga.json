@@ -779,6 +779,20 @@
             "mcp": "Comhtháthú Claude",
             "advanced": "Ardleibhéal"
         },
+        "categoryDescriptions": {
+            "profile": "Do phróifíl, do chuntas agus do ghléasanna ceangailte.",
+            "appearance": "Téama, mód, dlús taispeána agus dath aibhsithe.",
+            "accessibility": "Méid an téacs, leithead léitheoireachta, gluaiseacht agus trédhearcacht.",
+            "language": "Teanga na comhéadaine agus formáidí réigiúnacha.",
+            "notifications": "Roghnaigh conas agus cathain a chuireann Fluux in iúl duit.",
+            "encryption": "Eochracha criptithe ó cheann ceann do do chomhráite.",
+            "privacy": "Cartlannú teachtaireachtaí ar an bhfreastalaí agus íoslódáil uathoibríoch meán.",
+            "blocked": "Daoine nach féidir leo teachtaireacht a sheoladh chugat ná do stádas a fheiceáil.",
+            "storage": "Meáin i dtaisce ar an ngléas seo agus an spás a úsáideann siad.",
+            "updates": "Coinnigh Fluux cothrom le dáta.",
+            "mcp": "Socruithe don droichead áitiúil Claude.",
+            "advanced": "Uirlisí forbróra agus diagnóisic."
+        },
         "groups": {
             "general": "Ginearálta",
             "privacy": "Príobháideachas agus slándáil",

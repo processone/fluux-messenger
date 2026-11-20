@@ -773,6 +773,20 @@
             "mcp": "Claude 集成",
             "advanced": "高级"
         },
+        "categoryDescriptions": {
+            "profile": "您的个人资料、账户和已连接的设备。",
+            "appearance": "主题、模式、显示密度和强调色。",
+            "accessibility": "文字大小、阅读宽度、动效和透明度。",
+            "language": "界面语言和区域格式。",
+            "notifications": "选择 Fluux 何时以及如何提醒您。",
+            "encryption": "用于您的对话的端到端加密密钥。",
+            "privacy": "服务器消息存档和媒体自动下载。",
+            "blocked": "无法给您发消息或查看您状态的人。",
+            "storage": "此设备上缓存的媒体及其占用的空间。",
+            "updates": "让 Fluux 保持最新。",
+            "mcp": "本地 Claude 桥接的设置。",
+            "advanced": "开发者工具和诊断。"
+        },
         "groups": {
             "general": "通用",
             "privacy": "隐私与安全",

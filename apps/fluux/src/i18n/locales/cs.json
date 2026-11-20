@@ -779,6 +779,20 @@
             "mcp": "Integrace Claude",
             "advanced": "Pokročilé"
         },
+        "categoryDescriptions": {
+            "profile": "Váš profil, účet a připojená zařízení.",
+            "appearance": "Motiv, režim, hustota zobrazení a barva zvýraznění.",
+            "accessibility": "Velikost textu, šířka čtení, animace a průhlednost.",
+            "language": "Jazyk rozhraní a regionální formáty.",
+            "notifications": "Zvolte, jak a kdy vás Fluux upozorní.",
+            "encryption": "Klíče koncového šifrování pro vaše konverzace.",
+            "privacy": "Archivace zpráv na serveru a automatické stahování médií.",
+            "blocked": "Lidé, kteří vám nemohou psát ani vidět váš stav.",
+            "storage": "Média uložená v mezipaměti tohoto zařízení a místo, které zabírají.",
+            "updates": "Udržujte Fluux aktuální.",
+            "mcp": "Nastavení místního mostu Claude.",
+            "advanced": "Vývojářské nástroje a diagnostika."
+        },
         "groups": {
             "general": "Obecné",
             "privacy": "Soukromí a zabezpečení",

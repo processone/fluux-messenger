@@ -5,7 +5,7 @@ export function NotificationSoundSetting() {
   const tone = useIOSSoundSettingsStore(s => s.tone)
   const account = useIOSSoundSettingsStore(s => s.account)
   const setTone = useIOSSoundSettingsStore(s => s.setTone)
-  return <div className="space-y-2 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+  return <div className="space-y-2 p-4 fluux-card">
     <label htmlFor="ios-notification-tone" className="block text-sm font-medium text-fluux-text">{t('settings.nativeNotificationTone')}</label>
     <p className="text-xs text-fluux-muted">{t('settings.nativeNotificationToneDescription')}</p>
     <select id="ios-notification-tone" value={tone} disabled={!account} onChange={e => setTone(e.target.value as IOSNotificationTone)}

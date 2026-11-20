@@ -47,7 +47,7 @@ export function SettingsRow({
         type="button"
         onClick={onClick}
         disabled={disabled}
-        className={`w-full text-start flex items-center justify-between gap-4 px-4 py-3 hover:bg-fluux-hover transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent ${className}`}
+        className={`w-full text-start flex items-center justify-between gap-4 px-4 py-3 fluux-card-row-hover transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
       >
         {inner}
       </button>

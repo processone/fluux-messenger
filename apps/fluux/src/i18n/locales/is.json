@@ -773,6 +773,20 @@
             "mcp": "Claude-samþætting",
             "advanced": "Ítarlegt"
         },
+        "categoryDescriptions": {
+            "profile": "Prófíllinn þinn, aðgangurinn og tengd tæki.",
+            "appearance": "Þema, hamur, þéttleiki skjás og áherslulitur.",
+            "accessibility": "Textastærð, lesbreidd, hreyfing og gegnsæi.",
+            "language": "Tungumál viðmóts og svæðisbundin snið.",
+            "notifications": "Veldu hvernig og hvenær Fluux lætur þig vita.",
+            "encryption": "Lyklar fyrir enda-á-milli dulritun samtala þinna.",
+            "privacy": "Geymsla skilaboða á þjóni og sjálfvirk niðurhal margmiðlunarefnis.",
+            "blocked": "Fólk sem getur ekki sent þér skilaboð eða séð stöðu þína.",
+            "storage": "Margmiðlunarefni í skyndiminni á þessu tæki og plássið sem það tekur.",
+            "updates": "Haltu Fluux uppfærðu.",
+            "mcp": "Stillingar fyrir staðbundnu Claude-brúna.",
+            "advanced": "Forritaraverkfæri og greining."
+        },
         "groups": {
             "general": "Almennt",
             "privacy": "Persónuvernd og öryggi",

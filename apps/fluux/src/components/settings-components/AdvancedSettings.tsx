@@ -11,7 +11,7 @@ export function AdvancedSettings() {
   const setAdvancedMode = useAdvancedModeStore((s) => s.setAdvancedMode)
 
   return (
-    <section className="w-full max-w-md space-y-4">
+    <section className="w-full space-y-4">
       <SettingsGroup>
         <SettingsRow
           label={t('login.advancedMode')}

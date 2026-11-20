@@ -206,7 +206,7 @@ export function NotificationsSettings() {
 
   const inAppSection = (
     <SettingsSection title={t('settings.inAppSection')}>
-      <div className="flex items-center justify-between gap-4 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+      <div className="flex items-center justify-between gap-4 p-4 fluux-card">
         <div>
           <label htmlFor="in-app-banner" className="text-sm font-medium text-fluux-text">
             {t('settings.inAppBanner')}
@@ -236,7 +236,7 @@ export function NotificationsSettings() {
 
   if (platform().usesNativePush) {
     return (
-      <section className="w-full max-w-md space-y-8">
+      <section className="w-full space-y-8">
         <SettingsSection>
           <div className="space-y-3">
             <IosNotificationsCard
@@ -258,7 +258,7 @@ export function NotificationsSettings() {
 
         <SettingsSection title={t('settings.soundsSection')}>
           <NotificationSoundSetting />
-          <div className="flex items-center justify-between gap-4 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+          <div className="flex items-center justify-between gap-4 p-4 fluux-card">
             <div>
               <label htmlFor="notification-sound" className="text-sm font-medium text-fluux-text">
                 {t('settings.sound')}
@@ -283,11 +283,11 @@ export function NotificationsSettings() {
     (notificationStatus === 'granted' && [permission.badges, permission.alerts].includes('disabled')))
 
   return (
-    <section className="w-full max-w-md space-y-8">
+    <section className="w-full space-y-8">
       <SettingsSection title={t('settings.notificationPermission')}>
         <div className="space-y-3">
-          <div className={`flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg border-2 ${
-            blocked ? 'border-fluux-yellow bg-fluux-yellow/10' : 'border-fluux-border bg-fluux-bg'
+          <div className={`flex flex-wrap items-center justify-between gap-3 p-4 ${
+            blocked ? 'rounded-lg border-2 border-fluux-yellow bg-fluux-yellow/10' : 'fluux-card'
           }`}>
             <div className="flex flex-1 basis-48 min-w-0 items-start gap-3">
               {blocked ? (
@@ -376,7 +376,7 @@ export function NotificationsSettings() {
 
       {isWebPushSupported && isConnected && (
         <SettingsSection title={t('settings.webPushStatus')}>
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 fluux-card">
             <div className="flex flex-1 basis-48 min-w-0 items-start gap-3">
               <Send className={`size-5 shrink-0 ${
                 webPushStatus === 'registered' ? 'text-fluux-green'
@@ -432,7 +432,7 @@ export function NotificationsSettings() {
       )}
 
       <SettingsSection title={t('settings.soundsSection')}>
-        <div className="flex items-center justify-between gap-4 p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
+        <div className="flex items-center justify-between gap-4 p-4 fluux-card">
           <div>
             <label htmlFor="notification-sound" className="text-sm font-medium text-fluux-text">
               {t('settings.sound')}
@@ -460,7 +460,7 @@ export function NotificationsSettings() {
           )}
         >
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-fluux-bg/60 border border-fluux-border">
+            <div className="flex items-center justify-between gap-4 p-3 fluux-card">
               <label htmlFor="keep-in-system-tray" className="text-sm text-fluux-text">
                 {t('settings.systemTray.keepInTray')}
               </label>

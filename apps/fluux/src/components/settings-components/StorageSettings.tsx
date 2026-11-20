@@ -69,12 +69,12 @@ export function StorageSettings() {
     : 0
 
   return (
-    <section className="w-full max-w-md space-y-8">
+    <section className="w-full space-y-8">
       <SettingsSection
         title={t('settings.storage.mediaCache')}
         description={t('settings.storage.mediaCacheDescription')}
       >
-        <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-lg bg-fluux-bg/60 border border-fluux-border">
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4 fluux-card">
           <div className="space-y-1">
             <p className="text-xs text-fluux-muted">{t('settings.storage.cacheSize')}</p>
             <p className="text-lg font-semibold text-fluux-text">

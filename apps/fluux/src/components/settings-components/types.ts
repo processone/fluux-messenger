@@ -23,6 +23,8 @@ export type SettingsGroup = 'account' | 'general' | 'privacy' | 'system'
 export interface SettingsCategoryConfig {
   id: SettingsCategory
   labelKey: string
+  /** One-line summary shown under the title in the settings page header. */
+  descriptionKey: string
   icon: LucideIcon
   group: SettingsGroup
   /** Only show in Tauri desktop app */
@@ -36,23 +38,23 @@ export interface SettingsCategoryConfig {
 }
 
 export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
-  { id: 'profile', labelKey: 'settings.categories.profile', icon: User, group: 'account' },
+  { id: 'profile', labelKey: 'settings.categories.profile', descriptionKey: 'settings.categoryDescriptions.profile', icon: User, group: 'account' },
 
-  { id: 'appearance', labelKey: 'settings.categories.appearance', icon: Palette, group: 'general' },
-  { id: 'accessibility', labelKey: 'settings.categories.accessibility', icon: AccessibilityIcon, group: 'general' },
-  { id: 'language', labelKey: 'settings.categories.language', icon: Globe, group: 'general' },
-  { id: 'notifications', labelKey: 'settings.categories.notifications', icon: Bell, group: 'general' },
+  { id: 'appearance', labelKey: 'settings.categories.appearance', descriptionKey: 'settings.categoryDescriptions.appearance', icon: Palette, group: 'general' },
+  { id: 'accessibility', labelKey: 'settings.categories.accessibility', descriptionKey: 'settings.categoryDescriptions.accessibility', icon: AccessibilityIcon, group: 'general' },
+  { id: 'language', labelKey: 'settings.categories.language', descriptionKey: 'settings.categoryDescriptions.language', icon: Globe, group: 'general' },
+  { id: 'notifications', labelKey: 'settings.categories.notifications', descriptionKey: 'settings.categoryDescriptions.notifications', icon: Bell, group: 'general' },
 
-  { id: 'encryption', labelKey: 'settings.categories.encryption', icon: Lock, group: 'privacy' },
-  { id: 'privacy', labelKey: 'settings.categories.privacy', icon: ShieldCheck, group: 'privacy' },
-  { id: 'blocked', labelKey: 'settings.categories.blocked', icon: Ban, group: 'privacy' },
+  { id: 'encryption', labelKey: 'settings.categories.encryption', descriptionKey: 'settings.categoryDescriptions.encryption', icon: Lock, group: 'privacy' },
+  { id: 'privacy', labelKey: 'settings.categories.privacy', descriptionKey: 'settings.categoryDescriptions.privacy', icon: ShieldCheck, group: 'privacy' },
+  { id: 'blocked', labelKey: 'settings.categories.blocked', descriptionKey: 'settings.categoryDescriptions.blocked', icon: Ban, group: 'privacy' },
 
-  { id: 'storage', labelKey: 'settings.categories.storage', icon: HardDrive, mediaCacheOnly: true, group: 'system' },
-  { id: 'updates', labelKey: 'settings.categories.updates', icon: Download, updaterOnly: true, group: 'system' },
+  { id: 'storage', labelKey: 'settings.categories.storage', descriptionKey: 'settings.categoryDescriptions.storage', icon: HardDrive, mediaCacheOnly: true, group: 'system' },
+  { id: 'updates', labelKey: 'settings.categories.updates', descriptionKey: 'settings.categoryDescriptions.updates', icon: Download, updaterOnly: true, group: 'system' },
   // MCP bridge is not usable yet: it needs an HTTPS URL that our client cannot
   // easily expose, so the config screen is hidden (and unreachable) for now.
-  { id: 'mcp', labelKey: 'settings.categories.mcp', icon: Bot, desktopOnly: true, group: 'system', disabled: !MCP_FEATURE_ENABLED },
-  { id: 'advanced', labelKey: 'settings.categories.advanced', icon: Wrench, group: 'system' },
+  { id: 'mcp', labelKey: 'settings.categories.mcp', descriptionKey: 'settings.categoryDescriptions.mcp', icon: Bot, desktopOnly: true, group: 'system', disabled: !MCP_FEATURE_ENABLED },
+  { id: 'advanced', labelKey: 'settings.categories.advanced', descriptionKey: 'settings.categoryDescriptions.advanced', icon: Wrench, group: 'system' },
 ]
 
 /**

@@ -959,6 +959,23 @@ em-emoji-picker {
   }
 }
 
+/* Grouped card surface for settings, profile and admin pages: rows grouped in
+   one filled card, separated by hairlines. The fill is mixed from the page's own
+   text and canvas colours rather than taken from a ramp step, because the theme
+   ramps are not monotonic in light mode; mixing toward the text colour always
+   lifts the card slightly off the canvas in the readable direction, in every
+   theme and both modes, and moves text contrast by only a few percent. */
+:root {
+  --fluux-card-bg: color-mix(in srgb, var(--fluux-text-normal) 4%, var(--fluux-chat-bg));
+  --fluux-card-hover: color-mix(in srgb, var(--fluux-text-normal) 8%, var(--fluux-chat-bg));
+}
+.fluux-card {
+  background: var(--fluux-card-bg);
+  border: 1px solid var(--fluux-surface-divider);
+  border-radius: var(--fluux-radius-l);
+}
+.fluux-card-row-hover:hover:not(:disabled) { background: var(--fluux-card-hover); }
+
 /* Type hierarchy for chrome titles. Pane titles name the sidebar section
    ("Messages", "Rooms"); view titles head the main pane (a conversation, a
    settings category, a contact). Both use the display face so they separate

@@ -773,6 +773,20 @@
             "mcp": "Claude 통합",
             "advanced": "고급"
         },
+        "categoryDescriptions": {
+            "profile": "내 프로필, 계정 및 연결된 기기.",
+            "appearance": "테마, 모드, 표시 밀도 및 강조 색상.",
+            "accessibility": "글자 크기, 읽기 너비, 움직임 및 투명도.",
+            "language": "인터페이스 언어 및 지역 형식.",
+            "notifications": "Fluux가 언제 어떻게 알릴지 선택하세요.",
+            "encryption": "대화를 위한 종단 간 암호화 키.",
+            "privacy": "서버 메시지 보관 및 미디어 자동 다운로드.",
+            "blocked": "나에게 메시지를 보내거나 내 상태를 볼 수 없는 사람들.",
+            "storage": "이 기기에 캐시된 미디어와 사용 중인 공간.",
+            "updates": "Fluux를 최신 상태로 유지하세요.",
+            "mcp": "로컬 Claude 브리지 설정.",
+            "advanced": "개발자 도구 및 진단."
+        },
         "groups": {
             "general": "일반",
             "privacy": "개인정보 및 보안",

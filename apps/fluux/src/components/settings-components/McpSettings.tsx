@@ -31,7 +31,7 @@ export function McpSettings() {
   }
 
   return (
-    <section className="w-full max-w-md">
+    <section className="w-full">
       <SettingsSection description={t('settings.mcp.description')}>
         <button
           type="button"

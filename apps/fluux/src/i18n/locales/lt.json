@@ -777,6 +777,20 @@
             "mcp": "Claude integracija",
             "advanced": "Išplėstiniai"
         },
+        "categoryDescriptions": {
+            "profile": "Jūsų profilis, paskyra ir prijungti įrenginiai.",
+            "appearance": "Tema, režimas, rodinio tankis ir akcento spalva.",
+            "accessibility": "Teksto dydis, skaitymo plotis, animacija ir skaidrumas.",
+            "language": "Sąsajos kalba ir regioniniai formatai.",
+            "notifications": "Pasirinkite, kaip ir kada Fluux jus įspės.",
+            "encryption": "Jūsų pokalbių ištisinio šifravimo raktai.",
+            "privacy": "Žinučių archyvavimas serveryje ir automatinis medijos atsisiuntimas.",
+            "blocked": "Žmonės, kurie negali jums rašyti ar matyti jūsų būsenos.",
+            "storage": "Šio įrenginio podėlyje saugoma medija ir jos užimama vieta.",
+            "updates": "Atnaujinkite Fluux.",
+            "mcp": "Vietinio Claude tilto nustatymai.",
+            "advanced": "Kūrėjo įrankiai ir diagnostika."
+        },
         "groups": {
             "general": "Bendra",
             "privacy": "Privatumas ir sauga",
