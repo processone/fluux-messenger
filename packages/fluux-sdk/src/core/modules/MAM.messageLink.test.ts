@@ -3,6 +3,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
 import { MAM } from './MAM'
+import * as stanzaDecrypt from '../e2ee/stanzaDecrypt'
 import { applyRoomMessagePreviewUpdate } from '../../stores/shared/correctionHandoff'
 import type { ModuleDependencies } from './BaseModule'
 import { createMockPresenceReader } from '../test-utils'
@@ -12,6 +13,8 @@ import { setStorageScopeJid } from '../../utils/storageScope'
 import * as cache from '../../utils/messageCache'
 import * as searchIndex from '../../utils/searchIndex'
 import type { Room, RoomMessage } from '../types'
+
+vi.mock('../e2ee/stanzaDecrypt', async importOriginal => ({ ...await importOriginal<typeof import('../e2ee/stanzaDecrypt')>() }))
 
 const ROOM = 'team@conference.example.org'
 const ACCOUNT = 'alice@example.org'
@@ -237,6 +240,83 @@ describe('linked room message lookup', () => {
     const walked = h.sendIQ.mock.calls.filter(([iq]) => iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('max') === '100')
     expect(walked.length).toBeLessThanOrEqual(10)
     expect(walked.length).toBeGreaterThan(0)
+  })
+
+  // Intent: FLM-339 — a start time lets the server's count settle a too-long tail on the first page.
+  function withCount(h: ReturnType<typeof harness>, history: typeof rows, reply = true) {
+    const serve = h.sendIQ.getMockImplementation()!
+    const starts: (string | undefined)[] = []
+    h.sendIQ.mockImplementation(async (iq: Element) => {
+      const query = iq.getChild('query', MAM_NS)!
+      const start = query.getChild('x')?.getChildren('field').find(f => f.attrs.var === 'start')?.getChildText('value') ?? undefined
+      starts.push(start)
+      const res = await serve(iq)
+      if (reply) {
+        const from = start ? history.filter(row => row.timestamp.getTime() >= Date.parse(start)).length : history.length
+        res.getChild('fin', MAM_NS)!.getChild('set', RSM_NS)!.children.push(xml('count', {}, String(from)))
+      }
+      return res
+    })
+    return starts
+  }
+  const longTail = Array.from({ length: 1200 }, (_, index) => ({ ...rows[0], id: `tail-${index}`, stanzaId: String(1731490200000000 + index),
+    body: `Tail ${index}`, timestamp: new Date(Date.UTC(2026, 5, 1, 10, 0, index)) }))
+
+  it('stops after the first walk page when the reported tail exceeds the cap', async () => {
+    const h = harness(undefined, undefined, undefined, longTail)
+    const starts = withCount(h, longTail)
+    expect(await h.mam.readRoomMessagePreview(ROOM, longTail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    // Two requests to locate the original, one first walk page carrying the original's time.
+    expect(h.sendIQ).toHaveBeenCalledTimes(3)
+    expect(starts).toEqual([undefined, undefined, longTail[0].timestamp.toISOString()])
+  })
+
+  // Intent: FLM-339 review — a deletion on the first walk page still reads absent despite a long tail.
+  it('still applies a deletion on the first walk page before giving up on a long tail', async () => {
+    const h = harness(undefined, undefined, 'retraction', longTail, longTail[50].stanzaId)
+    withCount(h, longTail)
+    expect(await h.mam.readRoomMessagePreview(ROOM, longTail[50].stanzaId)).toEqual({ kind: 'absent' })
+    expect(h.sendIQ).toHaveBeenCalledTimes(3)
+  })
+
+  // Intent: FLM-339 review — a server that caps pages lower reads fewer entries within the cap.
+  it('sizes the cap by the page the server actually returned', async () => {
+    const tail = longTail.slice(0, 400)
+    const h = harness(undefined, undefined, undefined, tail)
+    withCount(h, tail)
+    // The stand-in serves 25 entries a page, so ten pages read 250 entries and a 399-entry tail cannot fit.
+    expect(await h.mam.readRoomMessagePreview(ROOM, tail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    expect(h.sendIQ).toHaveBeenCalledTimes(3)
+  })
+
+  // Intent: FLM-339 review — the filter uses the archive's time, and none when that is missing.
+  it('sends no start filter when the original has no usable archive time', async () => {
+    const h = harness(undefined, undefined, undefined, longTail)
+    const starts = withCount(h, longTail)
+    vi.spyOn(h.mam as unknown as { extractForwardedTimestamp: () => undefined }, 'extractForwardedTimestamp').mockReturnValue(undefined)
+    expect(await h.mam.readRoomMessagePreview(ROOM, longTail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    expect(starts.every(start => start === undefined)).toBe(true)
+    expect(h.sendIQ.mock.calls.length).toBeGreaterThan(3)
+  })
+
+  // Intent: FLM-339 review — an encrypted original's sender-claimed time, ahead of its archive time, never becomes the start filter.
+  it('starts the first walk page at the archive time, not the sender time of a decrypted original', async () => {
+    const h = harness(undefined, undefined, undefined, longTail)
+    const starts = withCount(h, longTail)
+    vi.spyOn(stanzaDecrypt, 'readStashedAuthoredAt').mockReturnValue(new Date(longTail[0].timestamp.getTime() + 3_600_000))
+    expect(await h.mam.readRoomMessagePreview(ROOM, longTail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    expect(starts.filter(Boolean)).toEqual([longTail[0].timestamp.toISOString()])
+  })
+
+  it('walks as before when the server reports no count or a tail within the cap', async () => {
+    const noCount = harness(undefined, undefined, undefined, longTail)
+    withCount(noCount, longTail, false)
+    expect(await noCount.mam.readRoomMessagePreview(ROOM, longTail[0].stanzaId)).toEqual({ kind: 'unknown' })
+    expect(noCount.sendIQ.mock.calls.length).toBeGreaterThan(3)
+    const fits = harness(undefined, undefined, 'retraction')
+    const starts = withCount(fits, rows)
+    expect(await fits.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toEqual({ kind: 'absent' })
+    expect(starts.filter(Boolean)).toEqual([rows[40].timestamp.toISOString()])
   })
 
   // Intent: FLM-323 — many links in one room cannot each run their own walk at once.
