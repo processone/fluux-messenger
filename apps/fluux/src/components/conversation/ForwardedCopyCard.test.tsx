@@ -55,7 +55,9 @@ describe('ForwardedCopyCard', () => {
     expect(el.textContent).toContain('ProcessOne tech')
     expect(el.textContent).toContain('· 18:52')
     expect(el.textContent).not.toContain('dates.')
-    expect(el.textContent).toContain('Ship it\nTonight')
+    expect(el.textContent).toContain('Ship it')
+    expect(el.textContent).toContain('Tonight')
+    expect(el.querySelector('[class*=select-text] br')).not.toBeNull()
   })
 
   it('names an unknown room by its full address', () => {
@@ -105,9 +107,48 @@ describe('ForwardedCopyCard', () => {
   it('does not look anything up while drawn, nor when a click ends a text selection', () => {
     card({ type: 'chat', from: 'bob@example.org' })
     expect(mocks.find).not.toHaveBeenCalled()
-    vi.spyOn(window, 'getSelection').mockReturnValue({ toString: () => 'Ship' } as Selection)
+    const selection = vi.spyOn(window, 'getSelection').mockReturnValue({ toString: () => 'Ship' } as Selection)
     fireEvent.click(screen.getByRole('link'))
     expect(mocks.find).not.toHaveBeenCalled()
+    selection.mockRestore()
+  })
+})
+
+// FLM-336 finding 8: links in a copy are clickable like links in ordinary messages.
+describe('ForwardedCopyCard links', () => {
+  beforeEach(() => { mocks.find.mockReset(); mocks.route.mockReset() })
+
+  it('draws a URL as a link, and following it does not open the original', () => {
+    const { container } = card({ type: 'chat', from: 'bob@example.org', text: 'See https://example.org/a?b=1 now' })
+    const anchor = container.querySelector('a')!
+    expect(anchor.getAttribute('href')).toBe('https://example.org/a?b=1')
+    expect(anchor.getAttribute('target')).toBe('_blank')
+    expect(anchor.getAttribute('rel')).toContain('noopener')
+    fireEvent.click(anchor)
+    expect(mocks.find).not.toHaveBeenCalled()
+  })
+
+  it('still opens the original from the text around the link', async () => {
+    mocks.find.mockResolvedValue(null)
+    const { container } = card({ type: 'chat', from: 'bob@example.org', text: 'See https://example.org now' })
+    fireEvent.click(container.querySelector('[data-forwarded-copy]')!)
+    await waitFor(() => expect(mocks.find).toHaveBeenCalled())
+  })
+
+  it('opens the link menu on right-click without opening the original', () => {
+    const { container } = card({ type: 'chat', from: 'bob@example.org', text: 'https://example.org' })
+    fireEvent.contextMenu(container.querySelector('a')!)
+    expect(mocks.find).not.toHaveBeenCalled()
+    // The menu is portalled out of the card; choosing an item must not open the original either.
+    const item = screen.getByText('chat.copyLink')
+    expect(container.contains(item)).toBe(false)
+    fireEvent.click(item)
+    expect(mocks.find).not.toHaveBeenCalled()
+  })
+
+  it('leaves a script URL as plain text', () => {
+    const { container } = card({ type: 'chat', from: 'bob@example.org', text: 'javascript:alert(1)' })
+    expect(container.querySelector('a')).toBeNull()
   })
 })
 
