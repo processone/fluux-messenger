@@ -29,6 +29,10 @@ const tutorialFR = {
     content: 'Recherchez des messages dans toutes les conversations. Utilisez les filtres ou « in:Team » pour affiner.',
     actionHint: 'Cliquez sur l\'icône Recherche et essayez « SDK » ou « in:Team »',
   },
+  'saved-hint': {
+    content: 'Gardez une copie privée de n\'importe quel message. Vos messages enregistrés vous suivent sur chaque appareil, et un clic ramène au message d\'origine.',
+    actionHint: 'Ouvrez le menu Plus d\'un message et choisissez Enregistrer le message, puis cliquez sur l\'icône Enregistrés',
+  },
   'mention-hint': {
     content: 'Vous avez été @mentionné dans Team Chat. Le badge indique les mentions non lues.',
     actionHint: 'Cliquez sur Team Chat pour accéder à votre mention',

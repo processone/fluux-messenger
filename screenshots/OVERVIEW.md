@@ -72,12 +72,24 @@ and the [blog thumbnail](./blog-hero-0.18.0.png).
 | <a href="./08-settings-dark.png"><img src="./08-settings-dark.png" width="400" alt="Settings"/></a> |
 | *14 built-in themes, custom accent colors, font sizes, and CSS overrides*                           |
 
+## Saved Messages
+
+| Saved list | Save from the More menu |
+| --- | --- |
+| <a href="./34-saved-dark.png"><img src="./34-saved-dark.png" width="400" alt="Saved messages list with five entries from chats and rooms"/></a> | <a href="./35-save-message-dark.png"><img src="./35-save-message-dark.png" width="400" alt="The More menu of a message offering Save message"/></a> |
+| *A private list kept on your account and shared by all your devices* | *Save any message from its More menu* |
+
 ## Search & Navigation
 
 | Search                                                                                        | Command Palette                                                                                                          |
 |-----------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
 | <a href="./09-search-dark.png"><img src="./09-search-dark.png" width="400" alt="Search"/></a> | <a href="./10-command-palette-dark.png"><img src="./10-command-palette-dark.png" width="400" alt="Command Palette"/></a> |
 | *Full-text search with type filters and context preview*                                      | *Keyboard-accessible launcher for conversations and actions*                                                             |
+
+| Find in Conversation |
+| --- |
+| <a href="./36-find-in-conversation-dark.png"><img src="./36-find-in-conversation-dark.png" width="400" alt="Find in conversation with the match highlighted"/></a> |
+| *Cmd+F searches the open conversation and highlights each match* |
 
 ## Light Mode
 

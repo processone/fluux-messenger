@@ -125,7 +125,56 @@ export const storyboard: Scene[] = [
     },
   },
 
-  // 7 — End-to-end encryption (reel)
+  // 7 — Global search (reel)
+  {
+    id: 'search',
+    variant: 'reel',
+    run: async (d) => {
+      await d.navigateTo('search')
+      await d.caption('Search everything', 'Full-text search across conversations & rooms')
+      await d.glideClick(d.page.locator('input[type="text"]').first(), 400)
+      await d.typeText('design')
+      // The frame is captured once and held: wait for the results before holding it.
+      const firstResult = d.page.locator('[data-search-result-id]').first()
+      await firstResult.waitFor({ timeout: 15_000 })
+      await d.dwell(1400)
+      await d.glideTo(firstResult)
+      await firstResult.click({ timeout: 15_000 })
+      await d.page.getByText('You are viewing a search result preview').waitFor({ timeout: 15_000 })
+      await d.hold(1800)
+      await d.clearCaption()
+    },
+  },
+
+  // 8 — Saved messages (reel): save from the More menu, open Saved, open the original
+  {
+    id: 'saved',
+    variant: 'reel',
+    run: async (d) => {
+      await d.crossfade(async () => { await d.navigateTo('messages'); await d.selectItem('Emma Wilson') })
+      await d.caption('Save what matters', 'A private list that follows you on every device')
+      const row = d.page.locator('[data-message-id="demo-emma-4"][data-message-body]')
+      await d.glideTo(row, 20)
+      await row.hover()
+      await d.hold(500)
+      await d.glideClick(row.getByRole('button', { name: 'More options', exact: true }), 700)
+      await d.glideClick(d.page.getByRole('button', { name: 'Save message', exact: true }), 900)
+      await d.navigateTo('saved')
+      await d.dwell(1400)
+      // Captured frames are taken with animations finished, which would end the 1.5 s highlight
+      // flash at transparent: hold it at its starting colour so the opened original reads as highlighted.
+      await d.page.addStyleTag({ content: '.message-highlight { animation: none !important; background-color: var(--fluux-bg-accent) !important; }' })
+      const savedRow = d.page.getByTestId('saved-row').first()
+      await d.glideTo(savedRow)
+      await savedRow.click({ timeout: 15_000 })
+      // The frame is captured once and held: wait for the original to open highlighted before holding it.
+      await d.page.locator('[data-message-id="demo-emma-4"].message-highlight').waitFor({ timeout: 15_000 })
+      await d.hold(1800)
+      await d.clearCaption()
+    },
+  },
+
+  // 9 — End-to-end encryption (reel)
   {
     id: 'encryption',
     variant: 'reel',
@@ -138,7 +187,7 @@ export const storyboard: Scene[] = [
     },
   },
 
-  // 8 — Themes & dark/light (reel)
+  // 10 — Themes & dark/light (reel)
   {
     id: 'themes',
     variant: 'reel',
@@ -154,7 +203,7 @@ export const storyboard: Scene[] = [
     },
   },
 
-  // 9 — Polls & code blocks (full only)
+  // 11 — Polls & code blocks (full only)
   {
     id: 'poll-code',
     variant: 'full',
@@ -168,7 +217,7 @@ export const storyboard: Scene[] = [
     },
   },
 
-  // 10 — Whispers (full only)
+  // 12 — Whispers (full only)
   {
     id: 'whisper',
     variant: 'full',
@@ -181,7 +230,7 @@ export const storyboard: Scene[] = [
     },
   },
 
-  // 11 — Encryption settings (full only)
+  // 13 — Encryption settings (full only)
   {
     id: 'encryption-settings',
     variant: 'full',
@@ -196,23 +245,7 @@ export const storyboard: Scene[] = [
     },
   },
 
-  // 12 — Global search (full only)
-  {
-    id: 'search',
-    variant: 'full',
-    run: async (d) => {
-      await d.navigateTo('search')
-      await d.caption('Search everything', 'Full-text search across conversations & rooms')
-      await d.glideClick(d.page.locator('input[type="text"]').first(), 400)
-      await d.typeText('design')
-      await d.dwell(1400)
-      const firstResult = d.page.locator('[data-search-result-id]').first()
-      if (await firstResult.isVisible().catch(() => false)) await d.glideClick(firstResult, 1800)
-      await d.clearCaption()
-    },
-  },
-
-  // 13 — i18n / RTL (full only)
+  // 14 — i18n / RTL (full only)
   {
     id: 'i18n',
     variant: 'full',
@@ -226,7 +259,7 @@ export const storyboard: Scene[] = [
     },
   },
 
-  // 14 — Admin console (full only)
+  // 15 — Admin console (full only)
   {
     id: 'admin',
     variant: 'full',
