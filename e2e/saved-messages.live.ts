@@ -2086,3 +2086,33 @@ test('with OpenPGP on, a deleted original is republished sealed without a clear 
   await emptyNode(reader)
   await one.context.close(); await bob.stop(); await reader.stop()
 })
+
+test('with OpenPGP on, a plain item whose sealed copy the server refuses is neither lost from the node nor from the list', async ({ browser }) => {
+  test.setTimeout(240_000)
+  await forgetOpenpgpIdentity('alice')
+  const reader = await script('alice')
+  await emptyNode(reader)
+  const one = await connect(browser, 'alice', { openpgp: true })
+  await one.page.reload()
+  const prompt = one.page.getByRole('dialog', { name: 'Unlock End-to-End Encryption' })
+  await expect(prompt).toBeVisible({ timeout: 30_000 })
+  // A node this script creates has other publish options than the app's: the server refuses the app's sealed publish onto it.
+  await emptyNode(reader)
+  const legacy = `Plain and refused ${stamp}`
+  await reader.c.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB }, xml('publish', { node: NODE },
+    xml('item', { id: `legacy-${stamp}` }, xml('saved', { xmlns: NODE, stamp: new Date().toISOString() }, xml('forwarded', { xmlns: 'urn:xmpp:forward:0' },
+      xml('message', { xmlns: 'jabber:client', from: 'bob@localhost', to: 'alice@localhost', type: 'chat', id: `legacy-m-${stamp}` }, xml('body', {}, legacy)))))))))
+  await nodeHolds(reader, 1)
+  await one.page.locator('input[type=password]').first().fill(PASSPHRASE)
+  await one.page.getByRole('button', { name: 'Unlock', exact: true }).last().click()
+  await one.page.waitForTimeout(10_000)
+  const items = await reader.items()
+  expect(items).toHaveLength(1)
+  expect(items[0]).toContain(`legacy-${stamp}`) // the plain item is still there
+  expect(items[0]).toContain(legacy)
+  await openSaved(one)
+  await expect(savedRow(one, legacy)).toBeVisible({ timeout: 30_000 })
+  await shot(one.page, 'migration-refused-kept')
+  await emptyNode(reader)
+  await one.context.close(); await reader.stop()
+})
