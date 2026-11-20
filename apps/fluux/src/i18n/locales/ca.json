@@ -450,6 +450,95 @@
         "destroyRoomConfirm": "Això destruirà la sala permanentment i eliminarà tots els membres. Aquesta acció no es pot desfer.",
         "destroyRoomError": "Error en destruir la sala.",
         "dangerZone": "Zona de Perill",
+        "settings": {
+            "sectionsLabel": "Seccions de la configuració de la sala",
+            "unsaved": "Canvis sense desar",
+            "footer": "La configuració de la sala s'aplica a tothom un cop desada. Les notificacions només t'afecten a tu i s'apliquen immediatament.",
+            "currentTopic": "Tema actual",
+            "noTopic": "Sense tema",
+            "topicHint": "Es mostra sota el nom de la sala a la capçalera. Si el canvies, es publica un avís a la sala.",
+            "membersDesc": "Concedeix o retira la pertinença, nomena administradors i bloqueja adreces.",
+            "bulkModerationDesc": "Elimina molts missatges alhora.",
+            "destroyTitle": "Destrueix aquesta sala",
+            "sections": {
+                "general": {
+                    "label": "General",
+                    "description": "Nom, descripció i tema visibles per a tothom."
+                },
+                "notifications": {
+                    "label": "Notificacions",
+                    "description": "Només t'afecta a tu i s'aplica immediatament."
+                },
+                "access": {
+                    "label": "Accés i privadesa",
+                    "description": "Qui pot trobar la sala i entrar-hi, i què hi pot veure."
+                },
+                "permissions": {
+                    "label": "Permisos",
+                    "description": "Què poden fer els participants."
+                },
+                "moderation": {
+                    "label": "Moderació",
+                    "description": "Veu, visitants i les persones que gestionen la sala."
+                },
+                "advanced": {
+                    "label": "Historial i opcions avançades",
+                    "description": "Arxivament i opcions pròpies del servidor."
+                },
+                "danger": {
+                    "label": "Zona de perill",
+                    "description": "Accions irreversibles."
+                }
+            },
+            "groups": {
+                "identity": "Identitat",
+                "notifyMe": "Avisa'm de",
+                "visibility": "Visibilitat",
+                "joining": "Entrada",
+                "participantsCan": "Els participants poden",
+                "privateMessages": "Missatges privats",
+                "memberList": "Llista de membres",
+                "voice": "Veu",
+                "visitors": "Visitants",
+                "people": "Persones",
+                "history": "Historial",
+                "features": "Funcions",
+                "other": "Altres opcions del servidor"
+            },
+            "fields": {
+                "roomName": "Nom de la sala",
+                "roomDesc": "Descripció",
+                "lang": "Idioma",
+                "publicRoom": "Mostra al directori públic",
+                "persistentRoom": "Conserva la sala quan és buida",
+                "publicList": "Tothom pot veure qui hi ha a la sala",
+                "whois": "Adreces reals visibles per a",
+                "membersOnly": "Només membres",
+                "passwordProtected": "Demana una contrasenya",
+                "roomSecret": "Contrasenya",
+                "captchaProtected": "Demana un CAPTCHA",
+                "captchaWhitelist": "Omet el CAPTCHA per a aquestes adreces",
+                "maxUsers": "Nombre màxim de participants",
+                "allowSubscription": "Permet subscriure's sense entrar",
+                "changeSubject": "Canviar el tema",
+                "allowInvites": "Convidar altres persones",
+                "allowQueryUsers": "Consultar altres participants",
+                "allowPm": "Qui pot enviar missatges privats",
+                "allowPmFromVisitors": "Els visitants poden escriure a",
+                "getMemberList": "Qui pot obtenir la llista de membres",
+                "presenceBroadcast": "Anuncia les entrades i sortides de",
+                "moderatedRoom": "Sala moderada",
+                "membersByDefault": "Els usuaris nous tenen veu",
+                "allowVoiceRequests": "Els visitants poden demanar veu",
+                "voiceRequestMinInterval": "Segons entre sol·licituds de veu",
+                "allowVisitorStatus": "Els visitants poden definir un missatge d'estat",
+                "allowVisitorNickChange": "Els visitants poden canviar de sobrenom",
+                "mam": "Arxiva els missatges (MAM)",
+                "enableLogging": "Registre públic",
+                "enableHats": "Insígnies de rol (hats)",
+                "pubsub": "Node PubSub associat"
+            }
+        },
         "createRoom": "Crear Sala",
         "roomName": "Nom de la Sala",
         "roomNamePlaceholder": "p. ex., Xat d'Equip",
@@ -1622,11 +1711,11 @@
         "members_by_default": "Els nous usuaris que s'uneixen a la sala obtenen automàticament el rol de participant, permetent-los parlar a les sales moderades.",
         "allow_private_messages_from_visitors": "Controla si els visitants (usuaris sense veu) poden enviar missatges privats.",
         "allow_query_users": "Permet als usuaris enviar consultes d'informació (descobriment de serveis) a altres participants.",
-        "allow_visitor_status": "Permet als visitants incloure un missatge d'estat amb la seva presència.",
-        "allow_visitor_nickchange": "Permet als visitants canviar el seu sobrenom a la sala.",
-        "allow_voice_requests": "Permet als visitants d'una sala moderada sol·licitar permís per parlar.",
+        "muc#roomconfig_allowvisitorstatus": "Permet als visitants incloure un missatge d'estat amb la seva presència.",
+        "muc#roomconfig_allowvisitornickchange": "Permet als visitants canviar el seu sobrenom a la sala.",
+        "muc#roomconfig_allowvoicerequests": "Permet als visitants d'una sala moderada sol·licitar permís per parlar.",
         "allow_subscription": "Permet als usuaris subscriure's als missatges de la sala sense ser-hi presents. Els subscriptors reben missatges sense unir-se a la sala, útil per a clients mòbils o notificacions.",
-        "voice_request_min_interval": "Temps d'espera mínim (en segons) entre sol·licituds de veu del mateix visitant.",
+        "muc#roomconfig_voicerequestmininterval": "Temps d'espera mínim (en segons) entre sol·licituds de veu del mateix visitant.",
         "enable_hats": "Activa la visualització d'insígnies al costat dels noms dels participants, mostrant rols o afiliacions especials.",
         "mam": "Activa l'arxiu de missatges (MAM) perquè els clients puguin obtenir missatges anteriors en unir-se o reconnectar-se. Aquest és l'historial que els participants veuen a la seva aplicació de xat."
     },

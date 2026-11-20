@@ -260,6 +260,23 @@ export function RoomHeader({
         </div>
       )}
 
+      {/* Room configuration modal. Rendered before the dialogs it links to
+          (avatar, members, hats) so they stack above it when opened from it. */}
+      {configModalOpen && (
+        <RoomConfigModal
+          room={room}
+          onClose={closeConfig}
+          submitRoomConfig={submitRoomConfig}
+          setSubject={setSubject}
+          destroyRoom={destroyRoom}
+          notifyGroup={notifyGroup}
+          onAvatar={isOwner ? () => setShowAvatarModal(true) : undefined}
+          onMembers={canManageRoom ? () => setShowMembersModal(true) : undefined}
+          onHats={isOwner ? () => { if (room.supportsHats) setShowHatsModal(true) } : undefined}
+          onBulkModeration={onBulkModeration}
+        />
+      )}
+
       {/* Room avatar crop modal */}
       <AvatarCropModal
         isOpen={showAvatarModal}
@@ -284,17 +301,6 @@ export function RoomHeader({
           isOpen={inviteModalOpen}
           onClose={closeInvite}
           room={room}
-        />
-      )}
-
-      {/* Room configuration modal */}
-      {configModalOpen && (
-        <RoomConfigModal
-          room={room}
-          onClose={closeConfig}
-          submitRoomConfig={submitRoomConfig}
-          setSubject={setSubject}
-          destroyRoom={destroyRoom}
         />
       )}
 

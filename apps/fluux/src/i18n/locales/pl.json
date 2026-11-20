@@ -450,6 +450,95 @@
         "destroyRoomConfirm": "To trwale zniszczy pokój i usunie wszystkich członków. Tej czynności nie można cofnąć.",
         "destroyRoomError": "Nie udało się zniszczyć pokoju.",
         "dangerZone": "Strefa niebezpieczna",
+        "settings": {
+            "sectionsLabel": "Sekcje ustawień pokoju",
+            "unsaved": "Niezapisane zmiany",
+            "footer": "Ustawienia pokoju po zapisaniu obowiązują wszystkich. Powiadomienia dotyczą tylko ciebie i działają od razu.",
+            "currentTopic": "Bieżący temat",
+            "noTopic": "Nie ustawiono tematu",
+            "topicHint": "Wyświetlany w nagłówku pod nazwą pokoju. Zmiana tematu publikuje informację w pokoju.",
+            "membersDesc": "Nadawaj i odbieraj członkostwo, mianuj administratorów i banuj adresy.",
+            "bulkModerationDesc": "Usuń wiele wiadomości naraz.",
+            "destroyTitle": "Zniszcz ten pokój",
+            "sections": {
+                "general": {
+                    "label": "Ogólne",
+                    "description": "Nazwa, opis i temat widoczne dla wszystkich."
+                },
+                "notifications": {
+                    "label": "Powiadomienia",
+                    "description": "Dotyczą tylko ciebie i działają od razu."
+                },
+                "access": {
+                    "label": "Dostęp i prywatność",
+                    "description": "Kto może znaleźć pokój i do niego dołączyć oraz co widzi."
+                },
+                "permissions": {
+                    "label": "Uprawnienia",
+                    "description": "Co mogą robić uczestnicy."
+                },
+                "moderation": {
+                    "label": "Moderacja",
+                    "description": "Głos, goście i osoby prowadzące pokój."
+                },
+                "advanced": {
+                    "label": "Historia i zaawansowane",
+                    "description": "Archiwizacja i opcje specyficzne dla serwera."
+                },
+                "danger": {
+                    "label": "Strefa niebezpieczna",
+                    "description": "Nieodwracalne działania."
+                }
+            },
+            "groups": {
+                "identity": "Tożsamość",
+                "notifyMe": "Powiadamiaj mnie o",
+                "visibility": "Widoczność",
+                "joining": "Dołączanie",
+                "participantsCan": "Uczestnicy mogą",
+                "privateMessages": "Wiadomości prywatne",
+                "memberList": "Lista członków",
+                "voice": "Głos",
+                "visitors": "Goście",
+                "people": "Osoby",
+                "history": "Historia",
+                "features": "Funkcje",
+                "other": "Inne opcje serwera"
+            },
+            "fields": {
+                "roomName": "Nazwa pokoju",
+                "roomDesc": "Opis",
+                "lang": "Język",
+                "publicRoom": "Pokaż w publicznym katalogu",
+                "persistentRoom": "Zachowaj pokój, gdy jest pusty",
+                "publicList": "Każdy widzi, kto jest w pokoju",
+                "whois": "Prawdziwe adresy widoczne dla",
+                "membersOnly": "Tylko dla członków",
+                "passwordProtected": "Wymagaj hasła",
+                "roomSecret": "Hasło",
+                "captchaProtected": "Wymagaj CAPTCHA",
+                "captchaWhitelist": "Pomiń CAPTCHA dla tych adresów",
+                "maxUsers": "Maksymalna liczba uczestników",
+                "allowSubscription": "Zezwalaj na subskrypcję bez dołączania",
+                "changeSubject": "Zmieniać temat",
+                "allowInvites": "Zapraszać innych",
+                "allowQueryUsers": "Wyszukiwać informacje o innych uczestnikach",
+                "allowPm": "Kto może wysyłać wiadomości prywatne",
+                "allowPmFromVisitors": "Goście mogą pisać do",
+                "getMemberList": "Kto może pobrać listę członków",
+                "presenceBroadcast": "Ogłaszaj dołączenie i wyjście dla",
+                "moderatedRoom": "Pokój moderowany",
+                "membersByDefault": "Nowi użytkownicy otrzymują głos",
+                "allowVoiceRequests": "Goście mogą prosić o głos",
+                "voiceRequestMinInterval": "Sekundy między prośbami o głos",
+                "allowVisitorStatus": "Goście mogą ustawiać opis statusu",
+                "allowVisitorNickChange": "Goście mogą zmieniać pseudonim",
+                "mam": "Archiwizuj wiadomości (MAM)",
+                "enableLogging": "Publiczny dziennik",
+                "enableHats": "Odznaki (oznaczenia ról)",
+                "pubsub": "Powiązany węzeł PubSub"
+            }
+        },
         "createRoom": "Utwórz pokój",
         "roomName": "Nazwa pokoju",
         "roomNamePlaceholder": "np., Czat zespołu",
@@ -1624,11 +1713,11 @@
         "members_by_default": "Nowi użytkownicy automatycznie otrzymują rolę uczestnika, co pozwala im mówić w moderowanych pokojach.",
         "allow_private_messages_from_visitors": "Określa, czy odwiedzający (użytkownicy bez prawa głosu) mogą wysyłać prywatne wiadomości.",
         "allow_query_users": "Pozwól użytkownikom wysyłać zapytania informacyjne (odkrywanie usług) do innych uczestników.",
-        "allow_visitor_status": "Pozwól odwiedzającym dołączać wiadomość statusu do swojej obecności.",
-        "allow_visitor_nickchange": "Pozwól odwiedzającym zmieniać pseudonim w pokoju.",
-        "allow_voice_requests": "Pozwól odwiedzającym w moderowanym pokoju prosić o prawo głosu.",
+        "muc#roomconfig_allowvisitorstatus": "Pozwól odwiedzającym dołączać wiadomość statusu do swojej obecności.",
+        "muc#roomconfig_allowvisitornickchange": "Pozwól odwiedzającym zmieniać pseudonim w pokoju.",
+        "muc#roomconfig_allowvoicerequests": "Pozwól odwiedzającym w moderowanym pokoju prosić o prawo głosu.",
         "allow_subscription": "Pozwól użytkownikom subskrybować wiadomości pokoju bez obecności. Subskrybenci otrzymują wiadomości bez dołączania do pokoju, przydatne dla klientów mobilnych lub powiadomień.",
-        "voice_request_min_interval": "Minimalny czas oczekiwania (w sekundach) między prośbami o głos od tego samego odwiedzającego.",
+        "muc#roomconfig_voicerequestmininterval": "Minimalny czas oczekiwania (w sekundach) między prośbami o głos od tego samego odwiedzającego.",
         "enable_hats": "Włącz wyświetlanie odznak obok nazw uczestników, pokazujących specjalne role lub przynależności.",
         "mam": "Włącz archiwum wiadomości (MAM), aby klienty mogły pobierać wcześniejsze wiadomości przy dołączaniu lub ponownym łączeniu. To historia, którą uczestnicy widzą w swojej aplikacji do czatowania."
     },

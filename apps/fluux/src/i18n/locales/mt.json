@@ -450,6 +450,95 @@
         "destroyRoomConfirm": "Dan se jeqred il-kamra b'mod permanenti u jneħħi l-membri kollha. Din l-azzjoni ma tistax tiġi lura.",
         "destroyRoomError": "Ma rnexxiex jeqred il-kamra.",
         "dangerZone": "Żona Perikoluża",
+        "settings": {
+            "sectionsLabel": "Sezzjonijiet tas-settings tal-kamra",
+            "unsaved": "Bidliet mhux salvati",
+            "footer": "Is-settings tal-kamra japplikaw għal kulħadd ladarba jiġu salvati. In-notifiki japplikaw għalik biss, minnufih.",
+            "currentTopic": "Suġġett attwali",
+            "noTopic": "L-ebda suġġett issettjat",
+            "topicHint": "Jidher taħt l-isem tal-kamra fl-intestatura. Jekk tibdlu, jidher avviż fil-kamra.",
+            "membersDesc": "Agħti jew irrevoka s-sħubija, aħtar amministraturi u ipprojbixxi indirizzi.",
+            "bulkModerationDesc": "Neħħi ħafna messaġġi f'daqqa.",
+            "destroyTitle": "Qered din il-kamra",
+            "sections": {
+                "general": {
+                    "label": "Ġenerali",
+                    "description": "Isem, deskrizzjoni u suġġett murija lil kulħadd."
+                },
+                "notifications": {
+                    "label": "Notifiki",
+                    "description": "Jaffettwak lilek biss, u japplika minnufih."
+                },
+                "access": {
+                    "label": "Aċċess u privatezza",
+                    "description": "Min jista' jsib il-kamra u jidħol fiha, u x'jista' jara."
+                },
+                "permissions": {
+                    "label": "Permessi",
+                    "description": "X'jistgħu jagħmlu l-parteċipanti."
+                },
+                "moderation": {
+                    "label": "Moderazzjoni",
+                    "description": "Vuċi, viżitaturi u min imexxi l-kamra."
+                },
+                "advanced": {
+                    "label": "Storja u avvanzat",
+                    "description": "Arkivjar u għażliet speċifiċi għas-server."
+                },
+                "danger": {
+                    "label": "Żona perikoluża",
+                    "description": "Azzjonijiet irriversibbli."
+                }
+            },
+            "groups": {
+                "identity": "Identità",
+                "notifyMe": "Innotifikani dwar",
+                "visibility": "Viżibbiltà",
+                "joining": "Dħul",
+                "participantsCan": "Il-parteċipanti jistgħu",
+                "privateMessages": "Messaġġi privati",
+                "memberList": "Lista tal-membri",
+                "voice": "Vuċi",
+                "visitors": "Viżitaturi",
+                "people": "Nies",
+                "history": "Storja",
+                "features": "Karatteristiċi",
+                "other": "Għażliet oħra tas-server"
+            },
+            "fields": {
+                "roomName": "Isem il-kamra",
+                "roomDesc": "Deskrizzjoni",
+                "lang": "Lingwa",
+                "publicRoom": "Elenka fid-direttorju pubbliku",
+                "persistentRoom": "Żomm il-kamra meta tkun vojta",
+                "publicList": "Kulħadd jista' jara min hemm fil-kamra",
+                "whois": "Indirizzi reali viżibbli għal",
+                "membersOnly": "Membri biss",
+                "passwordProtected": "Itlob password",
+                "roomSecret": "Password",
+                "captchaProtected": "Itlob CAPTCHA",
+                "captchaWhitelist": "Aqbeż is-CAPTCHA għal dawn l-indirizzi",
+                "maxUsers": "Numru massimu ta' parteċipanti",
+                "allowSubscription": "Ippermetti l-abbonament mingħajr dħul",
+                "changeSubject": "Jibdlu s-suġġett",
+                "allowInvites": "Jistiednu oħrajn",
+                "allowQueryUsers": "Jistaqsu dwar parteċipanti oħra",
+                "allowPm": "Min jista' jibgħat messaġġi privati",
+                "allowPmFromVisitors": "Il-viżitaturi jistgħu jiktbu lil",
+                "getMemberList": "Min jista' jikseb il-lista tal-membri",
+                "presenceBroadcast": "Ħabbar id-dħul u l-ħruġ ta'",
+                "moderatedRoom": "Kamra moderata",
+                "membersByDefault": "L-utenti l-ġodda jingħataw vuċi",
+                "allowVoiceRequests": "Il-viżitaturi jistgħu jitolbu vuċi",
+                "voiceRequestMinInterval": "Sekondi bejn talbiet għal vuċi",
+                "allowVisitorStatus": "Il-viżitaturi jistgħu jissettjaw messaġġ ta' status",
+                "allowVisitorNickChange": "Il-viżitaturi jistgħu jibdlu l-laqam",
+                "mam": "Arkivja l-messaġġi (MAM)",
+                "enableLogging": "Reġistru pubbliku",
+                "enableHats": "Badges (tar-rwoli)",
+                "pubsub": "Nodu PubSub assoċjat"
+            }
+        },
         "createRoom": "Oħloq Kamra",
         "roomName": "Isem il-Kamra",
         "roomNamePlaceholder": "eż., Chat tat-Tim",
@@ -1626,11 +1715,11 @@
         "members_by_default": "Utenti ġodda li jingħaqdu mal-kamra awtomatikament jieħdu r-rwol ta' parteċipant, li jippermettilhom jitkellmu f'kmamar moderati.",
         "allow_private_messages_from_visitors": "Jikkontrolla jekk viżitaturi (utenti mingħajr vuċi) jistgħux jibagħtu messaġġi privati.",
         "allow_query_users": "Ippermetti lill-utenti jibagħtu mistoqsijiet ta' informazzjoni (skoperta tas-servizz) lil-parteċipanti l-oħra.",
-        "allow_visitor_status": "Ippermetti lill-viżitaturi jinkludu messaġġ ta' status mal-preżenza tagħhom.",
-        "allow_visitor_nickchange": "Ippermetti lill-viżitaturi jibdlu l-laqam tagħhom fil-kamra.",
-        "allow_voice_requests": "Ippermetti lill-viżitaturi f'kamra moderata jitolbu permess biex jitkellmu.",
+        "muc#roomconfig_allowvisitorstatus": "Ippermetti lill-viżitaturi jinkludu messaġġ ta' status mal-preżenza tagħhom.",
+        "muc#roomconfig_allowvisitornickchange": "Ippermetti lill-viżitaturi jibdlu l-laqam tagħhom fil-kamra.",
+        "muc#roomconfig_allowvoicerequests": "Ippermetti lill-viżitaturi f'kamra moderata jitolbu permess biex jitkellmu.",
         "allow_subscription": "Ippermetti lill-utenti jabbonaw għall-messaġġi tal-kamra mingħajr ma jkunu preżenti. L-abbonati jirċievu messaġġi mingħajr ma jidħlu fil-kamra, utli għal klijenti mobbli jew notifiki.",
-        "voice_request_min_interval": "Ħin minimu ta' stennija (f'sekondi) bejn talbiet ta' vuċi mill-istess viżitatur.",
+        "muc#roomconfig_voicerequestmininterval": "Ħin minimu ta' stennija (f'sekondi) bejn talbiet ta' vuċi mill-istess viżitatur.",
         "enable_hats": "Attiva l-wiri ta' badges ħdejn l-ismijiet tal-parteċipanti, li juru rwoli jew affiljazzjonijiet speċjali.",
         "mam": "Attiva l-arkivju tal-messaġġi (MAM) biex il-klijenti jkunu jistgħu jiġbru messaġġi ta' qabel meta jingħaqdu jew jerġgħu jikkonnettjaw. Din hija l-istorja li l-parteċipanti jaraw fl-app taċ-chat tagħhom."
     },

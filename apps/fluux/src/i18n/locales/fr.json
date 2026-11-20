@@ -450,6 +450,95 @@
         "destroyRoomConfirm": "Cela détruira définitivement le salon et supprimera tous les membres. Cette action est irréversible.",
         "destroyRoomError": "Impossible de détruire le salon.",
         "dangerZone": "Zone de danger",
+        "settings": {
+            "sectionsLabel": "Sections des paramètres du salon",
+            "unsaved": "Modifications non enregistrées",
+            "footer": "Les paramètres du salon s'appliquent à tous après l'enregistrement. Les notifications ne concernent que vous et s'appliquent tout de suite.",
+            "currentTopic": "Sujet actuel",
+            "noTopic": "Aucun sujet",
+            "topicHint": "Affiché sous le nom du salon dans l'en-tête. Le modifier publie un avis dans le salon.",
+            "membersDesc": "Accorder ou retirer l'adhésion, nommer des administrateurs et bannir des adresses.",
+            "bulkModerationDesc": "Supprimer plusieurs messages d'un coup.",
+            "destroyTitle": "Détruire ce salon",
+            "sections": {
+                "general": {
+                    "label": "Général",
+                    "description": "Nom, description et sujet visibles par tous."
+                },
+                "notifications": {
+                    "label": "Notifications",
+                    "description": "Ne concerne que vous et s'applique tout de suite."
+                },
+                "access": {
+                    "label": "Accès et confidentialité",
+                    "description": "Qui peut trouver et rejoindre le salon, et ce qu'on y voit."
+                },
+                "permissions": {
+                    "label": "Permissions",
+                    "description": "Ce que les participants ont le droit de faire."
+                },
+                "moderation": {
+                    "label": "Modération",
+                    "description": "Parole, visiteurs et responsables du salon."
+                },
+                "advanced": {
+                    "label": "Historique et avancé",
+                    "description": "Archivage et options propres au serveur."
+                },
+                "danger": {
+                    "label": "Zone de danger",
+                    "description": "Actions irréversibles."
+                }
+            },
+            "groups": {
+                "identity": "Identité",
+                "notifyMe": "Me notifier pour",
+                "visibility": "Visibilité",
+                "joining": "Entrée dans le salon",
+                "participantsCan": "Les participants peuvent",
+                "privateMessages": "Messages privés",
+                "memberList": "Liste des membres",
+                "voice": "Parole",
+                "visitors": "Visiteurs",
+                "people": "Personnes",
+                "history": "Historique",
+                "features": "Fonctionnalités",
+                "other": "Autres options du serveur"
+            },
+            "fields": {
+                "roomName": "Nom du salon",
+                "roomDesc": "Description",
+                "lang": "Langue",
+                "publicRoom": "Afficher dans l'annuaire public",
+                "persistentRoom": "Conserver le salon quand il est vide",
+                "publicList": "Tout le monde peut voir qui est présent",
+                "whois": "Adresses réelles visibles par",
+                "membersOnly": "Réservé aux membres",
+                "passwordProtected": "Exiger un mot de passe",
+                "roomSecret": "Mot de passe",
+                "captchaProtected": "Exiger un CAPTCHA",
+                "captchaWhitelist": "Dispenser ces adresses du CAPTCHA",
+                "maxUsers": "Nombre maximum de participants",
+                "allowSubscription": "Autoriser l'abonnement sans rejoindre",
+                "changeSubject": "Modifier le sujet",
+                "allowInvites": "Inviter d'autres personnes",
+                "allowQueryUsers": "Interroger les autres participants",
+                "allowPm": "Qui peut envoyer des messages privés",
+                "allowPmFromVisitors": "Les visiteurs peuvent écrire à",
+                "getMemberList": "Qui peut obtenir la liste des membres",
+                "presenceBroadcast": "Annoncer les arrivées et départs des",
+                "moderatedRoom": "Salon modéré",
+                "membersByDefault": "Les nouveaux venus ont la parole",
+                "allowVoiceRequests": "Les visiteurs peuvent demander la parole",
+                "voiceRequestMinInterval": "Secondes entre deux demandes de parole",
+                "allowVisitorStatus": "Les visiteurs peuvent afficher un statut",
+                "allowVisitorNickChange": "Les visiteurs peuvent changer de pseudo",
+                "mam": "Archiver les messages (MAM)",
+                "enableLogging": "Journalisation publique",
+                "enableHats": "Badges de rôle (hats)",
+                "pubsub": "Nœud PubSub associé"
+            }
+        },
         "createRoom": "Créer un salon",
         "roomName": "Nom du salon",
         "roomNamePlaceholder": "ex. Discussion d'équipe",
@@ -1621,11 +1710,11 @@
         "members_by_default": "Les nouveaux utilisateurs obtiennent automatiquement le rôle de participant, leur permettant de parler dans les salons modérés.",
         "allow_private_messages_from_visitors": "Contrôle si les visiteurs (sans droit de parole) peuvent envoyer des messages privés.",
         "allow_query_users": "Autoriser les utilisateurs à envoyer des requêtes d'information aux autres participants.",
-        "allow_visitor_status": "Autoriser les visiteurs à inclure un message d'état avec leur présence.",
-        "allow_visitor_nickchange": "Autoriser les visiteurs à changer leur pseudo dans le salon.",
-        "allow_voice_requests": "Autoriser les visiteurs d'un salon modéré à demander la permission de parler.",
+        "muc#roomconfig_allowvisitorstatus": "Autoriser les visiteurs à inclure un message d'état avec leur présence.",
+        "muc#roomconfig_allowvisitornickchange": "Autoriser les visiteurs à changer leur pseudo dans le salon.",
+        "muc#roomconfig_allowvoicerequests": "Autoriser les visiteurs d'un salon modéré à demander la permission de parler.",
         "allow_subscription": "Permettre aux utilisateurs de s'abonner aux messages du salon sans y être présent. Les abonnés reçoivent les messages sans rejoindre le salon, utile pour les clients mobiles ou les notifications.",
-        "voice_request_min_interval": "Temps d'attente minimum (en secondes) entre les demandes de parole d'un même visiteur.",
+        "muc#roomconfig_voicerequestmininterval": "Temps d'attente minimum (en secondes) entre les demandes de parole d'un même visiteur.",
         "enable_hats": "Activer l'affichage de badges à côté des noms des participants, indiquant des rôles ou affiliations spéciales.",
         "mam": "Activer l'archive de messages (MAM) pour que les clients puissent récupérer les messages passés en rejoignant le salon ou en se reconnectant. C'est l'historique que les participants voient dans leur application."
     },

@@ -449,6 +449,95 @@
         "destroyRoomConfirm": "Toto natrvalo zničí miestnosť a odstráni všetkých členov. Túto akciu nemožno vrátiť späť.",
         "destroyRoomError": "Nepodarilo sa zničiť miestnosť.",
         "dangerZone": "Nebezpečná zóna",
+        "settings": {
+            "sectionsLabel": "Sekcie nastavení miestnosti",
+            "unsaved": "Neuložené zmeny",
+            "footer": "Nastavenia miestnosti platia po uložení pre všetkých. Oznámenia sa týkajú len vás a platia hneď.",
+            "currentTopic": "Aktuálna téma",
+            "noTopic": "Téma nie je nastavená",
+            "topicHint": "Zobrazuje sa pod názvom miestnosti v hlavičke. Jej zmena zverejní v miestnosti oznam.",
+            "membersDesc": "Udeľovať a odoberať členstvo, povyšovať správcov a zakazovať adresy.",
+            "bulkModerationDesc": "Odstrániť veľa správ naraz.",
+            "destroyTitle": "Zničiť túto miestnosť",
+            "sections": {
+                "general": {
+                    "label": "Všeobecné",
+                    "description": "Názov, popis a téma viditeľné pre všetkých."
+                },
+                "notifications": {
+                    "label": "Oznámenia",
+                    "description": "Týka sa len vás a platí hneď."
+                },
+                "access": {
+                    "label": "Prístup a súkromie",
+                    "description": "Kto môže miestnosť nájsť a pripojiť sa a čo uvidí."
+                },
+                "permissions": {
+                    "label": "Oprávnenia",
+                    "description": "Čo môžu účastníci robiť."
+                },
+                "moderation": {
+                    "label": "Moderovanie",
+                    "description": "Hlas, návštevníci a tí, ktorí miestnosť spravujú."
+                },
+                "advanced": {
+                    "label": "História a pokročilé",
+                    "description": "Archivácia a možnosti špecifické pre server."
+                },
+                "danger": {
+                    "label": "Nebezpečná zóna",
+                    "description": "Nevratné akcie."
+                }
+            },
+            "groups": {
+                "identity": "Identita",
+                "notifyMe": "Upozorňovať ma na",
+                "visibility": "Viditeľnosť",
+                "joining": "Pripájanie",
+                "participantsCan": "Účastníci môžu",
+                "privateMessages": "Súkromné správy",
+                "memberList": "Zoznam členov",
+                "voice": "Hlas",
+                "visitors": "Návštevníci",
+                "people": "Ľudia",
+                "history": "História",
+                "features": "Funkcie",
+                "other": "Ďalšie možnosti servera"
+            },
+            "fields": {
+                "roomName": "Názov miestnosti",
+                "roomDesc": "Popis",
+                "lang": "Jazyk",
+                "publicRoom": "Zobraziť vo verejnom adresári",
+                "persistentRoom": "Ponechať miestnosť, keď je prázdna",
+                "publicList": "Ktokoľvek vidí, kto je v miestnosti",
+                "whois": "Skutočné adresy vidia",
+                "membersOnly": "Len pre členov",
+                "passwordProtected": "Vyžadovať heslo",
+                "roomSecret": "Heslo",
+                "captchaProtected": "Vyžadovať CAPTCHA",
+                "captchaWhitelist": "Nevyžadovať CAPTCHA od týchto adries",
+                "maxUsers": "Maximálny počet účastníkov",
+                "allowSubscription": "Povoliť odber bez pripojenia",
+                "changeSubject": "Meniť tému",
+                "allowInvites": "Pozývať ďalších",
+                "allowQueryUsers": "Získavať údaje o ostatných účastníkoch",
+                "allowPm": "Kto môže posielať súkromné správy",
+                "allowPmFromVisitors": "Návštevníci môžu písať",
+                "getMemberList": "Kto môže získať zoznam členov",
+                "presenceBroadcast": "Oznamovať príchody a odchody pre",
+                "moderatedRoom": "Moderovaná miestnosť",
+                "membersByDefault": "Noví používatelia dostanú hlas",
+                "allowVoiceRequests": "Návštevníci môžu žiadať o hlas",
+                "voiceRequestMinInterval": "Sekundy medzi žiadosťami o hlas",
+                "allowVisitorStatus": "Návštevníci môžu nastaviť stavovú správu",
+                "allowVisitorNickChange": "Návštevníci môžu zmeniť prezývku",
+                "mam": "Archivovať správy (MAM)",
+                "enableLogging": "Verejné záznamy",
+                "enableHats": "Odznaky rolí (hats)",
+                "pubsub": "Priradený uzol PubSub"
+            }
+        },
         "createRoom": "Vytvoriť miestnosť",
         "roomName": "Názov miestnosti",
         "roomNamePlaceholder": "napr., Tímový chat",
@@ -1623,11 +1712,11 @@
         "members_by_default": "Noví používatelia automaticky získajú rolu účastníka, čo im umožňuje hovoriť v moderovaných miestnostiach.",
         "allow_private_messages_from_visitors": "Určuje, či môžu návštevníci (používatelia bez práva hlasu) posielať súkromné správy.",
         "allow_query_users": "Umožniť používateľom posielať informačné dotazy (objavovanie služieb) ostatným účastníkom.",
-        "allow_visitor_status": "Umožniť návštevníkom priložiť stavovú správu k ich prítomnosti.",
-        "allow_visitor_nickchange": "Umožniť návštevníkom meniť prezývku v miestnosti.",
-        "allow_voice_requests": "Umožniť návštevníkom v moderovanej miestnosti požiadať o právo hovoriť.",
+        "muc#roomconfig_allowvisitorstatus": "Umožniť návštevníkom priložiť stavovú správu k ich prítomnosti.",
+        "muc#roomconfig_allowvisitornickchange": "Umožniť návštevníkom meniť prezývku v miestnosti.",
+        "muc#roomconfig_allowvoicerequests": "Umožniť návštevníkom v moderovanej miestnosti požiadať o právo hovoriť.",
         "allow_subscription": "Umožniť používateľom odoberať správy z miestnosti bez prítomnosti. Odberatelia dostávajú správy bez pripojenia k miestnosti, užitočné pre mobilných klientov alebo upozornenia.",
-        "voice_request_min_interval": "Minimálna čakacia doba (v sekundách) medzi žiadosťami o hlas od toho istého návštevníka.",
+        "muc#roomconfig_voicerequestmininterval": "Minimálna čakacia doba (v sekundách) medzi žiadosťami o hlas od toho istého návštevníka.",
         "enable_hats": "Povoliť zobrazenie odznakov vedľa mien účastníkov, zobrazujúcich špeciálne roly alebo príslušnosti.",
         "mam": "Povoliť archív správ (MAM), aby klienti mohli načítať predchádzajúce správy pri pripojení alebo opätovnom pripojení. Toto je história, ktorú účastníci vidia vo svojej chatovacej aplikácii."
     },

@@ -621,6 +621,13 @@ vi.mock('lucide-react', () => ({
   AlertCircle: () => <span data-testid="icon-alert">Alert</span>,
   Clock: () => <span data-testid="icon-clock">Clock</span>,
   ChevronUp: () => <span data-testid="icon-chevron-up">ChevronUp</span>,
+  // Room settings section icons (RoomHeader > RoomConfigModal > roomConfigSections)
+  Info: () => <span>Info</span>,
+  Lock: () => <span>Lock</span>,
+  MessageSquare: () => <span>MessageSquare</span>,
+  Archive: () => <span>Archive</span>,
+  AlertTriangle: () => <span>AlertTriangle</span>,
+  Award: () => <span>Award</span>,
 }))
 
 // Create hoisted mock for MessageComposer (React 19: ref is a regular prop)

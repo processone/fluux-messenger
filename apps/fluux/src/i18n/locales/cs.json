@@ -450,6 +450,95 @@
         "destroyRoomConfirm": "Toto trvale zničí místnost a odstraní všechny členy. Tuto akci nelze vrátit zpět.",
         "destroyRoomError": "Nepodařilo se zničit místnost.",
         "dangerZone": "Nebezpečná zóna",
+        "settings": {
+            "sectionsLabel": "Sekce nastavení místnosti",
+            "unsaved": "Neuložené změny",
+            "footer": "Nastavení místnosti platí po uložení pro všechny. Oznámení se týkají jen vás a platí okamžitě.",
+            "currentTopic": "Aktuální téma",
+            "noTopic": "Téma není nastaveno",
+            "topicHint": "Zobrazuje se v záhlaví pod názvem místnosti. Jeho změna se v místnosti zveřejní.",
+            "membersDesc": "Udělit nebo odebrat členství, jmenovat správce a zakázat adresy.",
+            "bulkModerationDesc": "Odstranit mnoho zpráv najednou.",
+            "destroyTitle": "Zničit tuto místnost",
+            "sections": {
+                "general": {
+                    "label": "Obecné",
+                    "description": "Název, popis a téma viditelné pro všechny."
+                },
+                "notifications": {
+                    "label": "Oznámení",
+                    "description": "Týká se jen vás a platí okamžitě."
+                },
+                "access": {
+                    "label": "Přístup a soukromí",
+                    "description": "Kdo může místnost najít a vstoupit do ní a co v ní uvidí."
+                },
+                "permissions": {
+                    "label": "Oprávnění",
+                    "description": "Co smějí účastníci dělat."
+                },
+                "moderation": {
+                    "label": "Moderace",
+                    "description": "Právo hlasu, návštěvníci a ti, kdo místnost spravují."
+                },
+                "advanced": {
+                    "label": "Historie a pokročilé",
+                    "description": "Archivace a možnosti specifické pro server."
+                },
+                "danger": {
+                    "label": "Nebezpečná zóna",
+                    "description": "Nevratné akce."
+                }
+            },
+            "groups": {
+                "identity": "Identita",
+                "notifyMe": "Upozornit mě na",
+                "visibility": "Viditelnost",
+                "joining": "Vstup",
+                "participantsCan": "Účastníci mohou",
+                "privateMessages": "Soukromé zprávy",
+                "memberList": "Seznam členů",
+                "voice": "Právo hlasu",
+                "visitors": "Návštěvníci",
+                "people": "Lidé",
+                "history": "Historie",
+                "features": "Funkce",
+                "other": "Další možnosti serveru"
+            },
+            "fields": {
+                "roomName": "Název místnosti",
+                "roomDesc": "Popis",
+                "lang": "Jazyk",
+                "publicRoom": "Zobrazit ve veřejném adresáři",
+                "persistentRoom": "Zachovat místnost, i když je prázdná",
+                "publicList": "Kdokoli vidí, kdo je v místnosti",
+                "whois": "Skutečné adresy vidí",
+                "membersOnly": "Jen pro členy",
+                "passwordProtected": "Vyžadovat heslo",
+                "roomSecret": "Heslo",
+                "captchaProtected": "Vyžadovat CAPTCHA",
+                "captchaWhitelist": "Bez CAPTCHA pro tyto adresy",
+                "maxUsers": "Maximální počet účastníků",
+                "allowSubscription": "Povolit odběr bez vstupu",
+                "changeSubject": "Měnit téma",
+                "allowInvites": "Zvát další",
+                "allowQueryUsers": "Dotazovat se na ostatní účastníky",
+                "allowPm": "Kdo může posílat soukromé zprávy",
+                "allowPmFromVisitors": "Návštěvníci mohou psát",
+                "getMemberList": "Kdo může získat seznam členů",
+                "presenceBroadcast": "Oznamovat příchody a odchody pro",
+                "moderatedRoom": "Moderovaná místnost",
+                "membersByDefault": "Noví uživatelé dostanou právo hlasu",
+                "allowVoiceRequests": "Návštěvníci mohou žádat o právo hlasu",
+                "voiceRequestMinInterval": "Sekundy mezi žádostmi o právo hlasu",
+                "allowVisitorStatus": "Návštěvníci mohou nastavit stavovou zprávu",
+                "allowVisitorNickChange": "Návštěvníci mohou měnit přezdívku",
+                "mam": "Archivovat zprávy (MAM)",
+                "enableLogging": "Veřejné protokolování",
+                "enableHats": "Odznaky rolí (hats)",
+                "pubsub": "Přidružený uzel PubSub"
+            }
+        },
         "createRoom": "Vytvořit místnost",
         "roomName": "Název místnosti",
         "roomNamePlaceholder": "např., Týmový chat",
@@ -1624,11 +1713,11 @@
         "members_by_default": "Noví uživatelé automaticky získají roli účastníka, což jim umožňuje mluvit v moderovaných místnostech.",
         "allow_private_messages_from_visitors": "Určuje, zda mohou návštěvníci (uživatelé bez práva hlasu) posílat soukromé zprávy.",
         "allow_query_users": "Umožnit uživatelům posílat informační dotazy (zjišťování služeb) ostatním účastníkům.",
-        "allow_visitor_status": "Umožnit návštěvníkům přidat stavovou zprávu k jejich přítomnosti.",
-        "allow_visitor_nickchange": "Umožnit návštěvníkům měnit přezdívku v místnosti.",
-        "allow_voice_requests": "Umožnit návštěvníkům v moderované místnosti požádat o právo mluvit.",
+        "muc#roomconfig_allowvisitorstatus": "Umožnit návštěvníkům přidat stavovou zprávu k jejich přítomnosti.",
+        "muc#roomconfig_allowvisitornickchange": "Umožnit návštěvníkům měnit přezdívku v místnosti.",
+        "muc#roomconfig_allowvoicerequests": "Umožnit návštěvníkům v moderované místnosti požádat o právo mluvit.",
         "allow_subscription": "Umožnit uživatelům odebírat zprávy z místnosti bez přítomnosti. Odběratelé dostávají zprávy bez připojení k místnosti, užitečné pro mobilní klienty nebo oznámení.",
-        "voice_request_min_interval": "Minimální čekací doba (v sekundách) mezi žádostmi o hlas od stejného návštěvníka.",
+        "muc#roomconfig_voicerequestmininterval": "Minimální čekací doba (v sekundách) mezi žádostmi o hlas od stejného návštěvníka.",
         "enable_hats": "Povolit zobrazení odznaků vedle jmen účastníků, ukazujících speciální role nebo příslušnosti.",
         "mam": "Povolit archiv zpráv (MAM), aby klienti mohli načíst předchozí zprávy při připojení nebo opětovném připojení. Toto je historie, kterou účastníci vidí ve své chatovací aplikaci."
     },

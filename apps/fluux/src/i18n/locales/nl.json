@@ -448,6 +448,95 @@
         "destroyRoomConfirm": "Dit zal de kamer permanent verwijderen en alle leden verwijderen. Deze actie kan niet ongedaan worden gemaakt.",
         "destroyRoomError": "Kan kamer niet verwijderen.",
         "dangerZone": "Gevarenzone",
+        "settings": {
+            "sectionsLabel": "Secties van groepsinstellingen",
+            "unsaved": "Niet-opgeslagen wijzigingen",
+            "footer": "Groepsinstellingen gelden voor iedereen zodra ze zijn opgeslagen. Meldingen gelden alleen voor jou, en meteen.",
+            "currentTopic": "Huidig onderwerp",
+            "noTopic": "Geen onderwerp ingesteld",
+            "topicHint": "Wordt in de kopbalk onder de groepsnaam getoond. Wijzigen plaatst een melding in de groep.",
+            "membersDesc": "Lidmaatschap verlenen of intrekken, beheerders aanstellen en adressen verbannen.",
+            "bulkModerationDesc": "Veel berichten tegelijk verwijderen.",
+            "destroyTitle": "Deze groep verwijderen",
+            "sections": {
+                "general": {
+                    "label": "Algemeen",
+                    "description": "Naam, beschrijving en onderwerp die iedereen ziet."
+                },
+                "notifications": {
+                    "label": "Meldingen",
+                    "description": "Geldt alleen voor jou en gaat meteen in."
+                },
+                "access": {
+                    "label": "Toegang en privacy",
+                    "description": "Wie de groep kan vinden en eraan kan deelnemen, en wat ze kunnen zien."
+                },
+                "permissions": {
+                    "label": "Rechten",
+                    "description": "Wat deelnemers mogen doen."
+                },
+                "moderation": {
+                    "label": "Moderatie",
+                    "description": "Spreekrecht, bezoekers en de mensen die de groep beheren."
+                },
+                "advanced": {
+                    "label": "Geschiedenis en geavanceerd",
+                    "description": "Archivering en serverspecifieke opties."
+                },
+                "danger": {
+                    "label": "Gevarenzone",
+                    "description": "Onomkeerbare acties."
+                }
+            },
+            "groups": {
+                "identity": "Identiteit",
+                "notifyMe": "Stuur me een melding bij",
+                "visibility": "Zichtbaarheid",
+                "joining": "Deelnemen",
+                "participantsCan": "Deelnemers mogen",
+                "privateMessages": "Privéberichten",
+                "memberList": "Ledenlijst",
+                "voice": "Spreekrecht",
+                "visitors": "Bezoekers",
+                "people": "Mensen",
+                "history": "Geschiedenis",
+                "features": "Functies",
+                "other": "Overige serveropties"
+            },
+            "fields": {
+                "roomName": "Groepsnaam",
+                "roomDesc": "Beschrijving",
+                "lang": "Taal",
+                "publicRoom": "Tonen in de openbare lijst",
+                "persistentRoom": "Groep behouden als die leeg is",
+                "publicList": "Iedereen kan zien wie er in de groep zit",
+                "whois": "Echte adressen zichtbaar voor",
+                "membersOnly": "Alleen leden",
+                "passwordProtected": "Wachtwoord vereisen",
+                "roomSecret": "Wachtwoord",
+                "captchaProtected": "CAPTCHA vereisen",
+                "captchaWhitelist": "CAPTCHA overslaan voor deze adressen",
+                "maxUsers": "Maximaal aantal deelnemers",
+                "allowSubscription": "Abonneren zonder deelnemen toestaan",
+                "changeSubject": "Het onderwerp wijzigen",
+                "allowInvites": "Anderen uitnodigen",
+                "allowQueryUsers": "Andere deelnemers opvragen",
+                "allowPm": "Wie privéberichten mag sturen",
+                "allowPmFromVisitors": "Bezoekers mogen berichten sturen naar",
+                "getMemberList": "Wie de ledenlijst mag opvragen",
+                "presenceBroadcast": "Komen en gaan melden van",
+                "moderatedRoom": "Gemodereerde groep",
+                "membersByDefault": "Nieuwe gebruikers krijgen spreekrecht",
+                "allowVoiceRequests": "Bezoekers mogen spreekrecht aanvragen",
+                "voiceRequestMinInterval": "Seconden tussen spreekrechtaanvragen",
+                "allowVisitorStatus": "Bezoekers mogen een statusbericht instellen",
+                "allowVisitorNickChange": "Bezoekers mogen hun bijnaam wijzigen",
+                "mam": "Berichten archiveren (MAM)",
+                "enableLogging": "Openbare logboeken",
+                "enableHats": "Badges (rolbadges)",
+                "pubsub": "Gekoppelde PubSub-node"
+            }
+        },
         "createRoom": "Kamer aanmaken",
         "roomName": "Kamernaam",
         "roomNamePlaceholder": "bijv., Teamchat",
@@ -1618,11 +1707,11 @@
         "members_by_default": "Nieuwe gebruikers krijgen automatisch de deelnemerrol, waardoor ze mogen spreken in gemodereerde kamers.",
         "allow_private_messages_from_visitors": "Bepaalt of bezoekers (gebruikers zonder spreekrecht) privéberichten kunnen sturen.",
         "allow_query_users": "Gebruikers toestaan om informatiequery's (servicedetectie) te sturen naar andere deelnemers.",
-        "allow_visitor_status": "Bezoekers toestaan om een statusbericht op te nemen bij hun aanwezigheid.",
-        "allow_visitor_nickchange": "Bezoekers toestaan om hun bijnaam in de kamer te wijzigen.",
-        "allow_voice_requests": "Bezoekers in een gemodereerde kamer toestaan om spreekrecht aan te vragen.",
+        "muc#roomconfig_allowvisitorstatus": "Bezoekers toestaan om een statusbericht op te nemen bij hun aanwezigheid.",
+        "muc#roomconfig_allowvisitornickchange": "Bezoekers toestaan om hun bijnaam in de kamer te wijzigen.",
+        "muc#roomconfig_allowvoicerequests": "Bezoekers in een gemodereerde kamer toestaan om spreekrecht aan te vragen.",
         "allow_subscription": "Gebruikers toestaan om zich te abonneren op kamerberichten zonder aanwezig te zijn. Abonnees ontvangen berichten zonder deel te nemen aan de kamer, handig voor mobiele clients of meldingen.",
-        "voice_request_min_interval": "Minimale wachttijd (in seconden) tussen spreekverzoeken van dezelfde bezoeker.",
+        "muc#roomconfig_voicerequestmininterval": "Minimale wachttijd (in seconden) tussen spreekverzoeken van dezelfde bezoeker.",
         "enable_hats": "Weergave van badges naast deelnemersnamen inschakelen, die speciale rollen of affiliaties tonen.",
         "mam": "Berichtenarchief (MAM) inschakelen zodat clients eerdere berichten kunnen ophalen bij het deelnemen of opnieuw verbinden. Dit is de geschiedenis die deelnemers zien in hun chat-app."
     },

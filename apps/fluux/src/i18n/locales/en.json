@@ -450,6 +450,95 @@
         "destroyRoomConfirm": "This will permanently destroy the room and remove all members. This action cannot be undone.",
         "destroyRoomError": "Failed to destroy room.",
         "dangerZone": "Danger Zone",
+        "settings": {
+            "sectionsLabel": "Room settings sections",
+            "unsaved": "Unsaved changes",
+            "footer": "Room settings apply to everyone once saved. Notifications apply only to you, right away.",
+            "currentTopic": "Current topic",
+            "noTopic": "No topic set",
+            "topicHint": "Shown under the room name in the header. Changing it posts a notice in the room.",
+            "membersDesc": "Grant or revoke membership, promote admins and ban addresses.",
+            "bulkModerationDesc": "Remove many messages at once.",
+            "destroyTitle": "Destroy this room",
+            "sections": {
+                "general": {
+                    "label": "General",
+                    "description": "Name, description and topic shown to everyone."
+                },
+                "notifications": {
+                    "label": "Notifications",
+                    "description": "Only affects you, and applies right away."
+                },
+                "access": {
+                    "label": "Access & privacy",
+                    "description": "Who can find and join the room, and what they can see."
+                },
+                "permissions": {
+                    "label": "Permissions",
+                    "description": "What participants are allowed to do."
+                },
+                "moderation": {
+                    "label": "Moderation",
+                    "description": "Voice, visitors and the people who run the room."
+                },
+                "advanced": {
+                    "label": "History & advanced",
+                    "description": "Archiving and server-specific options."
+                },
+                "danger": {
+                    "label": "Danger zone",
+                    "description": "Irreversible actions."
+                }
+            },
+            "groups": {
+                "identity": "Identity",
+                "notifyMe": "Notify me about",
+                "visibility": "Visibility",
+                "joining": "Joining",
+                "participantsCan": "Participants can",
+                "privateMessages": "Private messages",
+                "memberList": "Member list",
+                "voice": "Voice",
+                "visitors": "Visitors",
+                "people": "People",
+                "history": "History",
+                "features": "Features",
+                "other": "Other server options"
+            },
+            "fields": {
+                "roomName": "Room name",
+                "roomDesc": "Description",
+                "lang": "Language",
+                "publicRoom": "List in the public directory",
+                "persistentRoom": "Keep the room when empty",
+                "publicList": "Anyone can see who is in the room",
+                "whois": "Real addresses visible to",
+                "membersOnly": "Members only",
+                "passwordProtected": "Require a password",
+                "roomSecret": "Password",
+                "captchaProtected": "Require a CAPTCHA",
+                "captchaWhitelist": "Skip the CAPTCHA for these addresses",
+                "maxUsers": "Maximum participants",
+                "allowSubscription": "Allow subscribing without joining",
+                "changeSubject": "Change the topic",
+                "allowInvites": "Invite others",
+                "allowQueryUsers": "Query other participants",
+                "allowPm": "Who can send private messages",
+                "allowPmFromVisitors": "Visitors can message",
+                "getMemberList": "Who can retrieve the member list",
+                "presenceBroadcast": "Announce joins and leaves of",
+                "moderatedRoom": "Moderated room",
+                "membersByDefault": "New users get voice",
+                "allowVoiceRequests": "Visitors can request voice",
+                "voiceRequestMinInterval": "Seconds between voice requests",
+                "allowVisitorStatus": "Visitors can set a status message",
+                "allowVisitorNickChange": "Visitors can change nickname",
+                "mam": "Archive messages (MAM)",
+                "enableLogging": "Public logging",
+                "enableHats": "Hats (role badges)",
+                "pubsub": "Associated PubSub node"
+            }
+        },
         "createRoom": "Create Room",
         "roomName": "Room Name",
         "roomNamePlaceholder": "e.g., Team Chat",
@@ -1618,11 +1707,11 @@
         "members_by_default": "New users joining the room automatically get participant role, allowing them to speak in moderated rooms.",
         "allow_private_messages_from_visitors": "Controls whether visitors (users without voice) can send private messages.",
         "allow_query_users": "Allow users to send information queries (service discovery) to other participants.",
-        "allow_visitor_status": "Allow visitors to include a status message with their presence.",
-        "allow_visitor_nickchange": "Allow visitors to change their nickname in the room.",
-        "allow_voice_requests": "Allow visitors in a moderated room to request permission to speak.",
+        "muc#roomconfig_allowvisitorstatus": "Allow visitors to include a status message with their presence.",
+        "muc#roomconfig_allowvisitornickchange": "Allow visitors to change their nickname in the room.",
+        "muc#roomconfig_allowvoicerequests": "Allow visitors in a moderated room to request permission to speak.",
         "allow_subscription": "Allow users to subscribe to room messages without being present. Subscribers receive messages without joining the room, useful for mobile clients or notifications.",
-        "voice_request_min_interval": "Minimum wait time (in seconds) between voice requests from the same visitor.",
+        "muc#roomconfig_voicerequestmininterval": "Minimum wait time (in seconds) between voice requests from the same visitor.",
         "enable_hats": "Enable badge display next to participant names, showing special roles or affiliations.",
         "mam": "Enable message archive (MAM) so clients can fetch past messages when joining or reconnecting. This is the history participants see in their chat app."
     },

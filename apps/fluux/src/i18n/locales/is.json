@@ -448,6 +448,95 @@
         "destroyRoomConfirm": "Þetta mun eyða herberginu varanlega og fjarlægja alla meðlimi. Ekki er hægt að afturkalla þessa aðgerð.",
         "destroyRoomError": "Ekki tókst að eyða herbergi.",
         "dangerZone": "Hættusvæði",
+        "settings": {
+            "sectionsLabel": "Hlutar herbergisstillinga",
+            "unsaved": "Óvistaðar breytingar",
+            "footer": "Herbergisstillingar gilda fyrir alla þegar þær hafa verið vistaðar. Tilkynningar gilda aðeins fyrir þig og taka strax gildi.",
+            "currentTopic": "Núverandi umræðuefni",
+            "noTopic": "Ekkert umræðuefni",
+            "topicHint": "Birtist undir nafni herbergisins í hausnum. Ef því er breytt birtist tilkynning í herberginu.",
+            "membersDesc": "Veita eða afturkalla aðild, skipa stjórnendur og banna vistföng.",
+            "bulkModerationDesc": "Fjarlægja mörg skilaboð í einu.",
+            "destroyTitle": "Eyða þessu herbergi",
+            "sections": {
+                "general": {
+                    "label": "Almennt",
+                    "description": "Nafn, lýsing og umræðuefni sem allir sjá."
+                },
+                "notifications": {
+                    "label": "Tilkynningar",
+                    "description": "Hefur aðeins áhrif á þig og tekur strax gildi."
+                },
+                "access": {
+                    "label": "Aðgangur og persónuvernd",
+                    "description": "Hverjir geta fundið herbergið og tekið þátt, og hvað þeir sjá."
+                },
+                "permissions": {
+                    "label": "Heimildir",
+                    "description": "Hvað þátttakendur mega gera."
+                },
+                "moderation": {
+                    "label": "Umsjón",
+                    "description": "Talaréttur, gestir og þeir sem stjórna herberginu."
+                },
+                "advanced": {
+                    "label": "Saga og ítarlegt",
+                    "description": "Geymsla og stillingar sem eru háðar netþjóninum."
+                },
+                "danger": {
+                    "label": "Hættusvæði",
+                    "description": "Óafturkræfar aðgerðir."
+                }
+            },
+            "groups": {
+                "identity": "Auðkenni",
+                "notifyMe": "Láta mig vita um",
+                "visibility": "Sýnileiki",
+                "joining": "Þátttaka",
+                "participantsCan": "Þátttakendur mega",
+                "privateMessages": "Einkaskilaboð",
+                "memberList": "Meðlimalisti",
+                "voice": "Talaréttur",
+                "visitors": "Gestir",
+                "people": "Fólk",
+                "history": "Saga",
+                "features": "Eiginleikar",
+                "other": "Aðrar stillingar netþjóns"
+            },
+            "fields": {
+                "roomName": "Nafn herbergis",
+                "roomDesc": "Lýsing",
+                "lang": "Tungumál",
+                "publicRoom": "Birta í opinberu skránni",
+                "persistentRoom": "Halda herberginu þegar það er tómt",
+                "publicList": "Allir geta séð hverjir eru í herberginu",
+                "whois": "Hverjir sjá raunveruleg vistföng",
+                "membersOnly": "Aðeins fyrir meðlimi",
+                "passwordProtected": "Krefjast lykilorðs",
+                "roomSecret": "Lykilorð",
+                "captchaProtected": "Krefjast CAPTCHA",
+                "captchaWhitelist": "Sleppa CAPTCHA fyrir þessi vistföng",
+                "maxUsers": "Hámarksfjöldi þátttakenda",
+                "allowSubscription": "Leyfa áskrift án þátttöku",
+                "changeSubject": "Breyta umræðuefninu",
+                "allowInvites": "Bjóða öðrum",
+                "allowQueryUsers": "Fletta upp öðrum þátttakendum",
+                "allowPm": "Hverjir geta sent einkaskilaboð",
+                "allowPmFromVisitors": "Gestir geta sent skilaboð til",
+                "getMemberList": "Hverjir geta sótt meðlimalistann",
+                "presenceBroadcast": "Tilkynna komur og brottfarir",
+                "moderatedRoom": "Stýrt herbergi",
+                "membersByDefault": "Nýir notendur fá orðið",
+                "allowVoiceRequests": "Gestir geta beðið um orðið",
+                "voiceRequestMinInterval": "Sekúndur milli beiðna um orðið",
+                "allowVisitorStatus": "Gestir geta stillt stöðuskilaboð",
+                "allowVisitorNickChange": "Gestir geta breytt stuttnefni",
+                "mam": "Geyma skilaboð (MAM)",
+                "enableLogging": "Opinber skráning",
+                "enableHats": "Hlutverkamerki (hats)",
+                "pubsub": "Tengdur PubSub hnútur"
+            }
+        },
         "createRoom": "Búa til herbergi",
         "roomName": "Heiti herbergis",
         "roomNamePlaceholder": "t.d., Hópspjall",
@@ -1618,11 +1707,11 @@
         "members_by_default": "Nýir notendur fá sjálfkrafa þátttakandahlutverk sem gerir þeim kleift að tala í stýrðum herbergjum.",
         "allow_private_messages_from_visitors": "Stýrir hvort gestir (notendur án talaréttar) geti sent einkaskilaboð.",
         "allow_query_users": "Leyfa notendum að senda upplýsingafyrirspurnir (þjónustuuppgötvun) til annarra þátttakenda.",
-        "allow_visitor_status": "Leyfa gestum að hafa stöðuskilaboð með viðveru sinni.",
-        "allow_visitor_nickchange": "Leyfa gestum að breyta stuttnefni sínu í herberginu.",
-        "allow_voice_requests": "Leyfa gestum í stýrðu herbergi að biðja um talarétt.",
+        "muc#roomconfig_allowvisitorstatus": "Leyfa gestum að hafa stöðuskilaboð með viðveru sinni.",
+        "muc#roomconfig_allowvisitornickchange": "Leyfa gestum að breyta stuttnefni sínu í herberginu.",
+        "muc#roomconfig_allowvoicerequests": "Leyfa gestum í stýrðu herbergi að biðja um talarétt.",
         "allow_subscription": "Leyfa notendum að gerast áskrifendur að skilaboðum herbergis án þess að vera viðstaddir. Áskrifendur fá skilaboð án þess að taka þátt í herberginu, gagnlegt fyrir farsímabiðlara eða tilkynningar.",
-        "voice_request_min_interval": "Lágmarks biðtími (í sekúndum) milli talabeiðna frá sama gesti.",
+        "muc#roomconfig_voicerequestmininterval": "Lágmarks biðtími (í sekúndum) milli talabeiðna frá sama gesti.",
         "enable_hats": "Virkja birtingu merkja við hlið þátttakendanafna sem sýna sérstök hlutverk eða tengsl.",
         "mam": "Virkja skilaboðageymslu (MAM) svo biðlarar geti sótt eldri skilaboð þegar þeir taka þátt eða endurtengjast. Þetta er sagan sem þátttakendur sjá í spjallforritinu sínu."
     },

@@ -449,6 +449,95 @@
         "destroyRoomConfirm": "Tas neatgriezeniski iznīcinās istabu un noņems visus dalībniekus. Šo darbību nevar atsaukt.",
         "destroyRoomError": "Neizdevās iznīcināt istabu.",
         "dangerZone": "Bīstamā zona",
+        "settings": {
+            "sectionsLabel": "Istabas iestatījumu sadaļas",
+            "unsaved": "Nesaglabātas izmaiņas",
+            "footer": "Istabas iestatījumi pēc saglabāšanas attiecas uz visiem. Paziņojumi attiecas tikai uz jums un stājas spēkā uzreiz.",
+            "currentTopic": "Pašreizējā tēma",
+            "noTopic": "Tēma nav iestatīta",
+            "topicHint": "Tiek rādīta galvenē zem istabas nosaukuma. Mainot to, istabā tiek publicēts paziņojums.",
+            "membersDesc": "Piešķiriet vai atņemiet dalību, ieceliet administratorus un bloķējiet adreses.",
+            "bulkModerationDesc": "Noņemiet daudz ziņojumu vienlaikus.",
+            "destroyTitle": "Iznīcināt šo istabu",
+            "sections": {
+                "general": {
+                    "label": "Vispārīgi",
+                    "description": "Visiem redzamais nosaukums, apraksts un tēma."
+                },
+                "notifications": {
+                    "label": "Paziņojumi",
+                    "description": "Attiecas tikai uz jums un stājas spēkā uzreiz."
+                },
+                "access": {
+                    "label": "Piekļuve un privātums",
+                    "description": "Kas var atrast istabu un pievienoties tai, un ko viņi var redzēt."
+                },
+                "permissions": {
+                    "label": "Atļaujas",
+                    "description": "Ko istabas lietotāji drīkst darīt."
+                },
+                "moderation": {
+                    "label": "Moderēšana",
+                    "description": "Balss tiesības, apmeklētāji un istabas pārvaldītāji."
+                },
+                "advanced": {
+                    "label": "Vēsture un papildu",
+                    "description": "Arhivēšana un servera specifiskās opcijas."
+                },
+                "danger": {
+                    "label": "Bīstamā zona",
+                    "description": "Neatgriezeniskas darbības."
+                }
+            },
+            "groups": {
+                "identity": "Identitāte",
+                "notifyMe": "Paziņot man par",
+                "visibility": "Redzamība",
+                "joining": "Pievienošanās",
+                "participantsCan": "Lietotāji var",
+                "privateMessages": "Privātās ziņas",
+                "memberList": "Dalībnieku saraksts",
+                "voice": "Balss tiesības",
+                "visitors": "Apmeklētāji",
+                "people": "Cilvēki",
+                "history": "Vēsture",
+                "features": "Funkcijas",
+                "other": "Citas servera opcijas"
+            },
+            "fields": {
+                "roomName": "Istabas nosaukums",
+                "roomDesc": "Apraksts",
+                "lang": "Valoda",
+                "publicRoom": "Rādīt publiskajā katalogā",
+                "persistentRoom": "Saglabāt istabu, kad tā ir tukša",
+                "publicList": "Ikviens var redzēt, kas ir istabā",
+                "whois": "Īstās adreses redz",
+                "membersOnly": "Tikai dalībniekiem",
+                "passwordProtected": "Pieprasīt paroli",
+                "roomSecret": "Parole",
+                "captchaProtected": "Pieprasīt CAPTCHA",
+                "captchaWhitelist": "Izlaist CAPTCHA šīm adresēm",
+                "maxUsers": "Maksimālais lietotāju skaits",
+                "allowSubscription": "Atļaut abonēt bez pievienošanās",
+                "changeSubject": "Mainīt tēmu",
+                "allowInvites": "Uzaicināt citus",
+                "allowQueryUsers": "Skatīt informāciju par citiem lietotājiem",
+                "allowPm": "Kas var sūtīt privātās ziņas",
+                "allowPmFromVisitors": "Apmeklētāji var rakstīt",
+                "getMemberList": "Kas var saņemt dalībnieku sarakstu",
+                "presenceBroadcast": "Paziņot, kad pievienojas vai aiziet",
+                "moderatedRoom": "Moderēta istaba",
+                "membersByDefault": "Jaunie lietotāji saņem balss tiesības",
+                "allowVoiceRequests": "Apmeklētāji var pieprasīt balss tiesības",
+                "voiceRequestMinInterval": "Sekundes starp balss tiesību pieprasījumiem",
+                "allowVisitorStatus": "Apmeklētāji var iestatīt statusa ziņu",
+                "allowVisitorNickChange": "Apmeklētāji var mainīt segvārdu",
+                "mam": "Arhivēt ziņas (MAM)",
+                "enableLogging": "Publisks žurnāls",
+                "enableHats": "Nozīmītes (lomu emblēmas)",
+                "pubsub": "Saistītais PubSub mezgls"
+            }
+        },
         "createRoom": "Izveidot istabu",
         "roomName": "Istabas nosaukums",
         "roomNamePlaceholder": "piem., Komandas čats",
@@ -1621,11 +1710,11 @@
         "members_by_default": "Jaunie lietotāji automātiski iegūst dalībnieka lomu, ļaujot viņiem runāt moderētās istabās.",
         "allow_private_messages_from_visitors": "Kontrolē, vai apmeklētāji (lietotāji bez balss tiesībām) var sūtīt privātās ziņas.",
         "allow_query_users": "Ļaut lietotājiem sūtīt informācijas pieprasījumus (pakalpojumu atklāšana) citiem dalībniekiem.",
-        "allow_visitor_status": "Ļaut apmeklētājiem pievienot statusa ziņojumu savai klātbūtnei.",
-        "allow_visitor_nickchange": "Ļaut apmeklētājiem mainīt segvārdu istabā.",
-        "allow_voice_requests": "Ļaut apmeklētājiem moderētā istabā pieprasīt atļauju runāt.",
+        "muc#roomconfig_allowvisitorstatus": "Ļaut apmeklētājiem pievienot statusa ziņojumu savai klātbūtnei.",
+        "muc#roomconfig_allowvisitornickchange": "Ļaut apmeklētājiem mainīt segvārdu istabā.",
+        "muc#roomconfig_allowvoicerequests": "Ļaut apmeklētājiem moderētā istabā pieprasīt atļauju runāt.",
         "allow_subscription": "Ļaut lietotājiem abonēt istabas ziņojumus bez klātbūtnes. Abonenti saņem ziņojumus nepievienojoties istabai, noderīgi mobilajiem klientiem vai paziņojumiem.",
-        "voice_request_min_interval": "Minimālais gaidīšanas laiks (sekundēs) starp viena un tā paša apmeklētāja balss pieprasījumiem.",
+        "muc#roomconfig_voicerequestmininterval": "Minimālais gaidīšanas laiks (sekundēs) starp viena un tā paša apmeklētāja balss pieprasījumiem.",
         "enable_hats": "Iespējot nozīmīšu attēlošanu blakus dalībnieku vārdiem, kas norāda īpašas lomas vai piederības.",
         "mam": "Iespējot ziņojumu arhīvu (MAM), lai klienti varētu iegūt iepriekšējos ziņojumus pievienojoties vai atkārtoti pieslēdzoties. Šī ir vēsture, ko dalībnieki redz savā tērzēšanas lietotnē."
     },

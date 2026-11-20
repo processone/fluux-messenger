@@ -1133,21 +1133,57 @@ export class DemoClient extends XMPPClient {
 
   /**
    * Build a MUC owner room config form response from seeded room data.
-   * Returns a data form with common room configuration fields.
+   * Mirrors the form ejabberd's mod_muc_room sends (vars, types, labels and
+   * options), so the demo shows the room settings as a real server fills them.
    */
   private buildRoomConfigResponse(roomJid: string | undefined): MockElement {
     const room = roomJid ? this.seededRooms.get(roomJid) : undefined
     const roomName = room?.name ?? roomJid?.split('@')[0] ?? ''
 
-    // Build x:data form fields from room data
-    const fields: MockElement[] = [
-      this.buildFormField('FORM_TYPE', 'http://jabber.org/protocol/muc#roomconfig', 'hidden'),
-      this.buildFormField('muc#roomconfig_roomname', roomName),
-      this.buildFormField('muc#roomconfig_roomdesc', room?.subject ?? ''),
-      this.buildFormField('muc#roomconfig_persistentroom', '1'),
-      this.buildFormField('muc#roomconfig_publicroom', '1'),
-      this.buildFormField('muc#roomconfig_membersonly', '0'),
+    type Spec = [varName: string, type: string, value: string | string[], label?: string, options?: Array<[string, string]>]
+    const roles: Array<[string, string]> = [['moderator', 'Moderator'], ['participant', 'Participant'], ['visitor', 'Visitor']]
+    const maxUsers = ['5', '10', '20', '30', '50', '100', '200', '500', '1000'].map((v): [string, string] => [v, v])
+    const spec: Spec[] = [
+      ['FORM_TYPE', 'hidden', 'http://jabber.org/protocol/muc#roomconfig'],
+      ['muc#roomconfig_roomname', 'text-single', roomName, 'Room title'],
+      ['muc#roomconfig_roomdesc', 'text-single', room?.subject ?? '', 'Room description'],
+      ['muc#roomconfig_lang', 'text-single', 'en', 'Natural Language for Room Discussions'],
+      ['muc#roomconfig_persistentroom', 'boolean', '1', 'Make room persistent'],
+      ['muc#roomconfig_publicroom', 'boolean', '1', 'Make room public searchable'],
+      ['public_list', 'boolean', '1', 'Make participants list public'],
+      ['muc#roomconfig_passwordprotectedroom', 'boolean', '0', 'Make room password protected'],
+      ['muc#roomconfig_roomsecret', 'text-private', '', 'Password'],
+      ['muc#roomconfig_maxusers', 'list-single', '200', 'Maximum Number of Occupants', [...maxUsers, ['none', 'No limit']]],
+      ['muc#roomconfig_whois', 'list-single', 'moderators', 'Present real Jabber IDs to', [['moderators', 'moderators only'], ['anyone', 'anyone']]],
+      ['muc#roomconfig_presencebroadcast', 'list-multi', ['moderator', 'participant', 'visitor'], 'Roles for which Presence is Broadcasted', roles],
+      ['muc#roomconfig_membersonly', 'boolean', '0', 'Make room members-only'],
+      ['muc#roomconfig_moderatedroom', 'boolean', '1', 'Make room moderated'],
+      ['members_by_default', 'boolean', '1', 'Default users as participants'],
+      ['muc#roomconfig_changesubject', 'boolean', '1', 'Allow users to change the subject'],
+      ['muc#roomconfig_allowpm', 'list-single', 'anyone', 'Allow users to send private messages', [['anyone', 'Anyone'], ['participants', 'Anyone with Voice'], ['moderators', 'Moderators Only'], ['none', 'Nobody']]],
+      ['allow_private_messages_from_visitors', 'list-single', 'anyone', 'Allow visitors to send private messages to', [['nobody', 'nobody'], ['moderators', 'moderators only'], ['anyone', 'anyone']]],
+      ['allow_query_users', 'boolean', '1', 'Allow users to query other users'],
+      ['muc#roomconfig_allowinvites', 'boolean', '0', 'Allow users to send invites'],
+      ['muc#roomconfig_allowvisitorstatus', 'boolean', '1', 'Allow visitors to send status text in presence updates'],
+      ['muc#roomconfig_allowvisitornickchange', 'boolean', '1', 'Allow visitors to change nickname'],
+      ['muc#roomconfig_allowvoicerequests', 'boolean', '1', 'Allow visitors to send voice requests'],
+      ['muc#roomconfig_voicerequestmininterval', 'text-single', '1800', 'Minimum interval between voice requests (in seconds)'],
+      ['allow_subscription', 'boolean', '0', 'Allow subscription'],
+      ['muc#roomconfig_getmemberlist', 'list-multi', ['moderator', 'participant', 'visitor'], 'Roles and Affiliations that May Retrieve Member List', roles],
+      ['enable_hats', 'boolean', '0', 'Enable hats'],
+      ['captcha_protected', 'boolean', '0', 'Make room CAPTCHA protected'],
+      ['muc#roomconfig_captcha_whitelist', 'jid-multi', [], 'Exclude Jabber IDs from CAPTCHA challenge'],
+      ['muc#roomconfig_pubsub', 'text-single', '', 'XMPP URI of Associated Publish-Subscribe Node'],
+      ['mam', 'boolean', '1', 'Enable message archiving'],
     ]
+    const fields = spec.map(([varName, type, value, label, options = []]) => this.mockElement(
+      'field',
+      label ? { var: varName, type, label } : { var: varName, type },
+      [
+        ...(Array.isArray(value) ? value : [value]).map(v => this.mockElement('value', {}, [], v)),
+        ...options.map(([v, optionLabel]) => this.mockElement('option', { label: optionLabel }, [this.mockElement('value', {}, [], v)])),
+      ],
+    ))
 
     return this.mockElement('iq', { type: 'result' }, [
       this.mockElement('query', { xmlns: NS_MUC_OWNER }, [

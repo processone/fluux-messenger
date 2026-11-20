@@ -448,6 +448,95 @@
         "destroyRoomConfirm": "Ovo će trajno uništiti sobu i ukloniti sve članove. Ova radnja se ne može poništiti.",
         "destroyRoomError": "Uništenje sobe nije uspjelo.",
         "dangerZone": "Opasna zona",
+        "settings": {
+            "sectionsLabel": "Odjeljci postavki sobe",
+            "unsaved": "Nespremljene promjene",
+            "footer": "Postavke sobe vrijede za sve nakon spremanja. Obavijesti se odnose samo na vas i primjenjuju se odmah.",
+            "currentTopic": "Trenutna tema",
+            "noTopic": "Tema nije postavljena",
+            "topicHint": "Prikazuje se ispod naziva sobe u zaglavlju. Promjena objavljuje obavijest u sobi.",
+            "membersDesc": "Dodijelite ili oduzmite članstvo, imenujte administratore i zabranite adrese.",
+            "bulkModerationDesc": "Uklonite više poruka odjednom.",
+            "destroyTitle": "Uništi ovu sobu",
+            "sections": {
+                "general": {
+                    "label": "Općenito",
+                    "description": "Naziv, opis i tema vidljivi svima."
+                },
+                "notifications": {
+                    "label": "Obavijesti",
+                    "description": "Odnosi se samo na vas i primjenjuje se odmah."
+                },
+                "access": {
+                    "label": "Pristup i privatnost",
+                    "description": "Tko može pronaći sobu i pridružiti joj se te što može vidjeti."
+                },
+                "permissions": {
+                    "label": "Dozvole",
+                    "description": "Što sudionici smiju raditi."
+                },
+                "moderation": {
+                    "label": "Moderiranje",
+                    "description": "Pravo glasa, posjetitelji i oni koji vode sobu."
+                },
+                "advanced": {
+                    "label": "Povijest i napredno",
+                    "description": "Arhiviranje i opcije specifične za poslužitelj."
+                },
+                "danger": {
+                    "label": "Opasna zona",
+                    "description": "Nepovratne radnje."
+                }
+            },
+            "groups": {
+                "identity": "Identitet",
+                "notifyMe": "Obavijesti me o",
+                "visibility": "Vidljivost",
+                "joining": "Pridruživanje",
+                "participantsCan": "Sudionici mogu",
+                "privateMessages": "Privatne poruke",
+                "memberList": "Popis članova",
+                "voice": "Pravo glasa",
+                "visitors": "Posjetitelji",
+                "people": "Osobe",
+                "history": "Povijest",
+                "features": "Značajke",
+                "other": "Ostale opcije poslužitelja"
+            },
+            "fields": {
+                "roomName": "Naziv sobe",
+                "roomDesc": "Opis",
+                "lang": "Jezik",
+                "publicRoom": "Prikaži u javnom direktoriju",
+                "persistentRoom": "Zadrži sobu kad je prazna",
+                "publicList": "Svi mogu vidjeti tko je u sobi",
+                "whois": "Tko vidi prave adrese",
+                "membersOnly": "Samo za članove",
+                "passwordProtected": "Zahtijevaj lozinku",
+                "roomSecret": "Lozinka",
+                "captchaProtected": "Zahtijevaj CAPTCHA",
+                "captchaWhitelist": "Preskoči CAPTCHA za ove adrese",
+                "maxUsers": "Najveći broj sudionika",
+                "allowSubscription": "Dopusti pretplatu bez pridruživanja",
+                "changeSubject": "Mijenjati temu",
+                "allowInvites": "Pozivati druge",
+                "allowQueryUsers": "Ispitivati druge sudionike",
+                "allowPm": "Tko može slati privatne poruke",
+                "allowPmFromVisitors": "Posjetitelji mogu pisati",
+                "getMemberList": "Tko može dohvatiti popis članova",
+                "presenceBroadcast": "Najavljuj dolaske i odlaske za",
+                "moderatedRoom": "Moderirana soba",
+                "membersByDefault": "Novi korisnici dobivaju pravo glasa",
+                "allowVoiceRequests": "Posjetitelji mogu zatražiti riječ",
+                "voiceRequestMinInterval": "Sekunde između zahtjeva za riječ",
+                "allowVisitorStatus": "Posjetitelji mogu postaviti statusnu poruku",
+                "allowVisitorNickChange": "Posjetitelji mogu promijeniti nadimak",
+                "mam": "Arhiviraj poruke (MAM)",
+                "enableLogging": "Javno bilježenje",
+                "enableHats": "Značke uloga (hats)",
+                "pubsub": "Povezani PubSub čvor"
+            }
+        },
         "createRoom": "Stvori sobu",
         "roomName": "Naziv sobe",
         "roomNamePlaceholder": "npr., Timski razgovor",
@@ -1620,11 +1709,11 @@
         "members_by_default": "Novi korisnici automatski dobivaju ulogu sudionika, što im omogućuje govoriti u moderiranim sobama.",
         "allow_private_messages_from_visitors": "Kontrolira mogu li posjetitelji (korisnici bez prava glasa) slati privatne poruke.",
         "allow_query_users": "Dopusti korisnicima slanje informacijskih upita (otkrivanje usluga) drugim sudionicima.",
-        "allow_visitor_status": "Dopusti posjetiteljima da uključe statusnu poruku uz svoju prisutnost.",
-        "allow_visitor_nickchange": "Dopusti posjetiteljima da promijene nadimak u sobi.",
-        "allow_voice_requests": "Dopusti posjetiteljima u moderiranoj sobi da zatraže dozvolu za govor.",
+        "muc#roomconfig_allowvisitorstatus": "Dopusti posjetiteljima da uključe statusnu poruku uz svoju prisutnost.",
+        "muc#roomconfig_allowvisitornickchange": "Dopusti posjetiteljima da promijene nadimak u sobi.",
+        "muc#roomconfig_allowvoicerequests": "Dopusti posjetiteljima u moderiranoj sobi da zatraže dozvolu za govor.",
         "allow_subscription": "Dopusti korisnicima pretplatu na poruke sobe bez prisutnosti. Pretplatnici primaju poruke bez ulaska u sobu, korisno za mobilne klijente ili obavijesti.",
-        "voice_request_min_interval": "Minimalno vrijeme čekanja (u sekundama) između zahtjeva za govor od istog posjetitelja.",
+        "muc#roomconfig_voicerequestmininterval": "Minimalno vrijeme čekanja (u sekundama) između zahtjeva za govor od istog posjetitelja.",
         "enable_hats": "Omogući prikaz znački uz imena sudionika koje pokazuju posebne uloge ili pripadnosti.",
         "mam": "Omogući arhivu poruka (MAM) kako bi klijenti mogli dohvatiti prošle poruke prilikom pridruživanja ili ponovnog povezivanja. To je povijest koju sudionici vide u svojoj aplikaciji za razgovor."
     },

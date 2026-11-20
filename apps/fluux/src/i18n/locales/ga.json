@@ -448,6 +448,95 @@
         "destroyRoomConfirm": "Scriosfaidh sé seo an seomra go buan agus bainfidh sé na baill go léir. Ní féidir an gníomh seo a chealú.",
         "destroyRoomError": "Theip ar scrios an tseomra.",
         "dangerZone": "Crios Contúirte",
+        "settings": {
+            "sectionsLabel": "Ranna socruithe an tseomra",
+            "unsaved": "Athruithe nár sábháladh",
+            "footer": "Baineann socruithe an tseomra le gach duine nuair a shábháiltear iad. Is leatsa amháin na fógraí agus cuirtear i bhfeidhm láithreach iad.",
+            "currentTopic": "Topaic reatha",
+            "noTopic": "Níl aon topaic socraithe",
+            "topicHint": "Taispeántar faoi ainm an tseomra sa cheanntásc é. Má athraítear é, postáiltear fógra sa seomra.",
+            "membersDesc": "Tabhair nó bain ballraíocht, ceap riarthóirí agus coisc seoltaí.",
+            "bulkModerationDesc": "Bain go leor teachtaireachtaí in éineacht.",
+            "destroyTitle": "Scrios an seomra seo",
+            "sections": {
+                "general": {
+                    "label": "Ginearálta",
+                    "description": "Ainm, cur síos agus topaic a fheiceann gach duine."
+                },
+                "notifications": {
+                    "label": "Fógraí",
+                    "description": "Ní bhaineann sé ach leatsa, agus cuirtear i bhfeidhm láithreach é."
+                },
+                "access": {
+                    "label": "Rochtain agus príobháideacht",
+                    "description": "Cé atá in ann an seomra a aimsiú agus dul isteach ann, agus cad a fheiceann siad."
+                },
+                "permissions": {
+                    "label": "Ceadanna",
+                    "description": "Cad atá cead ag rannpháirtithe a dhéanamh."
+                },
+                "moderation": {
+                    "label": "Modhnóireacht",
+                    "description": "Cead cainte, cuairteoirí agus na daoine a reáchtálann an seomra."
+                },
+                "advanced": {
+                    "label": "Stair agus ardroghanna",
+                    "description": "Cartlannú agus roghanna a bhaineann leis an bhfreastalaí."
+                },
+                "danger": {
+                    "label": "Crios contúirte",
+                    "description": "Gníomhartha nach féidir a chealú."
+                }
+            },
+            "groups": {
+                "identity": "Aitheantas",
+                "notifyMe": "Cuir in iúl dom faoi",
+                "visibility": "Infheictheacht",
+                "joining": "Dul isteach",
+                "participantsCan": "Is féidir le rannpháirtithe",
+                "privateMessages": "Teachtaireachtaí príobháideacha",
+                "memberList": "Liosta na mball",
+                "voice": "Cead cainte",
+                "visitors": "Cuairteoirí",
+                "people": "Daoine",
+                "history": "Stair",
+                "features": "Gnéithe",
+                "other": "Roghanna eile an fhreastalaí"
+            },
+            "fields": {
+                "roomName": "Ainm an tseomra",
+                "roomDesc": "Cur síos",
+                "lang": "Teanga",
+                "publicRoom": "Liostaigh san eolaire poiblí",
+                "persistentRoom": "Coinnigh an seomra nuair atá sé folamh",
+                "publicList": "Is féidir le duine ar bith a fheiceáil cé atá sa seomra",
+                "whois": "Fíorsheoltaí le feiceáil ag",
+                "membersOnly": "Baill amháin",
+                "passwordProtected": "Éiligh pasfhocal",
+                "roomSecret": "Pasfhocal",
+                "captchaProtected": "Éiligh CAPTCHA",
+                "captchaWhitelist": "Ná héiligh CAPTCHA ó na seoltaí seo",
+                "maxUsers": "Uaslíon rannpháirtithe",
+                "allowSubscription": "Ceadaigh liostáil gan dul isteach",
+                "changeSubject": "An topaic a athrú",
+                "allowInvites": "Cuireadh a thabhairt do dhaoine eile",
+                "allowQueryUsers": "Faisnéis a iarraidh ar rannpháirtithe eile",
+                "allowPm": "Cé atá in ann teachtaireachtaí príobháideacha a sheoladh",
+                "allowPmFromVisitors": "Is féidir le cuairteoirí scríobh chuig",
+                "getMemberList": "Cé atá in ann liosta na mball a fháil",
+                "presenceBroadcast": "Fógair teacht agus imeacht",
+                "moderatedRoom": "Seomra modhnaithe",
+                "membersByDefault": "Faigheann úsáideoirí nua cead cainte",
+                "allowVoiceRequests": "Is féidir le cuairteoirí cead cainte a iarraidh",
+                "voiceRequestMinInterval": "Soicindí idir iarratais chainte",
+                "allowVisitorStatus": "Is féidir le cuairteoirí teachtaireacht stádais a shocrú",
+                "allowVisitorNickChange": "Is féidir le cuairteoirí a leasainm a athrú",
+                "mam": "Cartlannaigh teachtaireachtaí (MAM)",
+                "enableLogging": "Logáil phoiblí",
+                "enableHats": "Suaitheantais róil (hats)",
+                "pubsub": "Nód PubSub gaolmhar"
+            }
+        },
         "createRoom": "Cruthaigh Seomra",
         "roomName": "Ainm an tSeomra",
         "roomNamePlaceholder": "m.sh., Comhrá Foirne",
@@ -1624,11 +1713,11 @@
         "members_by_default": "Faigheann úsáideoirí nua ról rannpháirtí go huathoibríoch, rud a ligeann dóibh labhairt i seomraí modhnaithe.",
         "allow_private_messages_from_visitors": "Rialaíonn sé an féidir le cuairteoirí (úsáideoirí gan cead cainte) teachtaireachtaí príobháideacha a sheoladh.",
         "allow_query_users": "Lig d'úsáideoirí fiosruithe eolais (aimsiú seirbhísí) a sheoladh chuig rannpháirtithe eile.",
-        "allow_visitor_status": "Lig do chuairteoirí teachtaireacht stádais a chur lena láithreacht.",
-        "allow_visitor_nickchange": "Lig do chuairteoirí a leasainm a athrú sa seomra.",
-        "allow_voice_requests": "Lig do chuairteoirí i seomra modhnaithe cead cainte a iarraidh.",
+        "muc#roomconfig_allowvisitorstatus": "Lig do chuairteoirí teachtaireacht stádais a chur lena láithreacht.",
+        "muc#roomconfig_allowvisitornickchange": "Lig do chuairteoirí a leasainm a athrú sa seomra.",
+        "muc#roomconfig_allowvoicerequests": "Lig do chuairteoirí i seomra modhnaithe cead cainte a iarraidh.",
         "allow_subscription": "Lig d'úsáideoirí liostáil le teachtaireachtaí seomra gan a bheith i láthair. Faigheann síntiúsóirí teachtaireachtaí gan dul isteach sa seomra, úsáideach do chliaint soghluaiste nó fógraí.",
-        "voice_request_min_interval": "Íos-am feithimh (i soicindí) idir iarratais chainte ón gcuairteoir céanna.",
+        "muc#roomconfig_voicerequestmininterval": "Íos-am feithimh (i soicindí) idir iarratais chainte ón gcuairteoir céanna.",
         "enable_hats": "Cumasaigh taispeáint suaitheantais in aice le hainmneacha na rannpháirtithe, a léiríonn róil nó cleamhnachtaí speisialta.",
         "mam": "Cumasaigh cartlann teachtaireachtaí (MAM) ionas gur féidir le cliaint teachtaireachtaí roimhe seo a fháil agus iad ag dul isteach nó ag athcheangal. Seo an stair a fheiceann rannpháirtithe ina n-aip chomhrá."
     },
