@@ -1365,27 +1365,54 @@ html, body {
 /*
  * Aurora composer card. The bar that wraps the context sections + input row.
  * Background is applied as a utility (bg-fluux-hover) on the element; this class
- * owns the hairline border, radius, and the signature accent focus-edge. The
- * focus-edge is pure :focus-within (no React focus state) so it never touches
- * the typing render path. No overflow:hidden here — the attach/emoji popups are
+ * owns the hairline border, radius, the panel shadow that lifts it off the
+ * message list, and the signature accent focus-edge. The focus-edge is pure
+ * :focus-within (no React focus state) so it never touches the typing render
+ * path, and it keeps the lift underneath the ring. The card stays opaque with no
+ * backdrop blur: messages never scroll behind it (.message-scroll-fade dissolves
+ * them above it instead). No overflow:hidden here — the attach/emoji popups are
  * absolutely positioned above the card and must not be clipped.
  */
 .composer-card {
   container-type: inline-size;
   border: 1px solid var(--fluux-border);
-  border-radius: var(--fluux-radius-l);
+  border-radius: var(--fluux-radius-xl);
+  box-shadow: var(--fluux-shadow-panel);
 }
 .composer-card:focus-within {
   border-color: var(--fluux-brand);
-  box-shadow: 0 0 0 3px hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.22);
+  box-shadow:
+    0 0 0 3px hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.22),
+    var(--fluux-shadow-panel);
 }
 /* Round the top of the first stacked row (edit / reply / attachment / key-change
  * indicator, or the input row itself). Without this its square accent bar and
  * bottom border poke past the card's rounded top corner. Inset by the 1px card
  * border so the curve tracks the inner edge. */
 .composer-card > :first-child {
-  border-start-start-radius: calc(var(--fluux-radius-l) - 1px);
-  border-start-end-radius: calc(var(--fluux-radius-l) - 1px);
+  border-start-start-radius: calc(var(--fluux-radius-xl) - 1px);
+  border-start-end-radius: calc(var(--fluux-radius-xl) - 1px);
+}
+
+/* Bottom edge of the message list: messages dissolve into the chat surface as
+ * they approach the composer instead of being cut at a hard line. It is sticky
+ * at the scroller's bottom, and its negative margin cancels its height, so it
+ * never changes the scroll height the live-edge logic reads. At the newest
+ * message it lies over the footer's spacing and the blank line-box space under
+ * the last line's descenders, not over glyphs. Out of scroll anchoring, so the
+ * browser never picks it as the node to hold still. It is a sibling of the
+ * scroll content rather than an overlay outside the scroller: the typing band
+ * sits between the scroller and the composer, and must not be covered. */
+.message-scroll-fade {
+  position: sticky;
+  bottom: 0;
+  height: 1rem;
+  margin-top: -1rem;
+  /* spans the scroller's px-4 padding, edge to edge */
+  margin-inline: -1rem;
+  pointer-events: none;
+  overflow-anchor: none;
+  background: linear-gradient(to bottom, transparent, var(--fluux-chat-bg));
 }
 
 /* Composer action row. On narrow widths (phone, narrowed pane) the input + send
