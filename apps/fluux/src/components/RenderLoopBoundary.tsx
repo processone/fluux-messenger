@@ -1,4 +1,5 @@
 import { Component, useEffect, useState, type ReactNode } from 'react'
+import { isRenderLoopError } from '@/utils/renderLoopError'
 import { resetRenderLoopDetector, getRenderStats, getSelectorHistory } from '@/utils/renderLoopDetector'
 
 interface Props {
@@ -45,7 +46,7 @@ export class RenderLoopBoundary extends Component<Props, State> {
     // which makes React tear down the whole tree — a silent blank "freeze"
     // with no recovery UI. Normalize to an Error first.
     const normalized = error instanceof Error ? error : new Error(String(error))
-    const isRenderLoop = normalized.message.includes('Render loop detected')
+    const isRenderLoop = isRenderLoopError(normalized)
     return {
       hasError: true,
       error: normalized,
@@ -137,7 +138,7 @@ export class RenderLoopBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (this.state.hasError) {
-      const isRenderLoop = this.state.error?.message.includes('Render loop detected')
+      const isRenderLoop = isRenderLoopError(this.state.error)
       return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-fluux-bg p-8">
           {/* The only caption a frameless window has once the app tree is gone.

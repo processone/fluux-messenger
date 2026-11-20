@@ -1802,5 +1802,12 @@
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
         "unverified": "Not verified: not sealed with your key"
+    },
+    "errorBoundary": {
+        "title": "Eitthvað fór úrskeiðis",
+        "description": "Ekki tókst að birta þennan hluta Fluux. Restin af forritinu virkar áfram.",
+        "panel": "Ekki tókst að birta þetta spjald.",
+        "message": "Ekki tókst að birta þessi skilaboð.",
+        "retry": "Reyna aftur"
     }
 }

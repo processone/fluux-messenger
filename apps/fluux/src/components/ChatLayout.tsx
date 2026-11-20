@@ -10,6 +10,7 @@ import { RoomView } from './RoomView'
 import { MemberList } from './MemberList'
 
 // Lazy-loaded views (not on critical path — preloaded after initial render)
+import { RegionErrorBoundary } from './RegionErrorBoundary'
 const ContactProfileView = lazy(() => import('./ContactProfileView').then(m => ({ default: m.ContactProfileView })))
 const SettingsView = lazy(() => import('./SettingsView').then(m => ({ default: m.SettingsView })))
 const AdminView = lazy(() => import('./AdminView').then(m => ({ default: m.AdminView })))
@@ -844,6 +845,20 @@ function ChatLayoutContent() {
     navigateToRooms(undefined, { replace: true })
   }
 
+  // Identity of what the main pane shows: a crash there clears once the user moves elsewhere.
+  const mainViewKey = [
+    sidebarView, settingsCategory, previewJid, activeRoomJid, activeConversationId,
+    selectedContact?.jid, adminCategory, searchPreviewResult ? 'search' : null,
+  ].join('|')
+  const mainViewBack = sidebarView === 'settings' ? handleSettingsBack
+    : previewJid ? () => setPreviewJid(null)
+    : activeRoomJid ? handleRoomBack
+    : activeConversationId ? handleChatBack
+    : selectedContact ? handleContactBack
+    : sidebarView === 'admin' ? handleAdminBack
+    : searchPreviewResult ? () => searchStore.getState().setPreviewResult(null)
+    : undefined
+
   const mainPane = useIosPaneNavigation(
     mobileMainRef,
     (sidebarView === 'messages' && !!activeConversationId) ||
@@ -1064,6 +1079,7 @@ function ChatLayoutContent() {
         {/* Left Sidebar - Conversations */}
         {/* Hidden on mobile when conversation or room is active, full width on mobile */}
         <div className={`${previewBack ? 'absolute inset-0 flex w-full' : adminHasMainContent ? 'flex w-auto' : hasActiveContent ? 'hidden md:flex w-full' : 'flex w-full'} md:w-auto`} inert={previewBack || undefined} aria-hidden={previewBack || undefined} data-testid="sidebar-pane">
+          <RegionErrorBoundary region="sidebar" variant="panel" resetKey={sidebarView}>
           <Sidebar
             mobileRailOnly={!!adminHasMainContent}
             onSelectContact={handleSelectContact}
@@ -1076,11 +1092,13 @@ function ChatLayoutContent() {
             activeContactJid={selectedContact?.jid}
             onViewChange={handleSidebarViewChange}
           />
+          </RegionErrorBoundary>
         </div>
 
         {/* Main Content Area */}
         {/* Hidden on mobile when no conversation/room selected */}
         <main ref={mobileMainRef} className={`${hasActiveContent ? 'flex' : 'hidden md:flex'} ${previewBack ? 'relative z-10 shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : mobileOccupants ? 'relative' : ''} content-panel flex-1 flex-col bg-fluux-chat min-w-0 min-h-0`}>
+          <RegionErrorBoundary region="main" resetKey={mainViewKey} onBack={mainViewBack}>
           {sidebarView === 'settings' ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <SettingsView onBack={() => mainPane.back(handleSettingsBack)} />
@@ -1154,6 +1172,7 @@ function ChatLayoutContent() {
               }
             />
           )}
+          </RegionErrorBoundary>
         </main>
 
         {/* Right Sidebar - Members (only for group chats) */}

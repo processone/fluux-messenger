@@ -21,6 +21,7 @@ import { useViewportObserver } from '@/hooks/useViewportObserver'
 import { useRenderCostProbe } from '@/hooks/useRenderCostProbe'
 import { countAnomalyMetric } from '@/utils/anomalyMetric'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
+import { RegionErrorBoundary } from '../RegionErrorBoundary'
 import { DateSeparator } from './DateSeparator'
 import { NewMessageMarker } from './NewMessageMarker'
 import { HistoryUnavailableMarker } from './HistoryUnavailableMarker'
@@ -865,7 +866,7 @@ export function MessageList<T extends BaseMessage>({
             {item.isFirstNew && (
               <NewMessageMarker count={dividerCount} provisional={firstNewMessageIsProvisional} />
             )}
-            {renderMessage(msg, item.indexInGroup, item.groupMessages, item.isFirstNew, handleMediaLoad)}
+            <RegionErrorBoundary region="message" variant="message" resetKey={msg}>{renderMessage(msg, item.indexInGroup, item.groupMessages, item.isFirstNew, handleMediaLoad)}</RegionErrorBoundary>
           </div>
         )
       }
@@ -1034,7 +1035,7 @@ export function MessageList<T extends BaseMessage>({
                     {showNewMarker && (
                       <NewMessageMarker count={dividerCount} provisional={firstNewMessageIsProvisional} />
                     )}
-                    {renderMessage(msg, idx, group.messages, showNewMarker, handleMediaLoad)}
+                    <RegionErrorBoundary region="message" variant="message" resetKey={msg}>{renderMessage(msg, idx, group.messages, showNewMarker, handleMediaLoad)}</RegionErrorBoundary>
                   </div>
                 )
               })}

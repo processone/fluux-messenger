@@ -14,6 +14,8 @@
  * - Detailed render history for post-mortem analysis
  */
 
+import { RENDER_LOOP_ERROR_PREFIX } from './renderLoopError'
+
 // Track renders per component (not globally, to avoid false positives during heavy loading)
 interface RenderEntry {
   timestamp: number
@@ -294,7 +296,7 @@ export function detectRenderLoop(componentName: string, messageIngressVersion?: 
       ? `The app sustained ${windowRate.toFixed(0)} renders/sec for ${heldMs}ms. `
       : `The app rendered ${state.loopRenderCount} times in ${LOOP_TIME_WINDOW_MS}ms. `
     state.error = new Error(
-      `Render loop detected in ${componentName}. ` + reason +
+      `${RENDER_LOOP_ERROR_PREFIX} in ${componentName}. ` + reason +
       `This usually indicates a bug in useEffect dependencies or state updates. ` +
       `Check console for detailed debug info.`
     )

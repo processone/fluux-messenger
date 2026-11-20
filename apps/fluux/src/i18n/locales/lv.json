@@ -1805,5 +1805,12 @@
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
         "unverified": "Not verified: not sealed with your key"
+    },
+    "errorBoundary": {
+        "title": "Kaut kas nogāja greizi",
+        "description": "Šo Fluux daļu neizdevās parādīt. Pārējā lietotne turpina darboties.",
+        "panel": "Šo paneli neizdevās parādīt.",
+        "message": "Šo ziņojumu neizdevās parādīt.",
+        "retry": "Mēģināt vēlreiz"
     }
 }
