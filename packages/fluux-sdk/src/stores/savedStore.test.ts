@@ -270,6 +270,26 @@ describe('clearing another account', () => {
       expect(s().pending).toEqual({ [ids[0]]: 'publish', p: 'retract' })
     })
 
+    it('removing a sealed copy that is not stored yet removes the plain item it stands for', () => {
+      s().setSealState('ready')
+      s().reconcileFetch([entry('p', { unverified: true })])
+      s().migrate('p')
+      const [sealedId] = Object.keys(s().entries)
+      s().remove(sealedId)
+      expect(s().entries).toEqual({})
+      expect(s().pending).toEqual({ [sealedId]: 'retract', p: 'retract' })
+      expect(s().migrating).toEqual({})
+    })
+
+    it('does not migrate when the node has no free slot', () => {
+      s().setSealState('ready')
+      s().setLimit(1)
+      s().reconcileFetch([entry('p', { unverified: true })])
+      s().migrate('p')
+      expect(Object.keys(s().entries)).toEqual(['p'])
+      expect(s().pending).toEqual({})
+    })
+
     it('lists the plain entry again when the sealed copy is refused, and does not list a plain item that is being sealed twice', () => {
       s().setSealState('ready')
       s().reconcileFetch([entry('p', { unverified: true })])

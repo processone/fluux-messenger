@@ -73,7 +73,7 @@ export interface SavedState {
   /** Re-save a plain entry sealed under a new id; the plain item is retracted only once the sealed copy is stored. */
   migrate: (id: string) => void
   /** The server definitively refused this operation: undo a refused save, note the refusal. */
-  refuse: (id: string, op: SavedPendingOp, revision?: number) => void
+  refuse: (id: string, op: SavedPendingOp, revision?: number, silent?: boolean) => void
   /** Merge the queue stored by an earlier session of this account (local operations win). */
   hydratePending: () => void
   reset: () => void
@@ -237,7 +237,21 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     const next = { ...entries }
     delete next[id]
     track(id)
-    set({ entries: next, pending: { ...pending, [id]: 'retract' }, removed: { ...get().removed, [id]: entries[id] }, revisions: bump(revisions, id) })
+    const nextPending: Record<string, SavedPendingOp> = { ...pending, [id]: 'retract' }
+    const nextRemoved = { ...get().removed, [id]: entries[id] }
+    let nextMigrating = get().migrating
+    let nextRevisions = bump(revisions, id)
+    // A sealed copy still being stored stands for a plain item the person saved: removing it removes that item too.
+    const plain = nextMigrating[id]
+    if (plain) {
+      nextMigrating = { ...nextMigrating }
+      delete nextMigrating[id]
+      track(plain.id)
+      nextPending[plain.id] = 'retract'
+      nextRemoved[plain.id] = plain
+      nextRevisions = bump(nextRevisions, plain.id)
+    }
+    set({ entries: next, pending: nextPending, removed: nextRemoved, migrating: nextMigrating, revisions: nextRevisions })
   },
 
   markDeleted: (id) => {
@@ -368,6 +382,9 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
   migrate: (id) => {
     const entry = get().entries[id]
     if (!entry?.unverified || get().sealState !== 'ready') return
+    // No free slot at the node: the copy could not be stored beside the plain item, which stays as it is.
+    const { limit, remote } = get()
+    if (limit !== undefined && Object.keys(remote).length >= limit) return
     const { unverified: _unverified, ...sealed } = entry
     get().hydratePending()
     const { entries, pending, revisions, migrating } = get()
@@ -397,7 +414,7 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
     set({ entries: nextEntries, pending: nextPending, revisions: nextRevisions, removed: { ...get().removed, ...removedNow }, hydrated: true })
   },
 
-  refuse: (id, op, revision) => {
+  refuse: (id, op, revision, silent) => {
     const { entries, pending, refusals, revisions, remote, removed } = get()
     if (pending[id] !== op || (revision !== undefined && revisions[id] !== revision)) return
     const nextPending = { ...pending }
@@ -420,7 +437,7 @@ export const savedStore = createStore<SavedState>()((set, get) => ({
       const nextMigrating = { ...get().migrating }
       delete nextMigrating[id]
       track(plain.id)
-      set({ entries: next, pending: nextPending, migrating: nextMigrating, refusals: refusals + 1 })
+      set({ entries: next, pending: nextPending, migrating: nextMigrating, ...(!silent && { refusals: refusals + 1 }) })
     } else {
       const next = { ...entries }
       delete next[id]

@@ -560,6 +560,42 @@ describe('saved messages sync side effect', () => {
       stop()
     })
 
+    it('migrates every plain item through a single free slot, retracting each before the next copy is stored', async () => {
+      const { client, node, stop } = setup()
+      node.sealState.mockReturnValue('ready')
+      node.fetchMaxItems.mockResolvedValue(4)
+      node.fetchAll.mockResolvedValue({ status: 'ok', items: [entry('p1'), entry('p2'), entry('p3')] })
+      node.open.mockImplementationOnce(async (items: SavedMessage[]) => opened(items.map((i) => ({ ...i, unverified: true as const })), { sealedSeen: 0 }))
+      const held = new Set(['p1', 'p2', 'p3'])
+      const order: string[] = []
+      node.publish.mockImplementation(async (e: SavedMessage) => {
+        if (held.size >= 4) throw Object.assign(new Error('full'), { name: 'StanzaError' })
+        held.add(e.id); order.push('publish')
+      })
+      node.retract.mockImplementation(async (id: string) => { held.delete(id); order.push('retract') })
+      client._emit('online')
+      await flushPromises()
+      expect(order).toEqual(['publish', 'retract', 'publish', 'retract', 'publish', 'retract'])
+      expect(savedStore.getState().refusals).toBe(0)
+      expect(Object.keys(savedStore.getState().entries)).toHaveLength(3)
+      stop()
+    })
+
+    it('leaves the plain items alone, without a refusal notice, when the node has no free slot', async () => {
+      const { client, node, stop } = setup()
+      node.sealState.mockReturnValue('ready')
+      node.fetchMaxItems.mockResolvedValue(2)
+      node.fetchAll.mockResolvedValue({ status: 'ok', items: [entry('p1'), entry('p2')] })
+      node.open.mockImplementationOnce(async (items: SavedMessage[]) => opened(items.map((i) => ({ ...i, unverified: true as const })), { sealedSeen: 0 }))
+      client._emit('online')
+      await flushPromises()
+      expect(node.publish).not.toHaveBeenCalled()
+      expect(node.retract).not.toHaveBeenCalled()
+      expect(savedStore.getState().refusals).toBe(0)
+      expect(Object.keys(savedStore.getState().entries).sort()).toEqual(['p1', 'p2'])
+      stop()
+    })
+
     it('flags a plain item beside sealed ones and neither seals nor retracts it', async () => {
       const { client, node, stop } = setup()
       node.sealState.mockReturnValue('ready')

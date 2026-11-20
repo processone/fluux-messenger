@@ -98,7 +98,8 @@ export function setupSavedMessagesSideEffects(
               const { limit } = state()
               if (!state().remote[id]) {
                 if (limit !== undefined && serverCount() >= limit) {
-                  state().refuse(id, op, revision)
+                  // A sealed copy of a plain item that has no free slot is not an error: the plain item simply stays.
+                  state().refuse(id, op, revision, Boolean(state().migrating[id]))
                   continue
                 }
                 // Limit unknown: only the first item of a node that does not exist yet may go (it creates the node);
@@ -124,7 +125,8 @@ export function setupSavedMessagesSideEffects(
             state().confirm(id, op)
             state().settle(id, op, revision)
             // A migrated entry's plain item is queued for retraction once its sealed copy is stored: send it now.
-            if (op === 'publish' && Object.values(state().pending).includes('retract')) flushAgain = true
+            // It goes before the next copy is published, so one free slot at the node is enough for the whole migration.
+            if (op === 'publish' && Object.values(state().pending).includes('retract')) { flushAgain = true; break }
             // The first publish creates the node, and only then can its limit be read: later saves wait for it.
             if (op === 'publish' && state().limit === undefined) {
               const limit = await client.internal.savedMessages.fetchMaxItems().catch(() => undefined)
