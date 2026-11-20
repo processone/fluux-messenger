@@ -15,6 +15,8 @@ export type OverflowEntry =
       danger?: boolean
       disabled?: boolean
       onSelect: () => void
+      /** Draws a divider above the row (the right-click menu and the ⋯ menu alike). */
+      separatorBefore?: boolean
       /** Container-query class controlling when this row is visible in the kebab. */
       kebabClassName?: string
     }
@@ -109,7 +111,7 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
           >
             {entries.map((e) =>
               e.kind === 'action' ? (
-                <div key={e.key} className={e.kebabClassName}>
+                <div key={e.key} className={[e.kebabClassName, e.separatorBefore && 'mt-1 border-t border-fluux-border pt-1'].filter(Boolean).join(' ') || undefined}>
                   <ItemRow
                     item={{ key: e.key, label: e.label, icon: e.icon, danger: e.danger, disabled: e.disabled, onSelect: e.onSelect }}
                     onPick={() => { close(); e.onSelect() }}

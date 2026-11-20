@@ -10,11 +10,16 @@ import type { ContactIdentity } from '@fluux/sdk'
 import { useRosterStore, useContactTime, useLastActivity } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
 import { useWindowDrag, useAnchoredMenu } from '@/hooks'
+import { useContextMenu } from '@/hooks/useContextMenu'
+import { copyToClipboard } from '@/utils/clipboard'
+import { ConfirmDialog } from './ConfirmDialog'
+import { RenameContactModal } from './RenameContactModal'
+import { ChatHeaderContactMenu, type HeaderMenuSelection } from './header/ChatHeaderContactMenu'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
 import { ConnectionStepSlot } from './ConnectionStep'
 import { UpdateStatus } from './UpdateStatus'
-import { Archive, ArchiveRestore, ArrowLeft, Clock, Hash, Loader2, Lock, Search, Shield, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, User } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, Ban, Clock, Copy, Hash, Loader2, Lock, Pencil, Search, Shield, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, Trash2, User, UserPlus } from 'lucide-react'
 import { waitsOnlyForTrustData, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
@@ -43,6 +48,18 @@ export interface ChatHeaderProps {
   onArchive?: () => void
   /** Unarchive the conversation from the overflow menu. 1:1 chats only. */
   onUnarchive?: () => void
+  /** Whether the contact is blocked — selects Block vs Unblock. 1:1 chats only. */
+  isBlocked?: boolean
+  /** Rename the contact. Given only for a contact in the contact list. */
+  onRenameContact?: (name: string) => Promise<void>
+  /** Send a subscription request. Given only for a peer outside the contact list. */
+  onAddContact?: () => void
+  /** Block the contact; the header asks first. */
+  onBlock?: () => void
+  /** Unblock the contact. Acts at once. */
+  onUnblock?: () => void
+  /** Remove the contact from the contact list; the header asks first. Given only for a contact in the list. */
+  onRemoveContact?: () => void
 }
 
 export function ChatHeader({
@@ -61,6 +78,12 @@ export function ChatHeader({
   isArchived,
   onArchive,
   onUnarchive,
+  isBlocked,
+  onRenameContact,
+  onAddContact,
+  onBlock,
+  onUnblock,
+  onRemoveContact,
 }: ChatHeaderProps) {
   const { t } = useTranslation()
   const isGroupChat = type === 'groupchat'
@@ -73,21 +96,79 @@ export function ChatHeader({
   const contactTime = useContactTime(!isGroupChat ? jid : null)
   useLastActivity(!isGroupChat ? jid : null)
 
-  // 1:1 overflow entries: search (collapses on narrow widths) + profile/archive
-  // (always in the kebab). Group chats expose none of these.
+  // Contact actions that ask first or open a dialog. Shared by the ⋯ menu and the right-click menu.
+  const [pending, setPending] = useState<'block' | 'remove' | 'rename' | null>(null)
+
+  // 1:1 entries, one list for the ⋯ menu and the right-click menu: search (collapses on narrow
+  // widths in the ⋯ menu) and the contact actions. Group chats expose none of these.
   const overflowEntries: OverflowEntry[] = []
+  if (!isGroupChat) {
+    if (onShowProfile) {
+      overflowEntries.push({ kind: 'action', key: 'profile', label: t('sidebar.viewProfile'), icon: User, onSelect: onShowProfile })
+    }
+    overflowEntries.push({ kind: 'action', key: 'copyAddress', label: t('contacts.copyAddress'), icon: Copy, onSelect: () => { void copyToClipboard(jid) } })
+  }
   if (onSearchInConversation) {
     overflowEntries.push({ kind: 'action', key: 'search', label: t('chat.searchInConversation', 'Search in conversation'), icon: Search, onSelect: onSearchInConversation, kebabClassName: kebabClass('search') })
   }
   if (!isGroupChat) {
-    if (onShowProfile) {
-      overflowEntries.push({ kind: 'action', key: 'profile', label: t('sidebar.viewProfile'), icon: User, onSelect: onShowProfile })
+    if (onRenameContact) {
+      overflowEntries.push({ kind: 'action', key: 'rename', label: t('contacts.rename'), icon: Pencil, onSelect: () => setPending('rename') })
+    }
+    if (onAddContact) {
+      overflowEntries.push({ kind: 'action', key: 'add', label: t('contacts.addToContacts'), icon: UserPlus, onSelect: onAddContact })
     }
     if (isArchived && onUnarchive) {
       overflowEntries.push({ kind: 'action', key: 'unarchive', label: t('conversations.unarchive'), icon: ArchiveRestore, onSelect: onUnarchive })
     } else if (!isArchived && onArchive) {
       overflowEntries.push({ kind: 'action', key: 'archive', label: t('conversations.archive'), icon: Archive, onSelect: onArchive })
     }
+    let separate = true
+    if (isBlocked && onUnblock) {
+      overflowEntries.push({ kind: 'action', key: 'unblock', label: t('contacts.unblockUser'), icon: Ban, onSelect: onUnblock, separatorBefore: separate })
+      separate = false
+    } else if (!isBlocked && onBlock) {
+      overflowEntries.push({ kind: 'action', key: 'block', label: t('contacts.blockUser'), icon: Ban, danger: true, onSelect: () => setPending('block'), separatorBefore: separate })
+      separate = false
+    }
+    if (onRemoveContact) {
+      overflowEntries.push({ kind: 'action', key: 'remove', label: t('contacts.removeFromRoster'), icon: Trash2, danger: true, onSelect: () => setPending('remove'), separatorBefore: separate })
+    }
+  }
+
+  // Right-click menu. Shift + right-click and text fields keep the system menu. A word that only
+  // the right-click itself selected is not a selection: the text is read as the button goes down.
+  const contactMenu = useContextMenu()
+  const [menuSelection, setMenuSelection] = useState<HeaderMenuSelection>({ text: '' })
+  const selectionBeforeClick = useRef<string | null>(null)
+  const handleMouseDown = (event: React.MouseEvent) => {
+    selectionBeforeClick.current = event.button === 2 || event.ctrlKey ? (window.getSelection()?.toString() ?? '') : null
+  }
+  const handleContextMenu = (event: React.MouseEvent<HTMLElement>) => {
+    const el = event.target instanceof Element ? event.target : null
+    if (isGroupChat || event.shiftKey || event.defaultPrevented || overflowEntries.length === 0) return
+    if (el?.closest('input, textarea, [contenteditable="true"], [data-header-actions]')) return
+    const selection = window.getSelection()
+    const text = selection && !selection.isCollapsed && selection.rangeCount > 0
+      && selection.getRangeAt(0).intersectsNode(event.currentTarget) ? selection.toString() : ''
+    const before = selectionBeforeClick.current
+    selectionBeforeClick.current = null
+    const selected = text.trim() !== '' && (before === null || before === text) ? text : ''
+    // The click itself selected a word: the menu opens over no selection.
+    if (text && !selected) selection?.removeAllRanges()
+    setMenuSelection({ text: selected, range: selected ? selection!.getRangeAt(0).cloneRange() : undefined })
+    contactMenu.handleContextMenu(event)
+  }
+
+  const confirmConfig = pending === 'remove'
+    ? { title: t('contacts.removeFromRoster'), message: t('contacts.removeConfirm', { name }), confirmLabel: t('contacts.remove') }
+    : pending === 'block'
+      ? { title: t('contacts.blockUser'), message: t('contacts.blockConfirm', { name }), confirmLabel: t('contacts.block') }
+      : null
+  const handleConfirm = () => {
+    if (pending === 'remove') onRemoveContact?.()
+    else if (pending === 'block') onBlock?.()
+    setPending(null)
   }
 
   // When the kebab holds an always-shown entry (profile/archive on a 1:1), it must
@@ -99,7 +180,13 @@ export function ChatHeader({
   const kebabWrapperClass = hasAlwaysShownEntry ? undefined : kebabClass('search')
 
   return (
-    <header className="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-2 md:gap-3" {...dragRegionProps}>
+    <>
+    <header
+      className="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-2 md:gap-3"
+      onMouseDown={handleMouseDown}
+      onContextMenu={handleContextMenu}
+      {...dragRegionProps}
+    >
       {/* Back button - mobile only */}
       {onBack && (
         <button
@@ -153,7 +240,7 @@ export function ChatHeader({
 
       {/* Trailing action cluster — grouped tightly on mobile (gap-1) so the
           shield reads as part of the menu; desktop keeps the header's md gap. */}
-      <div className="flex items-center gap-1 md:gap-3">
+      <div className="flex items-center gap-1 md:gap-3" data-header-actions="">
         {/* Encryption status icon — only for 1:1 chats with E2EE on. A contact
             without keys shows none; one whose every key waits shows a warning. */}
         {encryptionState && encryptionState.kind !== 'disabled' &&
@@ -189,6 +276,21 @@ export function ChatHeader({
         </div>
       </div>
     </header>
+    {contactMenu.isOpen && <ChatHeaderContactMenu menu={contactMenu} entries={overflowEntries} selection={menuSelection} />}
+    {confirmConfig && (
+      <ConfirmDialog
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        confirmLabel={confirmConfig.confirmLabel}
+        onConfirm={handleConfirm}
+        onCancel={() => setPending(null)}
+        variant="danger"
+      />
+    )}
+    {pending === 'rename' && onRenameContact && (
+      <RenameContactModal contact={{ jid, name }} onRename={onRenameContact} onClose={() => setPending(null)} />
+    )}
+    </>
   )
 }
 
