@@ -358,7 +358,7 @@ export class MAM extends BaseModule {
       const entries: RawArchiveEntry[] = []
       const fields = [xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM))]
       if (!room) fields.push(xml('field', { var: 'with' }, xml('value', {}, conversationId)))
-      const collector = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => entries.push({ forwarded, messageEl, archiveId }))
+      const collector = this.createMessageCollector(queryId, room ? conversationId : undefined, (forwarded, messageEl, archiveId) => entries.push({ forwarded, messageEl, archiveId }))
       const xmpp = this.deps.getXmpp()
       const unregister = this.deps.registerMAMCollector?.(queryId, collector) ?? (() => {
         xmpp?.on('stanza', collector)
@@ -607,7 +607,7 @@ export class MAM extends BaseModule {
         // Collector runs synchronously as stanzas arrive; it just buffers raw
         // elements. The actual parse/decrypt pass happens after `sendIQ`
         // resolves so we can await the E2EE pipeline per entry.
-        const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
+        const collectMessage = this.createMessageCollector(queryId, undefined, (forwarded, messageEl, archiveId) => {
           rawEntries.push({ forwarded, messageEl, archiveId })
         })
 
@@ -937,7 +937,7 @@ export class MAM extends BaseModule {
         const rawEntries: RawArchiveEntry[] = []
 
         // Collector only buffers; decrypt + parse happen in the async drain below.
-        const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
+        const collectMessage = this.createMessageCollector(queryId, roomJid, (forwarded, messageEl, archiveId) => {
           rawEntries.push({ forwarded, messageEl, archiveId })
         })
 
@@ -1224,7 +1224,7 @@ export class MAM extends BaseModule {
     const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
     const rawEntries: RawArchiveEntry[] = []
 
-    const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
+    const collectMessage = this.createMessageCollector(queryId, undefined, (forwarded, messageEl, archiveId) => {
       rawEntries.push({ forwarded, messageEl, archiveId })
     })
 
@@ -1305,7 +1305,7 @@ export class MAM extends BaseModule {
     const rawEntries: RawArchiveEntry[] = []
 
     // Collector only buffers; decrypt + parse happen in the async drain below.
-    const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
+    const collectMessage = this.createMessageCollector(queryId, roomJid, (forwarded, messageEl, archiveId) => {
       rawEntries.push({ forwarded, messageEl, archiveId })
     })
 
@@ -2272,7 +2272,7 @@ export class MAM extends BaseModule {
       // path (the local echo carries no stashed encryptedPayload), so the
       // preview stayed stuck on the fallback until the conversation was opened.
       const rawEntries: RawArchiveEntry[] = []
-      const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
+      const collectMessage = this.createMessageCollector(queryId, undefined, (forwarded, messageEl, archiveId) => {
         rawEntries.push({ forwarded, messageEl, archiveId })
       })
 
@@ -2400,7 +2400,7 @@ export class MAM extends BaseModule {
       const room = this.deps.stores?.room.getRoom(roomJid)
       const me = roomSelf(room)
       const rawEntries: RawArchiveEntry[] = []
-      const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
+      const collectMessage = this.createMessageCollector(queryId, roomJid, (forwarded, messageEl, archiveId) => {
         rawEntries.push({ forwarded, messageEl, archiveId })
       })
 
@@ -2489,6 +2489,8 @@ export class MAM extends BaseModule {
    */
   private createMessageCollector(
     queryId: string,
+    /** The room JID when a room archive was queried; undefined for the account's own archive. */
+    archiveJid: string | undefined,
     onMessage: (forwarded: Element, messageEl: Element, archiveId?: string) => void
   ): (stanza: Element) => void {
     const session = this.captureQuery()
@@ -2499,6 +2501,9 @@ export class MAM extends BaseModule {
 
       const result = stanza.getChild('result', NS_MAM)
       if (!result || result.attrs.queryid !== queryId) return
+      // XEP-0313: results come from the archive that was queried. A matching query id is
+      // not enough, since any contact can name one; only the archive's own address counts.
+      if (!this.isFromQueriedArchive(stanza.attrs.from, archiveJid)) return
 
       const forwarded = result.getChild('forwarded', NS_FORWARD)
       if (!forwarded) return
@@ -2510,6 +2515,17 @@ export class MAM extends BaseModule {
       this.correctionReceipts.observe(messageEl, true, result.attrs.id)
       onMessage(forwarded, messageEl, result.attrs.id)
     }
+  }
+
+  /**
+   * Whether a MAM result's sender is the archive that was queried. A stanza with no `from` comes from
+   * the account's own server (a contact's stanza always carries its address), so it is accepted.
+   */
+  private isFromQueriedArchive(from: string | undefined, archiveJid: string | undefined): boolean {
+    if (!from) return true
+    if (archiveJid) return from === archiveJid
+    const own = this.deps.getCurrentJid()
+    return !!own && getBareJid(from) === getBareJid(own) && !getResource(from)
   }
 
   /**
@@ -3461,7 +3477,7 @@ export class MAM extends BaseModule {
     const iq = this.buildMAMQuery(queryId, startFields, max, cursor.before, isRoom ? entityId : undefined, cursor.after)
 
     const entries: RawArchiveEntry[] = []
-    const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, id) => {
+    const collectMessage = this.createMessageCollector(queryId, isRoom ? entityId : undefined, (forwarded, messageEl, id) => {
       entries.push({ forwarded, messageEl, archiveId: id })
     })
     let unregister: () => void
