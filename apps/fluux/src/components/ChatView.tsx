@@ -10,11 +10,11 @@ import { format } from 'date-fns'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { deriveCopyBody } from '@/utils/copyMessageBody'
-import { useChatActive, useContactIdentities, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, chatStore, getStorageScopeJid, currentViewportGeneration, reportViewport, type Message, type ContactIdentity, type ViewportEvidenceKey } from '@fluux/sdk'
+import { useChatActive, useContactIdentities, useRosterActions, useBlocking, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, chatStore, getStorageScopeJid, currentViewportGeneration, reportViewport, type Message, type ContactIdentity, type ViewportEvidenceKey } from '@fluux/sdk'
 import { useToastStore } from '@/stores/toastStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
-import { useChatStore, useConnectionStore } from '@fluux/sdk/react'
+import { useChatStore, useConnectionStore, useBlockingStore } from '@fluux/sdk/react'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, groupHeaderIndex, buildReplyContext } from './conversation'
@@ -78,6 +78,9 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // Use useContactIdentities instead of useRoster() to avoid re-renders on
   // presence changes. ChatView only needs contact names and avatars for display.
   const contactsByJid = useContactIdentities()
+  const { addContact, removeContact, renameContact } = useRosterActions()
+  const { blockJid, unblockJid } = useBlocking()
+  const blockedJids = useBlockingStore((s) => s.blockedJids)
   const mediaPolicy = useSettingsStore((s) => s.mediaAutoDownload)
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
@@ -504,6 +507,12 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
               ? () => onShowProfile(activeConversation.id)
               : undefined
           }
+          isBlocked={blockedJids.has(activeConversation.id)}
+          onRenameContact={activeConversation.type === 'chat' && contact ? (name) => renameContact(activeConversation.id, name) : undefined}
+          onAddContact={activeConversation.type === 'chat' && !contact ? () => void addContact(activeConversation.id) : undefined}
+          onBlock={activeConversation.type === 'chat' ? () => void blockJid(activeConversation.id) : undefined}
+          onUnblock={activeConversation.type === 'chat' ? () => void unblockJid(activeConversation.id) : undefined}
+          onRemoveContact={activeConversation.type === 'chat' && contact ? () => void removeContact(activeConversation.id) : undefined}
           isArchived={activeConversation.type === 'chat' ? isArchived(activeConversation.id) : undefined}
           onArchive={
             activeConversation.type === 'chat'

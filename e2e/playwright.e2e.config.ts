@@ -55,6 +55,7 @@ const SUITES = [
   { name: 'message-links', testMatch: 'message-links.ts' },
   { name: 'saved-messages', testMatch: 'saved-messages.ts' },
   { name: 'message-context-menu', testMatch: 'message-context-menu.ts' },
+  { name: 'header-context-menu', testMatch: 'header-context-menu.ts' },
   { name: 'forward-direct', testMatch: 'forward-direct.ts' },
   { name: 'mobile-members', testMatch: 'mobile-members.ts' },
   { name: 'command-palette', testMatch: 'command-palette.ts' },
