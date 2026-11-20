@@ -930,16 +930,20 @@ describe('MUC Module', () => {
     })
 
     describe('setRoomNotifyLevel', () => {
-      it('saves Off to the bookmark and replaces the session choice', async () => {
+      // The saved fields are what every later bookmark save publishes, so only
+      // the bookmark's answer may write them, never the choice itself.
+      it('saves Off to the bookmark, and writes the saved level only from the stored bookmark', async () => {
         mockStores.room.getRoom.mockReturnValue(storedRoom())
 
         await muc.setRoomNotifyLevel(ROOM, 'none', true)
 
-        expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
-          roomJid: ROOM,
-          updates: { notifyAll: undefined, notifyOff: undefined, notifyAllPersistent: false, notifyOffPersistent: true },
-        })
         expect(notifyOf()).toBe('none')
+        expect(mockEmitSDK).toHaveBeenCalledWith('room:bookmark', {
+          roomJid: ROOM,
+          bookmark: expect.objectContaining({ notifyLevel: 'none' }),
+        })
+        const updates = mockEmitSDK.mock.calls.filter(([event]) => event === 'room:updated').map(([, payload]) => payload.updates)
+        expect(updates).toEqual([{ notifyAll: false, notifyOff: true }])
       })
 
       it('holds Off for the session without publishing when not persistent', async () => {
