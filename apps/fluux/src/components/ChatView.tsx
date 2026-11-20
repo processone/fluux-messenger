@@ -1357,7 +1357,10 @@ export const MessageInput = memo(function MessageInput({
     // SDK resolves stanzaId vs id for the protocol reference (XEP-0461)
     let replyTo: { id: string; to: string; fallback?: { author: string; body: string; fromEncrypted?: boolean } } | undefined
     if (replyingTo) {
-      const authorName = contactsByJid.get(getBareJid(replyingTo.from))?.name || getLocalPart(replyingTo.from)
+      // The quote is sent with the reply, so it must not carry the private name you gave the
+      // contact in your contact list (the reply preview above may keep it: it stays on this device).
+      // Quote the contact by address; your own messages keep your local part.
+      const authorName = replyingTo.isOutgoing ? getLocalPart(replyingTo.from) : getBareJid(replyingTo.from)
       replyTo = {
         id: replyingTo.id,
         to: replyingTo.from,

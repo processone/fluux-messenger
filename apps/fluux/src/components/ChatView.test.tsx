@@ -659,6 +659,22 @@ describe('ChatView', () => {
         })
       }
     })
+
+    // The reply's quote is sent to the contact: it names them by address, never by the
+    // private name you gave them in your contact list.
+    it('quotes the contact by address, not by your contact-list name', async () => {
+      render(<ChatView />)
+      const row = screen.getByText('Hello there!').closest('[data-message-id]') as HTMLElement
+      fireEvent.click(within(row).getByTestId('icon-reply').closest('button')!)
+
+      await act(async () => { fireEvent.click(screen.getByTestId('send-button')) })
+
+      expect(mockSendMessage).toHaveBeenCalledOnce()
+      const [to, body, options] = mockSendMessage.mock.calls[0]
+      expect([to, body]).toEqual(['alice@example.com', 'test message'])
+      expect(options.replyTo).toMatchObject({ id: 'msg-1', to: 'alice@example.com', fallback: { author: 'alice@example.com', body: 'Hello there!' } })
+      expect(JSON.stringify(mockSendMessage.mock.calls)).not.toContain('Alice Smith')
+    })
   })
 
   describe('Edit flow', () => {
