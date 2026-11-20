@@ -127,7 +127,7 @@ describe('forward on a one-to-one message', () => {
   })
 
   it('quotes a room message by its occupant nick, never by the displayed contact-list name', () => {
-    modal.props = undefined
+    modal.props = undefined as typeof modal.props
     render(<ForwardMessageProvider conversationId="room@conference.example.com">
       <MessageBubble {...bubble({ type: 'groupchat', from: 'room@conference.example.com/Alicia', body: 'Ship it', references: undefined, stanzaId: '1731490000123456', roomJid: 'room@conference.example.com' } as Partial<BaseMessage>)} supportsMAM /></ForwardMessageProvider>)
     fireEvent.click(screen.getAllByRole('button', { name: 'chat.forwardMessageLink' })[0])
