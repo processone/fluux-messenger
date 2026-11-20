@@ -1959,6 +1959,28 @@ describe('MUC Module', () => {
     })
   })
 
+  describe('domainHostsRooms', () => {
+    const answer = (category: string) => createMockElement('iq', { type: 'result' }, [
+      { name: 'query', attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+        children: [{ name: 'identity', attrs: { category, type: 'text' } }] },
+    ])
+
+    it('is true when the domain answers with a conference identity', async () => {
+      mockSendIQ.mockResolvedValueOnce(answer('conference'))
+      expect(await muc.domainHostsRooms('groups.example.com')).toBe(true)
+    })
+
+    it('is false when the domain answers as another kind of service', async () => {
+      mockSendIQ.mockResolvedValueOnce(answer('server'))
+      expect(await muc.domainHostsRooms('chat.example.com')).toBe(false)
+    })
+
+    it('is null when the domain gives no usable answer', async () => {
+      mockSendIQ.mockRejectedValueOnce(new Error('timeout'))
+      expect(await muc.domainHostsRooms('chat.example.com')).toBeNull()
+    })
+  })
+
   describe('joinRoom with MAM detection', () => {
     it('uses maxHistory: 0 when room supports MAM', async () => {
       // Mock disco#info response with MAM support

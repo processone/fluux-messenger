@@ -12,6 +12,15 @@ const mockJoinRoom = vi.fn()
 const mockJoinResult = vi.fn()
 const mockHasConversation = vi.fn()
 const mockOpenRoomMessageLink = vi.fn()
+const mockDomainHostsRooms = vi.fn()
+const mockAddRoom = vi.fn()
+// Drafts the stores hold, by conversation
+const chatDrafts = new Map<string, string>()
+const roomDrafts = new Map<string, string>()
+const contactList = [
+  { jid: 'alice@example.org', name: 'Alice', subscription: 'both' },
+  { jid: 'bob@example.org', name: 'Bob', subscription: 'none' },
+]
 vi.mock('./useRoomMessageLink', () => ({ useRoomMessageLink: () => mockOpenRoomMessageLink }))
 const shortcutState = { jid: 'testuser@example.org/phone' as string | null, rosterAccount: 'testuser@example.org', loaded: true, bookmarks: true }
 // Status the chat view sees; 'online' lets queued links replay.
@@ -59,6 +68,10 @@ vi.mock('@fluux/sdk', async importOriginal => ({
     getState: () => ({
       rooms: shortcutState.bookmarks ? new Map([['team@example.org', {}]]) : new Map(),
       bookmarksLoaded: shortcutState.bookmarks,
+      addRoom: mockAddRoom,
+      getDraft: (id: string) => roomDrafts.get(id) ?? '',
+      setDraft: (id: string, text: string) => { roomDrafts.set(id, text) },
+      clearDraft: (id: string) => { roomDrafts.delete(id) },
     }),
   },
   // Vanilla stores (for imperative .getState() access)
@@ -66,6 +79,9 @@ vi.mock('@fluux/sdk', async importOriginal => ({
     getState: () => ({
       conversations: new Map([['alice@example.org', {}]]),
       hasConversation: mockHasConversation,
+      getDraft: (id: string) => chatDrafts.get(id) ?? '',
+      setDraft: (id: string, text: string) => { chatDrafts.set(id, text) },
+      clearDraft: (id: string) => { chatDrafts.delete(id) },
     }),
   },
   useChat: () => ({
@@ -76,12 +92,10 @@ vi.mock('@fluux/sdk', async importOriginal => ({
     joinResult: mockJoinResult,
     getRoomInfo: () => Promise.resolve(null),
     isNonAnonymousRoomAcknowledged: () => false,
+    domainHostsRooms: mockDomainHostsRooms,
   }),
   useRoster: () => ({
-    contacts: [
-      { jid: 'alice@example.org', name: 'Alice' },
-      { jid: 'bob@example.org', name: 'Bob' },
-    ],
+    contacts: contactList,
   }),
   RoomJoinError,
 }))
@@ -160,6 +174,9 @@ describe('useDeepLink', () => {
     shortcutState.loaded = true
     shortcutState.bookmarks = true
     mockHasConversation.mockReturnValue(false)
+    mockDomainHostsRooms.mockResolvedValue(null)
+    chatDrafts.clear()
+    roomDrafts.clear()
     connectionState.status = 'online'
     mockGetCurrent.mockResolvedValue([])
     mockJoinRoom.mockResolvedValue(undefined)
@@ -701,6 +718,112 @@ describe('useDeepLink', () => {
       })
 
       expect(mockActivateConversation).toHaveBeenCalledWith('alice@example.org')
+    })
+
+    describe('link actions', () => {
+      // Modules reset between tests, so read the store the hook itself uses.
+      const modal = async () => (await import('@/stores/modalStore')).useModalStore.getState()
+      const openLink = async (uri: string) => {
+        let urlCallback: ((urls: string[]) => void) | undefined
+        mockOnOpenUrl.mockImplementation((cb) => { urlCallback = cb; return Promise.resolve(mockUnlisten) })
+        renderHook(() => useDeepLink(), { wrapper: createWrapper('/messages') })
+        await waitFor(() => { expect(urlCallback).toBeDefined() })
+        await act(async () => { urlCallback!([uri]) })
+      }
+
+      test('subscribe for someone who is not a contact opens Add contact with the address and sends nothing', async () => {
+        await openLink('xmpp:carol@example.org?subscribe')
+        expect((await modal()).addContact).toBe(true)
+        expect((await modal()).addContactJid).toBe('carol@example.org')
+        expect(mockActivateConversation).toHaveBeenCalledWith(null)
+        expect(currentLocation.current.pathname).toBe('/contacts')
+        expect(mockJoinRoom).not.toHaveBeenCalled()
+      })
+
+      test('subscribe for a contact that is not subscribed to yet still opens Add contact', async () => {
+        await openLink('xmpp:bob@example.org?subscribe')
+        expect((await modal()).addContactJid).toBe('bob@example.org')
+      })
+
+      test('subscribe for a contact whose presence you receive opens their chat', async () => {
+        await openLink('xmpp:alice@example.org?subscribe')
+        expect((await modal()).addContact).toBe(false)
+        expect(mockActivateConversation).toHaveBeenCalledWith('alice@example.org')
+      })
+
+      test('subscribe to your own address does nothing', async () => {
+        await openLink('xmpp:testuser@example.org?subscribe')
+        expect((await modal()).addContact).toBe(false)
+        expect(mockActivateConversation).not.toHaveBeenCalled()
+      })
+
+      test('subscribe waits for the app to be online', async () => {
+        connectionState.status = 'connecting'
+        await openLink('xmpp:carol@example.org?subscribe')
+        expect((await modal()).addContact).toBe(false)
+      })
+
+      test('message to a room that is not joined opens it without joining and keeps the text as its draft', async () => {
+        mockDomainHostsRooms.mockResolvedValue(true)
+        await openLink('xmpp:new@groups.example.com?message;body=Hello%20there')
+        expect(mockJoinRoom).not.toHaveBeenCalled()
+        expect(mockAddRoom).toHaveBeenCalledWith(expect.objectContaining({ jid: 'new@groups.example.com', joined: false }))
+        expect(mockActivateRoom).toHaveBeenCalledWith('new@groups.example.com')
+        expect(roomDrafts.get('new@groups.example.com')).toBe('Hello there')
+      })
+
+      test('message to a bookmarked room opens it without joining', async () => {
+        await openLink('xmpp:team@example.org?message')
+        expect(mockJoinRoom).not.toHaveBeenCalled()
+        expect(mockActivateRoom).toHaveBeenCalledWith('team@example.org')
+        expect(mockDomainHostsRooms).not.toHaveBeenCalled()
+      })
+
+      test('an address on a server that answers as a plain server opens a chat even when named like a room', async () => {
+        mockDomainHostsRooms.mockResolvedValue(false)
+        await openLink('xmpp:dave@chat.example.com?message')
+        expect(mockDomainHostsRooms).toHaveBeenCalledWith('chat.example.com')
+        expect(mockJoinRoom).not.toHaveBeenCalled()
+        expect(mockActivateConversation).toHaveBeenCalledWith('dave@chat.example.com')
+      })
+
+      test('an address on a room service opens the room even without a room-like name', async () => {
+        mockDomainHostsRooms.mockResolvedValue(true)
+        await openLink('xmpp:team@lounge.example.com?message')
+        expect(mockActivateRoom).toHaveBeenCalledWith('team@lounge.example.com')
+        expect(mockActivateConversation).not.toHaveBeenCalled()
+      })
+
+      test('without an answer from the server the name guess decides', async () => {
+        await openLink('xmpp:dave@conference.example.com?message')
+        expect(mockActivateRoom).toHaveBeenCalledWith('dave@conference.example.com')
+      })
+
+      test('known contacts are not asked about', async () => {
+        await openLink('xmpp:alice@example.org?message')
+        expect(mockDomainHostsRooms).not.toHaveBeenCalled()
+      })
+
+      test('message body fills an empty composer draft', async () => {
+        await openLink('xmpp:alice@example.org?message;body=Hi')
+        expect(chatDrafts.get('alice@example.org')).toBe('Hi')
+      })
+
+      test('message body goes below an existing draft, once for the same link', async () => {
+        chatDrafts.set('alice@example.org', 'See you at 6')
+        await openLink('xmpp:alice@example.org?message;body=Hi')
+        expect(chatDrafts.get('alice@example.org')).toBe('See you at 6\n\nHi')
+        const { routeDeepLink } = await import('@/utils/deepLinkRouter')
+        await act(async () => routeDeepLink('xmpp:alice@example.org?message;body=Hi'))
+        expect(chatDrafts.get('alice@example.org')).toBe('See you at 6\n\nHi')
+      })
+
+      test('message body drops control and direction-override characters and is bounded', async () => {
+        await openLink(`xmpp:alice@example.org?message;body=a%00b%E2%80%AEc${'x'.repeat(5000)}`)
+        const draft = chatDrafts.get('alice@example.org')!
+        expect(draft.startsWith('abc')).toBe(true)
+        expect(Array.from(draft).length).toBeLessThanOrEqual(4001)
+      })
     })
   })
 })

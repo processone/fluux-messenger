@@ -10,7 +10,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | [RFC 6121](https://datatracker.ietf.org/doc/html/rfc6121) | XMPP IM             | ✅ Implemented | Instant messaging, presence, roster management                                                                                                      |
 | [RFC 7622](https://datatracker.ietf.org/doc/html/rfc7622) | XMPP Address Format | ✅ Implemented | JID parsing and validation                                                                                                                          |
 | [RFC 7395](https://datatracker.ietf.org/doc/html/rfc7395) | XMPP over WebSocket | ✅ Implemented | WebSocket transport for browser connectivity. Desktop Rust proxy bridges WebSocket (RFC 7395) framing to native TCP (RFC 6120) framing              |
-| [RFC 5122](https://datatracker.ietf.org/doc/html/rfc5122) | XMPP URI Scheme     | ✅ Implemented | Deep linking support for `xmpp:` URIs - opens conversations and joins rooms from external links                                                     |
+| [RFC 5122](https://datatracker.ietf.org/doc/html/rfc5122) | XMPP URI Scheme     | ✅ Implemented | Deep linking support for `xmpp:` URIs - opens conversations and joins rooms from external links; `?subscribe` opens Add contact, `?message` reaches a room (Join button, no automatic join) or person, and `;body=` fills the draft, never sent                                                     |
 | [RFC 7590](https://datatracker.ietf.org/doc/html/rfc7590) | Use of TLS in XMPP  | ✅ Implemented | WSS for WebSocket connections, direct TLS and STARTTLS for native TCP connections (desktop), HTTPS for XEP-0156 discovery                           |
 
 ## Connection & Stream

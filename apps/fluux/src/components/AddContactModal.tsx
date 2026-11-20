@@ -7,12 +7,14 @@ import { ModalShell } from './ModalShell'
 
 interface AddContactModalProps {
   onClose: () => void
+  /** Address to fill in, such as from an xmpp: subscribe link. */
+  initialJid?: string
 }
 
-export function AddContactModal({ onClose }: AddContactModalProps) {
+export function AddContactModal({ onClose, initialJid = '' }: AddContactModalProps) {
   const { t } = useTranslation()
   const { addContact } = useRoster()
-  const [jid, setJid] = useState('')
+  const [jid, setJid] = useState(initialJid)
   const [nick, setNick] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)

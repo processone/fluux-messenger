@@ -621,6 +621,7 @@ export { applyRoomMessagePreviewUpdate } from './stores/shared/correctionHandoff
 export { findForwardedOrigin, forwardedCopyRoomLink, forwardedCopyMatchesBody, FORWARD_ORIGIN_WINDOW_MS, type ForwardOrigin } from './utils/forwardOrigin'
 export { subscribeMessageCacheUpdates } from './utils/messageCacheUpdates'
 export { parseXmppUri, isMucJid } from './utils/xmppUri'
+export { boundedPlainText } from './core/modules/messagingUtils'
 export type { XmppUri } from './utils/xmppUri'
 
 // Login prefill utilities

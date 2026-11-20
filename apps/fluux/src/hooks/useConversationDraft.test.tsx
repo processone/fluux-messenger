@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useConversationDraft, type DraftOperations } from './useConversationDraft'
+import { useConversationDraft, addDraftText, type DraftOperations } from './useConversationDraft'
 import type { MessageComposerHandle } from '@/components/MessageComposer'
 
 describe('useConversationDraft', () => {
@@ -31,6 +31,28 @@ describe('useConversationDraft', () => {
         placeCaret: vi.fn(),
       },
     }
+  })
+
+  describe('addDraftText (text from a link)', () => {
+    it('goes into the stored draft below what is there when no editor is open, once', () => {
+      drafts.set('conv-1', 'See you at 6')
+      addDraftText(mockDraftOperations, 'conv-1', 'Hi')
+      addDraftText(mockDraftOperations, 'conv-1', 'Hi')
+      expect(drafts.get('conv-1')).toBe('See you at 6\n\nHi')
+    })
+
+    it('reaches an open editor below what it holds, once', () => {
+      mockComposerRef.current!.getText = vi.fn(() => 'See you at 6')
+      const { result } = renderHook(() =>
+        useConversationDraft({ conversationId: 'conv-1', draftOperations: mockDraftOperations, composerRef: mockComposerRef })
+      )
+      act(() => result.current[1]('See you at 6'))
+      act(() => addDraftText(mockDraftOperations, 'conv-1', 'Hi'))
+      expect(mockComposerRef.current!.setText).toHaveBeenLastCalledWith('See you at 6\n\nHi')
+      mockComposerRef.current!.getText = vi.fn(() => 'See you at 6\n\nHi')
+      act(() => addDraftText(mockDraftOperations, 'conv-1', 'Hi'))
+      expect(mockComposerRef.current!.setText).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('initial state', () => {

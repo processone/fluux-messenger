@@ -45,6 +45,10 @@ interface ModalStoreState {
   newMessage: boolean
   addContact: boolean
   joinRoom: boolean
+  /** Address the Add contact dialog opens with (from an xmpp: link); empty otherwise. */
+  addContactJid: string
+  /** Open Add contact with the address filled in. Sends nothing. */
+  openAddContact: (jid: string) => void
   /** Open a specific modal. */
   open: (modal: ModalName) => void
   /** Close a specific modal. */
@@ -69,18 +73,23 @@ const ALL_CLOSED = {
 
 export const useModalStore = create<ModalStoreState>((set, get) => ({
   ...ALL_CLOSED,
+  addContactJid: '',
+  openAddContact: (jid) => {
+    dismissAllTooltips()
+    set({ addContact: true, addContactJid: jid })
+  },
   open: (modal) => {
     // A modal floats above the UI, but hover tooltips portal even higher and
     // are never dismissed by a keyboard-opened modal — clear them on open so
     // none linger over the command palette etc.
     dismissAllTooltips()
-    set({ [modal]: true } as Pick<ModalStoreState, ModalName>)
+    set({ [modal]: true, ...(modal === 'addContact' ? { addContactJid: '' } : {}) } as Pick<ModalStoreState, ModalName>)
   },
   close: (modal) => set({ [modal]: false } as Pick<ModalStoreState, ModalName>),
   toggle: (modal) =>
     set((s) => {
       if (!s[modal]) dismissAllTooltips()
-      return { [modal]: !s[modal] } as Pick<ModalStoreState, ModalName>
+      return { [modal]: !s[modal], ...(modal === 'addContact' ? { addContactJid: '' } : {}) } as Pick<ModalStoreState, ModalName>
     }),
   closeAll: () => set({ ...ALL_CLOSED }),
   closeTopmost: () => {

@@ -30,6 +30,13 @@ describe('AddContactModal', () => {
   })
 
   describe('rendering', () => {
+    it('fills in the address a link carries and sends nothing', () => {
+      render(<AddContactModal onClose={mockOnClose} initialJid="bob@example.com" />)
+
+      expect(screen.getByLabelText('contacts.jidLabel')).toHaveValue('bob@example.com')
+      expect(mockAddContact).not.toHaveBeenCalled()
+    })
+
     it('should render modal with title and form fields', () => {
       render(<AddContactModal onClose={mockOnClose} />)
 

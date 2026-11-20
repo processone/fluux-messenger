@@ -235,6 +235,27 @@ The app-specific scheme opens widget conversation links with account validation.
 
 - A bare `xmpp:alice@example.com` (no action) still prefills the JID.
 
+### Link actions inside the app
+
+When the app is online, an `xmpp:` link acts like this (RFC 5122, XEP-0147).
+Nothing a link says is ever sent for the person; they press the button.
+
+| URI                                              | Effect                                                                 |
+|--------------------------------------------------|------------------------------------------------------------------------|
+| `xmpp:bob@example.com?subscribe`                 | A contact whose presence you already receive (`to` or `both`): their chat opens. Anyone else: Add contact opens with the address filled in and nothing is sent. Your own address: nothing. A room address: the room opens without joining. |
+| `xmpp:team@example.com?message`                  | A room you have not joined opens with its Join button; it is not joined. A person's chat opens. |
+| `xmpp:alice@example.com?message;body=Hi`         | The text (control and direction-override characters removed, 4,000 characters at most) is added to the conversation's draft, or the room's, below any draft, with a blank line between. The same text already at the end of the draft is not added again. Other keys are ignored. |
+| `?join`, `?join;msg=…`                           | Unchanged: `join` joins the room; `join;msg=` opens a room message link. |
+
+Whether an address is a room or a person is decided by the first step that
+knows it: rooms Fluux holds, contacts and chats, then one disco#info question to
+the address's server (answered once per server name for the session; a
+`conference` identity means rooms), and only without an answer the name guess
+(`conference.`, `muc.`, `chat.` and similar). Only `connect` and a link with no
+action are login links; every other action is navigation, which waits for the
+app to be online and never fills the login form. Other XEP-0147 actions
+(`roster`, `remove`, `unsubscribe`, `invite`, …) open a chat as before.
+
 ### When it applies
 
 One router (`apps/fluux/src/utils/deepLinkRouter.ts`) reads the launch URL
@@ -245,7 +266,7 @@ on what is on screen:
   remembered FAST token or a keychain password): a login link (`connect`
   action, or a bare user address) replaces the saved account at any moment —
   the reconnect is abandoned, a connection in flight is cancelled, and the
-  login form opens with the link's account. A room-join or message link is
+  login form opens with the link's account. A room-join, message or subscribe link (any action but `connect`) is
   navigation: it waits and runs once the account is online.
 - **Logged out** (login form up): a login link prefills the form; a navigation
   link waits for the next time the app is online.
@@ -296,7 +317,7 @@ prefill is invalid, so a malformed link cannot survive a reload.
 | `server` with a disallowed scheme               | Field dropped; a valid `jid` still applies.         |
 | A link prefill present at login                 | Beats the saved localStorage seed; skips keychain auto-connect for a different saved account. |
 | Startup reconnect pending + login link          | Reconnect abandoned (connection cancelled); login form with the link's account. |
-| Startup reconnect pending + `join` / `message` URI | Reconnect continues; the link runs once online.  |
+| Startup reconnect pending + any link action other than `connect` (`join`, `message`, `subscribe`, …) | Reconnect continues; the link runs once online.  |
 
 ## Limitations
 
