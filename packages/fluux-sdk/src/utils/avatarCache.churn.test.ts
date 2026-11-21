@@ -72,10 +72,14 @@ it('clearing a negative entry that is not stored takes no write lock, and clears
 
 it('never returns a URL that was revoked while it checked the stored row', async () => {
   const first = await cacheAvatar(hash, base64, 'image/png')
-  const pending = cacheAvatar(hash, base64, 'image/png')
-  // A resume refresh replaces the pooled URL while the stored-row lookup is in flight.
-  revokeAllBlobUrls()
-  const second = await pending
+  // A resume refresh replaces the pooled URL exactly while the stored-row lookup is in flight.
+  const count = IDBObjectStore.prototype.count
+  const lookup = vi.spyOn(IDBObjectStore.prototype, 'count').mockImplementationOnce(function (this: IDBObjectStore, ...args) {
+    revokeAllBlobUrls()
+    return count.apply(this, args)
+  })
+  const second = await cacheAvatar(hash, base64, 'image/png')
+  expect(lookup).toHaveBeenCalledTimes(1)
   expect(second).not.toBe(first)
   expect(revoke).toHaveBeenCalledWith(first)
   expect(await getCachedAvatar(hash)).toBe(second)

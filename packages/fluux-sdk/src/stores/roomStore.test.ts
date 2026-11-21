@@ -5740,10 +5740,11 @@ describe('roomStore', () => {
       })
       const latest = roomMsgAt('latest', 7)
       roomStore.setState({ messages: new Map([[roomJid, [latest]]]) })
-      const bounded = [roomMsgAt('anchor', 3), spam('spam-a', 4), spam('spam-b', 4), spam('spam-c', 4), roomMsgAt('unread', 4)]
+      // after: 3 returns exactly three newer rows, all hidden; the unread row ties with them but lies past the cap.
+      const bounded = [roomMsgAt('anchor', 3), spam('spam-a', 4), spam('spam-b', 4), spam('spam-c', 4)]
       vi.mocked(messageCache.getRoomMessagesAround)
         .mockResolvedValueOnce(bounded)
-        .mockResolvedValueOnce([...bounded, latest])
+        .mockResolvedValueOnce([...bounded, roomMsgAt('unread', 4), latest])
       setResidentWindowSize(3)
       try {
         await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' })
