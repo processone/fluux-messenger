@@ -50,6 +50,7 @@ import { reportStartupShell } from '@/utils/startupRecovery'
 import { useEasterEggNotifications } from '@/hooks/useEasterEggNotifications'
 import { useFocusZones, useViewNavigation, isMobileWeb, isSmallScreen, useWindowVisibility, useRouteSync, useDayBoundaryWatcher, type FocusZoneRefs } from '@/hooks'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { resolveEncryptionSubPage } from './settings-components/encryptionPages'
 import { useIosPaneNavigation } from '@/hooks/useIosPaneNavigation'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/utils/sessionStorage'
@@ -384,6 +385,7 @@ function ChatLayoutContent() {
   const containerRef = useRef<HTMLDivElement>(null)
   const mobileMainRef = useRef<HTMLElement>(null)
   const occupantPaneRef = useRef<HTMLDivElement>(null)
+  const methodPaneRef = useRef<HTMLDivElement>(null)
 
   // Focus zone refs for Tab cycling - create refs at top level (stable across renders)
   const sidebarListRef = useRef<HTMLDivElement>(null)
@@ -765,6 +767,10 @@ function ChatLayoutContent() {
   const handleSettingsBack = () => {
     navigateToSettings(undefined, { replace: true })
   }
+  // An encryption method screen sits one level deeper: back goes to the Encryption overview.
+  const handleEncryptionMethodBack = () => {
+    navigateToSettings('encryption', { replace: true })
+  }
 
   const { markReadToNewest: markChatRead } = useChatActions()
   const { markReadToNewest: markRoomRead } = useRoomActions()
@@ -861,11 +867,24 @@ function ChatLayoutContent() {
     : searchPreviewResult ? () => searchStore.getState().setPreviewResult(null)
     : undefined
 
+  // An encryption method screen covers the Encryption overview, which stays mounted underneath so
+  // the edge swipe reveals it instead of the settings list. Derived from the route alone, never the
+  // window width, so a resize cannot change which pane owns back mid-gesture.
+  const mobileEncryptionMethod = sidebarView === 'settings' && settingsCategory === 'encryption'
+    && resolveEncryptionSubPage(settingsSubPage) !== null
+  const methodPane = useIosPaneNavigation(
+    methodPaneRef,
+    mobileEncryptionMethod,
+    handleEncryptionMethodBack,
+    settingsSubPage,
+    { shown: mobileEncryptionMethod, animated: true },
+  )
+
   const mainPane = useIosPaneNavigation(
     mobileMainRef,
     (sidebarView === 'messages' && !!activeConversationId) ||
       (sidebarView === 'rooms' && !!activeRoomJid && !showRoomOccupants) ||
-      settingsHasContent,
+      (settingsHasContent && !mobileEncryptionMethod),
     sidebarView === 'settings' ? handleSettingsBack : sidebarView === 'rooms' ? handleRoomBack : handleChatBack,
     sidebarView === 'settings' ? settingsCategory : activeRoomJid || activeConversationId,
     {
@@ -1112,9 +1131,31 @@ function ChatLayoutContent() {
         <main ref={mobileMainRef} className={`${hasActiveContent ? 'flex' : 'hidden md:flex'} ${previewBack ? 'relative z-10 shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : mobileOccupants ? 'relative' : ''} content-panel flex-1 flex-col bg-fluux-chat min-w-0 min-h-0`}>
           <RegionErrorBoundary region="main" resetKey={mainViewKey} onBack={mainViewBack}>
           {sidebarView === 'settings' ? (
-            <Suspense fallback={<ViewLoadingFallback />}>
-              <SettingsView onBack={() => mainPane.back(handleSettingsBack)} />
-            </Suspense>
+            // One stable tree for every settings screen, so crossing the breakpoint or opening a
+            // method screen never remounts the foreground view (its dialogs and busy state live
+            // there). The pane stays outside Suspense so its swipe listeners attach on first mount.
+            <div className="relative h-full">
+              {mobileEncryptionMethod && (
+                <div className="h-full" inert aria-hidden>
+                  <Suspense fallback={<ViewLoadingFallback />}>
+                    <SettingsView showOverview />
+                  </Suspense>
+                </div>
+              )}
+              <div
+                ref={methodPaneRef}
+                className={mobileEncryptionMethod
+                  ? `absolute inset-0 z-10 bg-fluux-chat ${methodPane.preview ? 'shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : ''}`
+                  : 'h-full'}
+              >
+                <Suspense fallback={<ViewLoadingFallback />}>
+                  <SettingsView
+                    onBack={() => mainPane.back(handleSettingsBack)}
+                    onSubPageBack={() => methodPane.back(handleEncryptionMethodBack)}
+                  />
+                </Suspense>
+              </div>
+            </div>
           ) : previewJid ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <StrangerRequestPreviewView
