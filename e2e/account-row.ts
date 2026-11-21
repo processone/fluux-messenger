@@ -11,6 +11,7 @@ import { bootDemo } from './harness/demoBoot'
 
 const SHOTS = process.env.ACCOUNT_ROW_SHOTS
 const GRACE_MS = 2000
+const LONG_NAME = 'Alexandria Montgomery-Featherstonehaugh the Third'
 const LONG_STATUS = 'Out of office until the end of next week, please leave a message and I will answer'
 
 type W = Window & {
@@ -73,8 +74,10 @@ test.describe('account row (desktop)', () => {
     await expect(page).toHaveURL(/settings\/profile/)
   })
 
-  test('a long status ends in an ellipsis inside the sidebar and hover discloses it in full', async ({ page }) => {
+  test('a long name and a long status end in ellipses inside the sidebar and hover discloses both in full', async ({ page }) => {
     await boot(page, 200)
+    await page.evaluate(n => (window as unknown as { __connectionStore: { getState(): { setOwnNickname(n: string): void } } }).__connectionStore.getState().setOwnNickname(n), LONG_NAME)
+    await expect(row(page)).toContainText('Alexandria')
     await row(page).click()
     await page.getByRole('menu').getByLabel('Status Message').fill(LONG_STATUS)
     await page.getByRole('menu').getByRole('button', { name: 'Save' }).click()
@@ -83,31 +86,45 @@ test.describe('account row (desktop)', () => {
       const pane = el.closest('[data-testid="sidebar-pane"]')!.getBoundingClientRect()
       const r = el.getBoundingClientRect()
       const line = [...el.querySelectorAll('span.truncate')].find(s => s.textContent?.startsWith('Out of office')) as HTMLElement
-      return { rowRight: r.right, paneRight: pane.right, truncated: line.scrollWidth > line.clientWidth, overflow: getComputedStyle(line).textOverflow }
+      const nameEl = [...el.querySelectorAll('span.truncate')].find(s => s.textContent?.startsWith('Alexandria')) as HTMLElement
+      const chevron = el.querySelector('svg:last-of-type')!.getBoundingClientRect()
+      const ends = (n: HTMLElement) => ({ truncated: n.scrollWidth > n.clientWidth, overflow: getComputedStyle(n).textOverflow })
+      return { rowRight: r.right, paneRight: pane.right, chevronRight: chevron.right, status: ends(line), name: ends(nameEl) }
     })
     expect(geo.rowRight).toBeLessThanOrEqual(geo.paneRight)
-    expect(geo.truncated).toBe(true)
-    expect(geo.overflow).toBe('ellipsis')
+    expect(geo.chevronRight).toBeLessThanOrEqual(geo.rowRight)
+    expect(geo.status).toEqual({ truncated: true, overflow: 'ellipsis' })
+    expect(geo.name).toEqual({ truncated: true, overflow: 'ellipsis' })
     await row(page).hover()
     const tip = page.getByRole('tooltip')
     await expect(tip).toContainText(LONG_STATUS, { timeout: 3000 })
-    const name = (await row(page).locator('span.truncate').first().textContent())!
-    await expect(tip).toContainText(name)
-    await expect(row(page)).toHaveAccessibleName(new RegExp(LONG_STATUS))
+    await expect(tip).toContainText(LONG_NAME)
+    await expect(row(page)).toHaveAccessibleName(new RegExp(`${LONG_NAME}, ${LONG_STATUS}`))
     await shot(page, 'desktop-long-status-tooltip')
   })
 
-  test('Tab reaches the row, Enter opens the menu, arrows walk it, Escape returns focus, Alt+Y opens it', async ({ page }) => {
+  test('Tab order is composer, account row, sidebar list; Shift+Tab reverses; Enter, arrows, Escape and Alt+Y work', async ({ page }) => {
     await boot(page)
     await page.locator('[data-nav="messages"]').click()
     await page.getByTestId('sidebar-pane').getByText('Emma Wilson', { exact: true }).first().click()
-    const focused = () => page.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? document.activeElement?.getAttribute('role') ?? document.activeElement?.tagName)
-    let reached = false
-    for (let i = 0; i < 12 && !reached; i++) {
-      await page.keyboard.press('Tab')
-      reached = (await focused()) === 'account-row'
-    }
-    expect(reached).toBe(true)
+    const composer = page.getByPlaceholder('Message Emma Wilson', { exact: true })
+    const sidebarList = page.getByTestId('sidebar-pane').locator('.focus-zone')
+    await composer.click()
+    await expect(composer).toBeFocused()
+    // Tab from the composer lands on the account row, the fourth area.
+    await page.keyboard.press('Tab')
+    await expect(row(page)).toBeFocused()
+    // The next Tab wraps to the sidebar list; Shift+Tab from there returns to the row.
+    await page.keyboard.press('Tab')
+    await expect(sidebarList).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await expect(row(page)).toBeFocused()
+    // Shift+Tab from the row goes back to the composer.
+    await page.keyboard.press('Shift+Tab')
+    await expect(composer).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(row(page)).toBeFocused()
+
     await page.keyboard.press('Enter')
     const menu = page.getByRole('menu')
     await expect(menu).toBeVisible()
@@ -117,12 +134,13 @@ test.describe('account row (desktop)', () => {
     await page.keyboard.press('Escape')
     await expect(menu).toHaveCount(0)
     await expect(row(page)).toBeFocused()
-    // Shift+Tab walks the cycle backwards, back to the composer side.
-    await page.keyboard.press('Shift+Tab')
-    expect(await focused()).not.toBe('account-row')
-    await page.locator('body').click({ position: { x: 700, y: 400 } })
+
+    // Alt+Y from the message list opens the menu.
+    await page.locator('[data-message-id]').first().click()
+    await expect(row(page)).not.toBeFocused()
     await page.keyboard.press('Alt+y')
     await expect(page.getByRole('menu')).toBeVisible()
+    await expect(page.getByRole('menu').getByRole('menuitemradio', { name: 'Online' })).toBeFocused()
   })
 
   test('the row keeps 48 px in every connection state and recovery actions stay available', async ({ page }, info) => {
@@ -137,7 +155,22 @@ test.describe('account row (desktop)', () => {
     }
     await check('online')
 
-    // Within the grace window nothing changes.
+    // A brief drop that recovers inside the grace window never flashes anything.
+    await setConnection(page, 'reconnecting', 1, 30_000)
+    await page.waitForTimeout(GRACE_MS - 1200)
+    await setConnection(page, 'online')
+    await page.waitForTimeout(GRACE_MS)
+    await expect(row(page)).toContainText('Online')
+    await expect(row(page).locator('.animate-spin')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Cancel reconnection' })).toHaveCount(0)
+    await check('brief-drop-recovered')
+
+    // A real outage: within the grace window nothing changes.
+    await page.evaluate(() => {
+      const w = window as unknown as { __cancelCalls: number; __demoClient: { cancelReconnect: () => void } }
+      w.__cancelCalls = 0
+      w.__demoClient.cancelReconnect = () => { w.__cancelCalls++ }
+    })
     await setConnection(page, 'reconnecting', 2, 30_000)
     await page.waitForTimeout(GRACE_MS - 800)
     await expect(page.getByRole('button', { name: 'Cancel reconnection' })).toHaveCount(0)
@@ -153,6 +186,8 @@ test.describe('account row (desktop)', () => {
     await row(page).click()
     const menu = page.getByRole('menu')
     for (const radio of await menu.getByRole('menuitemradio').all()) await expect(radio).toBeDisabled()
+    await expect(menu.getByLabel('Status Message')).toBeDisabled()
+    await expect(menu.getByRole('button', { name: 'Save' })).toBeDisabled()
     await expect(menu.getByRole('menuitem', { name: /log out/i })).toBeEnabled()
     await shot(page, 'desktop-reconnecting-menu')
     await page.keyboard.press('Escape')
@@ -160,16 +195,17 @@ test.describe('account row (desktop)', () => {
     const cancel = page.getByRole('button', { name: 'Cancel reconnection' })
     await expect(cancel).toBeVisible()
     await check('reconnecting-with-cancel')
+    await cancel.click()
+    expect(await page.evaluate(() => (window as unknown as { __cancelCalls: number }).__cancelCalls)).toBe(1)
 
     await setConnection(page, 'verifying')
     await expect(row(page)).toContainText('Verifying')
     await check('verifying')
 
-    // Terminal states (error, disconnected) send the real app to its login screen, so those
-    // lines are covered by the component tests, not here.
     await setConnection(page, 'online')
     await expect(row(page)).toContainText('Online')
     await expect(cancel).toHaveCount(0)
+    await check('recovered')
 
     await page.evaluate(() => (window as W).__eventsStore!.getState().addSystemNotification('auth-error', 'Sign-in expired', 'Sign in again'))
     await expect(row(page)).toContainText('Sign-in expired')
@@ -177,6 +213,14 @@ test.describe('account row (desktop)', () => {
     await expect(row(page)).toHaveAccessibleName(/Sign-in expired/)
     await shot(page, 'desktop-alert')
     info.annotations.push({ type: 'row-height', description: heights.join(' ') })
+  })
+
+  test('a connection error replaces the sidebar with the login screen, so the row never shows it', async ({ page }) => {
+    await boot(page)
+    await expect(row(page)).toBeVisible()
+    await setConnection(page, 'error')
+    await expect(row(page)).toHaveCount(0)
+    await expect(page.getByTestId('sidebar-pane')).toHaveCount(0)
   })
 })
 
@@ -220,4 +264,34 @@ test.describe('account row (phone)', () => {
       expect((await names()).index).toBe(lastIndex)
     })
   }
+})
+
+test.describe('account row (short phone viewport)', () => {
+  test.use({ viewport: { width: 390, height: 420 }, hasTouch: true, isMobile: true })
+
+  test('the sheet stays inside the viewport, scrolls, and every item is reachable', async ({ page }) => {
+    await boot(page)
+    expect(await rowHeight(page)).toBe(48)
+    await row(page).tap()
+    const sheet = page.getByRole('dialog')
+    await expect(sheet).toBeVisible()
+    await page.waitForTimeout(600)
+    const geo = await sheet.evaluate(el => {
+      const scroller = [...el.querySelectorAll<HTMLElement>('div')].find(d => getComputedStyle(d).overflowY === 'auto')!
+      const r = el.getBoundingClientRect()
+      return { top: r.top, bottom: r.bottom, scrolls: scroller.scrollHeight > scroller.clientHeight }
+    })
+    expect(geo.top).toBeGreaterThanOrEqual(0)
+    expect(geo.bottom).toBeLessThanOrEqual(420)
+    expect(geo.scrolls).toBe(true)
+    await shot(page, 'phone-short-sheet')
+    // Log out, the last item, is reachable by scrolling and by keyboard.
+    const logout = sheet.getByRole('menuitem', { name: /log out/i })
+    await logout.scrollIntoViewIfNeeded()
+    await expect(logout).toBeInViewport()
+    await sheet.getByRole('menuitemradio', { name: 'Online' }).focus()
+    await page.keyboard.press('Shift+Tab')
+    await expect(logout).toBeFocused()
+    await expect(logout).toBeInViewport()
+  })
 })
