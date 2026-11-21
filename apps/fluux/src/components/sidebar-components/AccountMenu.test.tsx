@@ -49,6 +49,7 @@ const store = {
 let mobile = false
 let consoleIsOpen = false
 let presence = 'online'
+let alerts: unknown[] = []
 let statusMessage = ''
 const toggleConsoleSpy = vi.fn()
 const setPresence = vi.fn()
@@ -64,7 +65,7 @@ vi.mock('@fluux/sdk/react', () => ({
   useConnectionStore: <T,>(selector: (s: ConnState) => T): T =>
     useSyncExternalStore(store.subscribe, () => selector(store.state)),
   useEventsStore: (selector: (s: { systemNotifications: unknown[] }) => unknown) =>
-    selector({ systemNotifications: [] }),
+    selector({ systemNotifications: alerts }),
 }))
 
 vi.mock('@fluux/sdk', () => ({
@@ -97,6 +98,7 @@ beforeEach(() => {
   mobile = false
   consoleIsOpen = false
   presence = 'online'
+  alerts = []
   statusMessage = ''
   store.state = { ...initialState }
   toggleConsoleSpy.mockClear()
@@ -233,6 +235,39 @@ describe('AccountMenu disclosure and phone sheet keys', () => {
     expect(document.activeElement).toBe(items[0])
     fireEvent.keyDown(items[0], { key: 'Tab', shiftKey: true })
     expect(document.activeElement).toBe(last)
+  })
+})
+
+describe('AccountMenu disclosure follows the displayed status', () => {
+  const tip = () => row().parentElement
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('carries the retry countdown into tooltip and spoken name', () => {
+    store.setState({ status: 'reconnecting', reconnectTargetTime: Date.now() + DEGRADED_STATUS_GRACE_MS + 5000, reconnectAttempt: 2 })
+    render(<AccountMenu onLogout={vi.fn()} onOpenProfile={vi.fn()} />)
+    act(() => vi.advanceTimersByTime(DEGRADED_STATUS_GRACE_MS))
+    expect(tip()?.getAttribute('data-tooltip')).toContain('status.reconnectingIn')
+    expect(row().getAttribute('aria-label')).toContain('"attempt":2')
+    expect(row().getAttribute('aria-label')).toContain(row().textContent!.split('Mickaël')[1])
+  })
+
+  it.each([
+    ['error', 'status.connectionError'],
+    ['disconnected', 'status.disconnected'],
+  ])('says %s in tooltip and spoken name', (status, text) => {
+    statusMessage = 'Custom'
+    store.setState({ status })
+    render(<AccountMenu onLogout={vi.fn()} onOpenProfile={vi.fn()} />)
+    expect(tip()).toHaveAttribute('data-tooltip', `Mickaël · ${text}`)
+    expect(row()).toHaveAccessibleName(`Mickaël, ${text}`)
+  })
+
+  it('says the persistent sign-in alert in tooltip and spoken name', () => {
+    alerts = [{ type: 'auth-error', title: 'Sign-in expired', message: 'm' }]
+    render(<AccountMenu onLogout={vi.fn()} onOpenProfile={vi.fn()} />)
+    expect(tip()).toHaveAttribute('data-tooltip', 'Mickaël · Sign-in expired')
+    expect(row()).toHaveAccessibleName('Mickaël, Sign-in expired')
   })
 })
 

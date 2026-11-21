@@ -47,11 +47,34 @@ interface AccountMenuProps {
   zoneRef?: React.MutableRefObject<HTMLElement | null>
 }
 
-/** Retry countdown. Mounted only while reconnecting, so the healthy row never re-renders on retry churn. */
-function ReconnectText() {
+type StatusTone = 'busy' | 'error' | 'muted'
+
+/**
+ * The one line under the account name, resolved once so the row, its tooltip and its
+ * spoken name all say the same thing: connection state while degraded, a persistent
+ * sign-in alert, otherwise the status message or presence label. Transient states
+ * (reconnecting, connecting, verifying) arrive as `step`, already past their grace
+ * delay; terminal ones show at once. The retry target is selected as null unless
+ * reconnecting, so a healthy row never re-renders on retry churn.
+ */
+function useAccountStatus(
+  step: string | null,
+  status: string,
+  presenceLabel: string,
+  statusMessage: string,
+): { text: string; tone: StatusTone } {
   const { t } = useTranslation()
-  const reconnectTargetTime = useConnectionStore((s) => s.reconnectTargetTime)
-  const reconnectAttempt = useConnectionStore((s) => s.reconnectAttempt)
+  const current = step ?? (status === 'error' || status === 'disconnected' ? status : null)
+  const reconnecting = current === 'reconnecting'
+  const reconnectTargetTime = useConnectionStore((s) => (reconnecting ? s.reconnectTargetTime : null))
+  const reconnectAttempt = useConnectionStore((s) => (reconnecting ? s.reconnectAttempt : 0))
+  const persistentAlert = useEventsStore((s) => {
+    for (let i = s.systemNotifications.length - 1; i >= 0; i--) {
+      const n = s.systemNotifications[i]
+      if (n.type === 'auth-error' || n.type === 'resource-conflict') return n
+    }
+    return null
+  })
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
 
   useEffect(() => {
@@ -65,59 +88,30 @@ function ReconnectText() {
     return () => clearInterval(interval)
   }, [reconnectTargetTime])
 
-  return (
-    <>
-      {secondsLeft !== null
+  if (reconnecting) {
+    return {
+      tone: 'busy',
+      text: secondsLeft !== null
         ? t('status.reconnectingIn', { seconds: secondsLeft, attempt: reconnectAttempt })
-        : t('status.reconnecting')}
-    </>
-  )
+        : t('status.reconnecting'),
+    }
+  }
+  if (current === 'verifying') return { tone: 'busy', text: t('status.verifying') }
+  if (current === 'connecting') return { tone: 'busy', text: t('status.connecting') }
+  if (current === 'error') return { tone: 'error', text: t('status.connectionError') }
+  if (current === 'disconnected') return { tone: 'muted', text: t('status.disconnected') }
+  if (persistentAlert) return { tone: 'error', text: persistentAlert.title }
+  return { tone: 'muted', text: statusMessage || presenceLabel }
 }
 
-/**
- * One line under the account name: connection state while degraded, the user's
- * status message while healthy, otherwise the presence label. Always a single
- * truncating line so the row keeps one height in every state. Transient states
- * (reconnecting, connecting, verifying) arrive here already past their grace
- * delay as `step`; terminal ones show at once.
- */
-function AccountStatusLine({
-  step,
-  status,
-  presenceLabel,
-  statusMessage,
-}: {
-  step: string | null
-  status: string
-  presenceLabel: string
-  statusMessage: string
-}) {
-  const { t } = useTranslation()
-  const persistentAlert = useEventsStore((s) => {
-    for (let i = s.systemNotifications.length - 1; i >= 0; i--) {
-      const n = s.systemNotifications[i]
-      if (n.type === 'auth-error' || n.type === 'resource-conflict') return n
-    }
-    return null
-  })
-  const current = step ?? (status === 'error' || status === 'disconnected' ? status : null)
-
-  const spinning = (text: React.ReactNode) => (
-    <span className="flex items-center gap-1 min-w-0 text-fluux-yellow">
-      <RefreshCw className="size-3 animate-spin flex-shrink-0" aria-hidden="true" />
+function AccountStatusLine({ text, tone }: { text: string; tone: StatusTone }) {
+  const color = tone === 'busy' ? 'text-fluux-yellow' : tone === 'error' ? 'text-fluux-error' : 'text-fluux-muted'
+  return (
+    <span className={`flex min-w-0 items-center gap-1 text-xs leading-4 ${color}`}>
+      {tone === 'busy' && <RefreshCw className="size-3 animate-spin flex-shrink-0" aria-hidden="true" />}
       <span className="truncate">{text}</span>
     </span>
   )
-
-  let line: React.ReactNode
-  if (current === 'reconnecting') line = spinning(<ReconnectText />)
-  else if (current === 'verifying') line = spinning(t('status.verifying'))
-  else if (current === 'connecting') line = spinning(t('status.connecting'))
-  else if (current === 'error') line = <span className="truncate text-fluux-error">{t('status.connectionError')}</span>
-  else if (current === 'disconnected') line = <span className="truncate text-fluux-muted">{t('status.disconnected')}</span>
-  else if (persistentAlert) line = <span className="truncate text-fluux-error">{persistentAlert.title}</span>
-  else line = <span className="truncate text-fluux-muted">{statusMessage || presenceLabel}</span>
-  return <span className="flex min-w-0 text-xs leading-4">{line}</span>
 }
 
 export function AccountMenu({ onLogout, onOpenProfile, zoneRef }: AccountMenuProps) {
@@ -165,6 +159,7 @@ export function AccountMenu({ onLogout, onOpenProfile, zoneRef }: AccountMenuPro
   const presenceLabel = t(currentOption.labelKey)
   // Presence can only change on a live connection; the rest of the menu (log out) stays available.
   const connected = status === 'online'
+  const line = useAccountStatus(step, status, presenceLabel, statusMessage || '')
   const showCancel = step === 'reconnecting'
 
   // The console is an advanced-only surface: close it if the flag turns off while open.
@@ -367,9 +362,8 @@ export function AccountMenu({ onLogout, onOpenProfile, zoneRef }: AccountMenuPro
     </>
   )
 
-  const statusText = statusMessage || presenceLabel
-  const rowTooltip = `${name} · ${step ? t(`status.${step}`) : statusText}`
-  const rowLabel = `${name}, ${step ? t(`status.${step}`) : statusText}`
+  const rowTooltip = `${name} · ${line.text}`
+  const rowLabel = `${name}, ${line.text}`
 
   return (
     <>
@@ -396,12 +390,7 @@ export function AccountMenu({ onLogout, onOpenProfile, zoneRef }: AccountMenuPro
               />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-sm font-medium leading-5 text-fluux-text">{name}</span>
-                <AccountStatusLine
-                  step={step}
-                  status={status}
-                  presenceLabel={presenceLabel}
-                  statusMessage={statusMessage || ''}
-                />
+                <AccountStatusLine text={line.text} tone={line.tone} />
               </span>
               <ChevronsUpDown className="size-4 flex-shrink-0 text-fluux-muted" aria-hidden="true" />
             </button>
