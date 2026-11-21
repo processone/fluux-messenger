@@ -265,6 +265,22 @@ describe('server backup status follows the confirmed file', () => {
     expect(f.plugin.backupHoldsOtherKey()).toBe(false)
   })
 
+  it('a checked other-key result does not outlive a restore of that very file', async () => {
+    const f = await setup()
+    await f.plugin.restoreSecretKey(meta.backupPassphrase)
+    await f.plugin.importKeyFromFile(bobBackup, meta.backupPassphrase)
+    expect((await f.plugin.checkBackupWithCode(meta.backupPassphrase)).outcome).toBe('other-key')
+    expect(f.plugin.backupHoldsOtherKey()).toBe(true)
+    // The device now uses the key that backup holds and restores from the same file.
+    await f.plugin.restoreSecretKey(meta.backupPassphrase)
+    expect(await f.plugin.inspectSecretKeyBackup()).toBe('confirmed')
+    expect(f.plugin.backupHoldsOtherKey()).toBe(false)
+    // A rotation whose backup publication then failed leaves the record behind: out of date, not a mismatch.
+    f.plugin.rotated = true
+    expect(await f.plugin.inspectSecretKeyBackup()).toBe('out-of-date')
+    expect(f.plugin.backupHoldsOtherKey()).toBe(false)
+  })
+
   it('a successful check of a newly replaced backup with this key ends the recorded other-key evidence', async () => {
     const f = await setup()
     await f.plugin.restoreSecretKey(meta.backupPassphrase)

@@ -676,13 +676,13 @@ wrong code changes nothing; a backup that opens but holds another key records no
 the existing mismatch status. That ownership evidence is bound to the hash of the file it describes, so
 a replaced or newly checked file never inherits it.
 
-Settings treats every state except `confirmed` as "a backup may exist" for replacement, rotation and
+Settings treats every state except `confirmed` (and `absent`, which has nothing to replace and whose rotation publishes no backup) as "a backup may exist" for replacement, rotation and
 deletion: one certainty reading drives the status, the factual known-presence replacement warning, the
 rotation warning and rotation's backup-code acknowledgement. Rotation re-publishes in these states,
 deliberately replacing the existing backup and code, even when another device created them. A backup the
 record (or a check) shows to hold another primary key keeps the older policy: the foreign-backup warning,
 and a rotation that leaves that backup alone. Only a
-failed raw presence probe offers Check again; the other states offer Check with code. Deleting the
+failed raw presence probe offers Check again; `unconfirmed`, `changed` and `out-of-date` offer Check with code; `absent` and `confirmed` do not. Deleting the
 backup or the identity clears the record and the marker. Markers from the earliest namespace are ignored.
 
 ### Guided macOS backup recovery

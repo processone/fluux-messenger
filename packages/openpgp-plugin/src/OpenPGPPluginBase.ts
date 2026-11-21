@@ -1849,8 +1849,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   /** Hash of the backup file the last inspection or check read; ownership evidence is bound to it. */
   private lastBackupHash: string | null = null
-  /** A file a code check opened and found to hold another key, by account and hash. */
-  private otherKeyCheck: { jid: string; hash: string } | null = null
+  /** A file a code check opened and found not to hold the key with this primary fingerprint, by account and hash. */
+  private otherKeyCheck: { jid: string; hash: string; fingerprint: string } | null = null
 
   /**
    * Record the identity of the backup file this device has just proven, from
@@ -1863,6 +1863,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     bundle: KeyBundle,
     confirmedBy: BackupConfirmedBy,
   ): Promise<void> {
+    this.otherKeyCheck = null // a proven file of this key supersedes any earlier other-key check
     try {
       const [packetsSha256, fingerprints] = await Promise.all([
         this.backupPacketsHash(armoredBackup),
@@ -1960,7 +1961,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const bundle = this.ownBundle
     const hash = this.lastBackupHash
     if (!jid || !bundle || !hash) return false
-    if (this.otherKeyCheck?.jid === jid && this.otherKeyCheck.hash === hash) return true
+    const check = this.otherKeyCheck
+    if (check?.jid === jid && check.hash === hash && fingerprintsEqual(check.fingerprint, bundle.fingerprint)) return true
     const record = readBackupIdentity(jid)
     if (!record || record.packetsSha256 !== hash) return false
     return !record.fingerprints.some((f) => fingerprintsEqual(f, bundle.fingerprint))
@@ -1988,9 +1990,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const held = bundles.find((b) => fingerprintsEqual(b.fingerprint, bundle.fingerprint))
     if (!held) {
       this.lastBackupHash = await this.backupPacketsHash(armored).catch(() => null)
-      this.otherKeyCheck = this.lastBackupHash ? { jid: ctx.account.jid, hash: this.lastBackupHash } : null
+      this.otherKeyCheck = this.lastBackupHash ? { jid: ctx.account.jid, hash: this.lastBackupHash, fingerprint: bundle.fingerprint } : null
       return { outcome: 'other-key', status: 'unconfirmed' }
     }
+    this.otherKeyCheck = null
     await this.recordBackupIdentity(ctx.account.jid, armored, held, 'check')
     // The status of the file just opened, from the record and this key: no further download.
     const record = readBackupIdentity(ctx.account.jid)
