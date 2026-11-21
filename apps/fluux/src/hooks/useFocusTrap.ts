@@ -56,7 +56,8 @@ export function useFocusTrap<T extends HTMLElement>(
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return
+      // A control inside that already used Tab (a list moving its highlight) keeps focus.
+      if (e.key !== 'Tab' || e.defaultPrevented) return
       const focusables = focusableElements(container)
       if (focusables.length === 0) {
         e.preventDefault()
