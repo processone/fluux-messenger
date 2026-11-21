@@ -32,14 +32,14 @@ import { useMode, useWindowDrag } from '@/hooks'
 /** Messages read from the cache on each side of the saved one. */
 const CONTEXT_SIZE = 50
 
-type Context = { messages: (Message | RoomMessage)[]; target?: Message | RoomMessage; loading: boolean }
+type Context = { messages: (Message | RoomMessage)[]; target?: Message | RoomMessage; loading: boolean; complete: boolean }
 
 /** The saved message's neighbours from this device's cache, and the cached copy of the message itself. */
 function useSavedContext(entry: SavedMessage): Context {
-  const [context, setContext] = useState<Context>({ messages: [], loading: true })
+  const [context, setContext] = useState<Context>({ messages: [], loading: true, complete: false })
   useEffect(() => {
     let cancelled = false
-    setContext({ messages: [], loading: true })
+    setContext({ messages: [], loading: true, complete: false })
     void (async () => {
       try {
         const isRoom = entry.type === 'groupchat'
@@ -50,10 +50,10 @@ function useSavedContext(entry: SavedMessage): Context {
         const after = await read(entry.conversationJid, { after: new Date(at.getTime() - 1), limit: CONTEXT_SIZE })
         const messages = mergeContextMessages(before, after, entry.conversationJid, isRoom)
         const shown = target ?? messages.find((m) => m.id === entry.messageId)
-        if (!cancelled) setContext({ messages, target: shown, loading: false })
+        if (!cancelled) setContext({ messages, target: shown, loading: false, complete: before.length < CONTEXT_SIZE })
       } catch (error) {
         console.warn('Could not read the context of a saved message', error)
-        if (!cancelled) setContext({ messages: [], loading: false })
+        if (!cancelled) setContext({ messages: [], loading: false, complete: false })
       }
     })()
     return () => { cancelled = true }
@@ -86,7 +86,7 @@ function SavedPreview({ entry, index, total, onRemove }: {
   const jid = useConnectionStore((s) => s.jid)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownNickname = useConnectionStore((s) => s.ownNickname)
-  const { messages, target, loading } = useSavedContext(entry)
+  const { messages, target, loading, complete } = useSavedContext(entry)
   const scrollRef = useRef<HTMLElement>(null)
   const isAtBottomRef = useRef(false)
   const isRoom = entry.type === 'groupchat'
@@ -123,7 +123,7 @@ function SavedPreview({ entry, index, total, onRemove }: {
             isDarkMode={resolvedMode === 'dark'}
             scrollerRef={scrollRef}
             isAtBottomRef={isAtBottomRef}
-            isHistoryComplete
+            isHistoryComplete={complete}
             isLoading={loading}
           />
         ) : loading ? (
