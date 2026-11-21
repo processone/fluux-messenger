@@ -51,13 +51,17 @@ Object.defineProperty(globalThis, 'localStorage', {
 // Mock messageCache to verify IndexedDB operations
 vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
+  const getRoomMessages = vi.fn().mockResolvedValue([])
   return {
     ...actual,
     isMessageCacheAvailable: vi.fn().mockReturnValue(true),
     saveRoomMessage: vi.fn().mockResolvedValue(undefined),
     saveRoomMessageWithResult: vi.fn().mockResolvedValue(true),
     saveRoomMessages: vi.fn().mockResolvedValue(true),
-    getRoomMessages: vi.fn().mockResolvedValue([]),
+    getRoomMessages,
+    // The typed read serves what getRoomMessages is mocked to return, as a readable cache.
+    readRoomMessages: vi.fn((...args: Parameters<typeof actual.readRoomMessages>) =>
+      getRoomMessages(...args).then((value: RoomMessage[]) => ({ status: 'ok' as const, value }))),
     getRoomMessagesAround: vi.fn().mockResolvedValue([]),
     updateRoomMessage: vi.fn().mockResolvedValue(undefined),
     deleteRoomMessages: vi.fn().mockResolvedValue(undefined),
@@ -6071,6 +6075,14 @@ describe('roomStore', () => {
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
     })
 
+    it('keeps the window parked when the cache cannot be read', async () => {
+      seedResidentWindow()
+      vi.mocked(messageCache.readRoomMessages).mockResolvedValueOnce({ status: 'unavailable' })
+
+      expect(await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)).toEqual([])
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
+    })
+
     it('returns an empty array and does nothing when the room has no resident messages', async () => {
       const returned = await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
       expect(returned).toEqual([])
@@ -6113,6 +6125,18 @@ describe('roomStore', () => {
         isOutgoing: false,
       }
     }
+
+    it('reports an unreadable cache and still releases the window', async () => {
+      roomStore.setState((state) => ({
+        messages: new Map(state.messages).set(roomJid, [roomMsgAt('resident-0', 0)]),
+        windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false),
+      }))
+      vi.mocked(messageCache.readRoomMessages).mockResolvedValueOnce({ status: 'unavailable' })
+
+      expect(await roomStore.getState().recenterToLatest(roomJid)).toBe(false)
+      // Released so the caller's fetch-latest from the archive lands in the window.
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(true)
+    })
 
     it('reloads the newest window and sets windowAtLiveEdge true', async () => {
       // Seed a slid-up window (evicted the newest tail via load-older).

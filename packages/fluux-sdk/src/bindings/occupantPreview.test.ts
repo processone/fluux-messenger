@@ -7,16 +7,21 @@ import { createRoom, createMessage, seedRoomWindow } from '../stores/roomStore.t
 import type { RoomMessage, RoomOccupant } from '../core/types'
 import * as messageCache from '../utils/messageCache'
 
-vi.mock('../utils/messageCache', async (importOriginal) => ({
+vi.mock('../utils/messageCache', async (importOriginal) => {
+  const getRoomMessages = vi.fn()
+  return {
   ...await importOriginal<typeof import('../utils/messageCache')>(),
   isMessageCacheAvailable: vi.fn(() => true),
-  getRoomMessages: vi.fn(),
+  getRoomMessages,
+  // The typed read serves what getRoomMessages is mocked to return, as a readable cache.
+  readRoomMessages: vi.fn(async (...args: unknown[]) => ({ status: 'ok' as const, value: await getRoomMessages(...args) })),
   getRoomMessagesAround: vi.fn(),
   saveRoomMessage: vi.fn().mockResolvedValue(undefined),
   saveRoomMessageWithResult: vi.fn().mockResolvedValue(true),
   saveRoomMessages: vi.fn().mockResolvedValue(true),
   reconcileRoomHistoryMessages: vi.fn(async (messages: RoomMessage[]) => messages),
-}))
+  }
+})
 
 const roomJid = 'preview@conference.example.test'
 const otherRoom = 'other@conference.example.test'

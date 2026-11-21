@@ -106,7 +106,7 @@ describe('room message link navigation', () => {
     const { result } = renderHook(useRoomMessageLink)
     act(() => result.current(link))
     locate.mockResolvedValue({ kind })
-    vi.spyOn(roomStore.getState(), 'recenterToLatest').mockResolvedValue(undefined)
+    vi.spyOn(roomStore.getState(), 'recenterToLatest').mockResolvedValue(true)
     act(() => roomStore.getState().addRoom({ ...roomStore.getState().rooms.get(link.roomJid)!, joined: true }))
     await waitFor(() => expect(toast).toHaveBeenCalledWith('error', notice))
     act(() => roomStore.setState({ activeRoomJid: link.roomJid }))
@@ -117,7 +117,7 @@ describe('room message link navigation', () => {
   it('reports a failed archive lookup after network membership resets, without retrying after reconnect', async () => {
     let finish!: (value: { kind: 'unknown' }) => void
     locate.mockImplementation(() => new Promise(resolve => { finish = resolve }))
-    vi.spyOn(roomStore.getState(), 'recenterToLatest').mockResolvedValue(undefined)
+    vi.spyOn(roomStore.getState(), 'recenterToLatest').mockResolvedValue(true)
     const { result } = renderHook(useRoomMessageLink)
     act(() => result.current(link))
     act(() => roomStore.getState().addRoom({ ...roomStore.getState().rooms.get(link.roomJid)!, joined: true }))

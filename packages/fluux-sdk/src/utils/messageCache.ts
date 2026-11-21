@@ -2073,15 +2073,35 @@ function entityTimestampRange(
 }
 
 /**
+ * The outcome of a cache read that tells an empty result apart from a cache
+ * that could not be read (IndexedDB missing, blocked or released to a newer
+ * client). Callers that draw a conclusion from "nothing found", such as
+ * "the window reached the newest message", need the difference.
+ */
+export type CacheRead<T> = { status: 'ok'; value: T } | { status: 'unavailable' }
+
+const CACHE_UNAVAILABLE: CacheRead<never> = { status: 'unavailable' }
+
+/**
  * Get messages for a conversation with optional pagination.
  * Messages are returned in chronological order (oldest first).
  * The optional filter runs before counting toward the limit; the cursor stops
  * as soon as enough matching renderable messages have been collected.
+ * Returns `[]` when the cache cannot be read; see {@link readMessages}.
  */
 export async function getMessages(
   conversationId: string,
   options: GetMessagesOptions & { filter?: (message: Message) => boolean } = {}
 ): Promise<Message[]> {
+  const read = await readMessages(conversationId, options)
+  return read.status === 'ok' ? read.value : []
+}
+
+/** {@link getMessages}, reporting an unreadable cache instead of an empty result. */
+export async function readMessages(
+  conversationId: string,
+  options: GetMessagesOptions & { filter?: (message: Message) => boolean } = {}
+): Promise<CacheRead<Message[]>> {
   try {
     const db = await getDB(getStorageScopeJid())
     const { limit, before, after, latest } = options
@@ -2125,12 +2145,12 @@ export async function getMessages(
       results.reverse()
     }
 
-    return results
+    return { status: 'ok', value: results }
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to get messages:', error)
     }
-    return []
+    return CACHE_UNAVAILABLE
   }
 }
 
@@ -3064,11 +3084,21 @@ export async function getRoomMessageByStanzaId(
 /**
  * Get messages for a room with optional pagination.
  * Messages are returned in chronological order (oldest first).
+ * Returns `[]` when the cache cannot be read; see {@link readRoomMessages}.
  */
 export async function getRoomMessages(
   roomJid: string,
   options: GetMessagesOptions = {}
 ): Promise<RoomMessage[]> {
+  const read = await readRoomMessages(roomJid, options)
+  return read.status === 'ok' ? read.value : []
+}
+
+/** {@link getRoomMessages}, reporting an unreadable cache instead of an empty result. */
+export async function readRoomMessages(
+  roomJid: string,
+  options: GetMessagesOptions = {}
+): Promise<CacheRead<RoomMessage[]>> {
   try {
     const db = await getDB(getStorageScopeJid())
     const { limit, before, after, latest } = options
@@ -3102,12 +3132,12 @@ export async function getRoomMessages(
       results.reverse()
     }
 
-    return results
+    return { status: 'ok', value: results }
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to get room messages:', error)
     }
-    return []
+    return CACHE_UNAVAILABLE
   }
 }
 

@@ -7,6 +7,8 @@ import { roomStore, roomReadStateGeneration } from '../stores/roomStore'
 import { roomSelectors } from '../stores/roomSelectors'
 import { useRoomStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
+import { logWarn } from '../core/logger'
+import { connectionStore } from '../stores/connectionStore'
 import type { Room, RoomMessage, ChatStateNotification, FileAttachment, HistoryQueryState, RoomFeatures, SendMessageOptions, ReplyTarget } from '../core/types'
 import { createFetchOlderHistory, createContinueCatchUp, pickOldestArchiveId } from './shared'
 import { getGapList } from '../stores/shared/mamGap'
@@ -400,11 +402,18 @@ export function useRoomActive() {
   }, [])
 
   // Sliding window: reset the resident window to the newest slice (jump-to-latest affordance).
-  const recenterToLatest = useCallback(() => {
+  // Without a readable cache, the newest messages are only in the archive.
+  const recenterToLatest = useCallback(async () => {
     const id = roomStore.getState().activeRoomJid
-    if (!id) return Promise.resolve()
-    return roomStore.getState().recenterToLatest(id)
-  }, [])
+    if (!id) return
+    const fromCache = await roomStore.getState().recenterToLatest(id)
+    if (fromCache || connectionStore.getState().status !== 'online') return
+    try {
+      await client.messages.queryRoomMAM({ roomJid: id })
+    } catch (error) {
+      logWarn(`Room: fetching the latest messages without a cache failed: ${String(error)}`)
+    }
+  }, [client])
 
   // --- Return ---
 
