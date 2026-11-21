@@ -59,6 +59,29 @@ exact-version request through the first mate, and the evidence handoff.
 This does not change the existing gate: Windows WebKit is neither Safari nor
 WKWebView, and does not validate Fluux's Windows WebView2 shell.
 
+### React Compiler coverage
+
+The application build and `npm run lint:compiler -w @xmpp/fluux` share
+`apps/fluux/scripts/reactCompilerOptions.ts`. Keep compiler options there so the
+coverage check analyzes the same configuration as the build.
+
+Application lint uses the React Hooks compiler rules at warning level, alongside
+the existing Rules of Hooks errors and exhaustive-dependency warnings. The
+compiler coverage command also transforms application sources with the installed
+compiler, reporting function names, source locations and skip reasons. This
+catches compiler bailouts, including unsupported syntax, that ESLint alone can
+miss. Remaining skips outside the required list are warnings, not a claim that
+the whole application compiles.
+
+The command fails if any required hot component does not emit a compiler success
+event: MessageList, MessageBubble, RoomMessageList, ChatView, RoomView,
+MessageComposer, ContactList, ConversationList and RoomsList. It runs its own
+regression tests and is included in application lint, so CI enforces this list.
+Changing or moving one of these components must update the coverage manifest in
+`apps/fluux/scripts/checkReactCompiler.mjs`, not silently remove its requirement.
+A successful compiler transform is optimization evidence, not a replacement for
+message, composer, navigation and browser-scroll regression tests.
+
 ### Targeted local tests
 
 During iteration, use `npm run test:local` from the project root. With no arguments

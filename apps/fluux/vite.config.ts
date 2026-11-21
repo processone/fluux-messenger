@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { reactCompilerOptions } from './scripts/reactCompilerOptions'
 import react from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -55,7 +56,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     babel({
-      plugins: [['babel-plugin-react-compiler', {}]],
+      plugins: [['babel-plugin-react-compiler', reactCompilerOptions]],
     }),
     // Remove demo assets (public/demo/, demo.html) from production builds. The e2e
     // build exists precisely to serve the demo, so it opts out.

@@ -4,7 +4,7 @@ import { getActiveMessageListController } from './conversation/activeMessageList
 import { isSpamModerated } from '@/utils/spamModeration'
 import { SpamModerationOption } from './SpamModerationOption'
 import type { GapInterval, MessageRowRef } from '@fluux/sdk'
-import React, { useState, useRef, useEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { flushSync } from 'react-dom'
 import { shallow } from 'zustand/shallow'
 import { useTranslation } from 'react-i18next'
@@ -362,37 +362,24 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // counterpart's occupant-id at call time without depending on activeRoom
   // (which changes on every occupant update and would destabilize the callback).
   const activeRoomRef = useRef(activeRoom)
-  activeRoomRef.current = activeRoom
+  useLayoutEffect(() => { activeRoomRef.current = activeRoom }, [activeRoom])
 
-  // Referentially-stable room for the message rows. `activeRoom` is recombined
-  // (entity/meta/runtime) on every render, so passing it directly re-renders every
-  // RoomMessageBubbleWrapper on each new message. The rows only read these fields,
-  // none of which change on a plain message append — so keep the previous reference
-  // until one of them actually changes (occupant/cache/nick churn). Implemented with
-  // a ref + field comparison rather than useMemo-with-partial-deps so it stays clean
-  // for both react-hooks/exhaustive-deps and the React Compiler.
-  const stableRoomRef = useRef(activeRoom)
-  {
-    const prev = stableRoomRef.current
-    if (!activeRoom) {
-      stableRoomRef.current = undefined
-    } else if (
-      !prev ||
-      prev.jid !== activeRoom.jid ||
-      prev.nickname !== activeRoom.nickname ||
-      prev.joined !== activeRoom.joined ||
-      prev.isJoining !== activeRoom.isJoining ||
-      prev.supportsReactions !== activeRoom.supportsReactions ||
-      prev.supportsMAM !== activeRoom.supportsMAM ||
-      prev.isIrcGateway !== activeRoom.isIrcGateway ||
-      prev.occupants !== activeRoom.occupants ||
-      prev.nickToJidCache !== activeRoom.nickToJidCache ||
-      prev.nickToAvatarCache !== activeRoom.nickToAvatarCache
-    ) {
-      stableRoomRef.current = activeRoom
-    }
-  }
-  const stableRoom = stableRoomRef.current
+  // Keep the row snapshot until a field consumed by rows changes. State,
+  // unlike a render-time ref write, is safe when React abandons a render.
+  const [stableRoom, setStableRoom] = useState(activeRoom)
+  if (stableRoom !== activeRoom && (
+    !stableRoom || !activeRoom ||
+    stableRoom.jid !== activeRoom.jid ||
+    stableRoom.nickname !== activeRoom.nickname ||
+    stableRoom.joined !== activeRoom.joined ||
+    stableRoom.isJoining !== activeRoom.isJoining ||
+    stableRoom.supportsReactions !== activeRoom.supportsReactions ||
+    stableRoom.supportsMAM !== activeRoom.supportsMAM ||
+    stableRoom.isIrcGateway !== activeRoom.isIrcGateway ||
+    stableRoom.occupants !== activeRoom.occupants ||
+    stableRoom.nickToJidCache !== activeRoom.nickToJidCache ||
+    stableRoom.nickToAvatarCache !== activeRoom.nickToAvatarCache
+  )) setStableRoom(activeRoom)
 
   // Stable callback that clears any staged compose state before entering whisper
   // mode. Whispers are text-only so a staged reply, edit, or pending attachment
@@ -994,7 +981,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 export const RoomMessageList = memo(function RoomMessageList({
   messages,
   identityMessages = messages,
-  loadedMessageCount = messages.length,
+  loadedMessageCount: suppliedLoadedMessageCount,
   messageIngressVersion,
   interiorPlacementVersion = 0,
   scrollerRef,
@@ -1112,6 +1099,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   onCatchUpHistory?: (gapStart: number) => void
   isCatchingUp?: boolean
 }) {
+  const loadedMessageCount = suppliedLoadedMessageCount === undefined ? messages.length : suppliedLoadedMessageCount
   const { t } = useTranslation()
   const { formatTime, effectiveTimeFormat } = useTimeFormat()
 
@@ -1145,7 +1133,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   // includes stanza/origin aliases, matching reply resolution elsewhere.
   const messagesById = useMemo(() => createMessageLookup(messages), [messages])
 
-  const mentionColorsRef = useRef<ReadonlyMap<string, string>>(undefined)
+  const [previousMentionColors, setPreviousMentionColors] = useState<ReadonlyMap<string, string>>()
   const identityKey = JSON.stringify([getStorageScopeJid(), room.jid])
   const mentionColors = useMemo(() => {
     let identities = roomMentionIdentities.get(identityKey)
@@ -1154,13 +1142,13 @@ export const RoomMessageList = memo(function RoomMessageList({
       roomMentionIdentities.set(identityKey, identities)
     }
     rememberRoomNickIdentities(room, identityMessages, identities)
-    const colors = resolveRoomMentionColors(room, contactsByJid, isDarkMode ?? true, identities, mentionColorsRef.current)
-    mentionColorsRef.current = colors
+    const colors = resolveRoomMentionColors(room, contactsByJid, isDarkMode ?? true, identities, previousMentionColors)
     return colors
-  }, [identityKey, room, identityMessages, contactsByJid, isDarkMode])
-  const knownNicksRef = useRef<ReadonlySet<string>>(new Set())
-  knownNicksRef.current = stableNickSet(mentionColors, knownNicksRef.current)
-  const knownNicks = knownNicksRef.current
+  }, [identityKey, room, identityMessages, contactsByJid, isDarkMode, previousMentionColors])
+  if (mentionColors !== previousMentionColors) setPreviousMentionColors(mentionColors)
+  const [previousKnownNicks, setPreviousKnownNicks] = useState<ReadonlySet<string>>(new Set())
+  const knownNicks = stableNickSet(mentionColors, previousKnownNicks)
+  if (knownNicks !== previousKnownNicks) setPreviousKnownNicks(knownNicks)
 
   // The current user's own occupant record (stable ref across presence churn unless
   // our own role/affiliation changes). Used per-row to compute moderation permission.

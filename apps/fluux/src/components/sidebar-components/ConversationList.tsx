@@ -1,4 +1,4 @@
-import React, { useState, useRef, memo, useSyncExternalStore } from 'react'
+import React, { useState, useRef, useLayoutEffect, memo, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { useListKeyboardNav, useRouteSync } from '@/hooks'
@@ -62,25 +62,19 @@ export function ConversationList() {
   trackSelectorChange('ConversationList', 'conversationIds', conversationIds)
   trackSelectorChange('ConversationList', 'activeConversationId', activeConversationId)
 
-  // Identity-stable click handler. useCallback is unreliable here: the React
-  // Compiler leaves JSX-only callbacks as fresh closures, which breaks
-  // ConversationItem's React.memo and re-renders the whole list on every update.
-  // A lazy-init ref + "latest" ref keeps the handler stable for the list's life.
+  // Mount-scoped handlers keep row props stable. Publish the latest actions
+  // after commit, so an abandoned render cannot change a visible row's actions.
   const latestNavRef = useRef({ navigateToMessages })
-  latestNavRef.current = { navigateToMessages }
-  const clickRef = useRef<((convId: string) => void) | null>(null)
-  if (!clickRef.current) {
-    clickRef.current = (convId: string) => {
-      const L = latestNavRef.current
-      // Standard back stack: switching to a different conversation pushes a
-      // history entry; re-selecting the active one dedups (replace).
-      const current = chatStore.getState().activeConversationId
-      void roomStore.getState().activateRoom(null)
-      void chatStore.getState().activateConversation(convId)
-      L.navigateToMessages(convId, { replace: shouldReplaceOnSelect(convId, current) })
-    }
-  }
-  const handleConversationClick = clickRef.current
+  useLayoutEffect(() => { latestNavRef.current = { navigateToMessages } })
+  const [handleConversationClick] = useState(() => (convId: string) => {
+    const L = latestNavRef.current
+    // Standard back stack: switching to a different conversation pushes a
+    // history entry; re-selecting the active one dedups (replace).
+    const current = chatStore.getState().activeConversationId
+    void roomStore.getState().activateRoom(null)
+    void chatStore.getState().activateConversation(convId)
+    L.navigateToMessages(convId, { replace: shouldReplaceOnSelect(convId, current) })
+  })
   const handleFileDrop = useConversationFileDrop(handleConversationClick)
 
   // Keyboard navigation

@@ -4,7 +4,7 @@ import { getActiveMessageListController } from './conversation/activeMessageList
 import type { ChatMessageTarget, GapInterval } from '@fluux/sdk'
 import type { MessageRowRef } from '@fluux/sdk'
 import { messageRowId, readMessageRowId, messageRowRefFromRowId } from './conversation/messageRowIdentity'
-import React, { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, useImperativeHandle, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
@@ -130,7 +130,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // props passed to the memoized MessageInput referentially stable, so the
   // composer does not re-render once per message (RenderLoopDetector warning).
   const activeMessagesRef = useRef(activeMessages)
-  activeMessagesRef.current = activeMessages
+  useLayoutEffect(() => { activeMessagesRef.current = activeMessages }, [activeMessages])
 
   // Handler to edit the last outgoing message (triggered by Up arrow in empty composer)
   const handleEditLastMessage = useCallback(() => {
@@ -421,7 +421,8 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
       if (!verifyDialogState.open || !verifyDialogState.identityId) return
       const { protocolId, peerJid, identityId } = verifyDialogState
       try {
-        await client.e2ee?.setIdentityTrust(protocolId, peerJid, identityId, decision)
+        const e2ee = client.e2ee
+        if (e2ee) await e2ee.setIdentityTrust(protocolId, peerJid, identityId, decision)
         setVerifyDialogState({ open: false })
         addToast('success', t(successKey))
       } catch (err) {

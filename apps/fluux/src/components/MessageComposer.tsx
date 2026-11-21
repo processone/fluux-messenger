@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, useId, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, useId, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, Shield, ShieldCheck, ShieldAlert, Terminal } from 'lucide-react'
@@ -318,23 +318,23 @@ export function MessageComposer({
   const [internalText, setInternalText] = useState('')
   const text = controlledValue !== undefined ? controlledValue : internalText
   const textRef = useRef(text)
-  textRef.current = text
+  useLayoutEffect(() => { textRef.current = text }, [text])
   const mounted = useRef(false)
   useEffect(() => {
     mounted.current = true
     return () => { mounted.current = false }
   }, [])
-  const setTextRef = useRef((_t: string) => {})
-  setTextRef.current = (t: string) => {
+  const controlled = controlledValue !== undefined
+  const textSetterRef = useRef({ controlled, onValueChange })
+  useLayoutEffect(() => { textSetterRef.current = { controlled, onValueChange } }, [controlled, onValueChange])
+  const setText = useCallback((t: string) => {
     textRef.current = t
-    if (controlledValue !== undefined) {
-      onValueChange?.(t)
+    const setter = textSetterRef.current
+    if (setter.controlled) {
+      setter.onValueChange?.(t)
     } else {
       setInternalText(t)
     }
-  }
-  const setText = useCallback((t: string) => {
-    setTextRef.current(t)
   }, [])
 
   const [sending, setSending] = useState(false)
@@ -355,7 +355,7 @@ export function MessageComposer({
   // position, so anything that moves the caret — typing included, not just
   // selection events — has to go through here or their menus never open.
   const onSelectionChangeRef = useRef(onSelectionChange)
-  onSelectionChangeRef.current = onSelectionChange
+  useLayoutEffect(() => { onSelectionChangeRef.current = onSelectionChange })
   const updateCaret = useCallback((nextText: string, position: number) => {
     // Keeping the previous object when nothing moved lets React bail out, the way
     // it did when this was a plain number: a selection event that lands on the
@@ -399,7 +399,7 @@ export function MessageComposer({
     (inputRef as React.MutableRefObject<ComposerInputElement | null>).current = node
     // Assign to external ref if provided
     if (textareaRef) {
-      (textareaRef as React.MutableRefObject<ComposerInputElement | null>).current = node
+      textareaRef.current = node
     }
   }
 
@@ -501,7 +501,7 @@ export function MessageComposer({
   // Kept identity-stable (refs for the callback prop) so the width observer
   // below doesn't re-subscribe on parent re-renders.
   const onInputResizeRef = useRef(onInputResize)
-  onInputResizeRef.current = onInputResize
+  useLayoutEffect(() => { onInputResizeRef.current = onInputResize })
   // Appends can be measured at the current height. Deletions need an intrinsic
   // measurement, with the input frame holding its space until the final height
   // is known so the browser cannot clamp the adjacent message list's scrollTop.
@@ -514,12 +514,9 @@ export function MessageComposer({
   // a width change re-reads it, which is also the only moment a responsive
   // padding utility could have changed it.
   const paddingBlockRef = useRef(-1)
-  const countLines = (s: string) => {
-    let n = 1
-    for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) === 10) n++
-    return n
-  }
-  const resizeToContent = useCallback((forceRemeasure = false) => {
+  // This imperative DOM operation closes only over refs. Keep its identity
+  // mount-scoped for the resize observer, independently of compiler inference.
+  const [resizeToContent] = useState(() => (forceRemeasure = false) => {
     const textarea = inputRef.current
     // A contenteditable input sizes itself in CSS (1 to 8 lines); only a textarea
     // needs its height written.
@@ -598,7 +595,7 @@ export function MessageComposer({
     }
 
     if (heightChanged) onInputResizeRef.current?.()
-  }, [])
+  })
 
   useEffect(() => {
     resizeToContent()
@@ -732,7 +729,7 @@ export function MessageComposer({
     }
 
     let failureKey = 'chat.failedToSendMessage'
-    try {
+    await runComposerAction(async () => {
       let outgoingText = trimmed
       if (commandsEnabled !== false && !replyingTo && !editingMessage && trimmed && resolveInput) {
         const outcome = await resolveInput(trimmed)
@@ -777,15 +774,15 @@ export function MessageComposer({
           restore()
         }
       }
-    } catch (err) {
+    }, (err) => {
       if (!editingMessage) restore()
       const toastKey = encryptionSendErrorKey(err)
       addToast('error', t(toastKey ?? failureKey))
       if (!toastKey) console.error('Failed to send message:', err)
-    } finally {
+    }, () => {
       submitting.current = false
       setSending(false)
-    }
+    })
   }
 
   const selectEmoji = (index: number) => {
@@ -850,10 +847,10 @@ export function MessageComposer({
     updateCaret(e.currentTarget.value, e.currentTarget.selectionStart)
   }
 
-  const attachmentPolicy = useRef({ attachmentDisabledReason, onFileSelect })
-  attachmentPolicy.current = { attachmentDisabledReason, onFileSelect }
+  const attachmentPolicyRef = useRef({ attachmentDisabledReason, onFileSelect })
+  useLayoutEffect(() => { attachmentPolicyRef.current = { attachmentDisabledReason, onFileSelect } })
   const selectFile = (file: File) => {
-    const policy = attachmentPolicy.current
+    const policy = attachmentPolicyRef.current
     if (policy.attachmentDisabledReason) {
       useToastStore.getState().addToast('info', policy.attachmentDisabledReason)
       return
@@ -906,11 +903,7 @@ export function MessageComposer({
     const hasTextContent = types.includes('text/plain') || types.includes('text/html')
     if (!hasTextContent) {
       e.preventDefault()
-      void import('@/utils/nativeClipboard').then(({ readClipboardImage }) =>
-        readClipboardImage().then((file) => {
-          if (file) selectFile(file)
-        })
-      )
+      void pasteNativeImage(selectFile)
     }
   }
 
@@ -1365,4 +1358,32 @@ export function MessageComposer({
       </div>
     </form>
   )
+}
+
+// Keep the clipboard fallback lazy; the compiler cannot lower dynamic imports.
+async function pasteNativeImage(selectFile: (file: File) => void) {
+  const { readClipboardImage } = await import('@/utils/nativeClipboard')
+  const file = await readClipboardImage()
+  if (file) selectFile(file)
+}
+
+function countLines(s: string): number {
+  let n = 1
+  for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) === 10) n++
+  return n
+}
+
+/** Keep cleanup unconditional, including when the action returns early. */
+async function runComposerAction(
+  action: () => Promise<void>,
+  onError: (error: unknown) => void,
+  cleanup: () => void,
+): Promise<void> {
+  try {
+    await action()
+  } catch (error) {
+    onError(error)
+  } finally {
+    cleanup()
+  }
 }
