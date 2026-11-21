@@ -10,7 +10,7 @@ import {
   selectRoomMergeTargets,
 } from '../../utils/messageIdentity'
 import { roomStanzaIdsMergeable } from '../../utils/roomStanzaId'
-import { backfillArchiveIds, mergeAndProcessMessages } from './messageArrayUtils'
+import { backfillArchiveIds, mergeAndProcessMessages, prependOlderMessages } from './messageArrayUtils'
 import { mergeArchive, type TimelineConfig } from './messageTimeline'
 
 interface Row {
@@ -109,6 +109,58 @@ describe('archive identity lookup', () => {
           return cfg.getMergeCandidates(message, candidates)
         })
       expectSameCandidates(result.newMessages, expectedNew)
+    }
+  })
+
+  it.each(['older', 'overlap'])('bounds identity-key work for a backward %s page', variant => {
+    const cfg = config('chat')
+    const resident = Array.from({ length: 600 }, (_, i) => row(`m${i + 100}`, {
+      stanzaId: `archive-${i + 100}`,
+      timestamp: new Date((i + 100) * 1_000),
+    }))
+    const incoming = Array.from({ length: 100 }, (_, i) => {
+      const index = (variant === 'older' ? 0 : 50) + i
+      return row(`m${index}`, { stanzaId: `archive-${index}`, timestamp: new Date(index * 1_000) })
+    })
+    let keyReads = 0
+    const result = mergeArchive(resident, incoming, 'backward', {
+      ...cfg,
+      getKeys: message => { keyReads++; return cfg.getKeys(message) },
+    }, false, true)
+
+    expect(result.newMessages).toHaveLength(variant === 'older' ? 100 : 50)
+    expect(result.resident).toHaveLength(variant === 'older' ? 700 : 650)
+    expect(keyReads).toBeLessThanOrEqual(4 * (resident.length + incoming.length))
+  })
+
+  it.each(['chat', 'room'] as const)('preserves scan candidates on the backward %s path for randomized identities', kind => {
+    let seed = 0x2b7
+    const random = (bound: number): number => {
+      seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0
+      return seed % bound
+    }
+    const cfg = config(kind)
+    const make = (): Row => row(`m${random(8)}`, {
+      stanzaId: random(3) ? `s${random(9)}` : undefined,
+      originId: random(3) ? `o${random(7)}` : undefined,
+      occupantId: kind === 'room' && random(3) ? `occupant-${random(2)}` : undefined,
+      from: `${roomJid}/${random(2) ? 'alice' : 'bob'}`,
+      timestamp: new Date(random(5) * 1_000),
+    })
+
+    for (let trial = 0; trial < 60; trial++) {
+      const resident = Array.from({ length: random(35) }, make)
+      const incoming = Array.from({ length: random(20) }, make)
+      if (resident.length) resident.push(resident[0]) // Two positions may hold the same object.
+      const expectedNew = incoming.filter(message => !cfg.getMergeCandidates(message,
+        scan(resident, message, cfg.getKeys)).some(candidate => cfg.sameMessage(candidate, message)))
+      const result = prependOlderMessages(resident, incoming, cfg.getKeys, kind, 20,
+        cfg.sameMessage, (message, candidates) => {
+          expectSameCandidates(candidates, scan(resident, message, cfg.getKeys))
+          return cfg.getMergeCandidates(message, candidates)
+        })
+      expectSameCandidates(result.newMessages, expectedNew)
+      expect(result.merged.length).toBeLessThanOrEqual(Math.max(20, resident.length))
     }
   })
 
