@@ -67,8 +67,7 @@ import { flushKey, flush as flushThrottledStorage } from './shared/throttledStor
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
 // Read via getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
-import { idleResidentWindowFor, getResidentWindowSize } from './shared/residentWindow'
-import { createIdleEvictedLedger } from './shared/idleEvictedLedger'
+import { getResidentWindowSize } from './shared/residentWindow'
 import { lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
 import { backfillArchiveIds, sortMessagesByTimestamp } from './shared/messageArrayUtils'
 import { archiveMoment, revivesArchivedConversation } from './shared/archiveRevival'
@@ -380,9 +379,6 @@ function getLegacyStorageKey(): string {
 function getChatMessageKeys(m: Message): string[] {
   return identityKeys(CHAT_SCOPE, m)
 }
-
-/** Rows pushed out of an idle conversation's short tail, kept for duplicate recognition only. */
-const idleEvictedChat = createIdleEvictedLedger<Message>(getChatMessageKeys, getResidentWindowSize)
 
 /** Timeline config for the shared resident-window machine (see shared/messageTimeline.ts). */
 export function chatTimelineConfig(): timeline.TimelineConfig<Message> {
@@ -1910,21 +1906,13 @@ export const chatStore = createStore<ChatState>()(
           // message never splices after an OLD one), and window trim.
           const atLiveEdge = state.windowAtLiveEdge.get(msg.conversationId) !== false
           const appendObservation: timeline.AppendLiveObservation = {}
-          const idle = state.activeConversationId !== msg.conversationId
-          const appendConfig = idle
-            ? { ...chatTimelineConfig(), windowSize: idleResidentWindowFor(convMessages, msg, isNoLocalStore) }
-            : chatTimelineConfig()
-          if (idle) {
-            if (convMessages.length === 0) idleEvictedChat.forget(msg.conversationId)
-            // A repeat of a row the short idle tail already dropped is still a duplicate.
-            const evicted = appendConfig.getMergeCandidates(msg, idleEvictedChat.candidates(msg.conversationId, msg))
-            if (evicted.some((resident) => appendConfig.sameMessage(resident, msg))) return state
-          }
-          const append = timeline.appendLive(convMessages, msg, atLiveEdge, appendConfig, appendObservation)
-          if (idle && append.kind === 'appended') {
-            const kept = new Set(append.messages)
-            idleEvictedChat.remember(msg.conversationId, convMessages.filter((resident) => !kept.has(resident)))
-          }
+          const append = timeline.appendLive(
+            convMessages,
+            msg,
+            atLiveEdge,
+            chatTimelineConfig(),
+            appendObservation
+          )
 
           if (append.kind === 'duplicate-unchanged') return state
           if (append.kind === 'duplicate-backfilled') {

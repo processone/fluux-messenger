@@ -3,7 +3,7 @@ import { chatStore, _resetChatArchiveSavesForTesting } from './chatStore'
 import type { Message, Conversation, ConversationMetadata } from '../core/types'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, setStorageScopeJid, getStorageScopeJid } from '../utils/storageScope'
-import { getIdleResidentWindowSize, setResidentWindowSize } from './shared/residentWindow'
+import { setResidentWindowSize } from './shared/residentWindow'
 import { getMAMQueryState } from './shared/mamState'
 import { selectCatchUpQuery } from '../utils/mamCatchUpUtils'
 import { _clearAllTransientForTesting, transientCounts } from './shared/transientUnread'
@@ -2648,8 +2648,6 @@ describe('chatStore', () => {
       // Messages are stored in memory for display, with a high limit (5000)
       // This test verifies we can store more than the old 100 message limit
       chatStore.getState().addConversation(createConversation('alice@example.com'))
-      // Only the active conversation keeps the full window resident.
-      chatStore.setState({ activeConversationId: 'alice@example.com' })
 
       // Add 500 messages (was limited to 100 before, now can go up to 5000)
       for (let i = 0; i < 500; i++) {
@@ -2659,62 +2657,6 @@ describe('chatStore', () => {
       // All 500 messages should be in memory
       const messages = chatStore.getState().messages.get('alice@example.com')
       expect(messages?.length).toBe(500)
-    })
-
-    it('keeps only a short tail resident for a conversation that is not active', () => {
-      chatStore.getState().addConversation(createConversation('alice@example.com'))
-      chatStore.getState().addConversation(createConversation('bob@example.com'))
-      chatStore.setState({ activeConversationId: 'bob@example.com' })
-
-      const base = Date.now()
-      for (let i = 0; i < 500; i++) {
-        const message = { ...createMessage('alice@example.com', `Message ${i}`), id: `idle-${i}`, timestamp: new Date(base + i) }
-        chatStore.getState().addMessage(message)
-      }
-
-      const resident = chatStore.getState().messages.get('alice@example.com') ?? []
-      expect(resident.length).toBe(getIdleResidentWindowSize())
-      expect(resident[resident.length - 1].id).toBe('idle-499')
-      expect(chatStore.getState().conversations.get('alice@example.com')?.unreadCount).toBe(500)
-    })
-
-    it('keeps the full window for an idle conversation holding memory-only messages, which the cache cannot give back', () => {
-      chatStore.getState().addConversation(createConversation('alice@example.com'))
-      const base = Date.now()
-      const count = getIdleResidentWindowSize() + 100
-      for (let i = 0; i < count; i++) {
-        chatStore.getState().addMessage({ ...createMessage('alice@example.com', `Message ${i}`), id: `mem-${i}`, noLocalStore: true, timestamp: new Date(base + i) } as Message)
-      }
-
-      expect(chatStore.getState().messages.get('alice@example.com')).toHaveLength(count)
-    })
-
-    it('still recognises a repeat of a row the idle tail has already dropped', () => {
-      chatStore.getState().addConversation(createConversation('alice@example.com'))
-      const base = Date.now()
-      const firstArrival = { ...createMessage('alice@example.com', 'first'), id: 'idle-0', timestamp: new Date(base) }
-      chatStore.getState().addMessage(firstArrival)
-      for (let i = 1; i <= getIdleResidentWindowSize() + 5; i++) {
-        chatStore.getState().addMessage({ ...createMessage('alice@example.com', `Message ${i}`), id: `idle-${i}`, timestamp: new Date(base + i) })
-      }
-      const unread = chatStore.getState().conversations.get('alice@example.com')?.unreadCount
-      const arrived = chatStore.getState().lastArrivedMessage
-
-      chatStore.getState().addMessage({ ...firstArrival })
-
-      expect(chatStore.getState().conversations.get('alice@example.com')?.unreadCount).toBe(unread)
-      expect(chatStore.getState().lastArrivedMessage).toBe(arrived)
-    })
-
-    it('does not count a repeated live delivery in the idle tail twice', () => {
-      chatStore.getState().addConversation(createConversation('alice@example.com'))
-      const message = { ...createMessage('alice@example.com', 'once'), id: 'echoed' }
-
-      chatStore.getState().addMessage(message)
-      chatStore.getState().addMessage({ ...message })
-
-      expect(chatStore.getState().messages.get('alice@example.com')).toHaveLength(1)
-      expect(chatStore.getState().conversations.get('alice@example.com')?.unreadCount).toBe(1)
     })
 
     it('should serialize conversation with lastMessage', () => {

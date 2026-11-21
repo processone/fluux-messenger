@@ -11,7 +11,7 @@ import {
   _resetForTesting as _resetThrottledStorageForTesting,
 } from './shared/throttledStorage'
 import { _resetStorageScopeForTesting, setStorageScopeJid, getStorageScopeJid } from '../utils/storageScope'
-import { getIdleResidentWindowSize, setResidentWindowSize } from './shared/residentWindow'
+import { setResidentWindowSize } from './shared/residentWindow'
 import { getMAMQueryState } from './shared/mamState'
 import { ignoreStore } from './ignoreStore'
 import { _clearAllTransientForTesting, transientCounts } from './shared/transientUnread'
@@ -1159,68 +1159,6 @@ describe('roomStore', () => {
   // ==================== Message Tests ====================
 
   describe('addMessage', () => {
-    it('keeps only a short tail resident for a room that is not active, and the full window for the active one', () => {
-      const idleJid = 'idle@conference.example.com'
-      const activeJid = 'active@conference.example.com'
-      roomStore.getState().addRoom(createRoom(idleJid, { joined: true }))
-      roomStore.getState().addRoom(createRoom(activeJid, { joined: true }))
-      roomStore.setState({ activeRoomJid: activeJid })
-
-      const base = Date.now()
-      for (let i = 0; i < 500; i++) {
-        roomStore.getState().addMessage(idleJid, { ...createMessage(`idle-${i}`, idleJid, 'alice', `Message ${i}`), timestamp: new Date(base + i) })
-        roomStore.getState().addMessage(activeJid, { ...createMessage(`active-${i}`, activeJid, 'alice', `Message ${i}`), timestamp: new Date(base + i) })
-      }
-
-      const idle = roomStore.getState().messages.get(idleJid) ?? []
-      expect(idle).toHaveLength(getIdleResidentWindowSize())
-      expect(idle[idle.length - 1].id).toBe('idle-499')
-      expect(roomStore.getState().rooms.get(idleJid)?.unreadCount).toBe(500)
-      expect(roomStore.getState().messages.get(activeJid)).toHaveLength(500)
-    })
-
-    it('keeps the full window for an idle room holding memory-only messages, which the cache cannot give back', () => {
-      const roomJid = 'quick@conference.example.com'
-      roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
-      const base = Date.now()
-      const count = getIdleResidentWindowSize() + 100
-      for (let i = 0; i < count; i++) {
-        roomStore.getState().addMessage(roomJid, { ...createMessage(`quick-${i}`, roomJid, 'alice', `Message ${i}`), noLocalStore: true, timestamp: new Date(base + i) } as RoomMessage)
-      }
-
-      expect(roomStore.getState().messages.get(roomJid)).toHaveLength(count)
-    })
-
-    it('still recognises a repeat of a row the idle tail has already dropped', () => {
-      const roomJid = 'idle@conference.example.com'
-      roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
-      const base = Date.now()
-      const firstArrival = { ...createMessage('idle-0', roomJid, 'alice', 'first'), timestamp: new Date(base) }
-      roomStore.getState().addMessage(roomJid, firstArrival)
-      for (let i = 1; i <= getIdleResidentWindowSize() + 5; i++) {
-        roomStore.getState().addMessage(roomJid, { ...createMessage(`idle-${i}`, roomJid, 'alice', `Message ${i}`), timestamp: new Date(base + i) })
-      }
-      const unread = roomStore.getState().rooms.get(roomJid)?.unreadCount
-      const arrived = roomStore.getState().lastArrivedMessage
-
-      roomStore.getState().addMessage(roomJid, { ...firstArrival }, { isLiveArrival: true })
-
-      expect(roomStore.getState().rooms.get(roomJid)?.unreadCount).toBe(unread)
-      expect(roomStore.getState().lastArrivedMessage).toBe(arrived)
-    })
-
-    it('does not count a repeated live delivery in the idle tail twice', () => {
-      const roomJid = 'idle@conference.example.com'
-      roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
-      const message = createMessage('echoed', roomJid, 'alice', 'once')
-
-      roomStore.getState().addMessage(roomJid, message)
-      roomStore.getState().addMessage(roomJid, { ...message })
-
-      expect(roomStore.getState().messages.get(roomJid)).toHaveLength(1)
-      expect(roomStore.getState().rooms.get(roomJid)?.unreadCount).toBe(1)
-    })
-
     it('publishes only accepted live arrivals', () => {
       const roomJid = 'test@conference.example.com'
       roomStore.getState().addRoom(createRoom(roomJid))

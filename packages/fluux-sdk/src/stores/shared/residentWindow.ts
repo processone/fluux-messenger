@@ -25,32 +25,3 @@ export function getResidentWindowSize(): number {
 export function setResidentWindowSize(size: number): void {
   residentWindowSize = Math.max(1, Math.floor(size))
 }
-
-/**
- * The most live arrivals a conversation or room keeps resident while it is NOT the active one.
- * Only the active view needs a long window; opening a conversation reloads what the durable cache
- * holds. A window holding memory-only messages (nothing stored locally, so the cache cannot give
- * them back) is exempt and keeps the full bound; see {@link idleResidentWindowFor}. Rows pushed out
- * of the short tail stay recognisable as duplicates through `idleEvictedLedger`.
- */
-const IDLE_RESIDENT_WINDOW_SIZE = 200
-
-/** Resident bound for a conversation or room that is not currently active. */
-export function getIdleResidentWindowSize(): number {
-  return Math.min(IDLE_RESIDENT_WINDOW_SIZE, residentWindowSize)
-}
-
-/**
- * The bound for an idle window about to take `incoming`: the short tail, unless the window or the
- * arrival holds a memory-only message, which cannot be reloaded from the cache and so keeps the
- * full window.
- */
-export function idleResidentWindowFor<T>(
-  resident: readonly T[],
-  incoming: T,
-  isMemoryOnly: (message: T) => boolean
-): number {
-  return isMemoryOnly(incoming) || resident.some(isMemoryOnly)
-    ? residentWindowSize
-    : getIdleResidentWindowSize()
-}
