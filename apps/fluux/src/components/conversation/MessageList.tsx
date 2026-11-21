@@ -1115,6 +1115,7 @@ export function MessageList<T extends BaseMessage>({
       {/* Scroll to bottom FAB with spring animation */}
       <div
         data-fab-container="scroll-to-bottom"
+        data-interaction-bridge
         hidden={interactionMenuOpen}
         className={`absolute bottom-4 end-4 z-40 ${fabAnimationClass(fabVisible, hasFabBeenVisibleRef.current)}`}
         inert={!fabVisible}

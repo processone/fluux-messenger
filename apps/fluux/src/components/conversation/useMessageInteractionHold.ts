@@ -142,6 +142,13 @@ export function useMessageInteractionHold({
       const row = target instanceof Element ? target.closest<HTMLElement>('[data-message-row-id]') : null
       return row && scrollRef.current?.contains(row) ? row : null
     }
+    // A control the hold itself reveals (the jump-to-latest FAB shows at 1px below the bottom only
+    // while a hold is on) keeps the held row. Releasing there would hide the FAB, drop the pointer
+    // back on the row and start a new hold: the two would trade the pointer on every move.
+    const pointerRowFor = (target: EventTarget | null) =>
+      target instanceof Element && target.closest('[data-interaction-bridge]')
+        ? held.current?.row ?? null
+        : rowFor(target)
     const onMove = (event: MouseEvent) => {
       if (middlePress && (event.buttons & 4) !== 0 &&
         (Math.abs(middlePress.x - event.clientX) > MIDDLE_PAN_DEAD_ZONE ||
@@ -151,7 +158,7 @@ export function useMessageInteractionHold({
         : Boolean(event.movementX || event.movementY)
       point = { x: event.clientX, y: event.clientY }
       const row = rowFor(event.target)
-      pointerRow.current = row
+      pointerRow.current = pointerRowFor(event.target)
       if (moved && hasHover()) {
         keyboard.current = false
         // An ongoing selection/drag must not reacquire after its native scrolling takes over.
@@ -160,7 +167,7 @@ export function useMessageInteractionHold({
       maybeRelease()
     }
     const onOut = (event: MouseEvent) => {
-      pointerRow.current = rowFor(event.relatedTarget)
+      pointerRow.current = pointerRowFor(event.relatedTarget)
       maybeRelease()
     }
     const onDown = (event: MouseEvent) => {
