@@ -867,10 +867,11 @@ function ChatLayoutContent() {
     : searchPreviewResult ? () => searchStore.getState().setPreviewResult(null)
     : undefined
 
-  // On a small screen an encryption method screen covers the Encryption overview, which stays
-  // mounted underneath so the edge swipe reveals it instead of the settings list.
+  // An encryption method screen covers the Encryption overview, which stays mounted underneath so
+  // the edge swipe reveals it instead of the settings list. Derived from the route alone, never the
+  // window width, so a resize cannot change which pane owns back mid-gesture.
   const mobileEncryptionMethod = sidebarView === 'settings' && settingsCategory === 'encryption'
-    && resolveEncryptionSubPage(settingsSubPage) !== null && isSmallScreen()
+    && resolveEncryptionSubPage(settingsSubPage) !== null
   const methodPane = useIosPaneNavigation(
     methodPaneRef,
     mobileEncryptionMethod,

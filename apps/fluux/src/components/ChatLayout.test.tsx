@@ -595,8 +595,11 @@ vi.mock('./ContactProfileView', () => ({
 }))
 
 vi.mock('./SettingsView', () => ({
-  SettingsView: ({ showOverview }: { showOverview?: boolean }) => (
-    <div data-testid={showOverview ? 'settings-overview' : 'settings-view'}>Settings</div>
+  SettingsView: ({ showOverview, onSubPageBack }: { showOverview?: boolean; onSubPageBack?: () => void }) => (
+    <div data-testid={showOverview ? 'settings-overview' : 'settings-view'}>
+      Settings
+      {!showOverview && <button type="button" data-testid="settings-sub-back" onClick={onSubPageBack}>Back</button>}
+    </div>
   ),
 }))
 
@@ -796,6 +799,17 @@ describe('ChatLayout - Tab Memory', () => {
       fireEvent.click(screen.getByTestId('probe-back'))
       await waitFor(() => expect(screen.queryByTestId('settings-overview')).not.toBeInTheDocument())
       expect(screen.getByTestId('settings-view')).toBe(view)
+    })
+
+    it.each(['omemo', 'openpgp'])('goes back from the %s screen on the first Back after narrowing from a wide window', async (method) => {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })
+      render(<ChatLayoutWithProbe initialRoute={`/settings/encryption/${method}`} />)
+      await screen.findByTestId('settings-view')
+
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 })
+      fireEvent.click(screen.getByTestId('settings-sub-back'))
+
+      await waitFor(() => expect(screen.getByTestId('probe-path').textContent).toBe('/settings/encryption'))
     })
 
     it('keeps the conversation open during a vertical scroll from the edge', () => {
