@@ -203,6 +203,10 @@ export interface MessageBubbleProps {
   groupSecurityContext?: BaseMessage['securityContext']
 }
 
+function sameHighlightTerms(prev: string[] = [], next: string[] = []): boolean {
+  return prev.length === next.length && prev.every((term, index) => term === next[index])
+}
+
 /**
  * Custom comparison for memo - compares data props, ignores callback props.
  * This prevents re-renders when only callback references change.
@@ -322,6 +326,10 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
 
   // Find-on-page current match
   if (prev.isCurrentMatch !== next.isCurrentMatch) return false
+
+  // Highlighted search terms, compared by value: the search preview builds a new
+  // list on every render, and a missing list means the same as an empty one.
+  if (!sameHighlightTerms(prev.highlightTerms, next.highlightTerms)) return false
 
   // Own-message run identity — changes when grouping shifts, so the row can
   // (de)register from the shared-width coordinator.

@@ -1028,9 +1028,7 @@ test.describe('Saved messages and find', () => {
     await openShowcase(page)
     await selectItem(page, 'Emma Ward')
     await page.keyboard.press('ControlOrMeta+f')
-    // The word goes in as one step: typed letter by letter, only the letters typed when
-    // the matches were first found stay highlighted.
-    await page.keyboard.insertText('poster')
+    await page.keyboard.type('poster')
     await expect(page.getByText('2/2', { exact: true })).toBeVisible()
     await capture(page, '36-find-in-conversation-dark')
   })
