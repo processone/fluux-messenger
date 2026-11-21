@@ -1505,10 +1505,6 @@
         "search": {
             "title": "Risultati di ricerca",
             "description": "Seleziona un risultato dalla barra laterale per visualizzare la conversazione."
-        },
-        "saved": {
-            "title": "Messaggi salvati",
-            "description": "Seleziona un messaggio salvato nella barra laterale per aprirlo nella sua conversazione."
         }
     },
     "avatar": {
@@ -1913,7 +1909,14 @@
         "headerButton": "Salvati in questa conversazione ({{count}}). Solo tu li vedi.",
         "scopeLabel": "In {{name}}",
         "clearScope": "Mostra tutti i messaggi salvati",
-        "onlyYou": "Solo tu vedi i tuoi messaggi salvati"
+        "onlyYou": "Solo tu vedi i tuoi messaggi salvati",
+        "zeroTitle": "Conserva i messaggi che contano",
+        "factPrivate": "Solo tu li vedi, anche nelle stanze",
+        "factDevices": "Disponibili su tutti i tuoi dispositivi",
+        "factOriginal": "Un clic per tornare all’originale",
+        "paneSavedOn": "Salvato il {{date}}",
+        "panePosition": "{{index}} di {{total}}",
+        "copyOnly": "La cronologia della conversazione non è su questo dispositivo: questa è la copia che hai salvato."
     },
     "errorBoundary": {
         "title": "Si è verificato un problema",

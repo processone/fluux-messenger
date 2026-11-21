@@ -1501,10 +1501,6 @@
         "search": {
             "title": "Sökresultat",
             "description": "Välj ett resultat i sidofältet för att visa konversationen."
-        },
-        "saved": {
-            "title": "Sparade meddelanden",
-            "description": "Välj ett sparat meddelande i sidofältet för att öppna det i sin konversation."
         }
     },
     "avatar": {
@@ -1909,7 +1905,14 @@
         "headerButton": "Sparade i den här konversationen ({{count}}). Bara du ser dem.",
         "scopeLabel": "I {{name}}",
         "clearScope": "Visa alla sparade meddelanden",
-        "onlyYou": "Bara du ser dina sparade meddelanden"
+        "onlyYou": "Bara du ser dina sparade meddelanden",
+        "zeroTitle": "Behåll de meddelanden som betyder något",
+        "factPrivate": "Bara du ser dem, även i rum",
+        "factDevices": "Tillgängliga på alla dina enheter",
+        "factOriginal": "Ett klick tillbaka till originalet",
+        "paneSavedOn": "Sparat {{date}}",
+        "panePosition": "{{index}} av {{total}}",
+        "copyOnly": "Konversationens historik finns inte på den här enheten, så detta är kopian du sparade."
     },
     "errorBoundary": {
         "title": "Något gick fel",

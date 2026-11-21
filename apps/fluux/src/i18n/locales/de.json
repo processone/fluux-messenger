@@ -1503,10 +1503,6 @@
         "search": {
             "title": "Suchergebnisse",
             "description": "Wählen Sie ein Ergebnis in der Seitenleiste aus, um die Unterhaltung anzuzeigen."
-        },
-        "saved": {
-            "title": "Gespeicherte Nachrichten",
-            "description": "Wählen Sie in der Seitenleiste eine gespeicherte Nachricht aus, um sie in ihrer Unterhaltung zu öffnen."
         }
     },
     "avatar": {
@@ -1911,7 +1907,14 @@
         "headerButton": "In dieser Unterhaltung gespeichert ({{count}}). Nur Sie sehen sie.",
         "scopeLabel": "In {{name}}",
         "clearScope": "Alle gespeicherten Nachrichten anzeigen",
-        "onlyYou": "Nur Sie sehen Ihre gespeicherten Nachrichten"
+        "onlyYou": "Nur Sie sehen Ihre gespeicherten Nachrichten",
+        "zeroTitle": "Behalte die Nachrichten, die zählen",
+        "factPrivate": "Nur du siehst sie, auch in Räumen",
+        "factDevices": "Auf allen deinen Geräten verfügbar",
+        "factOriginal": "Ein Klick zurück zum Original",
+        "paneSavedOn": "Gespeichert am {{date}}",
+        "panePosition": "{{index}} von {{total}}",
+        "copyOnly": "Der Verlauf der Unterhaltung ist nicht auf diesem Gerät. Das ist die Kopie, die du gespeichert hast."
     },
     "errorBoundary": {
         "title": "Etwas ist schiefgelaufen",

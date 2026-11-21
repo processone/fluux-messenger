@@ -1501,10 +1501,6 @@
         "search": {
             "title": "Keresési eredmények",
             "description": "Válasszon egy eredményt az oldalsávban a beszélgetés megtekintéséhez."
-        },
-        "saved": {
-            "title": "Mentett üzenetek",
-            "description": "Válasszon ki egy mentett üzenetet az oldalsávon, hogy megnyissa a beszélgetésében."
         }
     },
     "avatar": {
@@ -1909,7 +1905,14 @@
         "headerButton": "Mentve ebben a beszélgetésben ({{count}}). Csak te látod őket.",
         "scopeLabel": "Itt: {{name}}",
         "clearScope": "Az összes mentett üzenet megjelenítése",
-        "onlyYou": "A mentett üzeneteidet csak te látod"
+        "onlyYou": "A mentett üzeneteidet csak te látod",
+        "zeroTitle": "Őrizze meg a fontos üzeneteket",
+        "factPrivate": "Csak Ön látja őket, a szobákban is",
+        "factDevices": "Minden eszközén elérhetők",
+        "factOriginal": "Egy kattintás az eredetihez",
+        "paneSavedOn": "Mentve: {{date}}",
+        "panePosition": "{{index}} / {{total}}",
+        "copyOnly": "A beszélgetés előzményei nincsenek ezen az eszközön, ezért az Ön által mentett másolat látható."
     },
     "errorBoundary": {
         "title": "Hiba történt",

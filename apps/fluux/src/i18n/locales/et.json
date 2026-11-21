@@ -1503,10 +1503,6 @@
         "search": {
             "title": "Otsingutulemused",
             "description": "Valige külgribal tulemus, et vaadata vestlust."
-        },
-        "saved": {
-            "title": "Salvestatud sõnumid",
-            "description": "Valige külgribal salvestatud sõnum, et avada see oma vestluses."
         }
     },
     "avatar": {
@@ -1911,7 +1907,14 @@
         "headerButton": "Salvestatud selles vestluses ({{count}}). Näed neid ainult sina.",
         "scopeLabel": "Vestluses {{name}}",
         "clearScope": "Näita kõiki salvestatud sõnumeid",
-        "onlyYou": "Salvestatud sõnumeid näed ainult sina"
+        "onlyYou": "Salvestatud sõnumeid näed ainult sina",
+        "zeroTitle": "Hoia alles olulised sõnumid",
+        "factPrivate": "Näed neid ainult sina, ka jututubades",
+        "factDevices": "Saadaval kõigis su seadmetes",
+        "factOriginal": "Üks klõps originaali juurde",
+        "paneSavedOn": "Salvestatud {{date}}",
+        "panePosition": "{{index}} / {{total}}",
+        "copyOnly": "Vestluse ajalugu pole sellel seadmel, seega on see sinu salvestatud koopia."
     },
     "errorBoundary": {
         "title": "Midagi läks valesti",

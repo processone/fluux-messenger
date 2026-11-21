@@ -1507,10 +1507,6 @@
         "search": {
             "title": "Wyniki wyszukiwania",
             "description": "Wybierz wynik na pasku bocznym, aby wyświetlić rozmowę."
-        },
-        "saved": {
-            "title": "Zapisane wiadomości",
-            "description": "Wybierz zapisaną wiadomość na pasku bocznym, aby otworzyć ją w jej rozmowie."
         }
     },
     "avatar": {
@@ -1915,7 +1911,14 @@
         "headerButton": "Zapisane w tej rozmowie ({{count}}). Widzisz je tylko ty.",
         "scopeLabel": "W: {{name}}",
         "clearScope": "Pokaż wszystkie zapisane wiadomości",
-        "onlyYou": "Tylko ty widzisz swoje zapisane wiadomości"
+        "onlyYou": "Tylko ty widzisz swoje zapisane wiadomości",
+        "zeroTitle": "Zachowaj ważne wiadomości",
+        "factPrivate": "Widzisz je tylko ty, także w pokojach",
+        "factDevices": "Dostępne na wszystkich Twoich urządzeniach",
+        "factOriginal": "Jedno kliknięcie do oryginału",
+        "paneSavedOn": "Zapisano {{date}}",
+        "panePosition": "{{index}} z {{total}}",
+        "copyOnly": "Historii rozmowy nie ma na tym urządzeniu, więc widzisz zapisaną przez Ciebie kopię."
     },
     "errorBoundary": {
         "title": "Coś poszło nie tak",

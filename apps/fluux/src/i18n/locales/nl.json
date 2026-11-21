@@ -1501,10 +1501,6 @@
         "search": {
             "title": "Zoekresultaten",
             "description": "Selecteer een resultaat in de zijbalk om het gesprek te bekijken."
-        },
-        "saved": {
-            "title": "Bewaarde berichten",
-            "description": "Kies een bewaard bericht in de zijbalk om het in zijn gesprek te openen."
         }
     },
     "avatar": {
@@ -1909,7 +1905,14 @@
         "headerButton": "Opgeslagen in dit gesprek ({{count}}). Alleen jij ziet ze.",
         "scopeLabel": "In {{name}}",
         "clearScope": "Alle opgeslagen berichten tonen",
-        "onlyYou": "Alleen jij ziet je opgeslagen berichten"
+        "onlyYou": "Alleen jij ziet je opgeslagen berichten",
+        "zeroTitle": "Bewaar de berichten die ertoe doen",
+        "factPrivate": "Alleen jij ziet ze, ook in kamers",
+        "factDevices": "Beschikbaar op al je apparaten",
+        "factOriginal": "Eén klik terug naar het origineel",
+        "paneSavedOn": "Bewaard op {{date}}",
+        "panePosition": "{{index}} van {{total}}",
+        "copyOnly": "De gespreksgeschiedenis staat niet op dit apparaat; dit is de kopie die je hebt bewaard."
     },
     "errorBoundary": {
         "title": "Er is iets misgegaan",

@@ -1501,10 +1501,6 @@
         "search": {
             "title": "Søkeresultater",
             "description": "Velg et resultat i sidefeltet for å vise samtalen."
-        },
-        "saved": {
-            "title": "Lagrede meldinger",
-            "description": "Velg en lagret melding i sidefeltet for å åpne den i samtalen sin."
         }
     },
     "avatar": {
@@ -1909,7 +1905,14 @@
         "headerButton": "Lagret i denne samtalen ({{count}}). Bare du ser dem.",
         "scopeLabel": "I {{name}}",
         "clearScope": "Vis alle lagrede meldinger",
-        "onlyYou": "Bare du ser de lagrede meldingene dine"
+        "onlyYou": "Bare du ser de lagrede meldingene dine",
+        "zeroTitle": "Behold meldingene som betyr noe",
+        "factPrivate": "Bare du ser dem, også i rom",
+        "factDevices": "Tilgjengelige på alle enhetene dine",
+        "factOriginal": "Ett klikk tilbake til originalen",
+        "paneSavedOn": "Lagret {{date}}",
+        "panePosition": "{{index}} av {{total}}",
+        "copyOnly": "Samtalehistorikken finnes ikke på denne enheten, så dette er kopien du lagret."
     },
     "errorBoundary": {
         "title": "Noe gikk galt",

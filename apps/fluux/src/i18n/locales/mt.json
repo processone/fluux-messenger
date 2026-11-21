@@ -1509,10 +1509,6 @@
         "search": {
             "title": "Riżultati tat-tfittxija",
             "description": "Agħżel riżultat fil-bar tal-ġenb biex tara l-konversazzjoni."
-        },
-        "saved": {
-            "title": "Messaġġi msejvin",
-            "description": "Agħżel messaġġ misjuv fil-bar tal-ġenb biex tiftaħ fil-konversazzjoni tiegħu."
         }
     },
     "avatar": {
@@ -1917,7 +1913,14 @@
         "headerButton": "Ssejvjati f'din il-konversazzjoni ({{count}}). Inti biss tarahom.",
         "scopeLabel": "F'{{name}}",
         "clearScope": "Uri l-messaġġi ssejvjati kollha",
-        "onlyYou": "Inti biss tara l-messaġġi ssejvjati tiegħek"
+        "onlyYou": "Inti biss tara l-messaġġi ssejvjati tiegħek",
+        "zeroTitle": "Żomm il-messaġġi li jgħodd",
+        "factPrivate": "Int biss tarahom, anki fil-kmamar",
+        "factDevices": "Disponibbli fuq l-apparati kollha tiegħek",
+        "factOriginal": "Klikk wieħed lura għall-oriġinal",
+        "paneSavedOn": "Salvat fi {{date}}",
+        "panePosition": "{{index}} minn {{total}}",
+        "copyOnly": "L-istorja tal-konverżazzjoni mhix fuq dan l-apparat, għalhekk din hi l-kopja li salvajt."
     },
     "errorBoundary": {
         "title": "Xi ħaġa marret ħażin",

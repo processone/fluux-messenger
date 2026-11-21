@@ -1501,10 +1501,6 @@
         "search": {
             "title": "Hakutulokset",
             "description": "Valitse tulos sivupalkista nähdäksesi keskustelun."
-        },
-        "saved": {
-            "title": "Tallennetut viestit",
-            "description": "Valitse tallennettu viesti sivupalkista avataksesi sen keskustelussaan."
         }
     },
     "avatar": {
@@ -1909,7 +1905,14 @@
         "headerButton": "Tallennettu tähän keskusteluun ({{count}}). Vain sinä näet ne.",
         "scopeLabel": "Keskustelussa {{name}}",
         "clearScope": "Näytä kaikki tallennetut viestit",
-        "onlyYou": "Vain sinä näet tallennetut viestisi"
+        "onlyYou": "Vain sinä näet tallennetut viestisi",
+        "zeroTitle": "Säilytä tärkeät viestit",
+        "factPrivate": "Vain sinä näet ne, myös huoneissa",
+        "factDevices": "Käytettävissä kaikilla laitteillasi",
+        "factOriginal": "Yksi napsautus alkuperäiseen",
+        "paneSavedOn": "Tallennettu {{date}}",
+        "panePosition": "{{index}} / {{total}}",
+        "copyOnly": "Keskustelun historiaa ei ole tällä laitteella, joten tämä on tallentamasi kopio."
     },
     "errorBoundary": {
         "title": "Jokin meni pieleen",

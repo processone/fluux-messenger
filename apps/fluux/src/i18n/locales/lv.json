@@ -1504,10 +1504,6 @@
         "search": {
             "title": "Meklēšanas rezultāti",
             "description": "Izvēlieties rezultātu sānjoslā, lai skatītu sarunu."
-        },
-        "saved": {
-            "title": "Saglabātie ziņojumi",
-            "description": "Izvēlieties saglabātu ziņojumu sānjoslā, lai atvērtu to tā sarunā."
         }
     },
     "avatar": {
@@ -1912,7 +1908,14 @@
         "headerButton": "Saglabāts šajā sarunā ({{count}}). Tos redzat tikai jūs.",
         "scopeLabel": "Sarunā {{name}}",
         "clearScope": "Rādīt visas saglabātās ziņas",
-        "onlyYou": "Saglabātās ziņas redzat tikai jūs"
+        "onlyYou": "Saglabātās ziņas redzat tikai jūs",
+        "zeroTitle": "Saglabājiet svarīgās ziņas",
+        "factPrivate": "Tās redzat tikai jūs, arī istabās",
+        "factDevices": "Pieejamas visās jūsu ierīcēs",
+        "factOriginal": "Viens klikšķis līdz oriģinālam",
+        "paneSavedOn": "Saglabāts {{date}}",
+        "panePosition": "{{index}} no {{total}}",
+        "copyOnly": "Sarunas vēstures šajā ierīcē nav, tāpēc redzama jūsu saglabātā kopija."
     },
     "errorBoundary": {
         "title": "Kaut kas nogāja greizi",

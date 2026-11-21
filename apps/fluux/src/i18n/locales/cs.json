@@ -1507,10 +1507,6 @@
         "search": {
             "title": "Výsledky vyhledávání",
             "description": "Vyberte výsledek v postranním panelu pro zobrazení konverzace."
-        },
-        "saved": {
-            "title": "Uložené zprávy",
-            "description": "Vyberte uloženou zprávu v postranním panelu, aby se otevřela ve své konverzaci."
         }
     },
     "avatar": {
@@ -1915,7 +1911,14 @@
         "headerButton": "Uloženo v této konverzaci ({{count}}). Vidíte je jen vy.",
         "scopeLabel": "V: {{name}}",
         "clearScope": "Zobrazit všechny uložené zprávy",
-        "onlyYou": "Uložené zprávy vidíte jen vy"
+        "onlyYou": "Uložené zprávy vidíte jen vy",
+        "zeroTitle": "Uchovejte zprávy, na kterých záleží",
+        "factPrivate": "Vidíte je jen vy, i v místnostech",
+        "factDevices": "Dostupné na všech vašich zařízeních",
+        "factOriginal": "Jedno kliknutí k originálu",
+        "paneSavedOn": "Uloženo {{date}}",
+        "panePosition": "{{index}} z {{total}}",
+        "copyOnly": "Historie konverzace není v tomto zařízení, proto vidíte kopii, kterou jste uložili."
     },
     "errorBoundary": {
         "title": "Něco se pokazilo",

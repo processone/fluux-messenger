@@ -7,7 +7,7 @@ import { activateChat } from './harness/scrollHarness'
 import { ROOM_JID as ROOM } from '../apps/fluux/src/demo/constants'
 
 // Saved messages: save a room message and a chat message from the More menu, see them in the
-// Saved view, click through to the highlighted original, and remove them. Demo history is the
+// Saved view (central pane shows each in its conversation), open the highlighted original, and remove them. Demo history is the
 // fixture; the private-node transport has its own unit tests and live two-client check.
 const PEER = 'emma@fluux.chat'
 
@@ -94,16 +94,28 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await expect(rows.first()).toContainText('The door code is on the board')
   await expect(rows.nth(1)).toContainText(body.slice(0, 20))
 
-  // Open the room entry: its conversation opens with the original highlighted.
+  // The central pane opens the newest entry inside its conversation, read-only, with the message highlighted.
+  const preview = page.getByTestId('saved-preview')
+  await expect(preview).toBeVisible()
+  await expect(preview.locator('[data-message-id="saved-chat-1"].message-highlight-persistent')).toBeInViewport()
+  await expect(page.getByText('Select a saved message')).toHaveCount(0)
+
+  // A click on another row shows that entry in the pane without leaving Saved.
   await rows.nth(1).click()
+  await expect(page).toHaveURL(/\/saved/)
+  await expect(preview.locator(`[data-message-id="${roomId}"].message-highlight-persistent`)).toBeInViewport()
+  await expect(rows.nth(1)).toHaveAttribute('aria-current', 'true')
+
+  // Go to message opens the room conversation with the original highlighted.
+  await preview.getByRole('button', { name: 'Go to message' }).click()
   await expect(page).toHaveURL(new RegExp(`/rooms/${encodeURIComponent(ROOM)}$`))
   await expect(page.locator(`[data-message-id="${roomId}"].message-highlight`)).toBeInViewport()
   await expect(await savedEntry(page, 'Room actions')).toHaveText('Saved messages (1)')
   await page.keyboard.press('Escape')
 
-  // Open the chat entry.
+  // Open the chat entry with a double-click on its row.
   await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()
-  await page.getByTestId('saved-row').first().click()
+  await page.getByTestId('saved-row').first().dblclick()
   await expect(page).toHaveURL(new RegExp(`/messages/${encodeURIComponent(PEER)}$`))
   await expect(page.locator('[data-message-id="saved-chat-1"].message-highlight')).toBeInViewport()
 
@@ -113,6 +125,7 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await expect(page.getByTestId('saved-row')).toHaveCount(1)
   await page.getByTestId('saved-row').first().getByRole('button', { name: 'Remove from saved' }).click()
   await expect(page.getByText('No saved messages')).toBeVisible()
+  await expect(page.getByTestId('saved-zero-pane')).toBeVisible()
   expect(page.context().pages()).toHaveLength(1)
 })
 

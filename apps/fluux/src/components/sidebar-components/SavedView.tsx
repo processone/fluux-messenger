@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Bookmark, Lock, Trash2, RefreshCw, X } from 'lucide-react'
 import {
-  connectionStore, chatStore, findLatestCopy, getBareJid, getLocalPart, getResource, useSavedMessages, selectSavedInConversation,
+  connectionStore, chatStore, findLatestCopy, getBareJid, getLocalPart, getResource,
   type Message, type RoomMessage, type SavedMessage,
 } from '@fluux/sdk'
 import { useRoomStore, useRosterStore, useChatStore, useSavedStore } from '@fluux/sdk/react'
@@ -10,7 +10,9 @@ import { Avatar } from '../Avatar'
 import { RoomAvatar } from '../RoomAvatar'
 import { ListEmpty } from '../ui/ListEmpty'
 import { useDayChange } from '@/hooks/useDayChange'
-import { useSavedScopeStore } from '@/stores/savedScopeStore'
+import { useSavedScopeStore, useSavedSelectionStore } from '@/stores/savedScopeStore'
+import { useSavedList } from '@/hooks/useSavedList'
+import { useIsSmallScreen } from '@/hooks/useIsMobileWeb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { formatConversationTime } from '@/utils/dateFormat'
 import type { SavedOpenProblem } from '@/hooks/useSavedOpener'
@@ -21,7 +23,7 @@ import type { SavedOpenProblem } from '@/hooks/useSavedOpener'
  * was saved. An encrypted entry has its text only when it was sealed with the account's key; a message that never had text is
  * not a deleted one.
  */
-function useRowText(entry: SavedMessage): string {
+export function useRowText(entry: SavedMessage): string {
   const { t } = useTranslation()
   // The resident window changes when messages arrive, edits included: look again then.
   const chatWindow = useChatStore((s) => entry.type === 'chat' ? s.messages.get(entry.conversationJid) : undefined)
@@ -42,7 +44,7 @@ function useRowText(entry: SavedMessage): string {
 }
 
 /** The name of an entry's conversation: the room's, the contact's, else the conversation's own, else its JID's local part. */
-function useConversationName(entry: SavedMessage | undefined): string | undefined {
+export function useConversationName(entry: SavedMessage | undefined): string | undefined {
   const isRoom = entry?.type === 'groupchat'
   const jid = entry?.conversationJid
   const room = useRoomStore((s) => isRoom && jid ? s.rooms.get(jid) : undefined)
@@ -53,8 +55,12 @@ function useConversationName(entry: SavedMessage | undefined): string | undefine
     : contact?.name || chatStore.getState().conversationEntities.get(jid)?.name || getLocalPart(jid)
 }
 
-function SavedRow({ entry, problem, onOpen, onRemove, showConversation }: {
+function SavedRow({ entry, problem, onOpen, onSelect, onRemove, showConversation, selected }: {
   entry: SavedMessage
+  /** The row the central pane shows. Only set on a wide window, where a click selects instead of leaving the tab. */
+  selected: boolean
+  /** Shows the entry in the central pane. Absent on a small screen, where a tap opens the conversation. */
+  onSelect?: (entry: SavedMessage) => void
   /** False when the list is narrowed to one conversation, which the chip already names. */
   showConversation: boolean
   problem: SavedOpenProblem | undefined
@@ -81,9 +87,11 @@ function SavedRow({ entry, problem, onOpen, onRemove, showConversation }: {
       data-saved-id={entry.id}
       role="button"
       tabIndex={0}
-      onClick={() => onOpen(entry)}
-      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(entry) } }}
-      className="w-full px-2 py-1.5 rounded flex items-start gap-2.5 text-start cursor-pointer text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text transition-colors group/saved"
+      aria-current={selected || undefined}
+      onClick={() => (onSelect ?? onOpen)(entry)}
+      onDoubleClick={onSelect ? () => onOpen(entry) : undefined}
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); (onSelect ?? onOpen)(entry) } }}
+      className={`w-full px-2 py-1.5 rounded flex items-start gap-2.5 text-start cursor-pointer hover:bg-fluux-hover hover:text-fluux-text transition-colors group/saved ${selected ? 'bg-fluux-hover text-fluux-text' : 'text-fluux-muted'}`}
     >
       <div className="flex-shrink-0 mt-0.5">
         {isRoom
@@ -128,15 +136,20 @@ export function SavedView({ problems, onOpen }: {
   onOpen: (entry: SavedMessage) => Promise<void>
 }) {
   const { t } = useTranslation()
-  const { saved: allSaved, remove, lockedCount } = useSavedMessages()
-  const scope = useSavedScopeStore((s) => s.conversationJid)
+  const { saved, narrowed, scoped, scope, current, remove, lockedCount } = useSavedList()
   const setScope = useSavedScopeStore((s) => s.setScope)
-  const scoped = useMemo(() => scope ? selectSavedInConversation(allSaved, scope) : undefined, [allSaved, scope])
+  const select = useSavedSelectionStore((s) => s.select)
+  // The central pane shows the selected message only on a wide window with no conversation open
+  // (a conversation's Saved button keeps it open beside the list). There a click shows the
+  // message and a double-click opens its conversation; otherwise a click opens the conversation.
+  const small = useIsSmallScreen()
+  const chatOpen = useChatStore((s) => !!s.activeConversationId)
+  const roomOpen = useRoomStore((s) => !!s.activeRoomJid)
+  const conversationOpen = chatOpen || roomOpen
+  const paneShown = !small && !conversationOpen
   // The last saved message of the conversation was removed: nothing is left to narrow to.
   const scopeEmpty = !!scope && scoped?.length === 0
   useEffect(() => { if (scopeEmpty) setScope(null) }, [scopeEmpty, setScope])
-  const narrowed = scoped && scoped.length > 0 ? scoped : undefined
-  const saved = narrowed ?? allSaved
   const scopeName = useConversationName(narrowed?.[0])
 
   if (lockedCount > 0 && saved.length === 0) {
@@ -153,7 +166,8 @@ export function SavedView({ problems, onOpen }: {
       <ListEmpty
         icon={Bookmark}
         title={t('saved.empty')}
-        description={t('saved.emptyHint')}
+        // The central pane explains saving instead when it is shown.
+        description={paneShown ? undefined : t('saved.emptyHint')}
       />
     )
   }
@@ -180,7 +194,9 @@ export function SavedView({ problems, onOpen }: {
         <p role="status" className="px-2 py-1 text-xs text-fluux-muted" data-testid="saved-locked-note">{t('saved.lockedSome', { count: lockedCount })}</p>
       )}
       {saved.map((entry) => (
-        <SavedRow key={entry.id} entry={entry} problem={problems[entry.id]} onOpen={(e) => { void onOpen(e) }} onRemove={remove} showConversation={!narrowed} />
+        <SavedRow key={entry.id} entry={entry} problem={problems[entry.id]} selected={paneShown && entry.id === current?.id}
+          onSelect={paneShown ? (e) => select(e.id) : undefined}
+          onOpen={(e) => { void onOpen(e) }} onRemove={remove} showConversation={!narrowed} />
       ))}
     </div>
   )

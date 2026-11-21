@@ -48,7 +48,7 @@ import { ArrowLeft, ExternalLink, Search } from 'lucide-react'
 /** Number of messages to load on each side of the target */
 const CONTEXT_BATCH_SIZE = 50
 
-function chatSearchContextRowId(message: Pick<BaseMessage, 'id' | 'from'> & Partial<Pick<BaseMessage, 'stanzaId' | 'originId'>>): string {
+export function chatSearchContextRowId(message: Pick<BaseMessage, 'id' | 'from'> & Partial<Pick<BaseMessage, 'stanzaId' | 'originId'>>): string {
   return JSON.stringify([message.from, message.stanzaId ? 'stanza' : message.originId ? 'origin' : 'client',
     message.stanzaId || message.originId || message.id])
 }
@@ -64,6 +64,122 @@ const SCROLL_REASSERT_FRAMES = 90
 const SCROLL_STABLE_FRAMES = 3
 /** Landing-point drift (px) treated as "not moved" between frames. */
 const SCROLL_DRIFT_PX = 2
+
+/** Joins the messages before and after a target into one list in time order, dropping the same message seen twice (cache and archive, or an edit). */
+export function mergeContextMessages(
+  before: (Message | RoomMessage)[],
+  after: (Message | RoomMessage)[],
+  conversationJid: string,
+  isRoom: boolean,
+): (Message | RoomMessage)[] {
+  const scope = isRoom ? roomScope(conversationJid) : CHAT_SCOPE
+  const merged: (Message | RoomMessage)[] = []
+  for (const msg of [...before, ...after]) {
+    if (!merged.some(existing => sameLogicalMessage(scope, existing, msg) &&
+      (isRoom || !archiveIdentityConflict(existing, msg)) &&
+      (existing.type !== 'groupchat' || msg.type !== 'groupchat' || roomStanzaIdsMergeable(existing, msg)))) {
+      merged.push(msg)
+    }
+  }
+  return merged.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+}
+
+/**
+ * Scrolls a static (read-only) message list to a target row and keeps it highlighted.
+ * Shared by the search preview and the Saved preview. `targetKey` identifies the target
+ * (a new key restarts the loop); `isLoading` holds it until the target's context is ready.
+ */
+export function useScrollToContextTarget(
+  scrollerRef: { readonly current: HTMLElement | null },
+  rowId: string | undefined,
+  targetKey: unknown,
+  isLoading: boolean,
+) {
+  // Scroll to the target message and apply persistent highlight.
+  // We handle this here instead of passing targetMessageId to MessageList/useMessageListScroll
+  // because the scroll hook's live-conversation behaviors (ResizeObserver auto-scroll,
+  // new message scroll-to-bottom, scroll state persistence) interfere with the static preview.
+  //
+  // The target row and the rows above it size asynchronously (avatars, media, link previews),
+  // so a single scroll computed from the first, unsettled layout lands the target off-position
+  // — often well above the fold once the content grows. We therefore re-assert the position
+  // across frames until the landing point stops moving (mirrors the live message-list path's
+  // marker/pin re-assert loops), bailing the moment the user takes over.
+  // Keyed on the TARGET (previewResult) + the initial load flag — NOT on messages.length.
+  // loadMessages sets `messages` and clears `isLoading` in one batched update, so this fires
+  // exactly once when the target's context is ready. Loading OLDER context on scroll-to-top
+  // uses a separate `isLoadingOlder` flag, so paginating never re-triggers this — the loop must
+  // not yank the user back to the target after they deliberately scrolled up.
+  useEffect(() => {
+    if (!targetKey || !rowId || isLoading) return
+
+    const scroller = scrollerRef.current
+    if (!scroller) return
+
+    let raf = 0
+    let framesLeft = SCROLL_REASSERT_FRAMES
+    let stableFrames = 0
+    let landed = -1
+    let lastScrollHeight = -1
+    let userTookOver = false
+
+    // Any manual scroll gesture stops the loop so we never fight the user (e.g. once they
+    // scroll up to read context). Programmatic scrollTop writes never fire these events;
+    // covers wheel/trackpad, touch, and scrollbar drag.
+    const onUserTakeover = () => { userTookOver = true }
+    scroller.addEventListener('wheel', onUserTakeover, { passive: true })
+    scroller.addEventListener('touchstart', onUserTakeover, { passive: true })
+    scroller.addEventListener('mousedown', onUserTakeover, { passive: true })
+
+    const step = () => {
+      raf = 0
+      if (userTookOver) return
+      if (framesLeft-- <= 0) return
+
+      const el = findMessageRowElement(scroller, rowId)
+      if (!el) {
+        // Rows not mounted yet — keep waiting within the frame budget.
+        raf = requestAnimationFrame(step)
+        return
+      }
+
+      // Apply persistent highlight (no fade animation — this is a static preview).
+      el.classList.add('message-highlight-persistent')
+
+      // Position the target message ~1/3 down from the viewport top.
+      const scrollerRect = scroller.getBoundingClientRect()
+      const elementRect = el.getBoundingClientRect()
+      const elementTop = elementRect.top - scrollerRect.top + scroller.scrollTop
+      const desired = Math.max(0, elementTop - scroller.clientHeight / 3)
+      scroller.scrollTop = desired
+
+      // Converged once the landing point and content height both stop changing (rows have
+      // finished measuring). Use the post-write scrollTop (the browser clamps near the end).
+      const settledPos = landed >= 0 && Math.abs(scroller.scrollTop - landed) <= SCROLL_DRIFT_PX
+      const settledHeight = scroller.scrollHeight === lastScrollHeight
+      if (settledPos && settledHeight) {
+        if (++stableFrames >= SCROLL_STABLE_FRAMES) return
+      } else {
+        stableFrames = 0
+      }
+      landed = scroller.scrollTop
+      lastScrollHeight = scroller.scrollHeight
+      raf = requestAnimationFrame(step)
+    }
+
+    raf = requestAnimationFrame(step)
+
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      scroller.removeEventListener('wheel', onUserTakeover)
+      scroller.removeEventListener('touchstart', onUserTakeover)
+      scroller.removeEventListener('mousedown', onUserTakeover)
+      // Clean up highlight when switching results
+      const el = scroller ? findMessageRowElement(scroller, rowId) : null
+      el?.classList.remove('message-highlight-persistent')
+    }
+  }, [targetKey, rowId, isLoading, scrollerRef])
+}
 
 export function SearchContextView({ onBack }: { onBack?: () => void }) {
   const { t } = useTranslation()
@@ -178,20 +294,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
           }
         }
 
-        const scope = previewResult.isRoom
-          ? roomScope(previewResult.conversationId)
-          : CHAT_SCOPE
-        const merged: (Message | RoomMessage)[] = []
-        for (const msg of [...before, ...after]) {
-          if (!merged.some(existing => sameLogicalMessage(scope, existing, msg) &&
-            (previewResult.isRoom || !archiveIdentityConflict(existing, msg)) &&
-            (existing.type !== 'groupchat' || msg.type !== 'groupchat' || roomStanzaIdsMergeable(existing, msg)))) {
-            merged.push(msg)
-          }
-        }
-
-        // Sort by timestamp
-        merged.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+        const merged = mergeContextMessages(before, after, previewResult.conversationId, previewResult.isRoom)
 
         if (!cancelled) {
           setMessages(merged)
@@ -209,90 +312,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
     return () => { cancelled = true }
   }, [previewResult])
 
-  // Scroll to the target message and apply persistent highlight.
-  // We handle this here instead of passing targetMessageId to MessageList/useMessageListScroll
-  // because the scroll hook's live-conversation behaviors (ResizeObserver auto-scroll,
-  // new message scroll-to-bottom, scroll state persistence) interfere with the static preview.
-  //
-  // The target row and the rows above it size asynchronously (avatars, media, link previews),
-  // so a single scroll computed from the first, unsettled layout lands the target off-position
-  // — often well above the fold once the content grows. We therefore re-assert the position
-  // across frames until the landing point stops moving (mirrors the live message-list path's
-  // marker/pin re-assert loops), bailing the moment the user takes over.
-  // Keyed on the TARGET (previewResult) + the initial load flag — NOT on messages.length.
-  // loadMessages sets `messages` and clears `isLoading` in one batched update, so this fires
-  // exactly once when the target's context is ready. Loading OLDER context on scroll-to-top
-  // uses a separate `isLoadingOlder` flag, so paginating never re-triggers this — the loop must
-  // not yank the user back to the target after they deliberately scrolled up.
-  useEffect(() => {
-    if (!previewResult || !previewRowId || isLoading) return
-
-    const scroller = scrollRef.current
-    if (!scroller) return
-
-    let raf = 0
-    let framesLeft = SCROLL_REASSERT_FRAMES
-    let stableFrames = 0
-    let landed = -1
-    let lastScrollHeight = -1
-    let userTookOver = false
-
-    // Any manual scroll gesture stops the loop so we never fight the user (e.g. once they
-    // scroll up to read context). Programmatic scrollTop writes never fire these events;
-    // covers wheel/trackpad, touch, and scrollbar drag.
-    const onUserTakeover = () => { userTookOver = true }
-    scroller.addEventListener('wheel', onUserTakeover, { passive: true })
-    scroller.addEventListener('touchstart', onUserTakeover, { passive: true })
-    scroller.addEventListener('mousedown', onUserTakeover, { passive: true })
-
-    const step = () => {
-      raf = 0
-      if (userTookOver) return
-      if (framesLeft-- <= 0) return
-
-      const el = findMessageRowElement(scroller, previewRowId)
-      if (!el) {
-        // Rows not mounted yet — keep waiting within the frame budget.
-        raf = requestAnimationFrame(step)
-        return
-      }
-
-      // Apply persistent highlight (no fade animation — this is a static preview).
-      el.classList.add('message-highlight-persistent')
-
-      // Position the target message ~1/3 down from the viewport top.
-      const scrollerRect = scroller.getBoundingClientRect()
-      const elementRect = el.getBoundingClientRect()
-      const elementTop = elementRect.top - scrollerRect.top + scroller.scrollTop
-      const desired = Math.max(0, elementTop - scroller.clientHeight / 3)
-      scroller.scrollTop = desired
-
-      // Converged once the landing point and content height both stop changing (rows have
-      // finished measuring). Use the post-write scrollTop (the browser clamps near the end).
-      const settledPos = landed >= 0 && Math.abs(scroller.scrollTop - landed) <= SCROLL_DRIFT_PX
-      const settledHeight = scroller.scrollHeight === lastScrollHeight
-      if (settledPos && settledHeight) {
-        if (++stableFrames >= SCROLL_STABLE_FRAMES) return
-      } else {
-        stableFrames = 0
-      }
-      landed = scroller.scrollTop
-      lastScrollHeight = scroller.scrollHeight
-      raf = requestAnimationFrame(step)
-    }
-
-    raf = requestAnimationFrame(step)
-
-    return () => {
-      if (raf) cancelAnimationFrame(raf)
-      scroller.removeEventListener('wheel', onUserTakeover)
-      scroller.removeEventListener('touchstart', onUserTakeover)
-      scroller.removeEventListener('mousedown', onUserTakeover)
-      // Clean up highlight when switching results
-      const el = scroller ? findMessageRowElement(scroller, previewRowId) : null
-      el?.classList.remove('message-highlight-persistent')
-    }
-  }, [previewResult, previewRowId, isLoading])
+  useScrollToContextTarget(scrollRef, previewRowId, previewResult, isLoading)
 
   // Load older messages on scroll to top
   const handleScrollToTop = useCallback(async () => {

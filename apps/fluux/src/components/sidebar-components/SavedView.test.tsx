@@ -5,6 +5,7 @@ import { savedStore, type SavedMessage } from '@fluux/sdk'
 
 type SavedState = ReturnType<typeof savedStore.getState>
 
+const ui = vi.hoisted(() => ({ activeConversationId: null as string | null }))
 const open = vi.fn().mockResolvedValue(undefined)
 const latestCopy = vi.fn().mockResolvedValue(undefined)
 vi.mock('@fluux/sdk', async (importOriginal) => ({
@@ -20,7 +21,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   findLatestCopy: (...args: unknown[]) => latestCopy(...args),
 }))
 vi.mock('@fluux/sdk/react', () => ({
-  useChatStore: (selector: (s: unknown) => unknown) => selector({ messages: new Map() }),
+  useChatStore: (selector: (s: unknown) => unknown) => selector({ messages: new Map(), activeConversationId: ui.activeConversationId }),
   useRoomStore: (selector: (s: unknown) => unknown) => selector({ messages: new Map(), rooms: new Map() }),
   useRosterStore: (selector: (s: unknown) => unknown) => selector({ contacts: new Map() }),
   useSavedStore: (selector: (s: SavedState) => unknown) => useStore(savedStore, selector),
@@ -30,25 +31,37 @@ vi.mock('react-i18next', () => ({
 }))
 
 import { SavedView } from './SavedView'
-import { useSavedScopeStore } from '@/stores/savedScopeStore'
+import { useSavedScopeStore, useSavedSelectionStore } from '@/stores/savedScopeStore'
 
 const entry = (id: string, extra: Partial<SavedMessage> = {}): SavedMessage => ({
   id, conversationJid: 'juliet@capulet.example', type: 'chat', from: 'juliet@capulet.example/balcony',
   text: `text ${id}`, savedAt: 1000, sentAt: 500, messageId: `m-${id}`, stanzaId: `s-${id}`, ...extra,
 })
 
+/** The width the layout reads to tell a wide window from a small screen. */
+const setViewport = (width: number) => { Object.defineProperty(window, 'innerWidth', { value: width, configurable: true }) }
+
 describe('SavedView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     savedStore.getState().reset()
     useSavedScopeStore.getState().setScope(null)
+    useSavedSelectionStore.getState().select(null)
+    setViewport(1280)
+    ui.activeConversationId = null
   })
 
-  it('shows the empty state when nothing is saved', () => {
+  it('shows the empty state when nothing is saved, leaving how to save to the central pane on a wide window', () => {
     render(<SavedView problems={{}} onOpen={open} />)
     expect(screen.getByText('saved.empty')).toBeInTheDocument()
-    expect(screen.getByText('saved.emptyHint')).toBeInTheDocument()
+    expect(screen.queryByText('saved.emptyHint')).toBeNull()
     expect(screen.queryByTestId('saved-list')).toBeNull()
+  })
+
+  it('explains how to save in the list itself on a small screen, which has no central pane', () => {
+    setViewport(390)
+    render(<SavedView problems={{}} onOpen={open} />)
+    expect(screen.getByText('saved.emptyHint')).toBeInTheDocument()
   })
 
   it('lists entries newest saved first with encrypted and deleted text', () => {
@@ -73,13 +86,56 @@ describe('SavedView', () => {
     expect(open).not.toHaveBeenCalled()
   })
 
-  it('opens an entry from its row, but not from the keyboard on its Remove button', () => {
+  it('on a small screen opens an entry from its row, but not from the keyboard on its Remove button', () => {
+    setViewport(390)
     savedStore.setState({ entries: { a: entry('a') } })
     render(<SavedView problems={{}} onOpen={open} />)
     fireEvent.keyDown(screen.getByLabelText('saved.remove'), { key: 'Enter' })
     expect(open).not.toHaveBeenCalled()
     fireEvent.keyDown(screen.getByTestId('saved-row'), { key: 'Enter' })
     expect(open).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }))
+  })
+
+  describe('on a wide window', () => {
+    const rows = () => screen.getAllByTestId('saved-row')
+
+    it('marks the newest entry as the one the central pane shows', () => {
+      savedStore.setState({ entries: { a: entry('a', { savedAt: 1000 }), b: entry('b', { savedAt: 3000 }) } })
+      render(<SavedView problems={{}} onOpen={open} />)
+      expect(rows()[0]).toHaveAttribute('aria-current', 'true')
+      expect(rows()[1]).not.toHaveAttribute('aria-current')
+    })
+
+    it('shows an entry in the pane on a click or Enter without leaving the tab, and opens it on a double-click', () => {
+      savedStore.setState({ entries: { a: entry('a', { savedAt: 1000 }), b: entry('b', { savedAt: 3000 }) } })
+      render(<SavedView problems={{}} onOpen={open} />)
+      fireEvent.click(rows()[1])
+      expect(useSavedSelectionStore.getState().selectedId).toBe('a')
+      expect(rows()[1]).toHaveAttribute('aria-current', 'true')
+      fireEvent.keyDown(rows()[0], { key: 'Enter' })
+      expect(useSavedSelectionStore.getState().selectedId).toBe('b')
+      expect(open).not.toHaveBeenCalled()
+      fireEvent.doubleClick(rows()[1])
+      expect(open).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }))
+    })
+
+    it('opens the conversation on a click while one is already open beside the list, since the pane is not shown', () => {
+      ui.activeConversationId = 'juliet@capulet.example'
+      savedStore.setState({ entries: { a: entry('a') } })
+      render(<SavedView problems={{}} onOpen={open} />)
+      fireEvent.click(screen.getByTestId('saved-row'))
+      expect(open).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }))
+      expect(screen.getByTestId('saved-row')).not.toHaveAttribute('aria-current')
+    })
+
+    it('falls back to the newest entry when the selected one is removed', () => {
+      savedStore.setState({ entries: { a: entry('a', { savedAt: 1000 }), b: entry('b', { savedAt: 3000 }) } })
+      useSavedSelectionStore.getState().select('a')
+      render(<SavedView problems={{}} onOpen={open} />)
+      fireEvent.click(within(rows()[1]).getByLabelText('saved.remove'))
+      expect(rows()).toHaveLength(1)
+      expect(rows()[0]).toHaveAttribute('aria-current', 'true')
+    })
   })
 
   it('shows a failed open on its row and offers Try again only for a failed lookup', () => {
@@ -161,7 +217,8 @@ describe('SavedView', () => {
       expect(screen.getAllByTestId('saved-conversation')).toHaveLength(2)
     })
 
-    it('opens a row of the narrowed list', () => {
+    it('opens a row of the narrowed list on a small screen', () => {
+      setViewport(390)
       savedStore.setState({ entries: { a: room('a'), b: entry('b') } })
       useSavedScopeStore.getState().setScope('team@conference.example')
       render(<SavedView problems={{}} onOpen={open} />)

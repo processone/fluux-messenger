@@ -1505,10 +1505,6 @@
         "search": {
             "title": "Paieškos rezultatai",
             "description": "Pasirinkite rezultatą šoninėje juostoje, kad peržiūrėtumėte pokalbį."
-        },
-        "saved": {
-            "title": "Išsaugotos žinutės",
-            "description": "Šoninėje juostoje pasirinkite išsaugotą žinutę, kad atvertumėte ją jos pokalbyje."
         }
     },
     "avatar": {
@@ -1913,7 +1909,14 @@
         "headerButton": "Išsaugota šiame pokalbyje ({{count}}). Jas matote tik jūs.",
         "scopeLabel": "Pokalbyje {{name}}",
         "clearScope": "Rodyti visas išsaugotas žinutes",
-        "onlyYou": "Išsaugotas žinutes matote tik jūs"
+        "onlyYou": "Išsaugotas žinutes matote tik jūs",
+        "zeroTitle": "Išsaugokite svarbius pranešimus",
+        "factPrivate": "Juos matote tik jūs, net kambariuose",
+        "factDevices": "Pasiekiami visuose jūsų įrenginiuose",
+        "factOriginal": "Vienas spustelėjimas iki originalo",
+        "paneSavedOn": "Išsaugota {{date}}",
+        "panePosition": "{{index}} iš {{total}}",
+        "copyOnly": "Pokalbio istorijos šiame įrenginyje nėra, todėl rodoma jūsų išsaugota kopija."
     },
     "errorBoundary": {
         "title": "Kažkas nepavyko",

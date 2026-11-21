@@ -1504,10 +1504,6 @@
         "search": {
             "title": "Recherche",
             "description": "Sélectionnez un résultat dans la barre latérale pour afficher la conversation."
-        },
-        "saved": {
-            "title": "Messages enregistrés",
-            "description": "Sélectionnez un message enregistré dans la barre latérale pour l’ouvrir dans sa conversation."
         }
     },
     "avatar": {
@@ -1912,7 +1908,14 @@
         "headerButton": "Enregistrés dans cette conversation ({{count}}). Vous seul les voyez.",
         "scopeLabel": "Dans {{name}}",
         "clearScope": "Afficher tous les messages enregistrés",
-        "onlyYou": "Vous seul voyez vos messages enregistrés"
+        "onlyYou": "Vous seul voyez vos messages enregistrés",
+        "zeroTitle": "Gardez les messages qui comptent",
+        "factPrivate": "Vous seul les voyez, même dans les salons",
+        "factDevices": "Disponibles sur tous vos appareils",
+        "factOriginal": "Un clic pour retrouver l’original",
+        "paneSavedOn": "Enregistré le {{date}}",
+        "panePosition": "{{index}} sur {{total}}",
+        "copyOnly": "L’historique de la conversation n’est pas sur cet appareil : voici la copie que vous avez enregistrée."
     },
     "errorBoundary": {
         "title": "Un problème est survenu",

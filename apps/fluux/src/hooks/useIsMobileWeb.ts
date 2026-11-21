@@ -64,3 +64,19 @@ export function isSmallScreen(): boolean {
   if (typeof window === 'undefined') return false
   return window.innerWidth < MOBILE_BREAKPOINT
 }
+
+/**
+ * Reactive form of `isSmallScreen`: true while the viewport is below the mobile breakpoint,
+ * whatever the platform. Layout decisions (list first, one pane at a time) follow it.
+ */
+export function useIsSmallScreen(): boolean {
+  const [small, setSmall] = useState(isSmallScreen)
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
+    const handleChange = (e: MediaQueryListEvent) => setSmall(e.matches)
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
+  }, [])
+  return small
+}
