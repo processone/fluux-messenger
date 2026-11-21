@@ -9,6 +9,8 @@
  * @module Hooks/MetadataSubscriptions
  */
 
+import { useCallback, useRef } from 'react'
+import { shallow } from 'zustand/shallow'
 import { useChatStore, useRoomStore } from '../react/storeHooks'
 import { chatSelectors } from '../stores/chatSelectors'
 import { roomSelectors } from '../stores/roomSelectors'
@@ -20,6 +22,49 @@ import type { Message, ConversationEntity, ConversationMetadata, RoomEntity, Roo
  */
 const EMPTY_ROOM_MESSAGE_ARRAY: RoomMessage[] = []
 const EMPTY_OCCUPANT_MAP: Map<string, RoomOccupant> = new Map()
+
+/**
+ * Carry over the previous list's references wherever the content is unchanged.
+ *
+ * Returns `previous` itself when every row and the order match. Otherwise returns
+ * a new array that still reuses each unchanged row, so memoized rows skip rendering.
+ */
+function reuseUnchangedItems<Item extends object>(
+  previous: Item[] | undefined,
+  next: Item[],
+  key: keyof Item,
+): Item[] {
+  if (!previous) return next
+  const previousByKey = new Map(previous.map((item) => [item[key], item]))
+  let unchanged = previous.length === next.length
+  const reused = next.map((item, index) => {
+    const prior = previousByKey.get(item[key])
+    const stable = prior && shallow(prior, item) ? prior : item
+    if (stable !== previous[index]) unchanged = false
+    return stable
+  })
+  return unchanged ? previous : reused
+}
+
+/**
+ * Make a sidebar list selector safe for a store subscription.
+ *
+ * The sidebar selectors build new row objects on every call, which React reads as
+ * a store change on every render and rejects with "Maximum update depth exceeded".
+ * `useShallow` alone cannot help because each row is new. The cache belongs to the
+ * calling component, so components reading different stores never share a result.
+ */
+function useStableSidebarItems<State, Item extends object>(
+  select: (state: State) => Item[],
+  key: keyof Item,
+): (state: State) => Item[] {
+  const previous = useRef<Item[] | undefined>(undefined)
+  return useCallback((state: State) => {
+    const stable = reuseUnchangedItems(previous.current, select(state), key)
+    previous.current = stable
+    return stable
+  }, [select, key])
+}
 
 // =============================================================================
 // CHAT METADATA HOOKS
@@ -103,7 +148,7 @@ export function useChatSidebarItems(): Array<{
   lastMessage?: Message
   hasDraft: boolean
 }> {
-  return useChatStore(chatSelectors.activeSidebarListItems)
+  return useChatStore(useStableSidebarItems(chatSelectors.activeSidebarListItems, 'id'))
 }
 
 /**
@@ -137,7 +182,7 @@ export function useArchivedSidebarItems(): Array<{
   lastMessage?: Message
   hasDraft: boolean
 }> {
-  return useChatStore(chatSelectors.archivedSidebarListItems)
+  return useChatStore(useStableSidebarItems(chatSelectors.archivedSidebarListItems, 'id'))
 }
 
 /**
@@ -314,7 +359,7 @@ export interface RoomSidebarItem {
  * ```
  */
 export function useAllRoomSidebarItems(): RoomSidebarItem[] {
-  return useRoomStore(roomSelectors.sidebarListItems)
+  return useRoomStore(useStableSidebarItems(roomSelectors.sidebarListItems, 'jid'))
 }
 
 /**
@@ -326,7 +371,7 @@ export function useAllRoomSidebarItems(): RoomSidebarItem[] {
  * @returns Array of bookmarked room sidebar items
  */
 export function useRoomSidebarItems(): RoomSidebarItem[] {
-  return useRoomStore(roomSelectors.bookmarkedSidebarListItems)
+  return useRoomStore(useStableSidebarItems(roomSelectors.bookmarkedSidebarListItems, 'jid'))
 }
 
 /**
