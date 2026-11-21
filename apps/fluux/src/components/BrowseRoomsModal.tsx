@@ -307,7 +307,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                 onKeyDown={(e) => e.key === 'Enter' && handleCustomServiceSubmit()}
                 placeholder={t('rooms.customMucPlaceholder')}
                 className="flex-1 px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                           border border-transparent focus:border-fluux-brand
+                           border border-transparent
                            placeholder:text-fluux-muted"
                 autoFocus
               />
@@ -350,7 +350,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                 className="w-full appearance-none ps-10 pe-10 py-2.5 rounded-lg
                            bg-fluux-bg text-fluux-text cursor-pointer
                            border-2 border-fluux-hover
-                           hover:border-fluux-muted focus:border-fluux-brand focus:outline-none
+                           hover:border-fluux-muted
                            transition-colors
                            dark:[color-scheme:dark]"
               >
@@ -379,7 +379,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
             onChange={(e) => setNickname(e.target.value)}
             placeholder={t('rooms.nicknamePlaceholder')}
             className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                       border border-transparent focus:border-fluux-brand
+                       border border-transparent
                        placeholder:text-fluux-muted"
           />
         </div>
@@ -395,7 +395,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('rooms.searchRooms')}
               className="w-full ps-10 pe-3 py-2 bg-fluux-bg text-fluux-text rounded
-                         border border-transparent focus:border-fluux-brand
+                         border border-transparent
                          placeholder:text-fluux-muted"
             />
           </div>

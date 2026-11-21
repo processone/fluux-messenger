@@ -3,6 +3,7 @@ import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 import { resolveAccentPreset, useThemeStore } from '@/stores/themeStore'
 import type { AccentPreset } from '@/themes/types'
 import { resolveTransparency } from '@/themes/transparency'
+import { guardedFocusRing, paintedFocusSurfaces, type FocusRgba } from '@/themes/focusRing'
 import { platform } from '@/platform'
 import { setIosAppearance } from '@/platform/ios/appearance'
 import { measureSystemBodySize, rootFontSize } from '@/utils/systemTextSize'
@@ -184,6 +185,33 @@ function applyEmojiPickerColors() {
   }
 }
 
+/** Read resolved CSS colours through the browser, including custom/plugin tokens. */
+function applyFocusRing(accent: { h: number; s: number; l: number }, resolved: 'light' | 'dark') {
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = 1
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) return
+  const probe = document.createElement('span')
+  probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;forced-color-adjust:none'
+  document.body.appendChild(probe)
+  try {
+    const read = (color: string): FocusRgba => {
+      probe.style.color = color
+      context.clearRect(0, 0, 1, 1)
+      context.fillStyle = getComputedStyle(probe).color
+      context.fillRect(0, 0, 1, 1)
+      const data = context.getImageData(0, 0, 1, 1).data
+      return [data[0], data[1], data[2], data[3] / 255]
+    }
+    const [r, g, b] = read('Canvas')
+    const surfaces = paintedFocusSurfaces(token => read(`var(${token})`), [r, g, b])
+    const ring = guardedFocusRing(accent, resolved, surfaces)
+    document.documentElement.style.setProperty('--fluux-focus-ring', `rgb(${ring.join(', ')})`)
+  } finally {
+    probe.remove()
+  }
+}
+
 /** Snippet <style> element data attribute */
 const SNIPPET_ATTR = 'data-fluux-snippet'
 
@@ -268,6 +296,9 @@ export function useTheme() {
       root.style.setProperty('--fluux-text-on-accent', contrastColorForHsl(effectiveHsl.h, effectiveHsl.s, effectiveHsl.l))
     }
 
+    // Guard the shared keyboard indicator after theme and accent overrides.
+    applyFocusRing(getEffectiveAccentHsl(accentPreset, resolved, modeVars), resolved)
+
     // 3c. Derive emoji-picker RGB triples from the now-resolved theme tokens
     applyEmojiPickerColors()
 
@@ -313,6 +344,7 @@ export function useTheme() {
         document.documentElement.style.setProperty('--fluux-text-on-accent', contrastColorForHsl(effectiveHsl.h, effectiveHsl.s, effectiveHsl.l))
       }
 
+      applyFocusRing(getEffectiveAccentHsl(accentPreset, resolved, modeVars), resolved)
       applyEmojiPickerColors()
 
       updateThemeColorMeta(resolved)

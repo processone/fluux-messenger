@@ -24,7 +24,7 @@ type Outcome = 'removed' | 'failed' | 'skipped'
 const buttonClass = 'px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
 const secondaryButtonClass = `${buttonClass} text-fluux-text bg-fluux-hover hover:bg-fluux-active`
 const dangerButtonClass = `${buttonClass} bg-fluux-red text-white hover:bg-[color-mix(in_srgb,var(--fluux-status-error),black_10%)]`
-const inputClass = 'w-full px-3 py-2 text-sm text-fluux-text bg-fluux-bg rounded-lg border border-fluux-border placeholder:text-fluux-muted focus:border-fluux-brand'
+const inputClass = 'w-full px-3 py-2 text-sm text-fluux-text bg-fluux-bg rounded-lg border border-fluux-border placeholder:text-fluux-muted'
 
 function findReviewedTarget(messages: readonly RoomMessage[], target: RoomMessage): RoomMessage | undefined {
   return messages.find(message => message.roomJid === target.roomJid && sameMessageRow(messageRowRef(message), messageRowRef(target))

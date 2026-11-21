@@ -98,7 +98,7 @@ function ServerArchiveControl() {
                 disabled={disabled}
                 onClick={() => { if (prefs.default !== option.value) void save(option.value) }}
                 className={`min-w-0 break-words rounded-md px-2 py-2 text-center text-sm font-medium leading-tight transition-colors
-                  focus-visible:outline focus-visible:outline-2 focus-visible:outline-fluux-brand disabled:opacity-60
+                  disabled:opacity-60
                   ${prefs.default === option.value
                     ? 'bg-fluux-active text-fluux-text ring-1 ring-fluux-brand'
                     : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'}`}>

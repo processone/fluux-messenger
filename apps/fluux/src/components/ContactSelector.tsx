@@ -490,7 +490,7 @@ export function ContactSelector({
             : (placeholder || defaultPlaceholder)}
           disabled={disabled}
           className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                     border border-transparent focus:border-fluux-brand
+                     border border-transparent
                      placeholder:text-fluux-muted disabled:opacity-50"
         />
 
@@ -526,7 +526,7 @@ export function ContactSelector({
                       data-highlighted={index === highlightedIndex ? '' : undefined}
                       onClick={() => selectContact(contact.jid)}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectContact(contact.jid) } }}
-                      className={`flex items-center gap-2 px-3 py-2 ${
+                      className={`focus-ring-inset flex items-center gap-2 px-3 py-2 ${
                         contact.unavailableNote
                           ? `cursor-not-allowed text-fluux-muted ${index === highlightedIndex ? 'bg-fluux-hover' : ''}`
                           : `cursor-pointer text-fluux-text ${index === highlightedIndex ? 'bg-fluux-brand/20' : 'hover:bg-fluux-hover'}`
@@ -560,7 +560,7 @@ export function ContactSelector({
                 tabIndex={0}
                 onClick={() => selectContact(searchJidNormalized)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectContact(searchJidNormalized) } }}
-                className="flex items-center gap-2 px-3 py-2 cursor-pointer bg-fluux-brand/20 text-fluux-text"
+                className="focus-ring-inset flex items-center gap-2 px-3 py-2 cursor-pointer bg-fluux-brand/20 text-fluux-text"
               >
                 <span className="size-2 rounded-full flex-shrink-0 bg-fluux-muted" />
                 <span className="text-sm truncate flex-1">{searchJidNormalized}</span>

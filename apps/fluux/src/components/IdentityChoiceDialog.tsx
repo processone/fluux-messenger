@@ -257,7 +257,7 @@ export function IdentityChoiceDialog({
                   }
                 }}
                 placeholder={t('settings.encryption.identityChoice.restorePassphrasePlaceholder')}
-                className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
+                className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text disabled:opacity-50"
               />
             </>
           )}

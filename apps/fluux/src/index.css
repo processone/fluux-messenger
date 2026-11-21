@@ -380,12 +380,8 @@
   --fluux-scrollbar-thumb-sidebar: var(--fluux-scrollbar-thumb);
   --fluux-scrollbar-thumb-sidebar-hover: var(--fluux-scrollbar-thumb-hover);
 
-  /* Focus ring — drives the universal `.user-interacted *:focus` outline, so this
-     one token governs keyboard-focus visibility app-wide. Solid accent: at 0.5
-     alpha it was only ~1.9:1 and failed the WCAG 1.4.11 non-text minimum (3:1);
-     solid clears 3:1 on every surface in both modes. */
-  /* Dark lifts the ring 8% above the accent fill so it keeps 3:1 on the lifted
-     hover surface (base-40); .light keeps the plain accent. */
+  /* Pre-hook focus fallback. useTheme guards this solid accent against resolved
+     surfaces on each theme, mode or accent change to preserve 3:1 contrast. */
   --fluux-focus-ring: hsl(var(--fluux-accent-h), var(--fluux-accent-s), calc(var(--fluux-accent-l) + 8%));
 
   /* Shadows */
@@ -1388,53 +1384,40 @@ html, body {
   outline: none;
 }
 
-/* Focus ring system - only show after user has interacted */
-/* The 'user-interacted' class is added to html on first mouse/keyboard input */
-/* Exclude .no-focus-ring elements (large containers that shouldn't show focus) */
-.user-interacted *:focus:not(html):not(body):not(#root):not(.no-focus-ring) {
+/* One keyboard indicator, enabled only after the first real input. Explicit
+ * pointer modality also clears Chromium's retained :focus-visible on a button
+ * that was already focused. Text inputs keep their native clicked indicator. */
+.user-interacted:not([data-focus-modality="pointer"]) :focus-visible:where(:not(html):not(body):not(#root):not(.no-focus-ring)),
+.user-interacted[data-focus-modality="pointer"] :is(input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="tel"], input[type="password"], input[type="number"], textarea, [contenteditable="true"]):focus-visible:where(:not(.no-focus-ring)),
+.user-interacted:not([data-focus-modality="pointer"]) .keyboard-focus-row {
   outline: 2px solid var(--fluux-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Flush rows must keep their indicator inside scrolling/clipped containers. */
+.user-interacted :is(.focus-ring-inset, .sidebar-row, .command-row, [role^="menuitem"], [role="option"], .window-control, .xmpp-console-entry):focus-visible,
+.user-interacted:not([data-focus-modality="pointer"]) .keyboard-focus-row {
   outline-offset: -2px;
 }
 
-/* Focus zone styling - only show after user interaction.
- * Uses an `outline` (not an inset box-shadow) so the ring repaints reliably when
- * the zone loses focus. In WKWebView (Tauri) an inset box-shadow is not always
- * repainted away on blur — WebKit resets activeElement to <body> on window
- * blur→refocus, and the stale ring lingered on a pane that no longer held
- * keyboard focus, which read as a focus ring on an unfocused area. Outlines
- * repaint on every focus/blur transition. Same 1px accent weight and inset
- * treatment as the XMPP console-log ring below, so the sidebar / message / room
- * focus edge stays calm rather than a heavier 2px solid outline. */
-.user-interacted .focus-zone:focus {
-  /* Inset because these zones are flush panels (no room for an outset ring); the
-     solid 1px line keeps the keyboard-focus indicator visible for accessibility.
-     A small radius softens the corners so the edge reads as gently rounded. */
-  outline: 1px solid var(--fluux-brand) !important;
-  outline-offset: -1px !important;
+/* Panes keep their quiet inside edge. Outlines repaint reliably on WebKit blur,
+ * unlike inset shadows, and paint above scrolling content. */
+.user-interacted :is(.focus-zone, .xmpp-console-log):focus-visible {
+  outline-width: 1px;
+  outline-offset: -1px;
   border-radius: 4px;
 }
 
-/* XMPP console log: the focus ring is an outline (not an inset box-shadow) so it
- * sits ABOVE the scrolling entries. An inset ring would be painted under the
- * rows (the content scrolls on top of it), which is the overlap we want to avoid.
- * Same 1px accent weight as the focus zones, inset so it stays within the panel. */
-.user-interacted .xmpp-console-log:focus {
-  outline: 1px solid var(--fluux-brand) !important;
-  outline-offset: -1px !important;
+.user-interacted .xmpp-console-entry:focus-visible {
+  border-radius: 6px;
 }
 
-/* XMPP console entries: per-row keyboard-focus ring. The app-wide focus rule
- * (.user-interacted *:focus) insets the outline 2px, which on these dense,
- * square rows leaves only a hair of clearance above the first line — and WebKit
- * strokes outlines on a rounded path, so on some platforms the top line's glyphs
- * poke past the ring. Scope a calmer ring here: a defined corner radius (the
- * outline now follows a known curve instead of WebKit's implicit one) and just a
- * 1px inset so the ring hugs the row edge, keeping the full row padding as
- * clearance between the ring and the content. */
-.user-interacted .xmpp-console-entry:focus {
-  outline: 2px solid var(--fluux-focus-ring) !important;
-  outline-offset: -1px !important;
-  border-radius: 6px;
+@media (forced-colors: active) {
+  .user-interacted {
+    /* Override the token, not a lower-specificity outline declaration. This
+       reaches keyboard rows and clicked text fields through the same rule. */
+    --fluux-focus-ring: Highlight !important;
+  }
 }
 
 /*
@@ -1746,11 +1729,6 @@ input[type="range"]::-moz-range-thumb {
   background-color: color-mix(in srgb, currentColor 16%, transparent);
 }
 
-.window-control:focus-visible {
-  outline: 2px solid var(--fluux-focus-ring);
-  outline-offset: -2px;
-}
-
 /* The close colours Windows itself uses. */
 .window-control-close:hover {
   background-color: #c42b1c;
@@ -1770,9 +1748,6 @@ input[type="range"]::-moz-range-thumb {
     color: HighlightText;
   }
 
-  .window-control:focus-visible {
-    outline-color: Highlight;
-  }
 }
 
 /* Message highlight animation for reply navigation */

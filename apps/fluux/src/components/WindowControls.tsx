@@ -96,7 +96,7 @@ function ControlButton({ label, onClick, close = false, children }: {
       title={label}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
-      className={`window-control no-focus-ring${close ? ' window-control-close' : ''}`}
+      className={`window-control${close ? ' window-control-close' : ''}`}
       style={{ width: CONTROL_WIDTH }}
     >
       {children}

@@ -47,6 +47,7 @@ const BASE_URL = isolatedPort !== null
  */
 
 const SUITES = [
+  { name: 'focus-ring', testMatch: 'focus-ring.ts' },
   { name: 'notification-settings', testMatch: 'notification-settings.ts' },
   { name: 'badge-diagnostics', testMatch: 'badge-diagnostics.ts' },
   { name: 'backup-recovery', testMatch: 'backup-recovery.ts' },

@@ -397,7 +397,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
                 value={selectedVhost || ''}
                 onChange={(e) => handleVhostChange(e.target.value)}
                 className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-hover rounded-lg
-                           text-fluux-text focus:outline-none focus:border-fluux-brand"
+                           text-fluux-text"
               >
                 {vhosts.map((vhost) => (
                   <option key={vhost} value={vhost}>
@@ -673,7 +673,7 @@ function AddUserModal({ vhost, onSubmit, onClose }: AddUserModalProps) {
               placeholder={t('admin.addUser.usernamePlaceholder')}
               disabled={isSubmitting}
               className="flex-1 min-w-0 bg-transparent
-                         placeholder:text-fluux-muted disabled:opacity-50 focus:outline-none"
+                         placeholder:text-fluux-muted disabled:opacity-50"
             />
             <span className="text-fluux-muted whitespace-nowrap flex-shrink-0">@{vhost}</span>
           </div>
@@ -691,7 +691,7 @@ function AddUserModal({ vhost, onSubmit, onClose }: AddUserModalProps) {
             placeholder={t('admin.addUser.passwordPlaceholder')}
             disabled={isSubmitting}
             className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                       border border-transparent focus:border-fluux-brand
+                       border border-transparent
                        placeholder:text-fluux-muted disabled:opacity-50"
           />
         </div>
@@ -708,7 +708,7 @@ function AddUserModal({ vhost, onSubmit, onClose }: AddUserModalProps) {
             placeholder={t('admin.addUser.confirmPasswordPlaceholder')}
             disabled={isSubmitting}
             className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                       border border-transparent focus:border-fluux-brand
+                       border border-transparent
                        placeholder:text-fluux-muted disabled:opacity-50"
           />
         </div>

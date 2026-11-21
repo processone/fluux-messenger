@@ -112,7 +112,7 @@ export function BlockedUsersSettings() {
               autoFocus
               className="flex-1 px-3 py-2 rounded-lg border-2 border-fluux-hover bg-fluux-bg
                          text-fluux-text placeholder:text-fluux-muted
-                         focus:border-fluux-brand focus:outline-none transition-colors"
+                         transition-colors"
             />
             <button
               type="button"
@@ -167,7 +167,7 @@ export function BlockedUsersSettings() {
             placeholder={t('settings.blocked.searchPlaceholder')}
             className="w-full ps-10 pe-4 py-2 rounded-lg border-2 border-fluux-hover bg-fluux-bg
                        text-fluux-text placeholder:text-fluux-muted
-                       focus:border-fluux-brand focus:outline-none transition-colors"
+                       transition-colors"
           />
         </div>
       )}

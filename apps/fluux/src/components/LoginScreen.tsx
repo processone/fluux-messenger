@@ -465,8 +465,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
               aria-invalid={showJidError}
               aria-describedby={showJidError ? 'jid-error' : undefined}
               className={`w-full px-3 py-2.5 bg-fluux-bg text-fluux-text rounded-lg
-                         border focus:border-fluux-brand
-                         focus-visible:ring-2 focus-visible:ring-fluux-brand/50
+                         border
                          placeholder:text-fluux-muted disabled:opacity-50
                          ${showJidError ? 'border-fluux-red' : 'border-fluux-border'}`}
             />
@@ -497,8 +496,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                 required
                 disabled={isLoading}
                 className="w-full px-3 py-2.5 pe-10 bg-fluux-bg text-fluux-text rounded-lg
-                           border border-fluux-border focus:border-fluux-brand
-                           focus-visible:ring-2 focus-visible:ring-fluux-brand/50
+                           border border-fluux-border
                            placeholder:text-fluux-muted disabled:opacity-50"
               />
               <button
@@ -541,8 +539,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                 placeholder={platform().nativeXmppProxy ? t('login.serverPlaceholderDesktop') : t('login.serverPlaceholder')}
                 disabled={isLoading}
                 className="w-full px-3 py-2.5 bg-fluux-bg text-fluux-text rounded-lg
-                           border border-fluux-border focus:border-fluux-brand
-                           focus-visible:ring-2 focus-visible:ring-fluux-brand/50
+                           border border-fluux-border
                            placeholder:text-fluux-muted disabled:opacity-50"
               />
               <p className="text-xs text-fluux-muted mt-1">
@@ -567,8 +564,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
               onChange={(e) => setRememberMe(e.target.checked)}
               disabled={isLoading}
               className="size-4 shrink-0 rounded border border-fluux-border bg-fluux-bg
-                         checked:bg-fluux-brand checked:border-fluux-brand
-                         focus:ring-fluux-brand focus:ring-offset-0"
+                         checked:bg-fluux-brand checked:border-fluux-brand"
             />
             <label htmlFor="remember" className="min-w-0 flex-1 text-sm text-fluux-text flex items-center gap-2">
               <KeyRound className="size-4 shrink-0 text-fluux-muted" />
@@ -615,7 +611,6 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
             className="w-full py-3 bg-fluux-brand hover:bg-fluux-brand-hover
                        text-fluux-text-on-accent font-semibold rounded-lg transition-colors
                        disabled:opacity-50 disabled:cursor-not-allowed
-                       focus-visible:ring-2 focus-visible:ring-fluux-brand focus-visible:ring-offset-2 focus-visible:ring-offset-fluux-sidebar
                        flex items-center justify-center gap-2"
           >
             {isConnecting ? (

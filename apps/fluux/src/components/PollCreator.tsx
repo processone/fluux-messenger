@@ -99,7 +99,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={t('poll.titlePlaceholder', 'Ask a question...')}
-            className="px-3 py-2 rounded-md border border-fluux-border bg-fluux-bg text-fluux-text text-sm placeholder:text-fluux-muted focus:outline-none focus:border-fluux-brand"
+            className="px-3 py-2 rounded-md border border-fluux-border bg-fluux-bg text-fluux-text text-sm placeholder:text-fluux-muted"
             autoFocus
             maxLength={200}
           />
@@ -118,7 +118,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder={t('poll.descriptionPlaceholder', 'Add context or details...')}
-            className="px-3 py-2 rounded-md border border-fluux-border bg-fluux-bg text-fluux-text text-sm placeholder:text-fluux-muted focus:outline-none focus:border-fluux-brand"
+            className="px-3 py-2 rounded-md border border-fluux-border bg-fluux-bg text-fluux-text text-sm placeholder:text-fluux-muted"
             maxLength={300}
           />
         </div>
@@ -159,7 +159,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
                 value={option}
                 onChange={(e) => updateOption(index, e.target.value)}
                 placeholder={t('poll.optionPlaceholder', 'Option {{number}}', { number: index + 1 })}
-                className="flex-1 px-3 py-2 rounded-md border border-fluux-border bg-fluux-bg text-fluux-text text-sm placeholder:text-fluux-muted focus:outline-none focus:border-fluux-brand"
+                className="flex-1 px-3 py-2 rounded-md border border-fluux-border bg-fluux-bg text-fluux-text text-sm placeholder:text-fluux-muted"
                 maxLength={100}
               />
               {canRemoveOption && (
@@ -226,7 +226,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
             value={deadline}
             onChange={(e) => setDeadline(e.target.value)}
             min={new Date().toISOString().slice(0, 16)}
-            className="px-3 py-2 rounded-md border border-fluux-border bg-fluux-bg text-fluux-text text-sm focus:outline-none focus:border-fluux-brand"
+            className="px-3 py-2 rounded-md border border-fluux-border bg-fluux-bg text-fluux-text text-sm"
           />
         </div>
 

@@ -668,7 +668,7 @@ function CommandPaletteContent({
                       onClick={item.action}
                       onMouseEnter={() => !ignoreMouseRef.current && !isKeyboardNav && updateSelectedIndex(itemIndex)}
                       className={`w-full flex items-center command-row px-4 text-start transition-colors
-                        focus:outline-none focus-visible:!shadow-none border-s-2
+                        focus-visible:!shadow-none border-s-2
                         ${isSelected
                           ? 'text-fluux-text border-fluux-brand font-medium'
                           : `text-fluux-text border-transparent ${isKeyboardNav ? '' : 'hover:bg-fluux-hover'}`

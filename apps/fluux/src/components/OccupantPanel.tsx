@@ -593,7 +593,7 @@ export function OccupantPanel({
             type="button"
             aria-expanded={offlineExpanded}
             onClick={() => setOfflineDisclosure({ roomJid: room.jid, expanded: !offlineExpanded })}
-            className="w-full min-h-11 px-4 py-2 mt-1 border-t border-[color:var(--fluux-surface-divider)] flex items-center gap-2 text-start text-[11px] font-semibold uppercase tracking-[0.09em] text-fluux-muted hover:bg-fluux-message-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-fluux-brand focus-visible:-outline-offset-2"
+            className="focus-ring-inset w-full min-h-11 px-4 py-2 mt-1 border-t border-[color:var(--fluux-surface-divider)] flex items-center gap-2 text-start text-[11px] font-semibold uppercase tracking-[0.09em] text-fluux-muted hover:bg-fluux-message-hover"
           >
             {offlineExpanded
               ? <ChevronDown aria-hidden="true" className="size-3 shrink-0" />

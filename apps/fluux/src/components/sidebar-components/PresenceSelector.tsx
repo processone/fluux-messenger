@@ -156,7 +156,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
               key={option.value}
               onClick={() => void handleSelectPresence(option.value)}
               onMouseEnter={() => setFocusedIndex(index)}
-              className={`w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text transition-colors ${
+              className={`focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text transition-colors ${
                 focusedIndex === index ? 'bg-fluux-hover' : 'hover:bg-fluux-hover'
               }`}
             >
@@ -182,7 +182,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
                 onChange={(e) => setStatusInput(e.target.value)}
                 placeholder={t('presence.statusPlaceholder')}
                 maxLength={100}
-                className="flex-1 min-w-0 px-2 py-1.5 text-sm bg-fluux-sidebar text-fluux-text rounded border border-fluux-hover focus:outline-none focus:border-fluux-brand placeholder:text-fluux-muted"
+                className="flex-1 min-w-0 px-2 py-1.5 text-sm bg-fluux-sidebar text-fluux-text rounded border border-fluux-hover placeholder:text-fluux-muted"
               />
             </div>
             <div className="flex gap-2 mt-2">

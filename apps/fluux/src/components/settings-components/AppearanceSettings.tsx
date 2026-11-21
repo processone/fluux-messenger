@@ -149,7 +149,7 @@ function SnippetEditorModal({
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 text-sm bg-fluux-bg text-fluux-text rounded-lg border border-fluux-hover focus:border-fluux-brand outline-none"
+            className="w-full px-3 py-2 text-sm bg-fluux-bg text-fluux-text rounded-lg border border-fluux-hover outline-none"
             placeholder="my-tweaks.css"
           />
         </div>
@@ -160,7 +160,7 @@ function SnippetEditorModal({
           <TextArea
             value={css}
             onChange={(e) => setCss(e.target.value)}
-            className="w-full h-48 px-3 py-2 text-sm font-mono bg-fluux-bg text-fluux-text rounded-lg border border-fluux-hover focus:border-fluux-brand outline-none resize-y"
+            className="w-full h-48 px-3 py-2 text-sm font-mono bg-fluux-bg text-fluux-text rounded-lg border border-fluux-hover outline-none resize-y"
             placeholder={`/* Example: make the sidebar wider */\n.sidebar {\n  min-width: 300px;\n}\n\n/* Override a theme variable */\n:root {\n  --fluux-bg-accent: #e06c75;\n}`}
             spellCheck={false}
           />

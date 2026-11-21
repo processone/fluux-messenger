@@ -64,7 +64,7 @@ export function RenameContactModal({
             placeholder={t('contacts.enterName')}
             disabled={saving}
             className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                       border border-transparent focus:border-fluux-brand
+                       border border-transparent
                        placeholder:text-fluux-muted disabled:opacity-50"
           />
         </div>

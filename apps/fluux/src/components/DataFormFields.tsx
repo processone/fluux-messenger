@@ -89,7 +89,7 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
             disabled={disabled}
             required={isRequired}
             placeholder={field.desc}
-            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 disabled:opacity-50"
+            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted disabled:opacity-50"
           />
         )
 
@@ -104,7 +104,7 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
             disabled={disabled}
             required={isRequired}
             placeholder={field.desc}
-            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 disabled:opacity-50"
+            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted disabled:opacity-50"
           />
         )
 
@@ -120,7 +120,7 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
             required={isRequired}
             placeholder={field.desc || (field.type === 'jid-multi' ? t('admin.oneJidPerLine') : t('admin.onePerLine'))}
             rows={4}
-            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 disabled:opacity-50 resize-y"
+            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted disabled:opacity-50 resize-y"
           />
         )
 
@@ -133,7 +133,7 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
             onChange={e => onChange(field.var, e.target.value)}
             disabled={disabled}
             required={isRequired}
-            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 disabled:opacity-50"
+            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text disabled:opacity-50"
           >
             <option value="">{t('admin.selectOption')}</option>
             {field.options?.map(opt => (
@@ -166,7 +166,7 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
                       }
                     }}
                     disabled={disabled}
-                    className="rounded border-fluux-border text-fluux-brand focus:ring-fluux-brand/50"
+                    className="rounded border-fluux-border text-fluux-brand"
                   />
                   <span className="text-sm text-fluux-text">{opt.label || opt.value}</span>
                 </label>
@@ -185,7 +185,7 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
               checked={value === 'true' || value === '1'}
               onChange={e => onChange(field.var, e.target.checked ? '1' : '0')}
               disabled={disabled}
-              className="rounded border-fluux-border text-fluux-brand focus:ring-fluux-brand/50"
+              className="rounded border-fluux-border text-fluux-brand"
             />
             <span className="text-sm text-fluux-muted">{label}</span>
             {desc && (
@@ -205,7 +205,7 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
             value={(value as string) || ''}
             onChange={e => onChange(field.var, e.target.value)}
             disabled={disabled}
-            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 disabled:opacity-50"
+            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text disabled:opacity-50"
           />
         )
     }

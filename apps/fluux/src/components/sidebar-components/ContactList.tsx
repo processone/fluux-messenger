@@ -144,7 +144,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
           }}
           placeholder={t('contacts.searchContacts')}
           className="w-full px-3 py-2 bg-fluux-bg text-fluux-text text-sm rounded
-                     border border-transparent focus:border-fluux-brand
+                     border border-transparent
                      placeholder:text-fluux-muted"
         />
       </div>
@@ -393,12 +393,12 @@ const ContactItem = memo(function ContactItem({
           onTouchCancel={menu.handleTouchEnd}
           onMouseEnter={onMouseEnter}
           onMouseMove={onMouseMove}
-          className={`w-full relative px-2 sidebar-row touch-menu-row rounded border flex items-center text-start
+          className={`w-full relative px-2 sidebar-row touch-menu-row ${isSelected && isKeyboardNav ? 'keyboard-focus-row' : ''} rounded border flex items-center text-start
                      transition-colors cursor-pointer ${
                        isActive
                          ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"
                          : isSelected
-                           ? 'bg-fluux-hover text-fluux-text border-fluux-brand'
+                           ? 'bg-fluux-hover text-fluux-text border-transparent'
                            : isKeyboardNav
                              ? 'text-fluux-muted border-transparent'
                              : 'text-fluux-muted border-transparent hover:bg-fluux-hover hover:text-fluux-text'
@@ -435,7 +435,7 @@ const ContactItem = memo(function ContactItem({
           <button
             type="button"
             onClick={handleStartChat}
-            className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+            className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
           >
             <MessageCircle className="size-4" />
             <span>{t('contacts.startChat')}</span>
@@ -443,7 +443,7 @@ const ContactItem = memo(function ContactItem({
           <button
             type="button"
             onClick={handleRename}
-            className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+            className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
           >
             <Pencil className="size-4" />
             <span>{t('contacts.rename')}</span>
@@ -454,7 +454,7 @@ const ContactItem = memo(function ContactItem({
               <button
                 type="button"
                 onClick={handleManage}
-                className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+                className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
               >
                 <Server className="size-4" />
                 <span>{t('contacts.manage')}</span>
@@ -465,7 +465,7 @@ const ContactItem = memo(function ContactItem({
           <button
             type="button"
             onClick={handleRemove}
-            className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
+            className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
           >
             <Trash2 className="size-4" />
             <span>{t('contacts.removeContact')}</span>

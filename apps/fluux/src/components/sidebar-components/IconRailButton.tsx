@@ -33,7 +33,6 @@ export function IconRailButton({
         disabled={disabled}
         aria-label={label}
         className={`relative size-10 rounded-xl flex items-center justify-center transition-colors
-          focus-visible:ring-2 focus-visible:ring-fluux-brand focus-visible:ring-offset-2 focus-visible:ring-offset-fluux-sidebar
           ${active
             ? 'bg-fluux-brand text-fluux-text-on-accent'
             : disabled

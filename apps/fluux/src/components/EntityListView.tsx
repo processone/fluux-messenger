@@ -79,7 +79,7 @@ export function EntityListView<T>({
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={t('admin.entityList.searchPlaceholder')}
           className="w-full ps-9 pe-3 py-2 text-sm bg-fluux-bg border border-fluux-hover rounded-lg
-                     text-fluux-text placeholder-fluux-muted focus:outline-none focus:border-fluux-brand"
+                     text-fluux-text placeholder-fluux-muted"
         />
       </div>
 

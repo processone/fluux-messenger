@@ -53,7 +53,7 @@ export function CommandMenu({ matches, selectedIndex, navSerial, onSelect, onDis
           ref={idx === selectedIndex ? selectedRef : undefined}
           type="button"
           onClick={() => onSelect(idx)}
-          className={`w-full px-3 py-2 text-start text-sm flex items-baseline gap-2 transition-colors ${
+          className={`focus-ring-inset w-full px-3 py-2 text-start text-sm flex items-baseline gap-2 transition-colors ${
             idx === selectedIndex
               ? 'bg-fluux-brand text-fluux-text-on-accent'
               : 'hover:bg-fluux-hover text-fluux-text'

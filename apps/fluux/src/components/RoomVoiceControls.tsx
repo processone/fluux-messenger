@@ -5,7 +5,7 @@ import { useRoomModeration, type Room, type RoomVoiceRequest } from '@fluux/sdk'
 import { useEventsStore } from '@fluux/sdk/react'
 import { forgetVoiceRequestNotification } from '@/utils/actionableEventNotification'
 
-const actionClass = 'px-3 py-2 rounded-md text-sm font-medium focus-visible:outline-2 focus-visible:outline-fluux-brand disabled:opacity-50 disabled:cursor-not-allowed'
+const actionClass = 'px-3 py-2 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed'
 
 /** Voice is a room role; whisper permissions remain a separate server policy. */
 export function RoomVoiceControls({ room, isConnected, allowWhisper, children }: {

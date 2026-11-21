@@ -54,7 +54,6 @@ export function IconRailNavLink({
         data-nav={view}
         className={`
           icon-rail-btn relative rounded-xl flex items-center justify-center transition-colors
-          focus-visible:ring-2 focus-visible:ring-fluux-brand focus-visible:ring-offset-2 focus-visible:ring-offset-fluux-sidebar
           ${isActive
             ? 'bg-fluux-brand text-fluux-text-on-accent'
             : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'
