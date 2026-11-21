@@ -1681,6 +1681,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Weitere Treffer",
         "open": "Befehlspalette öffnen",
         "placeholder": "Gehe zu...",
         "noResults": "Keine Ergebnisse gefunden",

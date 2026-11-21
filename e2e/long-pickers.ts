@@ -161,8 +161,6 @@ test('review: exact short names outrank broader matches in palette and recipient
   await page.keyboard.press('ControlOrMeta+k')
   const palette = page.getByRole('dialog')
   const field = palette.getByRole('textbox')
-  await field.fill('@ros')
-  await expect(palette.locator('.command-row').filter({ hasText: /Alicia/ })).toHaveCount(0)
   await field.fill('@li')
   const contacts = palette.locator('.command-group-label').filter({ hasText: /^Contacts$/ }).locator('..').locator('.command-row')
   await expect(contacts.first()).toContainText('li@example.test')
@@ -305,4 +303,40 @@ test('review: rename compares a draft with the live roster name, not the opening
   expect(writes).toHaveLength(1)
   expect(writes[0]).toContain(`jid="${jid}"`)
   expect(writes[0]).toContain(`name="${originalName}"`)
+})
+
+
+test('palette category fallbacks stay bounded below every kind of name match', async ({ page }) => {
+  const named = [
+    { jid: 'ros@example.test', name: 'Ros' },
+    { jid: 'ros-manager@example.test', name: 'Ros Manager' },
+    { jid: 'ros-address@example.test', name: 'Zoe' },
+    { jid: 'alex-r@example.test', name: 'Alex Ros' },
+  ]
+  await page.evaluate(contacts => {
+    const client = (window as unknown as { __demoClient: DemoClient }).__demoClient
+    for (const contact of contacts) client.emitSDK('contacts:contact', { contact: { ...contact, presence: 'online', subscription: 'both' } })
+  }, named)
+  await page.mouse.move(0, 0)
+  await page.keyboard.press('ControlOrMeta+k')
+  const palette = page.getByRole('dialog')
+  const input = palette.getByRole('textbox')
+  await input.fill('@ros')
+  const contacts = palette.locator('.command-group-label').filter({ hasText: /^Contacts$/ }).locator('..').locator('.command-row')
+  await expect(contacts).toHaveCount(named.length)
+  // Exact, prefix-name, prefix-local-part, and substring-name matches all beat
+  // the roster keyword, even though the original roster sorts ahead of them.
+  await expect(contacts.nth(0)).toContainText(named[0].jid)
+  await expect(contacts.nth(1)).toContainText(named[1].jid)
+  await expect(contacts.nth(2)).toContainText(named[2].jid)
+  await expect(contacts.nth(3)).toContainText(named[3].jid)
+  const fallback = palette.locator('.command-group-label').filter({ hasText: /^More matches$/ }).locator('..').locator('.command-row')
+  await expect(fallback).toHaveCount(MAX_SUGGESTIONS)
+  await expect(fallback.first()).toContainText('Colleague')
+  const rows = await palette.locator('.command-row').allTextContents()
+  expect(rows.slice(0, named.length).every(row => !row.includes('Colleague'))).toBe(true)
+  expect(rows[named.length]).toContain('Colleague')
+  await expect(palette.getByRole('status').filter({ hasText: `Showing ${MAX_SUGGESTIONS} of ${ROSTER_SIZE}, type to narrow` })).toBeAttached()
+  await input.press('Enter')
+  await expect(page.getByRole('heading', { name: 'Ros', exact: true })).toBeVisible()
 })

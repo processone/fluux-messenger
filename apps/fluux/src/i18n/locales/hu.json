@@ -1679,6 +1679,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "További találatok",
         "open": "Parancspaletta megnyitása",
         "placeholder": "Ugrás...",
         "noResults": "Nincs találat",

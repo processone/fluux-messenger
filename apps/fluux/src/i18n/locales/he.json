@@ -1681,6 +1681,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "תוצאות נוספות",
         "open": "פתיחת לוח הפקודות",
         "placeholder": "עבור אל...",
         "noResults": "לא נמצאו תוצאות",

@@ -1684,6 +1684,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Ďalšie výsledky",
         "open": "Otvoriť paletu príkazov",
         "placeholder": "Prejsť na...",
         "noResults": "Žiadne výsledky sa nenašli",

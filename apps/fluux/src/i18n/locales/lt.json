@@ -1683,6 +1683,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Daugiau rezultatų",
         "open": "Atverti komandų paletę",
         "placeholder": "Eiti į...",
         "noResults": "Rezultatų nerasta",

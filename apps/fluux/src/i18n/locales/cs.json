@@ -1685,6 +1685,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Další výsledky",
         "open": "Otevřít příkazovou paletu",
         "placeholder": "Přejít na...",
         "noResults": "Žádné výsledky nenalezeny",

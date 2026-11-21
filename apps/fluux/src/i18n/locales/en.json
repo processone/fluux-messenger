@@ -1679,6 +1679,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "More matches",
         "open": "Open command palette",
         "placeholder": "Go to...",
         "noResults": "No results found",

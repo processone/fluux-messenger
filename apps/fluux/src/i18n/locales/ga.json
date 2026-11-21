@@ -1685,6 +1685,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Tuilleadh torthaí",
         "open": "Oscail an phailéad orduithe",
         "placeholder": "Téigh go...",
         "noResults": "Níor aimsíodh torthaí",

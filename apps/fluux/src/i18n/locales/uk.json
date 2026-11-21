@@ -1683,6 +1683,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Інші результати",
         "open": "Відкрити палітру команд",
         "placeholder": "Перейти до...",
         "noResults": "Нічого не знайдено",

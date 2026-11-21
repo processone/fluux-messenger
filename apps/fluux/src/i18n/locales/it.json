@@ -1683,6 +1683,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Altri risultati",
         "open": "Apri la palette dei comandi",
         "placeholder": "Vai a...",
         "noResults": "Nessun risultato trovato",

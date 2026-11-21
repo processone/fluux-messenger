@@ -1679,6 +1679,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Lisää osumia",
         "open": "Avaa komentopaletti",
         "placeholder": "Siirry...",
         "noResults": "Tuloksia ei löytynyt",

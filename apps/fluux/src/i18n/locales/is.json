@@ -1679,6 +1679,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Fleiri niðurstöður",
         "open": "Opna skipanaspjald",
         "placeholder": "Fara í...",
         "noResults": "Engar niðurstöður fundust",

@@ -16,7 +16,7 @@ import {
   Search,
   Bookmark,
 } from 'lucide-react'
-import { useChat, useRoom, useRoster, matchNameOrJid, getLocalPart, searchStore, roomActivityTone } from '@fluux/sdk'
+import { useChat, useRoom, useRoster, getLocalPart, searchStore, roomActivityTone } from '@fluux/sdk'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useChatStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react'
@@ -64,7 +64,7 @@ interface CommandItem {
 
 interface ItemGroup {
   key: string
-  type: ItemType
+  type: ItemType | 'category'
   label: string
   items: CommandItem[]
   totalCount?: number
@@ -101,27 +101,19 @@ function parseQuery(query: string): { filterMode: FilterMode; searchQuery: strin
 }
 
 // =============================================================================
-// Helper: Check if item matches search query
+// Helper: Rank names, message bodies and command aliases ahead of entity categories
 // =============================================================================
 
-function itemMatchesQuery(item: CommandItem, searchQuery: string): boolean {
-  // Category keywords describe commands/views, not every entity in a category.
-  if ((item.type === 'action' || item.type === 'view') && item.keywords?.some((k) => k.toLowerCase().includes(searchQuery))) {
-    return true
+function itemMatchRank(item: CommandItem, searchQuery: string): number {
+  const identityRank = suggestionMatchRank(searchQuery, item.label,
+    ['conversation', 'room', 'contact'].includes(item.type) ? item.sublabel : undefined)
+  if (identityRank < 3) return identityRank
+  if (item.lastMessageBody?.toLowerCase().includes(searchQuery)) return 3
+  // Entity category words are fallbacks; command aliases keep their normal sections.
+  if (item.keywords?.some(keyword => keyword.toLowerCase().includes(searchQuery))) {
+    return item.type === 'action' || item.type === 'view' ? 3 : 4
   }
-
-  // For JID-based items, match name or username (not domain)
-  if (['conversation', 'room', 'contact'].includes(item.type) && item.sublabel) {
-    if (matchNameOrJid(item.label, item.sublabel, searchQuery)) return true
-  }
-
-  // Check last message body for conversations/rooms
-  if (item.lastMessageBody?.toLowerCase().includes(searchQuery)) {
-    return true
-  }
-
-  // For other items, match label
-  return item.label.toLowerCase().includes(searchQuery)
+  return Number.POSITIVE_INFINITY
 }
 
 // =============================================================================
@@ -485,12 +477,16 @@ function CommandPaletteContent({
       // Filter mode without search: show all items of matching types
       grouped = groupItemsByType(allItems.filter((i) => allowedTypes.includes(i.type)), t)
     } else {
-      grouped = groupItemsByType(
-        allItems
-          .filter((i) => allowedTypes.includes(i.type))
-          .filter((i) => itemMatchesQuery(i, searchQuery)),
-        t,
-      )
+      const matches = allItems
+        .filter(item => allowedTypes.includes(item.type))
+        .map(item => ({ item, rank: itemMatchRank(item, searchQuery) }))
+        .filter(candidate => Number.isFinite(candidate.rank))
+        .sort((a, b) => a.rank - b.rank)
+      grouped = groupItemsByType(matches.filter(({ rank }) => rank < 4).map(({ item }) => item), t)
+      const categoryMatches = matches.filter(({ rank }) => rank === 4).map(({ item }) => item)
+      if (categoryMatches.length > 0) {
+        grouped.push({ key: 'category', type: 'category', label: t('commandPalette.moreMatches'), items: categoryMatches })
+      }
     }
 
     // Keep broad searches and type-only views bounded. Filtering happens first so
@@ -498,9 +494,7 @@ function CommandPaletteContent({
     grouped = grouped.map((group) => ({
       ...group,
       totalCount: group.items.length,
-      items: [...group.items]
-        .sort((a, b) => suggestionMatchRank(searchQuery, a.label, a.sublabel) - suggestionMatchRank(searchQuery, b.label, b.sublabel))
-        .slice(0, MAX_SUGGESTIONS),
+      items: group.items.slice(0, MAX_SUGGESTIONS),
     }))
 
     // Append "Search messages" gateway when user has typed a query
@@ -516,12 +510,13 @@ function CommandPaletteContent({
         },
         keywords: [],
       }
-      // Append to existing actions group, or create one
-      const actionsGroup = grouped.find((g) => g.type === 'action')
+      // Keep the message-search action last, after any category-only matches.
+      const lastGroup = grouped[grouped.length - 1]
+      const actionsGroup = lastGroup?.type === 'action' ? lastGroup : undefined
       if (actionsGroup) {
         actionsGroup.items.push(gatewayItem)
       } else {
-        grouped.push({ key: 'action', type: 'action', label: t('commandPalette.actions'), items: [gatewayItem] })
+        grouped.push({ key: 'search-gateway', type: 'action', label: t(grouped.some(group => group.type === 'action') ? 'sidebar.search' : 'commandPalette.actions'), items: [gatewayItem] })
       }
     }
 

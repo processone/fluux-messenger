@@ -1687,6 +1687,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "المزيد من النتائج",
         "open": "فتح لوحة الأوامر",
         "placeholder": "الانتقال إلى...",
         "noResults": "لم يتم العثور على نتائج",

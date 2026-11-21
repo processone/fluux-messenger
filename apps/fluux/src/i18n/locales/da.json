@@ -1679,6 +1679,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Flere resultater",
         "open": "Åbn kommandopalet",
         "placeholder": "Gå til...",
         "noResults": "Ingen resultater fundet",

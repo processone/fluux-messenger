@@ -328,16 +328,30 @@ describe('CommandPalette', () => {
       expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument()
     })
 
-    it('uses category keywords for actions, not entity rows', () => {
+    it('keeps category matches below actual names across entity sections', () => {
+      mockRooms = [...defaultRooms, { jid: 'tools@conference.example.com', name: 'Muc Tools', joined: true }]
+      mockContacts = [...defaultContacts, { jid: 'muc-helper@example.com', name: 'Muc Helper' }]
       render(<CommandPalette {...defaultProps} />)
       const input = screen.getByPlaceholderText('Go to...')
-
-      // Category keywords still find actions without making every room a match.
+      // Category words still find rooms and actions, below genuine name matches.
       fireEvent.change(input, { target: { value: 'muc' } })
 
       expect(screen.getByText('Join Room')).toBeInTheDocument()
-      expect(screen.queryByText('Development')).not.toBeInTheDocument()
+      expect(screen.getByText('Development')).toBeInTheDocument()
+      const categoryRoom = screen.getByText('Development').closest('button')!
+      for (const name of ['Muc Tools', 'Muc Helper']) {
+        expect(screen.getByText(name).closest('button')!.compareDocumentPosition(categoryRoom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      }
       expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument()
+    })
+
+    it.each([
+      ['room', 'Development'], ['muc', 'Development'], ['group', 'Development'],
+      ['chat', 'Alice Smith'], ['contact', 'Charlie Brown'], ['roster', 'Diana Prince'],
+    ])('keeps %s as an entity-category fallback', (query, name) => {
+      render(<CommandPalette {...defaultProps} />)
+      fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: query } })
+      expect(screen.getByText(name)).toBeInTheDocument()
     })
 
     it('should show search gateway when nothing matches by name', () => {

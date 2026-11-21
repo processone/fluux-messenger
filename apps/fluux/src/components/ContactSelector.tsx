@@ -60,6 +60,7 @@ export interface ContactSelectorProps {
 interface UnifiedContact {
   jid: string
   name: string
+  matchRank: number
   isExtra?: boolean
   presence?: string
   unavailableNote?: string
@@ -147,7 +148,7 @@ export function ContactSelector({
   const { contacts: filteredContacts, total: matchingContactCount } = (() => {
     const compareMatches = (a: UnifiedContact, b: UnifiedContact) =>
       Number(!!a.unavailableNote) - Number(!!b.unavailableNote) ||
-      suggestionMatchRank(search, a.name, a.jid) - suggestionMatchRank(search, b.name, b.jid)
+      a.matchRank - b.matchRank
     // Map roster contacts to unified type
     const rosterEntries: UnifiedContact[] = contacts
       .filter(contact => {
@@ -160,6 +161,7 @@ export function ContactSelector({
       .map(contact => ({
         jid: contact.jid,
         name: contact.name,
+        matchRank: suggestionMatchRank(search, contact.name, contact.jid),
         presence: contact.presence,
         unavailableNote: getUnavailableNote?.(contact.jid),
       }))
@@ -184,6 +186,7 @@ export function ContactSelector({
       .map(s => ({
         jid: s.jid,
         name: s.name || s.jid,
+        matchRank: suggestionMatchRank(search, s.name || s.jid, s.jid),
         isExtra: true,
         unavailableNote: getUnavailableNote?.(s.jid),
       }))
@@ -193,6 +196,7 @@ export function ContactSelector({
       extraEntries.push({
         jid: searchJidNormalized,
         name: searchJidNormalized,
+        matchRank: suggestionMatchRank(search, searchJidNormalized, searchJidNormalized),
         isExtra: true,
         isTypedAddress: true,
         unavailableNote: typedUnavailableNote,

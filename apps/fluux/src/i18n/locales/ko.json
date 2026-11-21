@@ -1679,6 +1679,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "추가 결과",
         "open": "명령 팔레트 열기",
         "placeholder": "이동...",
         "noResults": "결과를 찾을 수 없습니다",

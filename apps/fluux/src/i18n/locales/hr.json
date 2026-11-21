@@ -1681,6 +1681,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Više rezultata",
         "open": "Otvori paletu naredbi",
         "placeholder": "Idi na...",
         "noResults": "Rezultati nisu pronađeni",

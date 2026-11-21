@@ -1681,6 +1681,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Veel vasteid",
         "open": "Ava käsupalett",
         "placeholder": "Mine...",
         "noResults": "Tulemusi ei leitud",

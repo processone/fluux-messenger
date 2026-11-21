@@ -1679,6 +1679,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Fler träffar",
         "open": "Öppna kommandopaletten",
         "placeholder": "Gå till...",
         "noResults": "Inga resultat hittades",

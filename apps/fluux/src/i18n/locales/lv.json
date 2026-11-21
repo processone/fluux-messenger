@@ -1682,6 +1682,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Vairāk rezultātu",
         "open": "Atvērt komandu paleti",
         "placeholder": "Doties uz...",
         "noResults": "Rezultāti nav atrasti",

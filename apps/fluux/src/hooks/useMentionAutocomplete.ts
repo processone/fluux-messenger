@@ -142,7 +142,9 @@ export function useMentionAutocomplete(
     }
 
     return [...result, ...occupantMatches, ...historyMatches]
-      .sort((a, b) => suggestionMatchRank(query, a.nick) - suggestionMatchRank(query, b.nick))
+      .map(match => ({ match, rank: suggestionMatchRank(query, match.nick) }))
+      .sort((a, b) => a.rank - b.rank)
+      .map(({ match }) => match)
   }
   const allMatches = buildMatches()
   // Rendered options and keyboard navigation use the same bounded, ranked set.
