@@ -78,6 +78,38 @@ describe('deliberate message interaction', () => {
     expect(release).toHaveBeenCalledWith(true)
   })
 
+  it('keeps the hold while the pointer rests on the jump-to-latest FAB the hold revealed', () => {
+    // The FAB shows at 1px below the bottom only while a hold is on. If moving onto it released the
+    // hold, it would hide and drop the pointer back on the row, which would hold again: a flicker loop.
+    const { release, result } = setup()
+    const fab = document.createElement('div')
+    fab.dataset.interactionBridge = ''
+    fab.innerHTML = '<button>Scroll to bottom</button>'
+    document.body.append(fab)
+    moveIntoRow()
+    mouse('mouseout', row)
+    act(() => { row.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: fab.firstElementChild })) })
+    mouse('mousemove', fab.firstElementChild!, 600, 400)
+    mouse('mousemove', fab.firstElementChild!, 602, 401)
+    act(() => vi.advanceTimersByTime(500))
+    expect(release).not.toHaveBeenCalled()
+    expect(result.current.context.heldMessageId).toBe(row.dataset.messageRowId)
+    mouse('mousemove', document.body, 10, 10)
+    act(() => vi.advanceTimersByTime(100))
+    expect(release).toHaveBeenCalledWith(true)
+    fab.remove()
+  })
+  it('does not start a hold from the FAB alone', () => {
+    const { begin } = setup()
+    const fab = document.createElement('div')
+    fab.dataset.interactionBridge = ''
+    document.body.append(fab)
+    mouse('mousemove', document.body, 10, 10)
+    mouse('mousemove', fab, 600, 400)
+    expect(begin).not.toHaveBeenCalled()
+    fab.remove()
+  })
+
   it('does not mistake a row-mounted confirmation dialog for pointer interest in the message', () => {
     const { release } = setup()
     const modal = document.createElement('div')
