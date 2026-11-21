@@ -671,7 +671,8 @@ export function OpenPgpSettings() {
     return () => {
       cancelled = true
     }
-  }, [pluginStatus, client, backupProbeNonce])
+  // The own key is part of the reading: a restore or import that changes it re-reads the status.
+  }, [pluginStatus, client, backupProbeNonce, fingerprint])
 
   const handleBackupConfirm = useCallback(
     async (passphrase: string) => {
