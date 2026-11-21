@@ -87,7 +87,6 @@ test.describe('Wrap lines in the message list', () => {
     expect(await distanceFromBottom(page)).toBeLessThanOrEqual(AT_BOTTOM_OK_PX)
 
     // The last message is a long code block: it starts unwrapped with a sideways scroll.
-    // The last message is a long code block: it starts unwrapped with a sideways scroll.
     const last = wrapButtons(page).last()
     expect(await isWrapped(last)).toEqual({ wrapped: false, overflows: true })
     await last.click()
@@ -102,11 +101,15 @@ test.describe('Wrap lines in the message list', () => {
     // A wrap there grows the block downward; the block's top does not move.
     await wheelAwayFromBottom(page, 700)
     await settle(page)
-    const target = page.locator('[data-message-list] button[aria-pressed="false"]').last()
-    await expect(target).toBeVisible()
-    // Follow the very block we click by its message id: the "first mounted" one can change as rows mount.
-    const markedId = (await target.evaluate((b) => b.closest('[data-message-id]')?.getAttribute('data-message-id') ?? null))!
+    const lastUnwrapped = page.locator('[data-message-list] button[aria-pressed="false"]').last()
+    await expect(lastUnwrapped).toBeVisible()
+    const markedId = (await lastUnwrapped.evaluate((b) => b.closest('[data-message-id]')?.getAttribute('data-message-id') ?? null))!
     expect(markedId).not.toBeNull()
+    // From here on, scroll, click and measure that very block by its message id. The list mounts
+    // rows around the view, so once the block is scrolled into view a block further down can mount,
+    // and "the last unwrapped button" would then name that one: the click would scroll there and
+    // wrap it, and the marked block would move by the distance between the two.
+    const target = page.locator(`[data-message-list] [data-message-id="${markedId}"] button[aria-pressed]`)
     // Bring the block into view first: a click would scroll it there and spoil the reference.
     await target.scrollIntoViewIfNeeded()
     await settle(page)
