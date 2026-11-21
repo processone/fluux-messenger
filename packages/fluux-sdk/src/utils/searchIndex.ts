@@ -1092,15 +1092,44 @@ export async function search(
     if (result.size === 0) return []
   }
 
-  // Fetch matching documents
-  const candidates: DocEntry[] = []
-  for (const indexId of result) {
+  // Narrow by the scope filters on the ids alone, before any document is read.
+  // A document id starts with its kind, and the conversation index lists the
+  // ids of one conversation without reading the documents.
+  let ids = [...result]
+  if (options?.isRoom !== undefined) {
+    const prefix = options.isRoom ? 'room:' : 'chat:'
+    ids = ids.filter((id) => id.startsWith(prefix))
+  }
+  if (options?.conversationId) {
+    const inConversation = new Set<string>(
+      await docsStore.index('conversationId').getAllKeys(options.conversationId)
+    )
+    ids = ids.filter((id) => inConversation.has(id))
+  }
+
+  // Fetch only the documents that passed the scope filters, applying the exact
+  // filters that need the stored fields.
+  const scoped: DocEntry[] = []
+  for (const indexId of ids) {
     const doc = await docsStore.get(indexId)
-    if (doc) candidates.push(doc)
+    if (!doc) continue
+    if (options?.conversationId && doc.conversationId !== options.conversationId) continue
+    if (options?.isRoom !== undefined && doc.isRoom !== options.isRoom) continue
+    // Post-filter: verify exact phrases appear contiguously in the body
+    if (parsed.phrases.length > 0) {
+      const bodyLower = doc.body.toLowerCase()
+      if (!parsed.phrases.every((phrase) => bodyLower.includes(phrase))) continue
+    }
+    scoped.push(doc)
   }
   await tx.done
 
-  const messages = candidates.map((doc): Message | RoomMessage => {
+  // Newest first. The sort is stable, so equal timestamps keep their lookup order.
+  scoped.sort((a, b) => b.timestamp - a.timestamp)
+
+  // Judge retractions newest first and stop once the limit is filled: the cache
+  // is read for the documents that can appear, not for every match.
+  const toMessage = (doc: DocEntry): Message | RoomMessage => {
     const fields = {
       id: doc.messageId ?? doc.indexId.replace(/^(chat:|room:)/, ''),
       from: doc.from,
@@ -1116,33 +1145,23 @@ export async function search(
       ? { ...fields, type: 'groupchat', roomJid: doc.conversationId,
         nick: doc.nick ?? doc.from.split('/')[1], occupantId: doc.occupantId }
       : { ...fields, type: 'chat', conversationId: doc.conversationId }
-  })
-  const cachedRetractions = await messageCache.areRetractedInCache(messages, scopeJid)
-  const docs: DocEntry[] = []
+  }
+  const limited: DocEntry[] = []
   const retracted: (Message | RoomMessage)[] = []
-  for (const [index, doc] of candidates.entries()) {
-    const message = messages[index]
-    if (isKnownRetracted(message, scopeJid, true) || cachedRetractions[index]) {
-      retracted.push(message)
-      continue
+  const CHUNK_MIN = 25
+  for (let start = 0; start < scoped.length && limited.length < limit;) {
+    const chunk = scoped.slice(start, start + Math.max(limit - limited.length, CHUNK_MIN))
+    start += chunk.length
+    const messages = chunk.map(toMessage)
+    const cachedRetractions = await messageCache.areRetractedInCache(messages, scopeJid)
+    for (const [index, doc] of chunk.entries()) {
+      const message = messages[index]
+      if (isKnownRetracted(message, scopeJid, true) || cachedRetractions[index]) {
+        retracted.push(message)
+      } else if (limited.length < limit) {
+        limited.push(doc)
+      }
     }
-    // Apply conversation filter if specified
-    if (options?.conversationId && doc.conversationId !== options.conversationId) {
-      continue
-    }
-    // Apply isRoom filter if specified
-    if (options?.isRoom !== undefined && doc.isRoom !== options.isRoom) {
-      continue
-    }
-    // Post-filter: verify exact phrases appear contiguously in the body
-    if (parsed.phrases.length > 0) {
-      const bodyLower = doc.body.toLowerCase()
-      const allPhrasesMatch = parsed.phrases.every((phrase) =>
-        bodyLower.includes(phrase)
-      )
-      if (!allPhrasesMatch) continue
-    }
-    docs.push(doc)
   }
 
   for (const message of retracted) {
@@ -1153,12 +1172,6 @@ export async function search(
       console.warn('Failed to remove a retracted search document:', error)
     }
   }
-
-  // Sort by timestamp descending (newest first)
-  docs.sort((a, b) => b.timestamp - a.timestamp)
-
-  // Limit results
-  const limited = docs.slice(0, limit)
 
   return limited.map((doc) => {
     // Derive nick: prefer stored nick, fall back to resource part of occupant JID

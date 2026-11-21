@@ -369,6 +369,52 @@ describe('searchIndex', () => {
     })
   })
 
+  describe('scoped searches read only what can appear', () => {
+    async function seed() {
+      for (let i = 0; i < 60; i++) {
+        await indexMessage(createChatMessage(i % 2 ? 'alice@example.com' : 'bob@example.com', {
+          id: `scoped-${i}`,
+          body: `common word ${i}`,
+          timestamp: new Date(1_700_000_000_000 + i * 1000),
+        }))
+      }
+      await indexMessage(createRoomMessage('dev@conference.example.com', {
+        body: 'common word in a room',
+        stanzaId: 'scoped-room',
+        timestamp: new Date(1_700_000_000_000 + 99_000),
+      }))
+    }
+
+    it('returns the newest matches of the scope, newest first', async () => {
+      await seed()
+      const results = await search('common', { conversationId: 'alice@example.com', limit: 3 })
+      expect(results.map((r) => r.messageId)).toEqual(['scoped-59', 'scoped-57', 'scoped-55'])
+      const chats = await search('common', { isRoom: false, limit: 2 })
+      expect(chats.map((r) => r.messageId)).toEqual(['scoped-59', 'scoped-58'])
+      const rooms = await search('common', { isRoom: true })
+      expect(rooms).toHaveLength(1)
+      expect(rooms[0].isRoom).toBe(true)
+    })
+
+    it('judges retractions only for the documents it walks, not every match', async () => {
+      await seed()
+      const spy = vi.spyOn(messageCache, 'areRetractedInCache')
+      await search('common', { limit: 3 })
+      const judged = spy.mock.calls.reduce((n, [messages]) => n + messages.length, 0)
+      expect(judged).toBeLessThan(30)
+      spy.mockRestore()
+    })
+
+    it('fills the limit past a retracted newest match', async () => {
+      await seed()
+      vi.spyOn(messageCache, 'areRetractedInCache').mockImplementation(async (messages) =>
+        messages.map((m) => m.id === 'scoped-59'))
+      const results = await search('common', { isRoom: false, limit: 2 })
+      expect(results.map((r) => r.messageId)).toEqual(['scoped-58', 'scoped-57'])
+      vi.restoreAllMocks()
+    })
+  })
+
   // ===========================================================================
   // Conversation filtering
   // ===========================================================================
