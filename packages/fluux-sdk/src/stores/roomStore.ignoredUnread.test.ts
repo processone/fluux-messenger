@@ -72,11 +72,13 @@ describe('room unread respects hidden ignored messages', () => {
       { ...message('visible', 'bob', 20), isDelayed: true },
     ], {}, true, 'forward')
     await vi.waitFor(async () => expect(await cache.countRoomUnreadInArchive(ROOM, { floor: new Date(0) })).toEqual({ unread: 2 }))
+    // The merge schedules its own recount. The latest one to start wins and the other stands
+    // down without writing, so a recount can return before the badge holds its result.
     await roomStore.getState().recomputeUnreadForRoom(ROOM)
-    expect(meta().unreadCount).toBe(1)
+    await vi.waitFor(() => expect(meta().unreadCount).toBe(1))
     roomStore.getState().updateRoom(ROOM, { readPointer: makeReadPointer(message('visible', 'bob', 20), 'room') })
     await roomStore.getState().recomputeUnreadForRoom(ROOM)
-    expect(meta().unreadCount).toBe(0)
+    await vi.waitFor(() => expect(meta().unreadCount).toBe(0))
   })
 
   it('clears an existing ignored-only badge through the MAM recount without moving the pointer', async () => {
