@@ -35,8 +35,11 @@ use objc2::runtime::Bool;
 use objc2::{
   AllocAnyThread, DeclaredClass, MainThreadOnly, Message,
   rc::Retained,
-  runtime::{AnyObject, NSObject, ProtocolObject},
+  runtime::{AnyObject, ProtocolObject},
 };
+// Fluux: only the proxy-config and devtools branches below use NSObject.
+#[cfg(any(feature = "mac-proxy", any(debug_assertions, feature = "devtools")))]
+use objc2::runtime::NSObject;
 #[cfg(target_os = "macos")]
 use objc2_app_kit::{NSApplication, NSAutoresizingMaskOptions, NSTitlebarSeparatorStyle, NSView};
 #[cfg(target_os = "macos")]
