@@ -6,7 +6,7 @@ import { client as createClient, xml, type Element } from '@xmpp/client'
 import { MAM } from '../core/modules/MAM'
 import { Chat } from '../core/modules/Chat'
 import { Connection } from '../core/modules/Connection'
-import { createMockRoom, createMockStores, createMockXmppClient } from '../core/test-utils'
+import { createMockRoom, createMockStores, createMockStoreRefs, createMockXmppClient } from '../core/test-utils'
 import { createStoreBindings, type StoreRefs } from '../bindings/storeBindings'
 import type { ModuleDependencies } from '../core/modules/BaseModule'
 import { createPresenceReader } from '../core/presenceReader'
@@ -113,8 +113,9 @@ function harness(kind: Kind, own = false, originalFields: Partial<Row> = {}) {
     listeners.get(event)?.(payload as never)
   }
   unbind?.()
+  const rosterRefs = createMockStoreRefs().roster
   unbind = createStoreBindings(source, () => ({
-    connection: connectionStore.getState(),
+    connection: connectionStore.getState(), roster: rosterRefs,
     chat: chatStore.getState(), room: roomStore.getState(), ignore: ignoreStore.getState(), console: { addEvent() {} },
   }) as unknown as StoreRefs)
   const stores = createMockStores()

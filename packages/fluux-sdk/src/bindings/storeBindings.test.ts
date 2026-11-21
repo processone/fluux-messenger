@@ -625,14 +625,14 @@ describe('createStoreBindings', () => {
         lastInteraction,
         client: 'PhoneClient',
       })
-      expect(mockStores.roster.updatePresence).toHaveBeenCalledWith(
+      expect(mockStores.roster.queuePresence).toHaveBeenCalledWith(
         'alice@example.com/phone', 'away', 0, 'AFK', lastInteraction, 'PhoneClient'
       )
     })
 
     it('should handle roster:presence-offline', () => {
       mockClient.emit('contacts:presence-offline', { fullJid: 'alice@example.com/phone' })
-      expect(mockStores.roster.removePresence).toHaveBeenCalledWith('alice@example.com/phone')
+      expect(mockStores.roster.queuePresenceRemoval).toHaveBeenCalledWith('alice@example.com/phone')
     })
 
     it('should handle roster:presence-error', () => {
@@ -646,7 +646,7 @@ describe('createStoreBindings', () => {
         avatar: 'data:image/png...',
         avatarHash: 'hash123',
       })
-      expect(mockStores.roster.updateAvatar).toHaveBeenCalledWith('alice@example.com', 'data:image/png...', 'hash123')
+      expect(mockStores.roster.queueAvatar).toHaveBeenCalledWith('alice@example.com', 'data:image/png...', 'hash123')
     })
   })
 

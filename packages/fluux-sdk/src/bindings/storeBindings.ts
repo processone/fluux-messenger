@@ -156,7 +156,7 @@ export function createStoreBindings(
   on('connection:status', ({ status, discoveryFailure }) => {
     if (status !== 'online') {
       flushOccupants()
-      getStores().roster.flushPresence?.()
+      getStores().roster.flushPresence()
     }
     getStores().connection.setDiscoveryFailure(status === 'error' ? discoveryFailure ?? null : null)
   })
@@ -663,8 +663,7 @@ export function createStoreBindings(
 
   on('contacts:presence', (payload) => {
     const stores = getStores()
-    const updatePresence = stores.roster.queuePresence ?? stores.roster.updatePresence
-    updatePresence(
+    stores.roster.queuePresence(
       payload.fullJid,
       payload.show,
       payload.priority,
@@ -676,8 +675,7 @@ export function createStoreBindings(
 
   on('contacts:presence-offline', ({ fullJid }) => {
     const stores = getStores()
-    const removePresence = stores.roster.queuePresenceRemoval ?? stores.roster.removePresence
-    removePresence(fullJid)
+    stores.roster.queuePresenceRemoval(fullJid)
   })
 
   on('contacts:presence-error', ({ jid, error }) => {
@@ -687,8 +685,7 @@ export function createStoreBindings(
 
   on('contacts:avatar', ({ jid, avatar, avatarHash }) => {
     const stores = getStores()
-    const updateAvatar = stores.roster.queueAvatar ?? stores.roster.updateAvatar
-    updateAvatar(jid, avatar, avatarHash)
+    stores.roster.queueAvatar(jid, avatar, avatarHash)
   })
 
   // ============================================================================
@@ -868,7 +865,7 @@ export function createStoreBindings(
 
   // Return cleanup function
   return Object.assign(() => {
-    getStores().roster.flushPresence?.()
+    getStores().roster.flushPresence()
     for (const unsub of unsubscribers) {
       unsub()
     }
