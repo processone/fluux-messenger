@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, onTestFinished, vi, expectTypeOf } from 'vitest'
 import 'fake-indexeddb/auto'
-import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
+import { IDBFactory, IDBObjectStore, IDBIndex, IDBCursor } from 'fake-indexeddb'
 import { openDB } from 'idb'
 import type { RoomMessage } from '../core/types'
 import type { StoredMessage } from '../core/types/message-internal'
@@ -366,6 +366,144 @@ describe('searchIndex', () => {
 
       const results = await search('test', { limit: 3 })
       expect(results).toHaveLength(3)
+    })
+  })
+
+  describe('scoped searches read only what can appear', () => {
+    async function seed() {
+      for (let i = 0; i < 60; i++) {
+        await indexMessage(createChatMessage(i % 2 ? 'alice@example.com' : 'bob@example.com', {
+          id: `scoped-${i}`,
+          body: `common word ${i}`,
+          timestamp: new Date(1_700_000_000_000 + i * 1000),
+        }))
+      }
+      await indexMessage(createRoomMessage('dev@conference.example.com', {
+        body: 'common word in a room',
+        stanzaId: 'scoped-room',
+        timestamp: new Date(1_700_000_000_000 + 99_000),
+      }))
+    }
+
+    it('returns the newest matches of the scope, newest first', async () => {
+      await seed()
+      const results = await search('common', { conversationId: 'alice@example.com', limit: 3 })
+      expect(results.map((r) => r.messageId)).toEqual(['scoped-59', 'scoped-57', 'scoped-55'])
+      const chats = await search('common', { isRoom: false, limit: 2 })
+      expect(chats.map((r) => r.messageId)).toEqual(['scoped-59', 'scoped-58'])
+      const rooms = await search('common', { isRoom: true })
+      expect(rooms).toHaveLength(1)
+      expect(rooms[0].isRoom).toBe(true)
+    })
+
+    it('never fetches a document outside the conversation or type filter', async () => {
+      await seed()
+      const fetched: string[] = []
+      const get = IDBObjectStore.prototype.get
+      const spy = vi.spyOn(IDBObjectStore.prototype, 'get').mockImplementation(function (this: IDBObjectStore, ...args) {
+        if (this.name === 'search-docs') fetched.push(String(args[0]))
+        return get.apply(this, args)
+      })
+      const scopes = [
+        { conversationId: 'alice@example.com' },
+        { isRoom: true },
+        { isRoom: false },
+        { conversationId: 'dev@conference.example.com', isRoom: true },
+      ]
+      for (const scope of scopes) {
+        fetched.length = 0
+        const results = await search('common', { ...scope, limit: 100 })
+        expect(results.length).toBeGreaterThan(0)
+        const allowed = new Set(results.map((r) => r.indexId))
+        expect(fetched.length).toBe(allowed.size)
+        expect(fetched.every((id) => allowed.has(id))).toBe(true)
+      }
+      spy.mockRestore()
+    })
+
+    it('matches an unscoped search filtered afterwards, ties and phrases included', async () => {
+      for (let i = 0; i < 40; i++) {
+        await indexMessage(createChatMessage(i % 3 ? 'alice@example.com' : 'bob@example.com', {
+          id: `tie-${i}`,
+          body: i % 4 ? `common word ${i}` : `common phrase here ${i}`,
+          timestamp: new Date(1_700_000_000_000 + Math.floor(i / 4) * 1000),
+        }))
+      }
+      await indexMessage(createRoomMessage('dev@conference.example.com', {
+        body: 'common phrase here in a room', stanzaId: 'tie-room',
+        timestamp: new Date(1_700_000_000_000 + 3000),
+      }))
+      const all = await search('common', { limit: 1000 })
+      const phraseAll = await search('"common phrase"', { limit: 1000 })
+      const cases: Array<[string, { conversationId?: string; isRoom?: boolean }, (r: SearchIndexResult) => boolean]> = [
+        ['common', { conversationId: 'alice@example.com' }, (r) => r.conversationId === 'alice@example.com'],
+        ['common', { isRoom: false }, (r) => !r.isRoom],
+        ['common', { conversationId: 'dev@conference.example.com', isRoom: true }, (r) => r.isRoom && r.conversationId === 'dev@conference.example.com'],
+        ['common', { conversationId: 'nobody@example.com' }, () => false],
+        ['"common phrase"', { conversationId: 'bob@example.com' }, (r) => r.conversationId === 'bob@example.com'],
+      ]
+      for (const [query, scope, keep] of cases) {
+        const base = query.startsWith('"') ? phraseAll : all
+        for (const limit of [1, 5, 1000]) {
+          const got = await search(query, { ...scope, limit })
+          expect(got.map((r) => r.indexId)).toEqual(base.filter(keep).slice(0, limit).map((r) => r.indexId))
+        }
+      }
+    })
+
+    it('fetches no excluded document when the limit truncates or a retraction is skipped', async () => {
+      await seed()
+      vi.spyOn(messageCache, 'areRetractedInCache').mockImplementation(async (messages) =>
+        messages.map((m) => m.id === 'scoped-59'))
+      const fetched: string[] = []
+      const get = IDBObjectStore.prototype.get
+      vi.spyOn(IDBObjectStore.prototype, 'get').mockImplementation(function (this: IDBObjectStore, ...args) {
+        if (this.name === 'search-docs') fetched.push(String(args[0]))
+        return get.apply(this, args)
+      })
+      const results = await search('common', { conversationId: 'alice@example.com', limit: 2 })
+      expect(results.map((r) => r.messageId)).toEqual(['scoped-57', 'scoped-55'])
+      expect(fetched.every((id) => id.startsWith('chat:alice@example.com'))).toBe(true)
+      vi.restoreAllMocks()
+    })
+
+    it('probes one rare candidate without enumerating the conversation', async () => {
+      for (let i = 0; i < 80; i++) {
+        await indexMessage(createChatMessage('alice@example.com', {
+          id: `busy-${i}`, body: `ordinary chatter ${i}`,
+          timestamp: new Date(1_700_000_000_000 + i * 1000),
+        }))
+      }
+      await indexMessage(createChatMessage('alice@example.com', {
+        id: 'rare-1', body: 'ordinary zebrafish sighting',
+        timestamp: new Date(1_700_000_100_000),
+      }))
+      const getAllKeys = vi.spyOn(IDBIndex.prototype, 'getAllKeys')
+      const step = vi.spyOn(IDBCursor.prototype, 'continue')
+      const results = await search('zebrafish', { conversationId: 'alice@example.com' })
+      expect(results.map((r) => r.messageId)).toEqual(['rare-1'])
+      // A conversation-wide enumeration would collect keys or step the cursor once per message.
+      expect(getAllKeys).not.toHaveBeenCalled()
+      expect(step.mock.calls.length).toBeLessThan(5)
+      vi.restoreAllMocks()
+    })
+
+    it('judges retractions only for the documents it walks, not every match', async () => {
+      await seed()
+      const spy = vi.spyOn(messageCache, 'areRetractedInCache')
+      await search('common', { limit: 3 })
+      const judged = spy.mock.calls.reduce((n, [messages]) => n + messages.length, 0)
+      expect(judged).toBeLessThan(30)
+      spy.mockRestore()
+    })
+
+    it('fills the limit past a retracted newest match', async () => {
+      await seed()
+      vi.spyOn(messageCache, 'areRetractedInCache').mockImplementation(async (messages) =>
+        messages.map((m) => m.id === 'scoped-59'))
+      const results = await search('common', { isRoom: false, limit: 2 })
+      expect(results.map((r) => r.messageId)).toEqual(['scoped-58', 'scoped-57'])
+      vi.restoreAllMocks()
     })
   })
 
