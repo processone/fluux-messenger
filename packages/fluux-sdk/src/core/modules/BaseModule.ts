@@ -1,5 +1,5 @@
 import { AvatarStateOwner } from '../../utils/avatarState'
-import { getBareJid } from '../jid'
+import { getBareJid, getDomain } from '../jid'
 import { resolveDefaultMucNick } from '../nick'
 import type { DeferredDecryptEngine } from '../e2ee/deferredDecrypt'
 import { captureStorageScope } from '../../utils/storageScope'
@@ -132,6 +132,20 @@ export abstract class BaseModule {
   protected getRoomWithOccupants(roomJid: string) {
     this.deps.flushRoomOccupants?.(roomJid)
     return this.deps.stores?.room.getRoom(roomJid)
+  }
+
+  /**
+   * Whether an incoming address is a room, from what this session knows: a
+   * room Fluux holds, or an address on the account's own room service. Asks
+   * no one, so a stranger's stanza cannot make the client reveal it is online,
+   * and never goes by the server's name: people have accounts on chat.* too.
+   */
+  protected isKnownRoomAddress(bareJid: string): boolean {
+    const stores = this.deps.stores
+    if (!stores) return false
+    if (stores.room.getRoom(bareJid)) return true
+    const roomService = stores.admin.getMucServiceJid()
+    return !!roomService && getDomain(bareJid).toLowerCase() === roomService.toLowerCase()
   }
 
   /**

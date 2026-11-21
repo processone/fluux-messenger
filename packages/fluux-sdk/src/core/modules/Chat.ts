@@ -7,7 +7,6 @@ import type { Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { captureStorageScope } from '../../utils/storageScope'
 import { getBareJid, getLocalPart, getResource, isQuickChatJid } from '../jid'
-import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID, generateStableMessageId } from '../../utils/uuid'
 import { toCodePointOffset } from '../../utils/xep0426'
 import { roomMessageLinkReferences } from '../../utils/roomMessageLink'
@@ -2473,8 +2472,8 @@ export class Chat extends BaseModule {
     badgeMessageKey(message, stanza)
 
     if (!isOutgoing && this.deps.stores) {
-      // Skip stranger message handling for MUC JIDs - they should never be treated as contacts
-      if (!this.deps.stores.roster.hasContact(conversationId) && !isMucJid(conversationId)) {
+      // Skip stranger message handling for rooms - they should never be treated as contacts
+      if (!this.deps.stores.roster.hasContact(conversationId) && !this.isKnownRoomAddress(conversationId)) {
         // SDK event only - binding calls store.addStrangerMessage
         this.deps.emitSDK('events:stranger-message', { from: conversationId, body: parsed.processedBody })
         return message

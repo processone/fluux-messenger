@@ -134,7 +134,9 @@ export function parseXmppUri(uri: string): XmppUri | null {
 
 /**
  * Determine if a JID looks like a MUC room JID.
- * This is a heuristic based on common MUC service naming conventions.
+ * This is a heuristic based on common MUC service naming conventions, and
+ * people can have accounts on such servers too: use it only for a link when
+ * nothing better is known, never to decide what happens to an incoming stanza.
  *
  * @param jid - The JID to check
  * @returns true if the JID appears to be a MUC room

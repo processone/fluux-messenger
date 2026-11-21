@@ -2,7 +2,6 @@ import { deleteAvatarHash } from '../../utils/avatarCache'
 import { xml, Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { getBareJid, getLocalPart, getResource } from '../jid'
-import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID } from '../../utils/uuid'
 import { calculateCapsHash, getCapsNode } from '../caps'
 import { getClientName } from '../clients'
@@ -204,8 +203,8 @@ export class Roster extends BaseModule {
   }
 
   private handleSubscribe(bareFrom: string): void {
-    // Ignore subscription requests from MUC JIDs - rooms should never be contacts
-    if (isMucJid(bareFrom)) {
+    // Ignore subscription requests from rooms - rooms should never be contacts
+    if (this.isKnownRoomAddress(bareFrom)) {
       return
     }
 
