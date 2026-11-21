@@ -548,6 +548,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
                 placeholder={t('rooms.hatJidPlaceholder')}
                 excludeJids={selectorExcludeJids}
                 extraSuggestions={extraSuggestions}
+                caseInsensitiveRosterMerge
               />
             </div>
             <select

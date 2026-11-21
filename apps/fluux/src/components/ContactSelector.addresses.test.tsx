@@ -13,31 +13,36 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   useRoster: () => ({ contacts: [emma] }),
 }))
 
-// The selector must compare identities without rewriting the values held by callers.
-// This file owns selected-address and typed-address case matching; the modal suite
-// owns the roster/suggestion merge, loaded room exclusions and submitted addresses.
-describe.each(['selected', 'excluded'] as const)('case-insensitive %s addresses', (kind) => {
-  it.each([emma.jid, james.jid, avaJid])('does not offer or add %s under another case', (jid) => {
-    const onSelectionChange = vi.fn()
-    const addresses = [emma.jid, james.jid, avaJid].map(value => value.toUpperCase())
-    render(
-      <ContactSelector
-        selectedContacts={kind === 'selected' ? addresses : []}
-        excludeJids={kind === 'excluded' ? addresses : []}
-        extraSuggestions={[james]}
-        onSelectionChange={onSelectionChange}
-      />,
-    )
-    const input = screen.getByRole('textbox')
-    fireEvent.focus(input)
-    fireEvent.change(input, { target: { value: jid.toLowerCase() } })
+// The selector must compare selections and exclusions without rewriting caller values.
+// Room-management callers also opt into case-insensitive roster merging and chip naming.
+describe.each([false, true])('case-insensitive roster merge: %s', (caseInsensitiveRosterMerge) => {
+  describe.each(['selected', 'excluded'] as const)('case-insensitive %s addresses', (kind) => {
+    it.each([emma.jid, james.jid, avaJid])('does not offer or add %s under another case', (jid) => {
+      const onSelectionChange = vi.fn()
+      const addresses = [emma.jid, james.jid, avaJid].map(value => value.toUpperCase())
+      render(
+        <ContactSelector
+          selectedContacts={kind === 'selected' ? addresses : []}
+          excludeJids={kind === 'excluded' ? addresses : []}
+          extraSuggestions={[james]}
+          caseInsensitiveRosterMerge={caseInsensitiveRosterMerge}
+          onSelectionChange={onSelectionChange}
+        />,
+      )
+      const input = screen.getByRole('textbox')
+      fireEvent.focus(input)
+      fireEvent.change(input, { target: { value: jid.toLowerCase() } })
 
-    expect(within(screen.getByTestId('contact-suggestions')).queryAllByRole('button')).toHaveLength(0)
-    fireEvent.keyDown(input, { key: 'Enter' })
-    expect(onSelectionChange).not.toHaveBeenCalled()
-    if (kind === 'selected') {
-      expect(screen.getByText(emma.name)).toBeInTheDocument()
-      expect(screen.getByText(james.name)).toBeInTheDocument()
-    }
+      expect(within(screen.getByTestId('contact-suggestions')).queryAllByRole('button')).toHaveLength(0)
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(onSelectionChange).not.toHaveBeenCalled()
+      if (kind === 'selected' && caseInsensitiveRosterMerge) {
+        expect(screen.getByText(emma.name)).toBeInTheDocument()
+        expect(screen.getByText(james.name)).toBeInTheDocument()
+      } else if (kind === 'selected') {
+        expect(screen.getByText(addresses[0])).toBeInTheDocument()
+        expect(screen.getByText(addresses[1])).toBeInTheDocument()
+      }
+    })
   })
 })
