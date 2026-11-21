@@ -19,13 +19,12 @@ vi.mock('./sidebar-components', () => ({
   SIDEBAR_DEFAULT_WIDTH: 280,
   SIDEBAR_WIDTH_KEY: 'sidebar-width',
   IconRailNavLink: () => null,
-  StatusOrPresence: () => null,
+  AccountMenu: () => null,
   ConversationList: () => <div data-testid="active-list" />,
   ArchiveList: () => <div data-testid="archived-list" />,
   ContactList: () => null,
   RoomsList: () => null,
   SearchView: () => null,
-  UserMenu: () => null,
   // Header action clusters. Only the Messages one needs to be interactive here:
   // this test exercises Sidebar's showArchived → list-swap wiring, so the stub
   // exposes the archive toggle (aria-label reflects state) and calls back.

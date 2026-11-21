@@ -3,7 +3,7 @@ import { useToastStore } from '@/stores/toastStore'
 import type { ToastType } from '@/stores/toastStore'
 
 /**
- * Types that are kept in the store and surfaced by StatusDisplay as a persistent
+ * Types that are kept in the store and surfaced by the sidebar account row as a persistent
  * alert line. Everything else is transient — toasted and immediately removed.
  *
  * Persistent: 'auth-error', 'resource-conflict'
@@ -29,7 +29,7 @@ export function startSystemNotificationEffect(): () => void {
     for (const n of systemNotifications) {
       if (seen.has(n.id)) continue
       seen.add(n.id)
-      if (PERSISTENT_TYPES.has(n.type)) continue // shown by StatusDisplay
+      if (PERSISTENT_TYPES.has(n.type)) continue // shown by the account row
       useToastStore.getState().addToast(toToastType(n.type), n.message, TOAST_DURATION_MS)
       removeSystemNotification(n.id)
     }

@@ -394,12 +394,14 @@ function ChatLayoutContent() {
   const sidebarListRef = useRef<HTMLDivElement>(null)
   const mainContentRef = useRef<HTMLElement>(null)
   const composerRef = useRef<HTMLElement>(null)
+  const accountRef = useRef<HTMLElement>(null)
 
   // Refs object - stable across renders since refs don't change
   const focusZoneRefs: FocusZoneRefs = {
     sidebarList: sidebarListRef,
     mainContent: mainContentRef,
     composer: composerRef,
+    account: accountRef,
   }
 
   // Enable Tab cycling between focus zones
@@ -1123,6 +1125,7 @@ function ChatLayoutContent() {
             adminCategory={adminCategory}
             onAdminCategoryChange={handleAdminCategoryChange}
             sidebarListRef={focusZoneRefs.sidebarList}
+            accountRef={accountRef}
             activeContactJid={selectedContact?.jid}
             onViewChange={handleSidebarViewChange}
           />

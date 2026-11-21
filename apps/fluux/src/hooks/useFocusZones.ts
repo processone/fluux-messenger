@@ -1,19 +1,21 @@
 import { useEffect, useRef, useCallback, type RefObject } from 'react'
 
-export type FocusZone = 'sidebarList' | 'mainContent' | 'composer'
+export type FocusZone = 'sidebarList' | 'mainContent' | 'composer' | 'account'
 
-const ZONE_ORDER: FocusZone[] = ['sidebarList', 'mainContent', 'composer']
+const ZONE_ORDER: FocusZone[] = ['sidebarList', 'mainContent', 'composer', 'account']
 
 export interface FocusZoneRefs {
   sidebarList: RefObject<HTMLDivElement | null>
   mainContent: RefObject<HTMLElement | null>
   composer: RefObject<HTMLElement | null>
+  /** The sidebar account row; skipped when it is not mounted. */
+  account?: RefObject<HTMLElement | null>
 }
 
 /**
  * Hook for managing Tab cycling between focus zones.
  *
- * Tab cycles through: Sidebar List → Main Content → Composer
+ * Tab cycles through: Sidebar List → Main Content → Composer → Account row
  * Shift+Tab reverses the direction.
  *
  * Each zone container should have tabIndex={0} to be focusable.
@@ -31,7 +33,7 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
 
     for (const zone of ZONE_ORDER) {
       const zoneRef = currentRefs[zone]
-      if (zoneRef.current?.contains(activeElement)) {
+      if (zoneRef?.current?.contains(activeElement)) {
         return zone
       }
     }
@@ -41,9 +43,12 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
   // Focus a specific zone
   const focusZone = useCallback((zone: FocusZone) => {
     const zoneRef = refsRef.current[zone]
-    if (zoneRef.current) {
+    if (zoneRef?.current) {
       // Try to focus the zone container
       zoneRef.current.focus()
+      // A zone that is mounted but hidden (the sidebar behind an open conversation on a
+      // phone) cannot take focus: report that so the cycle moves on instead of sticking.
+      if (zone === 'account' && document.activeElement !== zoneRef.current) return false
       currentZoneRef.current = zone
       return true
     }

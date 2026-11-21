@@ -212,13 +212,15 @@ test('clicked checkbox and slider do not retain keyboard rings', async ({ page }
 
 test('handled presence arrows restore keyboard modality and inset menu focus', async ({ page }) => {
   await boot(page, 'dark')
-  await page.getByRole('button', { name: 'Online', exact: true }).click()
+  await page.getByTestId('account-row').click()
   await expect(page.locator('html')).toHaveAttribute('data-focus-modality', 'pointer')
-  // PresenceSelector consumes this key in capture phase before document bubble.
+  // Focus enters the menu on the current presence a frame after opening; arrow only once it has.
+  await expect(page.getByRole('menuitemradio', { name: 'Online', exact: true })).toBeFocused()
+  // The account menu moves focus itself on arrow keys, and the key marks keyboard modality.
   await page.keyboard.press('ArrowDown')
   await expect(page.locator('html')).toHaveAttribute('data-focus-modality', 'keyboard')
-  const option = page.getByRole('button', { name: 'Away', exact: true })
-  await option.focus()
+  const option = page.getByRole('menuitemradio', { name: 'Away', exact: true })
+  await expect(option).toBeFocused()
   await expect(option).toHaveCSS('outline-width', '2px')
   await expect(option).toHaveCSS('outline-offset', '-2px')
 })

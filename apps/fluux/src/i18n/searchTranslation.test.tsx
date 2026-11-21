@@ -52,8 +52,7 @@ vi.mock('@/components/sidebar-components', async () => ({
   MessagesHeaderActions: () => null,
   ContactsHeaderActions: () => null,
   RoomsHeaderActions: () => null,
-  StatusOrPresence: () => null,
-  UserMenu: () => null,
+  AccountMenu: () => null,
 }))
 vi.mock('@/components/AdminDashboard', () => ({ AdminDashboard: () => null }))
 vi.mock('@/components/BrowseRoomsModal', () => ({ BrowseRoomsModal: () => null }))

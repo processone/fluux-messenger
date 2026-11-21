@@ -10,7 +10,6 @@ import { useUpdateAffordance } from '@/stores/appUpdateStore'
 import {
   useXMPP,
   useRoomActions,
-  getLocalPart,
   type Contact,
   type AdminCategory,
 } from '@fluux/sdk'
@@ -18,7 +17,6 @@ import { useConnectionStore, useChatStore, useRoomStore, useEventsStore, useAdmi
 import { AdminDashboard } from './AdminDashboard'
 import { BrowseRoomsModal } from './BrowseRoomsModal'
 import { JoinRoomModal } from './JoinRoomModal'
-import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
 import { ConnectionStepSlot } from './ConnectionStep'
 import { AddContactModal } from './AddContactModal'
@@ -48,14 +46,13 @@ import {
   SIDEBAR_WIDTH_KEY,
   IconRailNavLink,
   IconRailButton,
-  StatusOrPresence,
   ConversationList,
   ArchiveList,
   ContactList,
   RoomsList,
   SearchView,
   SavedView,
-  UserMenu,
+  AccountMenu,
   MessagesHeaderActions,
   ContactsHeaderActions,
   RoomsHeaderActions,
@@ -74,13 +71,15 @@ interface SidebarProps {
   onAdminCategoryChange?: (category: AdminCategory | null) => void
   // Focus zone ref for Tab cycling
   sidebarListRef?: RefObject<HTMLDivElement | null>
+  // Focus zone ref for the account row (fourth Tab stop)
+  accountRef?: RefObject<HTMLElement | null>
   // Active contact JID for highlighting in directory view
   activeContactJid?: string | null
   // Handler for view changes - ensures all state cleanup happens in one place
   onViewChange: (view: SidebarView) => void
 }
 
-export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, onStartChatWithJid, onManageUser, adminCategory, onAdminCategoryChange, sidebarListRef, activeContactJid, onViewChange }: SidebarProps) {
+export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, onStartChatWithJid, onManageUser, adminCategory, onAdminCategoryChange, sidebarListRef, accountRef, activeContactJid, onViewChange }: SidebarProps) {
   // Above the Saved list, so a room join and a failure shown on an entry outlive the list itself.
   const savedOpener = useSavedOpener()
   detectRenderLoop('Sidebar')
@@ -90,8 +89,6 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
   // Use focused selectors instead of useConnection() to avoid re-renders when unrelated values change
   // (e.g., ownResources updates shouldn't re-render the entire sidebar)
   const jid = useConnectionStore((s) => s.jid)
-  const ownAvatar = useConnectionStore((s) => s.ownAvatar)
-  const ownNickname = useConnectionStore((s) => s.ownNickname)
   // Get methods from client (not from store)
   const { client } = useXMPP()
   const { markAllRoomsRead } = useRoomActions()
@@ -112,8 +109,6 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
   // Diagnostic: track every selector value per render. Dev-only (guarded inside
   // trackSelectorChange). Helps pinpoint unstable selectors causing render loops.
   trackSelectorChange('Sidebar', 'jid', jid)
-  trackSelectorChange('Sidebar', 'ownAvatar', ownAvatar)
-  trackSelectorChange('Sidebar', 'ownNickname', ownNickname)
   trackSelectorChange('Sidebar', 'isAdmin', isAdmin)
   trackSelectorChange('Sidebar', 'totalUnread', totalUnread)
   trackSelectorChange('Sidebar', 'roomTabTone', roomTabTone)
@@ -126,7 +121,6 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
   const showAddContact = useModalStore((s) => s.addContact)
   const addContactJid = useModalStore((s) => s.addContactJid)
   const showNewMessage = useModalStore((s) => s.newMessage)
-  const showPresenceMenu = useModalStore((s) => s.presenceMenu)
   const modalOpen = useModalStore((s) => s.open)
   const modalClose = useModalStore((s) => s.close)
 
@@ -407,47 +401,15 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
           </div>
         </div>
 
-        {/* User Panel - avatar spans both rows */}
+        {/* User panel: one account row; the menu holds presence, status, profile and the general items */}
         <div className="px-2 pt-2 pb-safe-2 bg-fluux-sidebar border-t border-fluux-bg">
-          <div className="flex items-center gap-2 min-w-0">
-            {/* Large avatar - clickable for profile settings */}
-            <Tooltip content={t('sidebar.viewProfile')} position="top">
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => { modalClose('presenceMenu'); navigateToSettings('profile') }}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); modalClose('presenceMenu'); navigateToSettings('profile') } }}
-                className="flex-shrink-0 me-1 rounded-full hover:ring-2 hover:ring-fluux-muted/30 transition-all cursor-pointer"
-              >
-                <Avatar
-                  identifier={jid || ''}
-                  name={ownNickname || (jid ? getLocalPart(jid) : undefined)}
-                  avatarUrl={ownAvatar || undefined}
-                  size="lg"
-                  fallbackColor="var(--fluux-bg-accent)"
-                />
-              </div>
-            </Tooltip>
-            {/* Name and status stacked vertically */}
-            <div className="flex-1 min-w-0 space-y-0.5">
-              <Tooltip content={t('sidebar.viewProfile')} position="top">
-                <button
-                  type="button"
-                  onClick={() => { modalClose('presenceMenu'); navigateToSettings('profile') }}
-                  className="block w-full text-start text-sm font-medium text-fluux-text truncate cursor-pointer hover:underline"
-                >
-                  {ownNickname || (jid ? getLocalPart(jid) : undefined)}
-                </button>
-              </Tooltip>
-              <StatusOrPresence isOpen={showPresenceMenu} onOpenChange={(open) => open ? modalOpen('presenceMenu') : modalClose('presenceMenu')} />
-            </div>
-            {/* Menu button — always available, including while reconnecting,
-                so logout stays reachable. Cancelling the reconnection lives
-                inline in the status line (StatusDisplay). */}
-            <UserMenu onLogout={(shouldCleanLocalData) =>
+          <AccountMenu
+            zoneRef={accountRef}
+            onOpenProfile={() => navigateToSettings('profile')}
+            onLogout={(shouldCleanLocalData) =>
               performLogout({ disconnect, push: client.push, jid, shouldCleanLocalData })
-            } />
-          </div>
+            }
+          />
         </div>
       </div>
 
