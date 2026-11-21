@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { getFloatingViewport, limitFloatingHeight } from './floatingViewport'
@@ -23,6 +23,15 @@ function Anchored({ direction }: { direction: MenuDirection }) {
   return <>
     <button type="button" ref={menu.triggerRef}>Anchor</button>
     <div ref={menu.menuRef} role="menu" style={{ left: menu.position.x, top: menu.position.y }}>Actions</div>
+  </>
+}
+
+function AnchoredSubmenu() {
+  const [inSubmenu, setInSubmenu] = useState(false)
+  const menu = useAnchoredMenu(true)
+  return <>
+    <button type="button" ref={menu.triggerRef} onClick={() => setInSubmenu(true)}>Open submenu</button>
+    <div ref={menu.menuRef} role="menu" data-submenu={inSubmenu || undefined} style={{ left: menu.position.x, top: menu.position.y }}>Actions</div>
   </>
 }
 
@@ -88,6 +97,21 @@ describe('floating viewport bounds', () => {
     fireEvent.resize(window)
     expect(menu.style.top).toBe('8px')
     expect(menu.style.maxHeight).toBe('')
+  })
+
+  it('moves a menu inside the window in the same commit that makes it taller', () => {
+    // Sizes measured from the room-owner menu at 360x600 and 150% text size.
+    vi.stubGlobal('innerHeight', 600)
+    vi.spyOn(HTMLButtonElement.prototype, 'getBoundingClientRect').mockReturnValue(box(32, 30))
+    vi.spyOn(HTMLDivElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLDivElement) {
+      return box(parseFloat(this.style.top) || 0, this.dataset.submenu ? 560 : 240)
+    })
+    render(<AnchoredSubmenu />)
+    const menu = screen.getByRole('menu')
+    expect(menu.style.top).toBe('66px')
+    fireEvent.click(screen.getByRole('button', { name: 'Open submenu' }))
+    expect(menu.style.top).toBe('32px')
+    expect(menu.getBoundingClientRect().bottom).toBe(592)
   })
 
   it('renders and scrolls a tall context menu below the caption', () => {
