@@ -856,25 +856,46 @@ describe('XMPPClient Roster', () => {
   })
 
   describe('subscription requests from MUC JIDs', () => {
-    it('should ignore subscription requests from MUC JIDs', async () => {
+    const subscribeFrom = (from: string) => mockXmppClientInstance._emit('stanza', createMockElement('presence', {
+      from,
+      to: 'user@example.com',
+      type: 'subscribe',
+    }))
+
+    it('should ignore subscription requests from a room Fluux holds, whatever its server is called', async () => {
       await connectClient()
       const emitSDKSpy = vi.spyOn(xmppClient as any, 'emitSDK')
+      mockStores.room.getRoom.mockImplementation((jid: string) =>
+        jid === 'team@groups.example.net' ? { jid } as never : undefined)
 
-      // Simulate a subscription request from a MUC JID (should be ignored)
-      const mucSubscribePresence = createMockElement('presence', {
-        from: 'room@conference.example.com',
-        to: 'user@example.com',
-        type: 'subscribe',
-      })
+      subscribeFrom('team@groups.example.net')
 
-      mockXmppClientInstance._emit('stanza', mucSubscribePresence)
-
-      // Should NOT emit subscription-request event for MUC JIDs
-      expect(emitSDKSpy).not.toHaveBeenCalledWith(
-        'events:subscription-request',
-        expect.objectContaining({ from: 'room@conference.example.com' })
-      )
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('events:subscription-request', expect.anything())
     })
+
+    it('should ignore subscription requests from an address on the account\'s room service', async () => {
+      await connectClient()
+      const emitSDKSpy = vi.spyOn(xmppClient as any, 'emitSDK')
+      mockStores.admin.getMucServiceJid.mockReturnValue('conference.example.com')
+
+      subscribeFrom('room@conference.example.com')
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('events:subscription-request', expect.anything())
+    })
+
+    it.each(['chat', 'muc', 'rooms', 'conference', 'groupchat'])(
+      'should show a contact request from a person on a %s. server',
+      async (prefix) => {
+        await connectClient()
+        const emitSDKSpy = vi.spyOn(xmppClient as any, 'emitSDK')
+        mockStores.roster.getContact.mockReturnValue(undefined)
+        const from = `alice@${prefix}.example.org`
+
+        subscribeFrom(from)
+
+        expect(emitSDKSpy).toHaveBeenCalledWith('events:subscription-request', { from })
+      },
+    )
 
     it('should process subscription requests from regular JIDs', async () => {
       await connectClient()

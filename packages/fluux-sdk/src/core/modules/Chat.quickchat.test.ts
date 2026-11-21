@@ -969,6 +969,7 @@ describe('XMPPClient Quick Chat', () => {
     it('should not treat MUC JID as stranger message', () => {
       // If a message with body comes from a MUC JID (which is not in roster),
       // it should NOT be added as a stranger message
+      mockStores.roster.hasContact.mockReturnValue(false)
       const messageFromMuc = createMockElement('message', {
         from: 'room@conference.example.com',
         to: 'user@example.com',
@@ -985,5 +986,36 @@ describe('XMPPClient Quick Chat', () => {
         expect.objectContaining({ from: 'room@conference.example.com' })
       )
     })
+
+    it('should not treat a room Fluux holds as a stranger, whatever its server is called', () => {
+      mockStores.roster.hasContact.mockReturnValue(false)
+      mockStores.room.getRoom.mockImplementation((jid: string) =>
+        jid === 'team@groups.example.net' ? { jid, joined: false } as never : undefined)
+
+      mockXmppClientInstance._emit('stanza', createMockElement('message', {
+        from: 'team@groups.example.net',
+        to: 'user@example.com',
+        type: 'chat',
+      }, [{ name: 'body', text: 'Notice from the room' }]))
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('events:stranger-message', expect.anything())
+    })
+
+    it.each(['chat', 'muc', 'rooms', 'conference', 'groupchat'])(
+      'should treat a first message from a person on a %s. server as a message request',
+      (prefix) => {
+        mockStores.roster.hasContact.mockReturnValue(false)
+        const from = `dan@${prefix}.example.org`
+
+        mockXmppClientInstance._emit('stanza', createMockElement('message', {
+          from,
+          to: 'user@example.com',
+          type: 'chat',
+        }, [{ name: 'body', text: 'Hello' }]))
+
+        expect(emitSDKSpy).toHaveBeenCalledWith('events:stranger-message', { from, body: 'Hello' })
+        expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:conversation', expect.anything())
+      },
+    )
   })
 })
