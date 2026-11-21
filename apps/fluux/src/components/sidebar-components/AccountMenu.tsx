@@ -66,8 +66,8 @@ function useAccountStatus(
   const { t } = useTranslation()
   const current = step ?? (status === 'error' || status === 'disconnected' ? status : null)
   const reconnecting = current === 'reconnecting'
-  const reconnectTargetTime = useConnectionStore((s) => (reconnecting ? s.reconnectTargetTime : null))
-  const reconnectAttempt = useConnectionStore((s) => (reconnecting ? s.reconnectAttempt : 0))
+  const reconnectTargetTime = useConnectionStore((s) => reconnecting ? s.reconnectTargetTime : null)
+  const reconnectAttempt = useConnectionStore((s) => reconnecting ? s.reconnectAttempt : 0)
   const persistentAlert = useEventsStore((s) => {
     for (let i = s.systemNotifications.length - 1; i >= 0; i--) {
       const n = s.systemNotifications[i]
