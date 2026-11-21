@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, onTestFinished, vi, expectTypeOf } from 'vitest'
 import 'fake-indexeddb/auto'
-import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
+import { IDBFactory, IDBObjectStore, IDBIndex, IDBCursor } from 'fake-indexeddb'
 import { openDB } from 'idb'
 import type { RoomMessage } from '../core/types'
 import type { StoredMessage } from '../core/types/message-internal'
@@ -464,6 +464,27 @@ describe('searchIndex', () => {
       const results = await search('common', { conversationId: 'alice@example.com', limit: 2 })
       expect(results.map((r) => r.messageId)).toEqual(['scoped-57', 'scoped-55'])
       expect(fetched.every((id) => id.startsWith('chat:alice@example.com'))).toBe(true)
+      vi.restoreAllMocks()
+    })
+
+    it('probes one rare candidate without enumerating the conversation', async () => {
+      for (let i = 0; i < 80; i++) {
+        await indexMessage(createChatMessage('alice@example.com', {
+          id: `busy-${i}`, body: `ordinary chatter ${i}`,
+          timestamp: new Date(1_700_000_000_000 + i * 1000),
+        }))
+      }
+      await indexMessage(createChatMessage('alice@example.com', {
+        id: 'rare-1', body: 'ordinary zebrafish sighting',
+        timestamp: new Date(1_700_000_100_000),
+      }))
+      const getAllKeys = vi.spyOn(IDBIndex.prototype, 'getAllKeys')
+      const step = vi.spyOn(IDBCursor.prototype, 'continue')
+      const results = await search('zebrafish', { conversationId: 'alice@example.com' })
+      expect(results.map((r) => r.messageId)).toEqual(['rare-1'])
+      // A conversation-wide enumeration would collect keys or step the cursor once per message.
+      expect(getAllKeys).not.toHaveBeenCalled()
+      expect(step.mock.calls.length).toBeLessThan(5)
       vi.restoreAllMocks()
     })
 
