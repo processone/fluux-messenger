@@ -5,7 +5,7 @@ import { iosHaptic } from '@/platform/ios/haptics'
  * Uses composition to handle view-specific rendering while sharing
  * the common bubble structure.
  */
-import { useState, useMemo, useRef, useEffect, useContext, memo, type CSSProperties, type ReactNode } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect, useContext, memo, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Bookmark, CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, forwardedFileName, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
@@ -437,7 +437,7 @@ export const MessageBubble = memo(function MessageBubble({
   const hideCopyQuote = copyShown && !!forwardedCopyFallbackRange(message)
   const shown = hideForwardFallback || hideCopyQuote ? withoutForwardFallback(message, mentions, hideCopyQuote) : { body: message.body, mentions }
   const [reactorEmoji, setReactorEmoji] = useState<string | null>(null)
-  const actionAnchor = useRef<HTMLElement | null>(null)
+  const [actionAnchor, setActionAnchor] = useState<HTMLElement | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFired = useRef(false)
   const hasMessageActionsRef = useRef(false)
@@ -494,18 +494,19 @@ export const MessageBubble = memo(function MessageBubble({
   })
 
   const messageMenu = useContextMenu()
-  const closeInteractionMenus = () => {
+  const closeMessageMenu = messageMenu.close
+  const closeInteractionMenus = useCallback(() => {
     openMenusRef.current = { more: false, reaction: false, pointer: false }
-    messageMenu.close()
+    closeMessageMenu()
     setShowMoreMenuState(false)
     setShowReactionPickerState(false)
     onReactionPickerChange?.(false)
-  }
-  const reportMenus = () => {
+  }, [closeMessageMenu, onReactionPickerChange])
+  const reportMenus = useCallback(() => {
     if (rowId) interaction?.setMenuOpen(rowId,
       openMenusRef.current.more || openMenusRef.current.reaction || openMenusRef.current.pointer, closeInteractionMenus,
       bubbleRef.current?.closest<HTMLElement>('[data-message-row-id]') ?? undefined)
-  }
+  }, [rowId, interaction, closeInteractionMenus])
   const setShowMoreMenu = (isOpen: boolean) => {
     openMenusRef.current.more = isOpen
     reportMenus()
@@ -608,15 +609,16 @@ export const MessageBubble = memo(function MessageBubble({
   // Long-press (touch) → open the action menu; scrolling (touchmove) or lifting
   // before the threshold cancels it. longPressFired suppresses the click that a
   // tap-and-hold would otherwise dispatch to an inner control on release.
-  hasMessageActionsRef.current = hasMessageActions
+  useLayoutEffect(() => { hasMessageActionsRef.current = hasMessageActions }, [hasMessageActions])
   const handleContentTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
     cancelLongPress()
     if (!hasMessageActions || event.touches.length > 1) return
-    actionAnchor.current = event.currentTarget
+    const anchor = event.currentTarget
     longPressFired.current = false
     longPressTimer.current = setTimeout(() => {
       if (!hasMessageActionsRef.current) return
       longPressFired.current = true
+      setActionAnchor(anchor)
       setShowActionSheet(true)
       iosHaptic('contextMenu')
     }, 500)
@@ -663,8 +665,7 @@ export const MessageBubble = memo(function MessageBubble({
   useEffect(() => {
     openMenusRef.current.pointer = messageMenu.isOpen
     reportMenus()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messageMenu.isOpen])
+  }, [messageMenu.isOpen, reportMenus])
   // While a right-click menu is open, no message offers its hover actions; see index.css.
   useEffect(() => {
     if (!messageMenu.isOpen) return
@@ -1043,7 +1044,7 @@ export const MessageBubble = memo(function MessageBubble({
       {showActionSheet && (
         <MessageActionSheet
           open
-          anchor={actionAnchor.current}
+          anchor={actionAnchor}
           onClose={() => {
             longPressFired.current = false
             setShowActionSheet(false)

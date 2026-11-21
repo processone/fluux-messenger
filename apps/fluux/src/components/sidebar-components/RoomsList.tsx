@@ -1,5 +1,5 @@
 import { isSpamModerated } from '@/utils/spamModeration'
-import React, { useState, useRef, memo } from 'react'
+import React, { useState, useRef, useLayoutEffect, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { useContextMenu, useListKeyboardNav, useRouteSync } from '@/hooks'
@@ -95,100 +95,82 @@ export function RoomsList() {
   }
   const jidToIndex = new Map(flatJids.map((jid, i) => [jid, i]))
 
-  // Stable per-row callbacks (taking a JID) so the memoized RoomItem rows keep
-  // identity-stable props and only re-render when their own room changes.
-  //
-  // NOTE: useCallback is intentionally NOT used here. With the React Compiler
-  // enabled, callbacks that are only consumed by JSX (not by a hook dependency)
-  // are left as fresh closures each render; the parent's JSX memoization is
-  // supposed to cover them, but it is invalidated whenever activeRoomJid /
-  // selectedIndex change — which re-creates the closures and breaks RoomItem's
-  // React.memo, re-rendering every row. Building the handlers once in a ref and
-  // routing through a "latest" ref keeps their identity stable for the lifetime
-  // of the list while always invoking the current actions.
+  // Mount-scoped handlers keep row props stable. Publish the latest actions
+  // after commit, so an abandoned render cannot change a visible row's actions.
   const latestRef = useRef({ setActiveConversation, setActiveRoom, joinRoomWithPassword, leaveRoom, removeBookmark, setBookmark, navigateToRooms, setEditingRoomJid, addToast, t })
-  latestRef.current = { setActiveConversation, setActiveRoom, joinRoomWithPassword, leaveRoom, removeBookmark, setBookmark, navigateToRooms, setEditingRoomJid, addToast, t }
+  useLayoutEffect(() => { latestRef.current = { setActiveConversation, setActiveRoom, joinRoomWithPassword, leaveRoom, removeBookmark, setBookmark, navigateToRooms, setEditingRoomJid, addToast, t } }, [setActiveConversation, setActiveRoom, joinRoomWithPassword, leaveRoom, removeBookmark, setBookmark, navigateToRooms, setEditingRoomJid, addToast, t])
 
-  const handlersRef = useRef<{
-    onSelect: (roomJid: string) => void
-    onActivate: (roomJid: string) => void
-    onJoin: (roomJid: string) => void
-    onLeave: (roomJid: string) => void
-    onEditBookmark: (roomJid: string) => void
-    onRemoveBookmark: (roomJid: string) => void
-    onToggleAutojoin: (roomJid: string) => void
-  } | null>(null)
-  if (!handlersRef.current) {
-    handlersRef.current = {
-      onSelect: (roomJid) => {
-        const L = latestRef.current
-        // Standard back stack: switching rooms pushes; re-selecting dedups.
-        const current = roomStore.getState().activeRoomJid
+  const [handlers] = useState(() => ({
+    onSelect: (roomJid: string) => {
+      const L = latestRef.current
+      // Standard back stack: switching rooms pushes; re-selecting dedups.
+      const current = roomStore.getState().activeRoomJid
+      void L.setActiveConversation(null)
+      void roomStore.getState().activateRoom(roomJid)
+      L.navigateToRooms(roomJid, { replace: shouldReplaceOnSelect(roomJid, current) })
+    },
+    onActivate: async (roomJid: string) => {
+      const L = latestRef.current
+      const room = roomStore.getState().getRoom(roomJid)
+      const current = roomStore.getState().activeRoomJid
+      if (room?.joined) {
         void L.setActiveConversation(null)
         void roomStore.getState().activateRoom(roomJid)
-        L.navigateToRooms(roomJid, { replace: shouldReplaceOnSelect(roomJid, current) })
-      },
-      onActivate: async (roomJid) => {
-        const L = latestRef.current
-        const room = roomStore.getState().getRoom(roomJid)
-        const current = roomStore.getState().activeRoomJid
-        if (room?.joined) {
-          void L.setActiveConversation(null)
-          void roomStore.getState().activateRoom(roomJid)
-        } else {
-          try {
-            // Prompts for the room password when the server asks for one.
-            if (!(await L.joinRoomWithPassword(roomJid, room?.nickname ?? ''))) return
-          } catch (err) {
-            // Do not activate/navigate into a room we failed to join.
-            L.addToast('error', getRoomJoinErrorMessage(L.t, err))
-            return
-          }
-          void L.setActiveConversation(null)
-          void roomStore.getState().activateRoom(roomJid)
+      } else {
+        const nickname = room?.nickname ?? ''
+        try {
+          // Prompts for the room password when the server asks for one.
+          const joined = await L.joinRoomWithPassword(roomJid, nickname)
+          if (!joined) return
+        } catch (err) {
+          // Do not activate/navigate into a room we failed to join.
+          L.addToast('error', getRoomJoinErrorMessage(L.t, err))
+          return
         }
-        L.navigateToRooms(roomJid, { replace: shouldReplaceOnSelect(roomJid, current) })
-      },
-      onJoin: (roomJid) => {
+        void L.setActiveConversation(null)
+        void roomStore.getState().activateRoom(roomJid)
+      }
+      L.navigateToRooms(roomJid, { replace: shouldReplaceOnSelect(roomJid, current) })
+    },
+    onJoin: (roomJid: string) => {
+      const L = latestRef.current
+      const room = roomStore.getState().getRoom(roomJid)
+      const nickname = room?.nickname ?? ''
+      void (async () => {
+        try {
+          await L.joinRoomWithPassword(roomJid, nickname)
+        } catch (err) {
+          L.addToast('error', getRoomJoinErrorMessage(L.t, err))
+        }
+      })()
+    },
+    onLeave: (roomJid: string) => {
+      const L = latestRef.current
+      if (roomStore.getState().activeRoomJid === roomJid) void L.setActiveRoom(null)
+      void L.leaveRoom(roomJid)
+    },
+    onEditBookmark: (roomJid: string) => latestRef.current.setEditingRoomJid(roomJid),
+    // The menu closes on click, so a failed bookmark write is reported in a toast;
+    // the room keeps showing its unchanged bookmark state.
+    onRemoveBookmark: (roomJid: string) => {
+      latestRef.current.removeBookmark(roomJid).catch(() => {
         const L = latestRef.current
-        const room = roomStore.getState().getRoom(roomJid)
-        void (async () => {
-          try {
-            await L.joinRoomWithPassword(roomJid, room?.nickname ?? '')
-          } catch (err) {
-            L.addToast('error', getRoomJoinErrorMessage(L.t, err))
-          }
-        })()
-      },
-      onLeave: (roomJid) => {
+        L.addToast('error', L.t('rooms.failedToRemoveBookmark'))
+      })
+    },
+    onToggleAutojoin: (roomJid: string) => {
+      const room = roomStore.getState().getRoom(roomJid)
+      if (!room) return
+      latestRef.current.setBookmark(roomJid, {
+        name: room.name,
+        nick: room.nickname,
+        autojoin: !room.autojoin,
+      }).catch(() => {
         const L = latestRef.current
-        if (roomStore.getState().activeRoomJid === roomJid) void L.setActiveRoom(null)
-        void L.leaveRoom(roomJid)
-      },
-      onEditBookmark: (roomJid) => latestRef.current.setEditingRoomJid(roomJid),
-      // The menu closes on click, so a failed bookmark write is reported in a toast;
-      // the room keeps showing its unchanged bookmark state.
-      onRemoveBookmark: (roomJid) => {
-        latestRef.current.removeBookmark(roomJid).catch(() => {
-          const L = latestRef.current
-          L.addToast('error', L.t('rooms.failedToRemoveBookmark'))
-        })
-      },
-      onToggleAutojoin: (roomJid) => {
-        const room = roomStore.getState().getRoom(roomJid)
-        if (!room) return
-        latestRef.current.setBookmark(roomJid, {
-          name: room.name,
-          nick: room.nickname,
-          autojoin: !room.autojoin,
-        }).catch(() => {
-          const L = latestRef.current
-          L.addToast('error', L.t('rooms.failedToSaveBookmark'))
-        })
-      },
-    }
-  }
-  const handlers = handlersRef.current
+        L.addToast('error', L.t('rooms.failedToSaveBookmark'))
+      })
+    },
+  }))
 
   // Keyboard navigation over the flat JID list. Enter selects the highlighted room.
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({

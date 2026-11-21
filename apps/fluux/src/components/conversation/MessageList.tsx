@@ -13,7 +13,7 @@ import { latestJumpVisible } from './fabVisibility'
  * docs/2026-07-23-scroll-positioning-contract.md.
  */
 import { findMessageRowIndex, type MessageRowRef } from '@fluux/sdk'
-import { useMemo, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from 'react'
+import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage, GapInterval } from '@fluux/sdk'
 import { useMessageCopyFormatter, useMessageRangeSelection } from '@/hooks'
@@ -401,12 +401,17 @@ export function MessageList<T extends BaseMessage>({
   // A new real content width retags the height cache at once (virtualized path only). The adapter
   // samples after a measurement batch, so those rows were already measured at the new width; a
   // changed tag wipes them with the stale heights, and their settled heights are recorded again.
+  // Font scale changes invalidate row-height assumptions.
+  const scalePct = useSettingsStore((s) => s.fontSize)
+  const metricsCallbacksRef = useRef({ refresh: (_first: boolean) => {}, reassert: () => {} })
   const { metricsRef: rowMetricsRef, realWidthPxRef: rowRealWidthPxRef, sample: sampleRowMetrics } = useRowMetrics(scrollContainerRef, first => {
-    virtualizer.refreshEstimates?.(first)
-    if (first) reassertUnreadMarker()
+    metricsCallbacksRef.current.refresh(first)
+    if (first) metricsCallbacksRef.current.reassert()
   }, realWidthPx => {
     if (!virtualized) return
-    const { conversationId: cid, scalePct: scale, virtualItems: items } = onMeasuredParamsRef.current
+    const cid = conversationId
+    const scale = scalePct
+    const items = virtualItems
     const scroller = scrollContainerRef.current
     if (!noteRealWidthBucket(cid, realWidthPx) || !scroller) return
     for (const [key, height] of collectSettledRowHeights(scroller, items, scale)) {
@@ -417,9 +422,6 @@ export function MessageList<T extends BaseMessage>({
   // --------------------------------------------------------------------------
   // PERSISTENT HEIGHT CACHE (virtualized path only)
   // --------------------------------------------------------------------------
-  // Current font scale (a number; e.g. 100, 125). Subscribe so widthBucket changes
-  // when the user adjusts font size — different scale = different heights.
-  const scalePct = useSettingsStore((s) => s.fontSize)
 
   // Per-index estimate: drives the virtualizer's initial size guess so prepend-restore lands
   // accurately instead of snapping. Only used when virtualized (passed unconditionally since the
@@ -445,26 +447,22 @@ export function MessageList<T extends BaseMessage>({
   // Build the initialMeasurements seed from the persistent cache. Only when virtualized —
   // flag-OFF path is unchanged. Entries are keyed id@scale; width validity is a per-conversation
   // tag (a changed real width wipes the map), so everything present is valid to seed.
-  // Use a ref so it is evaluated once at mount without needing eslint-disable on empty deps.
-  // MOUNT-SCOPED: this builds the seed exactly once per mount and relies on MessageList
-  // remounting on every conversation switch (the cache is the whole point — it survives that
-  // remount). It will NOT rebuild if MessageList is ever reused across conversations without a
-  // remount; that is not the case today.
-  const initialMeasurementsRef = useRef<ReadonlyMap<string, number> | undefined>(undefined)
-  const initialMeasurementsBuiltRef = useRef(false)
-  if (!initialMeasurementsBuiltRef.current && virtualized) {
-    initialMeasurementsBuiltRef.current = true
+  // Build once when virtualization first becomes active in this mount.
+  // MessageList remounts on conversation changes; an inactive flag may turn on later.
+  const [measurementSeed, setMeasurementSeed] = useState<{ value?: ReadonlyMap<string, number> } | null>(null)
+  let initialMeasurements = measurementSeed?.value
+  if (virtualized && measurementSeed === null) {
     // One-shot per page load: fill the module cache from the persisted snapshot so the
     // FIRST mount after a reload seeds real heights (the in-memory cache alone dies with
     // the page, which made every conversation re-open on estimates → the reload blink).
     hydrateHeightCache()
     const stored = getCachedHeights(conversationId)
+    const result = new Map<string, number>()
     if (stored.size > 0) {
       const suffix = `@${scalePct}`
       // For each stored key at the current scale, extract the item key (strip `@scale`) and
       // include it if it is a key in virtualItems.
       const virtualKeys = new Set(virtualItems.map((item) => item.key))
-      const result = new Map<string, number>()
       for (const [k, size] of stored) {
         if (k.endsWith(suffix)) {
           const messageId = k.slice(0, k.length - suffix.length)
@@ -473,18 +471,20 @@ export function MessageList<T extends BaseMessage>({
           }
         }
       }
-      if (result.size > 0) initialMeasurementsRef.current = result
     }
     estimateDebugLog('seed', {
       conversationId,
       bucket: getConversationWidthBucket(conversationId),
       scale: scalePct,
-      seeded: initialMeasurementsRef.current?.size ?? 0,
+      seeded: result.size,
       candidates: stored.size,
       rows: virtualItems.length,
     })
+    // The adapter consumes the seed on this pass, before React re-renders
+    // with the saved state. Its measurement cache cannot be seeded afterward.
+    initialMeasurements = result.size ? result : undefined
+    setMeasurementSeed({ value: initialMeasurements })
   }
-  const initialMeasurements = initialMeasurementsRef.current
 
   // Write-back: record each row's measured height to the persistent cache. A repeated measurement
   // for the same row also carries the authoritative delta from @tanstack's ResizeObserver. Positive
@@ -499,12 +499,20 @@ export function MessageList<T extends BaseMessage>({
     heightDelta: number,
   ) => void>(() => {})
   const onMeasuredParamsRef = useRef({ conversationId, scalePct, rowMetricsRef, rowRealWidthPxRef, indexById, virtualItems })
-  onMeasuredParamsRef.current = { conversationId, scalePct, rowMetricsRef, rowRealWidthPxRef, indexById, virtualItems }
+  useLayoutEffect(() => {
+    onMeasuredParamsRef.current = { conversationId, scalePct, rowMetricsRef, rowRealWidthPxRef, indexById, virtualItems }
+  })
   const onMeasured = useMemo(
     () =>
       virtualized
         ? (key: string, size: number) => {
-            const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef, indexById: idMap, virtualItems: items } = onMeasuredParamsRef.current
+            // Row ref callbacks run before layout effects. Capture this render
+            // so newly mounted rows use the current window, not the last commit.
+            const cid = conversationId
+            const scale = scalePct
+            const metricsRef = rowMetricsRef
+            const idMap = indexById
+            const items = virtualItems
             const idx = idMap.get(key)
             const item = idx != null ? items[idx] : undefined
             const measuredGrowth = measuredRowSizesRef.current.observe(cid, scale, key, size)
@@ -531,14 +539,14 @@ export function MessageList<T extends BaseMessage>({
               })
               // The re-entry blink signal: a row whose SEEDED height disagrees with what it
               // measures on mount reflows after the first paint and re-asserts the bottom pin.
-              const seeded = initialMeasurementsRef.current?.get(key)
+              const seeded = initialMeasurements?.get(key)
               if (seeded !== undefined && seeded !== size) {
                 estimateDebugLog('seed-mismatch', key, { seeded, measured: size })
               }
             }
           }
         : undefined,
-    [virtualized],
+    [virtualized, initialMeasurements, conversationId, scalePct, rowMetricsRef, indexById, virtualItems],
   )
 
   const virtualizer = useTanstackMessageVirtualizer({ items: virtualItems, indexById, scrollRef: scrollContainerRef, estimateSize, sampleEstimateMetrics: sampleRowMetrics, initialMeasurements, onMeasured })
@@ -593,12 +601,14 @@ export function MessageList<T extends BaseMessage>({
   // window + scrollTop each call; returns null to suppress (separator at top / no
   // date above). MessageList itself does not re-render on scroll.
   const getTopVisibleDateRef = useRef<() => string | null>(() => null)
-  getTopVisibleDateRef.current = () => {
-    const v = activeVirtualizer
-    const scroller = scrollContainerRef.current
-    if (!v || !scroller) return null
-    return getTopVisibleDate(v.getVirtualItems(), virtualItems, scroller.scrollTop)
-  }
+  useLayoutEffect(() => {
+    getTopVisibleDateRef.current = () => {
+      const v = activeVirtualizer
+      const scroller = scrollContainerRef.current
+      if (!v || !scroller) return null
+      return getTopVisibleDate(v.getVirtualItems(), virtualItems, scroller.scrollTop)
+    }
+  }, [activeVirtualizer, virtualItems])
   const getTopDate = useCallback(() => getTopVisibleDateRef.current(), [])
 
   // Expose virtualizer offset lookup for Playwright test assertions (invariant-1).
@@ -686,7 +696,7 @@ export function MessageList<T extends BaseMessage>({
     release: releaseInteractionHold,
     menuChanged: setInteractionMenuOpen,
   })
-  cancelInteractionRef.current = interaction.cancel
+  useLayoutEffect(() => { cancelInteractionRef.current = interaction.cancel }, [interaction.cancel])
   // A reader at the live edge who makes a row taller (Wrap lines) stays at the edge. The hover
   // hold would otherwise keep the clicked control in place and leave the reader above the grown row.
   const runKeepingLiveEdge = useCallback<RunKeepingLiveEdge>((grow) => {
@@ -698,7 +708,10 @@ export function MessageList<T extends BaseMessage>({
     // gives way if the reader or the list took control in between.
     if (pin) requestAnimationFrame(() => requestAnimationFrame(pin))
   }, [staticMode, holdLiveEdgePin])
-  handleVirtualRowMeasuredGrowthRef.current = handleVirtualRowMeasuredGrowth
+  useLayoutEffect(() => {
+    handleVirtualRowMeasuredGrowthRef.current = handleVirtualRowMeasuredGrowth
+    metricsCallbacksRef.current = { refresh: first => virtualizer.refreshEstimates?.(first), reassert: reassertUnreadMarker }
+  }, [handleVirtualRowMeasuredGrowth, virtualizer, reassertUnreadMarker])
 
   // Combined ref setter for scroll container
   const setScrollContainerRef = useCallback((element: HTMLDivElement | null) => {
@@ -905,9 +918,9 @@ export function MessageList<T extends BaseMessage>({
   const dividerCount = dividerSourceCount > 0 ? dividerSourceCount : undefined
   // Track whether the FAB has ever been shown in this mount so the exit animation (whose first
   // keyframe is fully-visible) never runs on a fresh open-at-bottom, which would flash the FAB.
-  // MessageList is remounted per conversation via `key`, so this ref resets on every open.
-  const hasFabBeenVisibleRef = useRef(false)
-  if (fabVisible) hasFabBeenVisibleRef.current = true
+  // MessageList is remounted per conversation via `key`, so this state resets on every open.
+  const [hasFabBeenVisible, setHasFabBeenVisible] = useState(false)
+  if (fabVisible && !hasFabBeenVisible) setHasFabBeenVisible(true)
   const handleJumpToBottom = () => {
     releaseInteractionHold(false)
     if (windowSlidUp && onJumpToLatest) {
@@ -1120,7 +1133,7 @@ export function MessageList<T extends BaseMessage>({
         data-fab-container="scroll-to-bottom"
         data-interaction-bridge
         hidden={interactionMenuOpen}
-        className={`absolute bottom-4 end-4 z-40 ${fabAnimationClass(fabVisible, hasFabBeenVisibleRef.current)}`}
+        className={`absolute bottom-4 end-4 z-40 ${fabAnimationClass(fabVisible, hasFabBeenVisible)}`}
         inert={!fabVisible}
       >
         <Tooltip content={t('chat.scrollToBottom') + ` (${isMac ? '⌘↓' : 'Ctrl+↓'})`} position="left">

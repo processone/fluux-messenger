@@ -1,4 +1,4 @@
-import React, { useState, useRef, memo } from 'react'
+import React, { useState, useRef, useLayoutEffect, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { useContextMenu, useTypeToFocus, useListKeyboardNav } from '@/hooks'
@@ -77,43 +77,27 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
   }
   const jidToIndex = new Map(flatJids.map((jid, i) => [jid, i]))
 
-  // Reference-STABLE row callbacks for the memoized ContactItem. Their identity must stay
-  // fixed across re-renders or the memo no-ops and the WHOLE roster re-renders row by row.
-  // Same lazy-init + "latest" ref pattern as RoomsList (compiler-proof; useCallback is
-  // stripped). onSelect / onStartChat take the Contact (ContactItem self-subscribes and
-  // passes its own); the rest take a jid.
+  // Mount-scoped handlers keep row props stable. Publish the latest actions
+  // after commit, so an abandoned render cannot change a visible row's actions.
   const latestRef = useRef({ onSelectContact, onStartChat, removeContact, renameContact, onManageUser })
-  latestRef.current = { onSelectContact, onStartChat, removeContact, renameContact, onManageUser }
-  const rowHandlersRef = useRef<{
-    onSelect: (contact: Contact) => void
-    onStartChat: (contact: Contact) => void
-    onRemove: (jid: string) => void
-    onRename: (jid: string, name: string) => Promise<void>
-    onManageUser: (jid: string) => void
-  } | null>(null)
-  if (!rowHandlersRef.current) {
-    rowHandlersRef.current = {
-      onSelect: (contact) => latestRef.current.onSelectContact?.(contact),
-      onStartChat: (contact) => latestRef.current.onStartChat?.(contact),
-      onRemove: (jid) => latestRef.current.removeContact(jid),
-      onRename: (jid, name) => latestRef.current.renameContact(jid, name),
-      onManageUser: (jid) => latestRef.current.onManageUser?.(jid),
-    }
-  }
-  const rowHandlers = rowHandlersRef.current
+  useLayoutEffect(() => { latestRef.current = { onSelectContact, onStartChat, removeContact, renameContact, onManageUser } })
+  const [rowHandlers] = useState(() => ({
+    onSelect: (contact: Contact) => latestRef.current.onSelectContact?.(contact),
+    onStartChat: (contact: Contact) => latestRef.current.onStartChat?.(contact),
+    onRemove: (jid: string) => latestRef.current.removeContact(jid),
+    onRename: (jid: string, name: string) => latestRef.current.renameContact(jid, name),
+    onManageUser: (jid: string) => latestRef.current.onManageUser?.(jid),
+  }))
   const onManageUserStable = onManageUser ? rowHandlers.onManageUser : undefined
 
   // Keyboard navigation works over the flat jid list; onSelect resolves jid -> contact.
-  const selectByJidRef = useRef<((jid: string) => void) | null>(null)
-  if (!selectByJidRef.current) {
-    selectByJidRef.current = (jid: string) => {
-      const c = rosterStore.getState().contacts.get(jid)
-      if (c) rowHandlers.onSelect(c)
-    }
-  }
+  const [selectByJid] = useState(() => (jid: string) => {
+    const contact = rosterStore.getState().contacts.get(jid)
+    if (contact) rowHandlers.onSelect(contact)
+  })
   const { selectedIndex, isKeyboardNav, getItemProps, getContainerProps } = useListKeyboardNav<string>({
     items: flatJids,
-    onSelect: selectByJidRef.current,
+    onSelect: selectByJid,
     listRef,
     searchInputRef,
     getItemId: (jid) => jid,

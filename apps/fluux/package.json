@@ -11,7 +11,7 @@
     "test:run": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src",
+    "lint": "eslint src && npm run lint:compiler",
     "lint:fix": "eslint src --fix",
     "clean": "rm -rf dist",
     "clean:all": "rm -rf dist node_modules src-tauri/target",
@@ -41,7 +41,8 @@
     "tauri:android:dev": "tauri android dev",
     "pretauri:android:build": "npm run tauri:android:prepare",
     "tauri:android:build": "tauri android build --apk",
-    "pretauri:ios:init": "node scripts/mobile-share-resources.mjs"
+    "pretauri:ios:init": "node scripts/mobile-share-resources.mjs",
+    "lint:compiler": "node scripts/checkReactCompiler.mjs && node --test scripts/checkReactCompiler.test.mjs"
   },
   "dependencies": {
     "@chenglou/pretext": "^1.0.0",
@@ -80,6 +81,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.13",
     "@eslint/js": "^10.0.0",
     "@rolldown/plugin-babel": "^0.3.0",
     "@tailwindcss/container-queries": "^0.1.1",
@@ -95,7 +97,6 @@
     "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^10.0.0",
     "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-compiler": "^19.1.0-rc.2",
     "eslint-plugin-react-hooks": "^7.0.1",
     "fake-indexeddb": "^6.2.5",
     "fast-check": "^4.9.0",

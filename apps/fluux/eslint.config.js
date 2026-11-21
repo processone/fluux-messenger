@@ -1,7 +1,6 @@
 import eslint from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import reactHooks from 'eslint-plugin-react-hooks'
-import reactCompiler from 'eslint-plugin-react-compiler'
 import react from 'eslint-plugin-react'
 
 export default tseslint.config(
@@ -10,7 +9,6 @@ export default tseslint.config(
   {
     plugins: {
       'react-hooks': reactHooks,
-      'react-compiler': reactCompiler,
       react,
     },
     languageOptions: {
@@ -24,8 +22,11 @@ export default tseslint.config(
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
 
-      // React Compiler
-      'react-compiler/react-compiler': 'warn',
+      // React Hooks 7 includes the current compiler diagnostics. Keep existing
+      // skips visible while lint:compiler gates the performance-critical views.
+      ...Object.fromEntries(Object.keys(reactHooks.configs.recommended.rules)
+        .filter(rule => !['react-hooks/rules-of-hooks', 'react-hooks/exhaustive-deps'].includes(rule))
+        .map(rule => [rule, 'warn'])),
 
       // A <button> with no type attribute defaults to type="submit". Inside a
       // <form> that silently triggers the form's onSubmit - which is how the
