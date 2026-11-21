@@ -19,6 +19,10 @@ it.each(['online', 'offline'] as const)('persists and restores queued %s presenc
   const client = new SnapshotClient({ debug: false, storageAdapter: sessionStorageAdapter })
   client.setSnapshotJid(account)
   const restored = new StateSnapshot({ storageAdapter: sessionStorageAdapter, getJid: () => account })
+  const failure = new Error('UI subscriber failed')
+  const report = vi.spyOn(console, 'error').mockImplementation(() => {})
+  let detachFailing = () => {}
+  let detachFollowing = () => {}
   try {
     rosterStore.getState().setContacts([{ jid: peer, name: 'Emma Wilson', presence: 'offline', subscription: 'both' }], account)
     if (presence === 'offline') rosterStore.getState().updatePresence(`${peer}/desktop`, 'away', 5, 'Back soon')
@@ -29,8 +33,15 @@ it.each(['online', 'offline'] as const)('persists and restores queued %s presenc
     expect(rosterStore.getState().contacts).toBe(previous)
     expect(rosterStore.getState().getContact(peer)?.presence).toBe(presence)
 
-    // No timer advancement: exercise the same entry point as beforeunload/pagehide.
+    detachFailing = rosterStore.subscribe(() => { throw failure })
+    const following = vi.fn()
+    detachFollowing = rosterStore.subscribe(following)
+    // No timer advancement: a failed listener must not skip the unload snapshot.
     await client.flushStateSnapshot()
+    expect(following).toHaveBeenCalledTimes(1)
+    expect(report).toHaveBeenCalledWith('[SDK] Store subscriber failed:', failure)
+    detachFailing()
+    detachFollowing()
     const saved = await sessionStorageAdapter.getRoster!(account) as Array<{ jid: string; presence: string }>
     expect(saved.find(contact => contact.jid === peer)?.presence).toBe(presence)
     client.destroy()
@@ -43,8 +54,11 @@ it.each(['online', 'offline'] as const)('persists and restores queued %s presenc
       expect(rosterStore.getState().getContact(peer)?.statusMessage).toBeUndefined()
     }
   } finally {
+    detachFailing()
+    detachFollowing()
     client.destroy()
     restored.stop()
     await sessionStorageAdapter.clearAll!(account)
+    report.mockRestore()
   }
 })

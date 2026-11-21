@@ -1,4 +1,5 @@
 import { createStore } from 'zustand/vanilla'
+import { containSubscriberErrors } from './shared/containSubscriberErrors'
 import type { Contact, PresenceStatus, PresenceShow, ResourcePresence } from '../core/types'
 import { getBareJid, getResource } from '../core/jid'
 import { getPresenceRank, getPresenceFromShow } from '../utils/presenceUtils'
@@ -202,7 +203,7 @@ function sidebarGroup(contact: Contact): string {
   return contact.presenceError ? 'errored' : contact.presence === 'offline' ? 'offline' : 'online'
 }
 
-export const rosterStore = createStore<RosterState>((set, get) => {
+export const rosterStore = createStore<RosterState>()(containSubscriberErrors((set, get) => {
   // Pending contacts are immutable replacements, not mutations of published snapshots.
   // Protocol consumers read these through getContact before the UI snapshot is published.
   const pending = new Map<string, Contact>()
@@ -453,6 +454,6 @@ export const rosterStore = createStore<RosterState>((set, get) => {
       ])
     },
   }
-})
+}))
 
 export type { RosterState }
