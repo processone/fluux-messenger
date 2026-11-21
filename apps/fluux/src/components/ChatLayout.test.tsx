@@ -775,6 +775,29 @@ describe('ChatLayout - Tab Memory', () => {
       await waitFor(() => expect(screen.getByTestId('probe-path').textContent).toBe('/settings/encryption'))
     })
 
+    it('hides the covered encryption overview from focus and assistive tech', async () => {
+      render(<ChatLayoutWithProbe initialRoute="/settings/encryption/omemo" />)
+
+      await screen.findByTestId('settings-view')
+      const covered = screen.getByTestId('settings-overview').parentElement!
+      expect(covered).toHaveAttribute('inert')
+      expect(covered).toHaveAttribute('aria-hidden', 'true')
+    })
+
+    it('keeps the same settings screen mounted when moving between the overview and a method', async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/encryption', '/settings/encryption/omemo']} initialIndex={1}>
+          <ChatLayout />
+          <HistoryProbe />
+        </MemoryRouter>,
+      )
+
+      const view = await screen.findByTestId('settings-view')
+      fireEvent.click(screen.getByTestId('probe-back'))
+      await waitFor(() => expect(screen.queryByTestId('settings-overview')).not.toBeInTheDocument())
+      expect(screen.getByTestId('settings-view')).toBe(view)
+    })
+
     it('keeps the conversation open during a vertical scroll from the edge', () => {
       setMockState({ activeConversationId: 'alice@example.com' })
       render(<ChatLayoutWithProbe initialRoute="/messages/alice@example.com" />)

@@ -1130,18 +1130,31 @@ function ChatLayoutContent() {
         <main ref={mobileMainRef} className={`${hasActiveContent ? 'flex' : 'hidden md:flex'} ${previewBack ? 'relative z-10 shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : mobileOccupants ? 'relative' : ''} content-panel flex-1 flex-col bg-fluux-chat min-w-0 min-h-0`}>
           <RegionErrorBoundary region="main" resetKey={mainViewKey} onBack={mainViewBack}>
           {sidebarView === 'settings' ? (
-            <Suspense fallback={<ViewLoadingFallback />}>
-              {mobileEncryptionMethod ? (
-                <div className="relative h-full">
-                  <SettingsView showOverview />
-                  <div ref={methodPaneRef} className={`absolute inset-0 z-10 bg-fluux-chat ${methodPane.preview ? 'shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : ''}`}>
-                    <SettingsView onSubPageBack={() => methodPane.back(handleEncryptionMethodBack)} />
-                  </div>
+            // One stable tree for every settings screen, so crossing the breakpoint or opening a
+            // method screen never remounts the foreground view (its dialogs and busy state live
+            // there). The pane stays outside Suspense so its swipe listeners attach on first mount.
+            <div className="relative h-full">
+              {mobileEncryptionMethod && (
+                <div className="h-full" inert aria-hidden>
+                  <Suspense fallback={<ViewLoadingFallback />}>
+                    <SettingsView showOverview />
+                  </Suspense>
                 </div>
-              ) : (
-                <SettingsView onBack={() => mainPane.back(handleSettingsBack)} />
               )}
-            </Suspense>
+              <div
+                ref={methodPaneRef}
+                className={mobileEncryptionMethod
+                  ? `absolute inset-0 z-10 bg-fluux-chat ${methodPane.preview ? 'shadow-[-8px_0_24px_rgba(0,0,0,0.18)]' : ''}`
+                  : 'h-full'}
+              >
+                <Suspense fallback={<ViewLoadingFallback />}>
+                  <SettingsView
+                    onBack={() => mainPane.back(handleSettingsBack)}
+                    onSubPageBack={() => methodPane.back(handleEncryptionMethodBack)}
+                  />
+                </Suspense>
+              </div>
+            </div>
           ) : previewJid ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <StrangerRequestPreviewView
