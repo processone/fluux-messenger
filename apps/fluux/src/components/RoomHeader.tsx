@@ -25,7 +25,7 @@ import { RoomInfoModal } from './RoomInfoModal'
 import { HeaderSubmenuButton } from './header/HeaderSubmenuButton'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
 import { buildNotifyGroup, buildManagementGroup, notifyModeOf, notifyIconOf } from './header/roomHeaderActions'
-import { inlineClass, kebabClass, KEBAB_TRIGGER_CLASS } from './header/headerOverflow'
+import { inlineClass, kebabClass } from './header/headerOverflow'
 import { useRoomUiStore } from '../stores/roomUiStore'
 import { useToastStore } from '@/stores/toastStore'
 import {
@@ -82,7 +82,6 @@ export function RoomHeader({
   const [avatarError, setAvatarError] = useState<string | null>(null)
   const { dragRegionProps } = useWindowDrag()
   const savedCount = useSavedCountInConversation(room.jid)
-  const savedLabel = t('saved.headerButton', { count: savedCount })
   const showSaved = !!onShowSavedInConversation && savedCount > 0
   const configModalOpen = useRoomUiStore((s) => s.configModalOpen)
   const inviteModalOpen = useRoomUiStore((s) => s.inviteModalOpen)
@@ -103,6 +102,7 @@ export function RoomHeader({
 
   const mode = notifyModeOf(room)
   const NotifyIcon = notifyIconOf(mode)
+  const notifyChanged = mode !== 'mentions'
   const notifyGroup = buildNotifyGroup({
     room, t, setRoomNotifyLevel,
     onSaveFailed: () => addToast('error', t('rooms.failedToSaveBookmark')),
@@ -163,61 +163,21 @@ export function RoomHeader({
       </div>
 
       {/* Trailing action cluster — grouped tightly on mobile (gap-1) so the
-          kebab and members pill read as one unit; desktop keeps the header's md
-          gap so the wide-tier controls are spaced as before. */}
+          kebab and members pill read as one unit. Only search and the members
+          toggle are inline on a wide header; the other actions live in the kebab. */}
       <div className="flex items-center gap-1 md:gap-3">
-        {/* Notification settings — inline copy (wide tier) */}
-        <div className={inlineClass('wide')}>
-          <HeaderSubmenuButton
-            ariaLabel={t('rooms.notificationSettings')}
-            tooltip={t('rooms.notificationSettings')}
-            icon={NotifyIcon}
-            active={mode !== 'mentions'}
-            group={notifyGroup}
-          />
-        </div>
-
-        {/* Invite member — inline copy (wide tier) */}
-        <div className={inlineClass('wide')}>
-          <Tooltip content={t('rooms.inviteMember')} position="bottom">
-            <button
-              type="button"
-              onClick={openInvite}
-              className="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
-              aria-label={t('rooms.inviteMember')}
-            >
-              <UserPlus className="size-4" />
-            </button>
-          </Tooltip>
-        </div>
-
-        {/* Room management — inline copy (wide tier, owners/admins only) */}
-        {managementGroup && (
-          <div className={inlineClass('wide')}>
-            <HeaderSubmenuButton
-              ariaLabel={t('rooms.manageRoom')}
-              tooltip={t('rooms.manageRoom')}
-              icon={Settings}
-              group={managementGroup}
-            />
-          </div>
-        )}
-
-        {/* Saved in this conversation — inline copy (search tier) */}
-        {showSaved && (
+        {/* Notification settings — inline only as a status icon while the room is
+            muted or set to all messages; at the default (mentions only) it lives in
+            the kebab. Collapses with search on a narrow header. */}
+        {notifyChanged && (
           <div className={inlineClass('search')}>
-            <Tooltip content={savedLabel} position="bottom">
-              <button
-                type="button"
-                onClick={onShowSavedInConversation}
-                className="px-1.5 py-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target inline-flex items-center gap-1"
-                aria-label={savedLabel}
-                data-testid="header-saved"
-              >
-                <Bookmark className="size-4" />
-                <span className="text-xs tabular-nums">{savedCount}</span>
-              </button>
-            </Tooltip>
+            <HeaderSubmenuButton
+              ariaLabel={t('rooms.notificationSettings')}
+              tooltip={t('rooms.notificationSettings')}
+              icon={NotifyIcon}
+              active
+              group={notifyGroup}
+            />
           </div>
         )}
 
@@ -237,23 +197,22 @@ export function RoomHeader({
           </div>
         )}
 
-        {/* Overflow kebab — holds the collapsed copies. Every room entry also has
-            an inline copy, so once the header is wide enough to show them all the
-            kebab is redundant: KEBAB_TRIGGER_CLASS hides it at the wide tier. */}
-        <div className={KEBAB_TRIGGER_CLASS}>
+        {/* Overflow kebab — always shown: invite always lives here, and search and a
+            changed notification level fold in on a narrow header. */}
+        <div className="flex">
           <HeaderOverflowKebab
             ariaLabel={t('rooms.roomActions', 'Room actions')}
             entries={[
               ...(showSaved
-                ? [{ kind: 'action', key: 'saved', label: savedLabel, icon: Bookmark, onSelect: onShowSavedInConversation, kebabClassName: kebabClass('search') } as OverflowEntry]
+                ? [{ kind: 'action', key: 'saved', label: `${t('saved.title')} (${savedCount})`, icon: Bookmark, onSelect: onShowSavedInConversation } as OverflowEntry]
                 : []),
               ...(onSearchInConversation
                 ? [{ kind: 'action', key: 'search', label: t('chat.searchInConversation', 'Search in conversation'), icon: Search, onSelect: onSearchInConversation, kebabClassName: kebabClass('search') } as OverflowEntry]
                 : []),
-              { kind: 'action', key: 'invite', label: t('rooms.inviteMember'), icon: UserPlus, onSelect: openInvite, kebabClassName: kebabClass('wide') },
-              { kind: 'submenu', key: 'notify', label: t('rooms.notificationSettings'), icon: NotifyIcon, group: notifyGroup, kebabClassName: kebabClass('wide') },
+              { kind: 'action', key: 'invite', label: t('rooms.inviteMember'), icon: UserPlus, onSelect: openInvite },
+              { kind: 'submenu', key: 'notify', label: t('rooms.notificationSettings'), icon: NotifyIcon, group: notifyGroup, kebabClassName: notifyChanged ? kebabClass('search') : undefined },
               ...(managementGroup
-                ? [{ kind: 'submenu', key: 'manage', label: t('rooms.manageRoom'), icon: Settings, group: managementGroup, kebabClassName: kebabClass('wide') } as OverflowEntry]
+                ? [{ kind: 'submenu', key: 'manage', label: t('rooms.manageRoom'), icon: Settings, group: managementGroup } as OverflowEntry]
                 : []),
             ]}
           />

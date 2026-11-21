@@ -105,14 +105,13 @@ export function ChatHeader({
   const [pending, setPending] = useState<'block' | 'remove' | 'rename' | null>(null)
 
   const savedCount = useSavedCountInConversation(jid)
-  const savedLabel = t('saved.headerButton', { count: savedCount })
   const showSaved = !!onShowSavedInConversation && savedCount > 0
 
-  // 1:1 entries, one list for the ⋯ menu and the right-click menu: search (collapses on narrow
-  // widths in the ⋯ menu) and the contact actions. Group chats expose none of these.
+  // One list for the ⋯ menu and the right-click menu: saved messages, search (inline on wide
+  // headers, in the ⋯ menu on narrow ones) and the contact actions, which group chats do not have.
   const overflowEntries: OverflowEntry[] = []
   if (showSaved && onShowSavedInConversation) {
-    overflowEntries.push({ kind: 'action', key: 'saved', label: savedLabel, icon: Bookmark, onSelect: onShowSavedInConversation, kebabClassName: kebabClass('search') })
+    overflowEntries.push({ kind: 'action', key: 'saved', label: `${t('saved.title')} (${savedCount})`, icon: Bookmark, onSelect: onShowSavedInConversation })
   }
   if (!isGroupChat) {
     if (onShowProfile) {
@@ -179,9 +178,9 @@ export function ChatHeader({
     setPending(null)
   }
 
-  // When the kebab holds an always-shown entry (profile/archive on a 1:1), it must
-  // stay visible at every width. When its only entries are the tier-collapsible saved/search
-  // (e.g. a group chat), the trigger should hide once search goes inline — otherwise
+  // When the kebab holds an always-shown entry (saved, profile, archive), it must
+  // stay visible at every width. When its only entry is the tier-collapsible search
+  // (e.g. a group chat with nothing saved), the trigger should hide once search goes inline — otherwise
   // a wide header shows a kebab whose single row is container-query-hidden, i.e. an
   // empty menu. kebabClass('search') matches search's reveal threshold.
   const hasAlwaysShownEntry = overflowEntries.some((e) => !e.kebabClassName)
@@ -261,23 +260,6 @@ export function ChatHeader({
             onEnableClick={onEnableEncryptionClick}
             onReviewKeysClick={onReviewKeysClick}
           />
-        )}
-
-        {/* Saved in this conversation — inline copy (same tier as search) */}
-        {showSaved && (
-          <div className={inlineClass('search')}>
-            <button
-              type="button"
-              onClick={onShowSavedInConversation}
-              className="px-1.5 py-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target inline-flex items-center gap-1"
-              aria-label={savedLabel}
-              title={savedLabel}
-              data-testid="header-saved"
-            >
-              <Bookmark className="size-4" />
-              <span className="text-xs tabular-nums">{savedCount}</span>
-            </button>
-          </div>
         )}
 
         {/* Search in conversation — inline copy (collapses on narrow widths) */}

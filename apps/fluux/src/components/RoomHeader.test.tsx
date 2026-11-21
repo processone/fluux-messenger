@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
 import { RoomHeader } from './RoomHeader'
 import { savedStore, type Room, type RoomOccupant } from '@fluux/sdk'
 import { useToastStore } from '@/stores/toastStore'
@@ -164,6 +164,17 @@ const mockSetSubject = vi.fn().mockResolvedValue(undefined)
 const mockDestroyRoom = vi.fn().mockResolvedValue(undefined)
 const mockOnToggleOccupants = vi.fn()
 const mockOnBack = vi.fn()
+
+/** Opens the room's ⋮ menu and scopes queries to it. */
+function openRoomMenu() {
+  fireEvent.click(screen.getByLabelText('rooms.roomActions'))
+  return within(screen.getByRole('menu'))
+}
+
+/** Picks an entry of the room's ⋮ menu; a submenu entry opens its items. */
+function pickRoomMenuEntry(label: string) {
+  fireEvent.click(openRoomMenu().getByText(label))
+}
 
 describe('RoomHeader', () => {
   beforeEach(() => {
@@ -480,7 +491,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Notification settings'))
+      pickRoomMenuEntry('Notification settings')
 
       expect(screen.getByText('Mentions only')).toBeInTheDocument()
       // "All messages" appears twice (session-only and always options)
@@ -502,7 +513,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Notification settings'))
+      pickRoomMenuEntry('Notification settings')
 
       // Click the "All messages" option with "This session only" subtitle
       const allMessagesButtons = screen.getAllByText('All messages')
@@ -529,7 +540,7 @@ describe('RoomHeader', () => {
           destroyRoom={mockDestroyRoom}
         />
       )
-      fireEvent.click(screen.getByLabelText('Notification settings'))
+      pickRoomMenuEntry('Notification settings')
     }
 
     it('saves Off to the bookmark when the Off row is chosen', () => {
@@ -548,7 +559,7 @@ describe('RoomHeader', () => {
       expect(mockSetRoomNotifyLevel).toHaveBeenCalledWith('room@conference.example.com', 'none', false)
     })
 
-    it('shows the crossed bell on the header button for an Off room and @ for Mentions only', () => {
+    it('shows the crossed bell inline for an Off room, and keeps Mentions only in the menu with the @ icon', () => {
       const { unmount } = render(
         <RoomHeader
           room={createRoom({ notifyOffPersistent: true })}
@@ -562,11 +573,27 @@ describe('RoomHeader', () => {
           destroyRoom={mockDestroyRoom}
         />
       )
+      // A changed level shows inline as a status icon.
       expect(screen.getByLabelText('Notification settings').querySelector('.lucide-bell-off')).not.toBeNull()
       unmount()
 
-      renderNotifyMenu(createRoom())
-      expect(screen.getByLabelText('Notification settings').querySelector('.lucide-at-sign')).not.toBeNull()
+      // The default level keeps the bell in the ⋮ menu only, where its row carries the @ icon.
+      render(
+        <RoomHeader
+          room={createRoom()}
+          showOccupants={false}
+          onToggleOccupants={mockOnToggleOccupants}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
+          setRoomAvatar={mockSetRoomAvatar}
+          clearRoomAvatar={mockClearRoomAvatar}
+          submitRoomConfig={mockSubmitRoomConfig}
+          setSubject={mockSetSubject}
+          destroyRoom={mockDestroyRoom}
+        />
+      )
+      expect(screen.queryByLabelText('Notification settings')).toBeNull()
+      const row = openRoomMenu().getByText('Notification settings').closest('button')!
+      expect(row.querySelector('.lucide-at-sign')).not.toBeNull()
     })
 
     it('shows "always" option only for bookmarked rooms', () => {
@@ -584,7 +611,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Notification settings'))
+      pickRoomMenuEntry('Notification settings')
 
       // All messages · Always and Off · Always
       expect(screen.getAllByText('Always (saved to bookmark)')).toHaveLength(2)
@@ -605,7 +632,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Notification settings'))
+      pickRoomMenuEntry('Notification settings')
 
       expect(screen.queryByText('Always (saved to bookmark)')).not.toBeInTheDocument()
     })
@@ -674,7 +701,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      expect(screen.getByLabelText('Manage room')).toBeInTheDocument()
+      expect(openRoomMenu().getByText('Manage room')).toBeInTheDocument()
     })
 
     it('shows management menu for room admins', () => {
@@ -696,7 +723,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      expect(screen.getByLabelText('Manage room')).toBeInTheDocument()
+      expect(openRoomMenu().getByText('Manage room')).toBeInTheDocument()
     })
 
     it('hides management menu for regular members', () => {
@@ -718,7 +745,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      expect(screen.queryByLabelText('Manage room')).not.toBeInTheDocument()
+      expect(openRoomMenu().queryByText('Manage room')).not.toBeInTheDocument()
     })
 
     it('opens management dropdown when clicked', () => {
@@ -740,7 +767,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Manage room'))
+      pickRoomMenuEntry('Manage room')
 
       expect(screen.getByText('Room settings')).toBeInTheDocument()
       expect(screen.getByText('Change subject')).toBeInTheDocument()
@@ -767,7 +794,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Manage room'))
+      pickRoomMenuEntry('Manage room')
       expect(screen.getByText('Remove avatar')).toBeInTheDocument()
     })
 
@@ -791,7 +818,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Manage room'))
+      pickRoomMenuEntry('Manage room')
       expect(screen.queryByText('Remove avatar')).not.toBeInTheDocument()
     })
 
@@ -814,7 +841,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Manage room'))
+      pickRoomMenuEntry('Manage room')
       expect(screen.getByText('Manage membership')).toBeInTheDocument()
     })
 
@@ -837,7 +864,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Manage room'))
+      pickRoomMenuEntry('Manage room')
       expect(screen.getByText('Manage membership')).toBeInTheDocument()
     })
   })
@@ -862,7 +889,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Invite member'))
+      pickRoomMenuEntry('Invite member')
 
       expect(screen.getByTestId('invite-modal')).toBeInTheDocument()
     })
@@ -886,7 +913,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      expect(screen.getByLabelText('Invite member')).toBeInTheDocument()
+      expect(openRoomMenu().getByText('Invite member')).toBeInTheDocument()
     })
   })
 
@@ -910,7 +937,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Manage room'))
+      pickRoomMenuEntry('Manage room')
       fireEvent.click(screen.getByText('Change avatar'))
 
       expect(screen.getByTestId('avatar-crop-modal')).toBeInTheDocument()
@@ -938,7 +965,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Manage room'))
+      pickRoomMenuEntry('Manage room')
       fireEvent.click(screen.getByText('Remove avatar'))
 
       await waitFor(() => {
@@ -968,7 +995,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Manage room'))
+      pickRoomMenuEntry('Manage room')
       expect(screen.getByText('Manage Hats')).toBeInTheDocument()
     })
 
@@ -991,7 +1018,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Manage room'))
+      pickRoomMenuEntry('Manage room')
       expect(screen.queryByText('Manage Hats')).not.toBeInTheDocument()
     })
 
@@ -1015,7 +1042,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Manage room'))
+      pickRoomMenuEntry('Manage room')
       fireEvent.click(screen.getByText('Manage Hats'))
 
       expect(screen.getByTestId('hats-modal')).toBeInTheDocument()
@@ -1041,7 +1068,7 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Manage room'))
+      pickRoomMenuEntry('Manage room')
       expect(screen.getByText('Room settings')).toBeInTheDocument()
 
       fireEvent.click(screen.getByText('Manage Hats'))
@@ -1075,25 +1102,22 @@ describe('RoomHeader', () => {
     }
     beforeEach(() => { savedStore.getState().reset() })
 
-    it('shows no Saved button where nothing is saved', () => {
+    it('lists no Saved entry where nothing is saved', () => {
       renderHeader()
-      expect(screen.queryByTestId('header-saved')).toBeNull()
+      expect(openRoomMenu().queryByText(/saved\.title/)).toBeNull()
     })
 
-    it('shows the count where something is saved here, and opens the Saved tab', () => {
+    it('lists the count in the ⋮ menu where something is saved here, and opens the Saved tab', () => {
       saveHere('room@conference.example.com')
       const onShowSaved = renderHeader()
-      const button = screen.getByTestId('header-saved')
-      expect(button).toHaveTextContent('1')
-      expect(button).toHaveAccessibleName('saved.headerButton')
-      fireEvent.click(button)
+      fireEvent.click(openRoomMenu().getByText('saved.title (1)'))
       expect(onShowSaved).toHaveBeenCalledTimes(1)
     })
 
     it('ignores messages saved from another conversation', () => {
       saveHere('other@conference.example.com')
       renderHeader()
-      expect(screen.queryByTestId('header-saved')).toBeNull()
+      expect(openRoomMenu().queryByText(/saved\.title/)).toBeNull()
     })
   })
 })

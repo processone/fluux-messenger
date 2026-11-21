@@ -564,13 +564,26 @@ test.describe('desktop floating caption bounds', () => {
       await expect(page.locator('html')).toHaveCSS('font-size', '24px')
       const trigger = page.getByRole('button', { name: 'Room actions', exact: true })
       const menu = page.getByRole('menu')
-      await trigger.click()
+      // Room management is the tallest list an owner can open from the room menu.
+      const openManage = async () => {
+        await trigger.click()
+        await menu.getByRole('menuitem', { name: 'Manage room', exact: true }).click()
+      }
+      // Escape steps out of the submenu first, then closes the menu.
+      const closeMenu = async () => {
+        await page.keyboard.press('Escape')
+        await page.keyboard.press('Escape')
+        await expect(menu).toBeHidden()
+      }
+      await openManage()
       await expect(menu).toBeVisible()
       const nativeBox = (await menu.boundingBox())!
-      expect(nativeBox.y).toBe(8)
-      await page.keyboard.press('Escape')
+      // With native window chrome the menu may use the whole window, inside its 8px margin.
+      expect(nativeBox.y).toBeGreaterThanOrEqual(8)
+      expect(nativeBox.y + nativeBox.height).toBeLessThanOrEqual(592)
+      await closeMenu()
       await page.evaluate(() => { document.documentElement.dataset.windowChrome = 'custom' })
-      await trigger.click()
+      await openManage()
       await expect(menu).toHaveCSS('max-height', '524px')
       const box = (await menu.boundingBox())!
       expect(box.y).toBeGreaterThanOrEqual(68)
@@ -586,9 +599,9 @@ test.describe('desktop floating caption bounds', () => {
       const lastBox = (await menu.getByRole('menuitem').last().boundingBox())!
       expect(lastBox.y).toBeGreaterThanOrEqual(68)
       expect(lastBox.y + lastBox.height).toBeLessThanOrEqual(593)
-      await page.keyboard.press('Escape')
+      await closeMenu()
       await page.evaluate(() => { delete document.documentElement.dataset.windowChrome })
-      await trigger.click()
+      await openManage()
       const restoredBox = (await menu.boundingBox())!
       expect(restoredBox.y).toBe(nativeBox.y)
       expect(restoredBox.height).toBe(nativeBox.height)

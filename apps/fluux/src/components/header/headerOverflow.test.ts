@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { OVERFLOW_TIER, KEBAB_TRIGGER_CLASS, inlineClass, kebabClass } from './headerOverflow'
+import { OVERFLOW_TIER, inlineClass, kebabClass } from './headerOverflow'
 
 describe('headerOverflow tiers', () => {
   it('pinned actions are always inline and never in the kebab', () => {
@@ -12,18 +12,8 @@ describe('headerOverflow tiers', () => {
     expect(kebabClass('search')).toBe('block @[440px]:hidden')
   })
 
-  it('wide-tier actions reveal inline only on a wide container', () => {
-    expect(inlineClass('wide')).toBe('hidden @[600px]:flex')
-    expect(kebabClass('wide')).toBe('block @[600px]:hidden')
-  })
-
   it('kebab rows use block (not flex) for their visible state so stacked submenu sections lay out vertically', () => {
     expect(kebabClass('search').startsWith('block ')).toBe(true)
-    expect(kebabClass('wide').startsWith('block ')).toBe(true)
-  })
-
-  it('the kebab trigger is hidden once the widest tier is inline', () => {
-    expect(KEBAB_TRIGGER_CLASS).toContain('@[600px]:hidden')
   })
 
   it('uses the @[…] arbitrary container syntax, not the unsupported @min-[…] form', () => {
@@ -33,11 +23,10 @@ describe('headerOverflow tiers', () => {
       expect(tier.inline).not.toContain('@min-[')
       expect(tier.kebab).not.toContain('@min-[')
     }
-    expect(KEBAB_TRIGGER_CLASS).not.toContain('@min-[')
   })
 
   it('OVERFLOW_TIER strings are literal so Tailwind JIT can see them', () => {
     // Guards against anyone refactoring to dynamic concatenation.
-    expect(OVERFLOW_TIER.wide.inline).toBe('hidden @[600px]:flex')
+    expect(OVERFLOW_TIER.search.inline).toBe('hidden @[440px]:flex')
   })
 })

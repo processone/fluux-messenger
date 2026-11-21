@@ -30,14 +30,40 @@ describe('HeaderOverflowKebab', () => {
     expect(container.firstChild).toBeNull()
   })
 
-  it('hover: opens an anchored dropdown with flat actions and a submenu section', () => {
+  it('hover: opens an anchored dropdown with actions and a submenu row that opens its items', () => {
     render(<HeaderOverflowKebab ariaLabel="More" entries={makeEntries()} />)
     fireEvent.click(screen.getByLabelText('More'))
     expect(screen.getByText('Search')).toBeInTheDocument()
     expect(screen.getByText('Invite')).toBeInTheDocument()
-    // submenu group title acts as a section header in the dropdown
-    expect(screen.getByText('Notifications')).toBeInTheDocument()
+    // A submenu is one row; its items stay hidden until it is opened.
+    expect(screen.queryByText('Mentions only')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Notifications'))
     expect(screen.getByText('Mentions only')).toBeInTheDocument()
+    expect(screen.queryByText('Invite')).not.toBeInTheDocument()
+  })
+
+  it('hover: Escape in a submenu returns to the root list with focus on its row, then closes', () => {
+    render(<HeaderOverflowKebab ariaLabel="More" entries={makeEntries()} />)
+    fireEvent.click(screen.getByLabelText('More'))
+    fireEvent.click(screen.getByText('Notifications'))
+    const back = screen.getByLabelText('Back')
+    expect(back).toHaveFocus()
+    fireEvent.keyDown(back, { key: 'Escape' })
+    const row = screen.getByText('Notifications').closest('button')!
+    expect(row).toHaveFocus()
+    expect(screen.getByText('Invite')).toBeInTheDocument()
+    fireEvent.keyDown(row, { key: 'Escape' })
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('hover: the back row returns to the root list without firing actions', () => {
+    const onSearch = vi.fn()
+    render(<HeaderOverflowKebab ariaLabel="More" entries={makeEntries(onSearch)} />)
+    fireEvent.click(screen.getByLabelText('More'))
+    fireEvent.click(screen.getByText('Notifications'))
+    fireEvent.click(screen.getByLabelText('Back'))
+    expect(screen.getByText('Search')).toBeInTheDocument()
+    expect(onSearch).not.toHaveBeenCalled()
   })
 
   it('hover: selecting an action fires onSelect and closes', () => {

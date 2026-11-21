@@ -11,6 +11,12 @@ import { ROOM_JID as ROOM } from '../apps/fluux/src/demo/constants'
 // fixture; the private-node transport has its own unit tests and live two-client check.
 const PEER = 'emma@fluux.chat'
 
+/** Opens a conversation header's ⋮ menu and returns its Saved entry, which carries the count. */
+async function savedEntry(page: Page, menuName: 'Room actions' | 'More actions') {
+  await page.getByRole('button', { name: menuName, exact: true }).click()
+  return page.getByRole('menu').getByRole('menuitem', { name: /^Saved messages \(/ })
+}
+
 async function openMore(page: Page, id: string) {
   const row = page.locator(`[data-message-id="${id}"][data-message-body]`)
   await row.scrollIntoViewIfNeeded()
@@ -33,9 +39,10 @@ test('save a room message and a chat message, open them from Saved, remove them'
     return scope.__roomStore.getState().messages.get(roomJid)!.find(row => row.id === roomId)!.body
   }, { roomJid: ROOM, roomId })
 
-  // Nothing is saved yet: the room header is up (it has Search) but shows no Saved button.
+  // Nothing is saved yet: the room header is up (it has Search) but its ⋮ menu lists no Saved entry.
   await expect(page.getByRole('button', { name: 'Search in conversation' })).toBeVisible()
-  await expect(page.getByTestId('header-saved')).toHaveCount(0)
+  await expect(await savedEntry(page, 'Room actions')).toHaveCount(0)
+  await page.keyboard.press('Escape')
 
   // Save the room message.
   let row = await openMore(page, roomId)
@@ -51,15 +58,18 @@ test('save a room message and a chat message, open them from Saved, remove them'
     }, isLiveArrival: true })
     location.hash = `#/messages/${encodeURIComponent(peer)}`
   }, PEER)
-  row = await openMore(page, 'saved-chat-1')
-  // This chat has nothing saved yet, while the room does: no button here.
+  // This chat has nothing saved yet, while the room does: no Saved entry here. Checked before
+  // opening the message's actions, since opening the header menu closes them.
   await expect(page.getByRole('button', { name: 'Search in conversation' })).toBeVisible()
-  await expect(page.getByTestId('header-saved')).toHaveCount(0)
+  await expect(await savedEntry(page, 'More actions')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  row = await openMore(page, 'saved-chat-1')
   await row.getByRole('button', { name: 'Save message', exact: true }).click()
 
-  // The chat header shows only this conversation's count; it opens the Saved tab narrowed to it.
-  await expect(page.getByTestId('header-saved')).toHaveText('1')
-  await page.getByTestId('header-saved').click()
+  // The chat header's ⋮ menu shows only this conversation's count; it opens the Saved tab narrowed to it.
+  const entry = await savedEntry(page, 'More actions')
+  await expect(entry).toHaveText('Saved messages (1)')
+  await entry.click()
   await expect(page).toHaveURL(/\/saved/)
   await expect(page.getByTestId('saved-row')).toHaveCount(1)
   await expect(page.getByTestId('saved-row')).toContainText('The door code is on the board')
@@ -71,7 +81,7 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await expect(page.getByTestId('saved-row')).toHaveCount(2)
 
   // Choosing a row of the narrowed list opens the message highlighted in this conversation.
-  await page.getByTestId('header-saved').click()
+  await (await savedEntry(page, 'More actions')).click()
   await expect(page.getByTestId('saved-row')).toHaveCount(1)
   await page.getByTestId('saved-row').click()
   await expect(page.locator('[data-message-id="saved-chat-1"].message-highlight')).toBeInViewport()
@@ -88,7 +98,8 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await rows.nth(1).click()
   await expect(page).toHaveURL(new RegExp(`/rooms/${encodeURIComponent(ROOM)}$`))
   await expect(page.locator(`[data-message-id="${roomId}"].message-highlight`)).toBeInViewport()
-  await expect(page.getByTestId('header-saved')).toHaveText('1')
+  await expect(await savedEntry(page, 'Room actions')).toHaveText('Saved messages (1)')
+  await page.keyboard.press('Escape')
 
   // Open the chat entry.
   await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()
@@ -169,7 +180,7 @@ test('on a phone the header button shows the narrowed list and Back from a row r
 
   // On a phone the header collapses the button into the More actions menu; it opens the narrowed list instead of leaving the chat on screen.
   await page.getByRole('button', { name: 'More actions' }).click()
-  await page.getByRole('menuitem', { name: /Saved in this conversation \(1\)/ }).click()
+  await page.getByRole('menuitem', { name: 'Saved messages (1)', exact: true }).click()
   await expect(page).toHaveURL(/\/saved/)
   await expect(page.getByTestId('saved-scope')).toBeVisible()
   await expect(page.getByTestId('saved-row')).toHaveCount(1)
@@ -200,7 +211,7 @@ test('removing the last saved message of the narrowed conversation shows the ful
       savedAt: Date.now() - 1000, stanzaId: 'archive-elsewhere', stanzaIdBy: 'room@conference.example',
     })
   }, PEER)
-  await page.getByTestId('header-saved').click()
+  await (await savedEntry(page, 'More actions')).click()
   await expect(page.getByTestId('saved-scope')).toBeVisible()
   await expect(page.getByTestId('saved-row')).toHaveCount(1)
   await page.getByTestId('saved-row').getByRole('button', { name: 'Remove from saved' }).click()
