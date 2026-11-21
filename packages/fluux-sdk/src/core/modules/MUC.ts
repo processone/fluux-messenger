@@ -540,6 +540,22 @@ export class MUC extends BaseModule {
         return
       }
 
+      // Our own status change (or any later self-presence) in a room we are already in:
+      // the server echoes it in every joined room. It is not a join, so skip the join
+      // completion (room:joined toggle, avatar restore, MAM preview, bookmark and
+      // capability checks) and only refresh our occupant.
+      if (!this.pendingJoins.has(roomJid)) {
+        const joinedRoom = this.deps.stores?.room.getRoom(roomJid)
+        if (joinedRoom?.joined && !joinedRoom.isJoining) {
+          this.deps.emitSDK('room:self-occupant', { roomJid, occupant })
+          this.deps.emitSDK('room:occupant-joined', { roomJid, occupant })
+          if (avatarHash) {
+            this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid, occupantId, invalidationJid)
+          }
+          return
+        }
+      }
+
       // The password this join actually got in with — read before clearPendingJoin
       // drops the pending entry. Only recorded on success, so a wrong password is
       // never persisted (and never re-sent on the next join).

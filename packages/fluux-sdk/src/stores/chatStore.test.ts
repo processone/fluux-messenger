@@ -1378,6 +1378,27 @@ describe('chatStore', () => {
       expect(chatStore.getState().messages.get(A)?.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
       expect(chatStore.getState().windowAtLiveEdge.get(A)).toBe(false)
     })
+
+    // Opening a conversation at its read pointer used to read every newer cached row,
+    // though the resident window cannot hold more than its bound.
+    it('bounds the newer rows it reads to one resident window and leaves the live edge when it hits the bound', async () => {
+      const A = 'alice@example.com'
+      chatStore.getState().addConversation(createConversation(A))
+      chatStore.setState({ activeConversationId: A, messages: new Map([[A, [msgAt(A, 'newer-9', 9)]]]) })
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue([
+        msgAt(A, 'anchor', 4), msgAt(A, 'newer-5', 5), msgAt(A, 'newer-6', 6), msgAt(A, 'newer-7', 7),
+      ])
+      setResidentWindowSize(3)
+      try {
+        await chatStore.getState().loadMessagesAroundFromCache(A, { id: 'anchor' })
+      } finally {
+        setResidentWindowSize(5000)
+      }
+
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(A, { id: 'anchor' }, { after: 3 })
+      expect(chatStore.getState().messages.get(A)?.map((m) => m.id)).toEqual(['anchor', 'newer-5', 'newer-6'])
+      expect(chatStore.getState().windowAtLiveEdge.get(A)).toBe(false)
+    })
   })
 
   describe('addMessage', () => {

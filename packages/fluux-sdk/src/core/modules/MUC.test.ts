@@ -1429,6 +1429,55 @@ describe('MUC Module', () => {
       })
     })
 
+    // Intent: the server echoes our own status change as a self-presence in every joined
+    // room; that must not rerun the join completion (avatar restore, MAM preview, room:joined).
+    it('treats a self-presence in an already joined room as an occupant refresh, not a join', async () => {
+      const roomJid = 'room@conference.example.org'
+      const selfPresence = (show?: string) => createMockElement('presence', { from: `${roomJid}/mynick` }, [
+        ...(show ? [{ name: 'show', attrs: {}, text: show }] : []),
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'item', attrs: { affiliation: 'member', role: 'participant' } },
+            { name: 'status', attrs: { code: '110' } },
+          ],
+        },
+      ])
+      const calls = (mock: ReturnType<typeof vi.fn>, name: string) => mock.mock.calls.filter(call => call[0] === name).length
+
+      await muc.joinRoom(roomJid, 'mynick')
+      muc.handle(selfPresence())
+      expect(calls(mockEmit, 'mucJoined')).toBe(1)
+
+      // The store now holds the room as joined, as the room:joined binding leaves it.
+      mockStores.room.getRoom.mockReturnValue(createMockRoom(roomJid, { joined: true, isJoining: false }))
+      mockEmit.mockClear()
+      mockEmitSDK.mockClear()
+      muc.handle(selfPresence('away'))
+
+      expect(calls(mockEmit, 'mucJoined')).toBe(0)
+      expect(calls(mockEmitSDK, 'room:joined')).toBe(0)
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:self-occupant', expect.objectContaining({ roomJid, occupant: expect.objectContaining({ show: 'away' }) }))
+      expect(calls(mockEmitSDK, 'room:occupant-joined')).toBe(1)
+    })
+
+    it('still completes the join when a room is rejoined after its joined flag is lifted', async () => {
+      const roomJid = 'room@conference.example.org'
+      mockStores.room.getRoom.mockReturnValue(createMockRoom(roomJid, { joined: false, isJoining: true }))
+      await muc.joinRoom(roomJid, 'mynick')
+      mockEmit.mockClear()
+      muc.handle(createMockElement('presence', { from: `${roomJid}/mynick` }, [{
+        name: 'x',
+        attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+        children: [
+          { name: 'item', attrs: { affiliation: 'member', role: 'participant' } },
+          { name: 'status', attrs: { code: '110' } },
+        ],
+      }]))
+      expect(mockEmit).toHaveBeenCalledWith('mucJoined', roomJid, 'mynick')
+    })
+
     it('clears isJoining on room error', async () => {
       // First join the room
       await muc.joinRoom('room@conference.example.org', 'mynick')

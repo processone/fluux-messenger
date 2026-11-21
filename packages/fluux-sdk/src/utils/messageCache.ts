@@ -3641,15 +3641,37 @@ export async function getOldestRoomMessageTimestamp(
 }
 
 /**
+ * Read a store a page at a time, in primary-key order, each page in its own
+ * short readonly transaction. A page is fully read before `onPage` runs, so the
+ * callback may await writes to a different database (the search index) without
+ * the cursor's transaction auto-committing under it (TransactionInactiveError),
+ * and only one page of rows is held in memory instead of the whole store.
+ * Rows written while paging are either seen or not; the callers (search
+ * backfill, rebuild) tolerate that, since live ingestion indexes new rows itself.
+ */
+async function readInPages<Raw>(
+  storeName: typeof MESSAGES_STORE | typeof ROOM_MESSAGES_STORE,
+  pageSize: number,
+  onPage: (rows: Raw[]) => Promise<void>,
+): Promise<void> {
+  const db = await getDB(getStorageScopeJid())
+  let after: IDBValidKey | undefined
+  for (;;) {
+    const range = after === undefined ? undefined : IDBKeyRange.lowerBound(after, true)
+    const tx = db.transaction(storeName, 'readonly')
+    const rows = (await tx.store.getAll(range, pageSize)) as Raw[]
+    await tx.done
+    if (rows.length === 0) return
+    await onPage(rows)
+    if (rows.length < pageSize) return
+    after = (rows[rows.length - 1] as { cacheKey: IDBValidKey }).cacheKey
+  }
+}
+
+/**
  * Iterate all stored chat messages in batches.
- * Used for search index backfill. Reads all messages from the store first,
- * then processes them in batches via the callback.
- *
- * Reading is done upfront (via getAll) so the IDB readonly transaction
- * completes before `onBatch` runs. This avoids TransactionInactiveError
- * when the callback performs async writes to a different database (e.g.
- * the search index), which would otherwise cause the cursor's transaction
- * to auto-commit while the event loop is idle.
+ * Used for search index backfill. Reads one page of `batchSize` rows at a time
+ * (see {@link readInPages}), so memory is bounded by the batch rather than the archive.
  *
  * @param batchSize - Number of messages per batch (default: 500)
  * @param onBatch - Callback invoked with each batch of deserialized messages
@@ -3658,19 +3680,13 @@ export async function iterateAllMessages(
   batchSize: number,
   onBatch: (messages: Message[]) => Promise<void>
 ): Promise<void> {
-  const db = await getDB(getStorageScopeJid())
-  const allRaw = await db.getAll(MESSAGES_STORE)
-
-  for (let i = 0; i < allRaw.length; i += batchSize) {
-    const batch = allRaw.slice(i, i + batchSize).map(deserializeMessage)
-    await onBatch(batch)
-  }
+  await readInPages<Parameters<typeof deserializeMessage>[0]>(MESSAGES_STORE, batchSize,
+    rows => onBatch(rows.map(deserializeMessage)))
 }
 
 /**
  * Iterate all stored room messages in batches.
- * Used for search index backfill. Same upfront-read strategy as
- * `iterateAllMessages` to avoid IDB transaction lifetime issues.
+ * Used for search index backfill. Same paged-read strategy as `iterateAllMessages`.
  *
  * @param batchSize - Number of messages per batch (default: 500)
  * @param onBatch - Callback invoked with each batch of deserialized messages
@@ -3679,13 +3695,8 @@ export async function iterateAllRoomMessages(
   batchSize: number,
   onBatch: (messages: RoomMessage[]) => Promise<void>
 ): Promise<void> {
-  const db = await getDB(getStorageScopeJid())
-  const allRaw = await db.getAll(ROOM_MESSAGES_STORE)
-
-  for (let i = 0; i < allRaw.length; i += batchSize) {
-    const batch = allRaw.slice(i, i + batchSize).map(deserializeRoomMessage)
-    await onBatch(batch)
-  }
+  await readInPages<Parameters<typeof deserializeRoomMessage>[0]>(ROOM_MESSAGES_STORE, batchSize,
+    rows => onBatch(rows.map(deserializeRoomMessage)))
 }
 
 /**
