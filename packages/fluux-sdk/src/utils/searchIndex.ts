@@ -1101,10 +1101,22 @@ export async function search(
     ids = ids.filter((id) => id.startsWith(prefix))
   }
   if (options?.conversationId) {
-    const inConversation = new Set<string>(
-      await docsStore.index('conversationId').getAllKeys(options.conversationId)
-    )
-    ids = ids.filter((id) => inConversation.has(id))
+    // Probe only the candidate ids: one key-only cursor over the conversation's
+    // index entries, jumping to each candidate in primary-key order, never
+    // collecting the whole conversation.
+    const kept: string[] = []
+    let cursor = await docsStore.index('conversationId')
+      .openKeyCursor(IDBKeyRange.only(options.conversationId))
+    for (const id of [...ids].sort()) {
+      if (!cursor) break
+      // The cursor may only move forward; a candidate it already passed is absent.
+      if (id > cursor.primaryKey) {
+        cursor = await cursor.continuePrimaryKey(options.conversationId, id)
+      }
+      if (cursor && cursor.primaryKey === id) kept.push(id)
+    }
+    const keptSet = new Set(kept)
+    ids = ids.filter((id) => keptSet.has(id))
   }
 
   // Fetch only the documents that passed the scope filters, applying the exact

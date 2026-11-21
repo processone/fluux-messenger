@@ -396,6 +396,31 @@ describe('searchIndex', () => {
       expect(rooms[0].isRoom).toBe(true)
     })
 
+    it('never fetches a document outside the conversation or type filter', async () => {
+      await seed()
+      const fetched: string[] = []
+      const get = IDBObjectStore.prototype.get
+      const spy = vi.spyOn(IDBObjectStore.prototype, 'get').mockImplementation(function (this: IDBObjectStore, ...args) {
+        if (this.name === 'search-docs') fetched.push(String(args[0]))
+        return get.apply(this, args)
+      })
+      const scopes = [
+        { conversationId: 'alice@example.com' },
+        { isRoom: true },
+        { isRoom: false },
+        { conversationId: 'dev@conference.example.com', isRoom: true },
+      ]
+      for (const scope of scopes) {
+        fetched.length = 0
+        const results = await search('common', { ...scope, limit: 100 })
+        expect(results.length).toBeGreaterThan(0)
+        const allowed = new Set(results.map((r) => r.indexId))
+        expect(fetched.length).toBe(allowed.size)
+        expect(fetched.every((id) => allowed.has(id))).toBe(true)
+      }
+      spy.mockRestore()
+    })
+
     it('judges retractions only for the documents it walks, not every match', async () => {
       await seed()
       const spy = vi.spyOn(messageCache, 'areRetractedInCache')
