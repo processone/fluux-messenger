@@ -8,7 +8,7 @@ import { iosHaptic } from '@/platform/ios/haptics'
 import { useState, useMemo, useRef, useEffect, useContext, memo, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Bookmark, CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX } from 'lucide-react'
-import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
+import { formatMessagePreview, formatXMPPError, forwardedFileName, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { useKeyDecisions } from '@/e2ee/openpgpTrustView'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { Avatar } from '../Avatar'
@@ -570,7 +570,7 @@ export const MessageBubble = memo(function MessageBubble({
   // A message holding a copy forwards its displayed comment and the copied text as one readable quote.
   const forwardAttachment = readable && !message.deliveryError ? message.attachment : undefined
   // A file without a caption is quoted by its name, so the forward still names its sender.
-  const fileName = forwardAttachment ? (forwardAttachment.name || forwardAttachment.url.split(/[?#]/)[0].split('/').filter(Boolean).pop() || '') : ''
+  const fileName = forwardAttachment ? forwardedFileName(forwardAttachment) : ''
   const sourceText = readable ? (copyShown ? forwardableText(shown.body, message.forwarded) : message.body) : ''
   const forwardText = sourceText.trim() ? sourceText : fileName
   const quotable = !!forwardText.trim()
