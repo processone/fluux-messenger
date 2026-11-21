@@ -244,7 +244,7 @@ describe('vCard cache through avatar dispatchers', () => {
         avatar: 'blob:loaded', avatarHash: HASH,
       }])
       const stores = createMockStores()
-      stores.roster.getContact.mockImplementation(jid => roster.getState().contacts.get(jid))
+      stores.roster.getContact.mockImplementation(jid => roster.getState().getContact(jid))
       stores.roster.sortedContacts.mockImplementation(() => [...roster.getState().contacts.values()])
       stores.roster.updateAvatar.mockImplementation((...args) => roster.getState().updateAvatar(...args))
       bindStoresForTesting(client, stores)
@@ -420,6 +420,9 @@ describe('vCard cache through avatar dispatchers', () => {
         for (const result of [...contactFetch.mock.results, ...occupantFetch.mock.results]) await result.value
         await client.profile.refreshAllAvatarBlobUrls()
         await client.profile.restoreAllContactAvatarHashes()
+        // Protocol reads include pending avatar removal; UI snapshots follow at flush.
+        expect(roster.getState().getContact(JID)).toMatchObject({ avatar: undefined, avatarHash: undefined })
+        roster.getState().flushPresence()
         expect(roster.getState().contacts.get(JID)).toMatchObject({ avatar: undefined, avatarHash: undefined })
         expect(await cache.getAvatarHash(JID)).toBeNull()
         expect(contactFetch).not.toHaveBeenCalled()

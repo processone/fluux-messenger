@@ -534,6 +534,19 @@ The SDK uses an event-based store binding pattern:
 
 The SDK can be used without React by accessing stores directly.
 
+Contact presence from SDK events aggregates immediately for `getContact(jid)`
+protocol reads, while `contacts` and React subscribers receive an immutable snapshot
+at most once per 16 ms burst. Resource updates and removals retain wire order.
+Avatar completion for a pending contact joins its batch. Membership, name and
+error mutations flush pending presence first; replacing the roster, resetting it
+or switching accounts cancels pending updates. Direct `updatePresence` and `removePresence`
+actions remain synchronous. `flushPresence()` publishes pending contacts immediately;
+binding cleanup and non-online connection transitions also flush them.
+
+`contactSidebarEntries()` caches name/group ordering across subscriber reads and
+status-only changes within a group. Membership, names and online/offline/error
+transitions invalidate that order; individual rows still receive updated contacts.
+
 For occupant update timing and flush controls, see
 [`createStoreBindings`](src/bindings/storeBindings.ts).
 

@@ -1497,7 +1497,8 @@ export class XMPPClient {
   }
 
   /**
-   * Commit queued occupant updates, then flush debounced snapshot writes to storage.
+   * Commit queued occupant and contact presence updates, then flush debounced
+   * snapshot writes to storage.
    *
    * Call this from `beforeunload`/`pagehide` handlers so the latest store
    * state (roster, rooms, profile) survives page reload. SM counters still
@@ -1506,6 +1507,7 @@ export class XMPPClient {
    */
   async flushStateSnapshot(): Promise<void> {
     this.storeBindings?.flushOccupants()
+    rosterStore.getState().flushPresence()
     if (this.stateSnapshot) {
       await this.stateSnapshot.flush()
     }

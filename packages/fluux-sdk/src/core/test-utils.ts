@@ -31,6 +31,9 @@ type MockifyFunctions<T> = {
 // Type for mock store bindings - all functions are Vitest Mocks
 export type MockStoreBindings = {
   [K in keyof StoreBindings]: MockifyFunctions<StoreBindings[K]>
+} & {
+  // Some integration fixtures also pass this bundle to the concrete event bindings.
+  roster: Pick<MockStoreRefs['roster'], 'queuePresence' | 'queuePresenceRemoval' | 'queueAvatar' | 'flushPresence'>
 }
 
 /**
@@ -745,6 +748,10 @@ export const createMockStores = (): MockStoreBindings => ({
   },
   roster: {
     ...mockMethods(rosterBindingMethodKeys),
+    queuePresence: vi.fn(),
+    queuePresenceRemoval: vi.fn(),
+    queueAvatar: vi.fn(),
+    flushPresence: vi.fn(),
     hasContact: vi.fn().mockReturnValue(true), // Default to true so messages are processed normally
     getContact: vi.fn().mockReturnValue(undefined),
     getOfflineContacts: vi.fn().mockReturnValue([]),
@@ -1154,6 +1161,10 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     removeContact: vi.fn(),
     updatePresence: vi.fn(),
     removePresence: vi.fn(),
+    queuePresence: vi.fn(),
+    queuePresenceRemoval: vi.fn(),
+    queueAvatar: vi.fn(),
+    flushPresence: vi.fn(),
     setPresenceError: vi.fn(),
     updateAvatar: vi.fn(),
     getContact: vi.fn().mockReturnValue(undefined),

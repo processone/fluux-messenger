@@ -4,7 +4,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { xml, type Element } from '@xmpp/client'
 import { MAM } from './MAM'
 import type { ModuleDependencies } from './BaseModule'
-import { createMockStores } from '../test-utils'
+import { createMockStores, createMockStoreRefs } from '../test-utils'
 import { createPresenceReader } from '../presenceReader'
 import type { SDKEventSource } from '../types/eventSource'
 import type { SDKEvents } from '../types/sdk-events'
@@ -79,7 +79,8 @@ function harness(kind: Kind) {
       return () => { listeners.delete(event) }
     },
   }
-  unbind = createStoreBindings(source, () => ({ room: roomStore.getState(), chat: chatStore.getState(),
+  const rosterRefs = createMockStoreRefs().roster
+  unbind = createStoreBindings(source, () => ({ roster: rosterRefs, room: roomStore.getState(), chat: chatStore.getState(),
     ignore: ignoreStore.getState(), console: { addEvent() {} } }) as unknown as StoreRefs)
   const stores = createMockStores()
   stores.room.getRoom.mockImplementation(jid => roomStore.getState().getRoom(jid))
