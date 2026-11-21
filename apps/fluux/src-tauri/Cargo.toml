@@ -232,9 +232,6 @@ opt-level = "s"
 strip = "debuginfo"  # Use debuginfo instead of true to keep symbols needed by Tauri updater
 
 [patch.crates-io]
-# Xcode 27 internalizes SwiftRs.o's C exports. Keep the runtime shim global in
-# the Tauri archive only (Brendonovich/swift-rs#80); remove this pin after release.
-swift-rs = { git = "https://github.com/alchaplinsky/swift-rs", rev = "aaf38d45ab3a4b10a5af3a3dbc64424e998fae8c" }
 # wry 0.57.2 carries two patches (vendor/wry/FLUUX_PATCH.md): #1856 delivers
 # custom-protocol responses on the main queue, avoiding stopped-task races
 # (#1822/#1502); the macOS fluux-startup-recovery feature gates the runtime's
