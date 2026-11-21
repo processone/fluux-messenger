@@ -18,8 +18,10 @@ for (const form of ['join', 'members']) {
       } else {
         await page.getByText('Team Chat', { exact: true }).click()
         await page.getByRole('button', { name: 'Room actions', exact: true }).click()
-        const manage = page.getByRole('button', { name: 'Manage room', exact: true })
-        if (await manage.isVisible()) await manage.click()
+        // A submenu row: a menuitem in the pointer dropdown, a button in the touch menu.
+        await page.getByRole('menuitem', { name: 'Manage room', exact: true })
+          .or(page.getByRole('button', { name: 'Manage room', exact: true }))
+          .click()
         await page.getByText('Manage Membership', { exact: true }).click()
       }
       const panel = page.locator('[data-modal] > .fluux-glass')

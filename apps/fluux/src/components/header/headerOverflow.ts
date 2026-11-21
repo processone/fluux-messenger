@@ -24,10 +24,10 @@ export interface HeaderActionGroup {
 /**
  * Collapse priority for a header action.
  * - `pinned`  — always inline, never collapses (members toggle).
- * - `search`  — collapses second (revealed inline on a medium-width header).
- * - `wide`    — collapses first (revealed inline only on a wide header).
+ * - `search`  — inline from a medium-width header, in the overflow surface below it.
+ * An entry with no tier lives only in the overflow surface.
  */
-export type OverflowTier = 'pinned' | 'search' | 'wide'
+export type OverflowTier = 'pinned' | 'search'
 
 /**
  * Container-query class pairs. The container is the `<header>` (marked
@@ -51,11 +51,7 @@ export type OverflowTier = 'pinned' | 'search' | 'wide'
 export const OVERFLOW_TIER: Record<OverflowTier, { inline: string; kebab: string }> = {
   pinned: { inline: 'flex', kebab: 'hidden' },
   search: { inline: 'hidden @[440px]:flex', kebab: 'block @[440px]:hidden' },
-  wide: { inline: 'hidden @[600px]:flex', kebab: 'block @[600px]:hidden' },
 }
-
-/** Hide the kebab trigger once the widest collapsible tier is shown inline. */
-export const KEBAB_TRIGGER_CLASS = 'flex @[600px]:hidden'
 
 export function inlineClass(tier: OverflowTier): string {
   return OVERFLOW_TIER[tier].inline

@@ -711,25 +711,27 @@ describe('ChatHeader', () => {
     }
     beforeEach(() => { savedStore.getState().reset() })
 
-    it('shows no Saved button where nothing is saved', () => {
+    const openMenu = () => {
+      fireEvent.click(screen.getByLabelText('contacts.actionsMenu'))
+      return within(screen.getByRole('menu'))
+    }
+
+    it('lists no Saved entry where nothing is saved', () => {
       renderHeader()
-      expect(screen.queryByTestId('header-saved')).toBeNull()
+      expect(openMenu().queryByText(/saved\.title/)).toBeNull()
     })
 
-    it('shows the count where something is saved, and opens the Saved tab', () => {
+    it('lists the count in the ⋮ menu where something is saved, and opens the Saved tab', () => {
       saveFrom('alice@example.com')
       const onShowSaved = renderHeader()
-      const button = screen.getByTestId('header-saved')
-      expect(button).toHaveTextContent('1')
-      expect(button).toHaveAccessibleName('saved.headerButton')
-      fireEvent.click(button)
+      fireEvent.click(openMenu().getByText('saved.title (1)'))
       expect(onShowSaved).toHaveBeenCalledTimes(1)
     })
 
     it('ignores messages saved from another conversation', () => {
       saveFrom('bob@example.com')
       renderHeader()
-      expect(screen.queryByTestId('header-saved')).toBeNull()
+      expect(openMenu().queryByText(/saved\.title/)).toBeNull()
     })
   })
 })
