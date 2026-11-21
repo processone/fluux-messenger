@@ -136,5 +136,17 @@ describe('forwarded copy of a readable room message', () => {
       const { container } = card(real.body, true, {}, real.body, photo, undefined)
       expect(container.querySelector('[data-forward-differs] [data-forwarded-attachment] img')).toBeTruthy()
     })
+
+    // A captionless photo is quoted by its file name, while the room's own message has an empty body.
+    it('does not flag an honest forward of a photo without a caption', () => {
+      const { container } = card(photo.name, true, {}, '', photo, photo)
+      expect(container.querySelector('[data-forwarded-copy] > [data-forwarded-attachment] img')).toBeTruthy()
+      expect(container.querySelector('[data-forward-differs]')).toBeNull()
+    })
+
+    it('flags another file that claims the name of a captionless room photo', () => {
+      const { container } = card(photo.name, true, {}, '', other, photo)
+      expect(container.querySelector('[data-forward-differs] [data-forwarded-attachment] img[src*="other.png"]')).toBeTruthy()
+    })
   })
 })

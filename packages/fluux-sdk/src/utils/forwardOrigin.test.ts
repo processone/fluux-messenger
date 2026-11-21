@@ -4,7 +4,10 @@ import { IDBFactory } from 'fake-indexeddb'
 import type { ForwardedCopy, Message, RoomMessage } from '../core/types'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
 import * as messageCache from './messageCache'
-import { findForwardedOrigin, forwardedCopyRoomLink } from './forwardOrigin'
+import { findForwardedOrigin, forwardedCopyMatchesMessage, forwardedCopyRoomLink, forwardedFileName } from './forwardOrigin'
+import { parseMessageContent } from '../core/modules/messagingUtils'
+import { xml } from '@xmpp/client'
+import { NS_FALLBACK, NS_FILE_METADATA, NS_OOB } from '../core/namespaces'
 
 const T = Date.UTC(2026, 10, 18, 18, 52)
 const chat = (conversationId: string, o: Partial<Message> = {}): Message => ({
@@ -195,5 +198,46 @@ describe('findForwardedOrigin', () => {
     const pending = findForwardedOrigin(copy(), 'me@example.org', [])
     setStorageScopeJid('someone-else@example.org')
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  })
+})
+
+// A forward of a captionless room photo is quoted by the file's name, while the reader's own copy has an empty body.
+describe('forwardedCopyMatchesMessage for a file without a caption', () => {
+  const url = 'https://upload.example/abc/holiday%20photo.png'
+  const parsed = (address: string, body: string, ...extra: ReturnType<typeof xml>[]) => {
+    const messageEl = xml('message', { type: 'groupchat' }, ...(body ? [xml('body', {}, body)] : []), xml('x', { xmlns: NS_OOB }, xml('url', {}, address)), ...extra)
+    const { processedBody, attachment } = parseMessageContent({ messageEl, body, messageContext: 'room' })
+    return { body: processedBody, attachment }
+  }
+  const shapes = {
+    'Fluux, with a marked address and the file name': () => parsed(url, url,
+      xml('fallback', { xmlns: NS_FALLBACK, for: NS_OOB }, xml('body', { start: '0', end: String(url.length) })),
+      xml('file', { xmlns: NS_FILE_METADATA }, xml('name', {}, 'holiday photo.png'))),
+    'another client, with the address as the whole body': () => parsed(url, url),
+    'another client, with no body': () => parsed(url, ''),
+    'an address without a file extension': () => parsed('https://upload.example/abc/d41d8cd9', 'https://upload.example/abc/d41d8cd9'),
+  }
+
+  it.each(Object.entries(shapes))('accepts the honest quote of %s', (_name, shape) => {
+    const message = shape()
+    expect(message.body).toBe('')
+    expect(forwardedCopyMatchesMessage(forwardedFileName(message.attachment!), message, message.attachment)).toBe(true)
+  })
+
+  it('refuses other words, even with the same file', () => {
+    const message = shapes['another client, with the address as the whole body']()
+    expect(forwardedCopyMatchesMessage('Send me your password', message, message.attachment)).toBe(false)
+  })
+
+  it('refuses the file name when the forward carries another file or none', () => {
+    const message = shapes['another client, with the address as the whole body']()
+    const name = forwardedFileName(message.attachment!)
+    expect(forwardedCopyMatchesMessage(name, message, { url: 'https://upload.example/other.png' })).toBe(false)
+    expect(forwardedCopyMatchesMessage(name, message, undefined)).toBe(false)
+  })
+
+  it('does not accept the file name for a message that has a caption', () => {
+    const file = { url, name: 'p.png', mediaType: 'image/png' }
+    expect(forwardedCopyMatchesMessage('p.png', { body: 'Our holiday', attachment: file }, file)).toBe(false)
   })
 })

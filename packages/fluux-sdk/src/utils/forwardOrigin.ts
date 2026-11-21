@@ -1,4 +1,4 @@
-import type { BaseMessage } from '../core/types'
+import type { BaseMessage, FileAttachment } from '../core/types'
 import { getBareJid } from '../core/jid'
 import { parseRoomMessageLink, type RoomMessageLink } from './roomMessageLink'
 import { getMessagesByForwardedId, getMessages, getRoomMessages, type ForwardedIdReference } from './messageCache'
@@ -34,9 +34,23 @@ export function forwardedCopyRoomLink(message: Pick<BaseMessage, 'references' | 
   return null
 }
 
-/** Whether a received copy's text is what an honest forward of this body would carry. */
-export function forwardedCopyMatchesBody(copyText: string, body: string): boolean {
-  return copyText.trim() === forwardedCopyTextOf(body).trim()
+/** The text a forward quotes for a file without a caption: its name, or the last part of its address. */
+export function forwardedFileName(file: Pick<FileAttachment, 'name' | 'url'>): string {
+  return file.name || file.url.split(/[?#]/)[0].split('/').filter(Boolean).pop() || ''
+}
+
+/**
+ * Whether a received copy's text is what an honest forward of this message would carry: its body
+ * or, for a file without a caption, the file's name. The name counts only when the forward carries
+ * that same file, so it can never vouch for another file.
+ */
+export function forwardedCopyMatchesMessage(
+  copyText: string,
+  message: Pick<BaseMessage, 'body' | 'attachment'>,
+  forwardedFile?: Pick<FileAttachment, 'url'>,
+): boolean {
+  const ownFile = !message.body.trim() && message.attachment?.url === forwardedFile?.url ? message.attachment : undefined
+  return copyText.trim() === forwardedCopyTextOf(ownFile ? forwardedFileName(ownFile) : message.body).trim()
 }
 
 /** Exact text first; a longer original counts only for a copy that was cut at the limit, judged before trimming. */

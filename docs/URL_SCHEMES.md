@@ -147,7 +147,7 @@ bidirectional-override characters removed; nested forwards and every other
 extension are ignored, and the inner message is never handled as a new arrival,
 correction, receipt or room event. Fluux shows it as a source card naming the
 claimed author, the room or direct chat and the day, and without a second preview of the link.
-The forwarding message's own file is drawn inside the card, and a click on it opens the file, not the original; beside a readable room message, a file that is not that message's own is flagged and shown with the claimed text.
+The forwarding message's own file is drawn inside the card, and a click on it opens the file, not the original; beside a readable room message, a file that is not that message's own is flagged and shown with the claimed text. A file without a caption is quoted by its name, which counts as the room message's text only when the forward carries that message's own file.
 Clicking the card opens the original in context, looked up only on the click: the room message
 link the forward generated (the link that ends the marked quote), then the carried ids, then
 local history by sender, time (two minutes) and text, closest unique match only. A room original

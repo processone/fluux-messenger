@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight, MessageSquare, Users } from 'lucide-react'
-import { buildRoomMessageLink, chatStore, connectionStore, findForwardedOrigin, forwardedCopyMatchesBody, forwardedCopyRoomLink, getBareJid, type BaseMessage, type ForwardedCopy, type RoomMessage } from '@fluux/sdk'
+import { buildRoomMessageLink, chatStore, connectionStore, findForwardedOrigin, forwardedCopyMatchesMessage, forwardedCopyRoomLink, getBareJid, type BaseMessage, type ForwardedCopy, type RoomMessage } from '@fluux/sdk'
 import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
 import { getConsistentTextColor } from '../Avatar'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
@@ -50,7 +50,7 @@ function CopyCardView({ message, formatTime, isDarkMode, onMediaLoad, isOwnMessa
   // A file the forwarder attached to a copy of a readable room message is shown in the quote only when it is the
   // room message's own file; otherwise it is part of the forwarder's claim, shown under the flag.
   const fileDiffers = !!real && !!message.attachment && message.attachment.url !== real.attachment?.url
-  const differs = !!real && (!forwardedCopyMatchesBody(claimed.text, real.body) || fileDiffers)
+  const differs = !!real && (!forwardedCopyMatchesMessage(claimed.text, real, message.attachment) || fileDiffers)
   // The room's message speaks for itself; the copy is only the forwarder's claim.
   // Everything shown comes from the room's message, never from the copy's claimed sender or kind.
   const copy: ForwardedCopy = real ? { author: real.nick, from: real.from, type: 'groupchat', text: real.body, timestamp: real.timestamp.getTime() } : claimed
