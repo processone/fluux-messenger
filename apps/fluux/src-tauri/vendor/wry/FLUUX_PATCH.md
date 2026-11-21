@@ -35,6 +35,11 @@ for a local path dependency. These crate-wide allowances keep the Rust sources
 at 0.57.3 plus the backport; they also suppress future warnings in those categories
 within wry. Fluux's own lint settings are unchanged.
 
+`src/wkwebview/mod.rs` imports `NSObject` only under the cfgs of the two branches
+that use it: the `mac-proxy` feature and `debug_assertions` or `devtools`. A
+release build without those would otherwise warn about an unused import. Keep
+the import's cfg identical to those branches' cfgs when re-applying this change.
+
 ## Manual macOS check
 
 On a macOS build containing this patch, reload while media or custom-protocol
@@ -65,7 +70,7 @@ directory moves to the same release. To move it: unpack the new crates.io
 archive, leave out the files this directory omits (`.cargo/`,
 `.cargo_vcs_info.json`, `.license_template`, `CHANGELOG.md`, `Cargo.lock`,
 `Cargo.toml.orig`, `MOBILE.md`, `SECURITY.md`, `renovate.json`), re-apply both
-modifications and the `Cargo.toml` changes above, update the release base here
+modifications, the `NSObject` import scoping and the `Cargo.toml` changes above, update the release base here
 and the pin, then run the manual macOS check.
 
 ## Removing it
