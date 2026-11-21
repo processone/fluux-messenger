@@ -59,6 +59,8 @@ interface UnifiedContact {
   isExtra?: boolean
   presence?: string
   unavailableNote?: string
+  /** The row stands for the search text itself, so its name already is the address. */
+  isTypedAddress?: boolean
 }
 
 /**
@@ -118,6 +120,13 @@ export function ContactSelector({
   // Build a set of roster JIDs for fast deduplication
   const rosterJids = new Set(contacts.map(c => c.jid))
 
+  // Search text naming someone who cannot be chosen gets its own marked row, so the reason
+  // shows whatever else the search matches and even if the text could not be added as typed.
+  const searchJidNormalized = search.trim().toLowerCase()
+  const typedUnavailableNote = allowTypedJid && searchJidNormalized
+    ? getUnavailableNote?.(searchJidNormalized)
+    : undefined
+
   // Filter and sort contacts, merging extra suggestions
   // - Map roster contacts to unified type
   // - Append extra suggestions not already in roster (dedupe by JID)
@@ -169,6 +178,16 @@ export function ContactSelector({
     extraEntries.sort((a, b) => a.name.localeCompare(b.name))
 
     const entries = [...rosterEntries, ...extraEntries]
+    const typedBareJid = searchJidNormalized.split('/')[0]
+    if (typedUnavailableNote && !entries.some(entry => entry.jid.toLowerCase().split('/')[0] === typedBareJid)) {
+      entries.push({
+        jid: searchJidNormalized,
+        name: searchJidNormalized,
+        isExtra: true,
+        isTypedAddress: true,
+        unavailableNote: typedUnavailableNote,
+      })
+    }
     return [
       ...entries.filter(entry => !entry.unavailableNote),
       ...entries.filter(entry => entry.unavailableNote),
@@ -196,28 +215,19 @@ export function ContactSelector({
 
   // Whether the search text is a JID the user can add outright.
   const searchIsValidJid = isValidJid(search)
-  const searchJidNormalized = search.trim().toLowerCase()
-  const typedUnavailableNote = allowTypedJid && searchIsValidJid
-    ? getUnavailableNote?.(searchJidNormalized)
-    : undefined
   const canAddAsJid = allowTypedJid && searchIsValidJid && !typedUnavailableNote &&
     !selectedContacts.includes(searchJidNormalized) &&
     !excludeJids.includes(searchJidNormalized)
 
   // The popover shows suggestions, an add-this-JID row, or a no-match notice.
   const isPopoverOpen = isFocused && (filteredContacts.length > 0 || !!search)
-  const showTypedUnavailable = filteredContacts.length === 0 && !!typedUnavailableNote
 
   // Focus stays in the input, so a screen reader hears why the highlighted person
   // cannot be chosen only through a status message.
   const highlightedContact = filteredContacts[highlightedIndex]
-  const unavailableAnnouncement = !isPopoverOpen
-    ? ''
-    : highlightedContact?.unavailableNote
-      ? `${highlightedContact.name}: ${highlightedContact.unavailableNote}`
-      : showTypedUnavailable
-        ? `${searchJidNormalized}: ${typedUnavailableNote}`
-        : ''
+  const unavailableAnnouncement = isPopoverOpen && highlightedContact?.unavailableNote
+    ? `${highlightedContact.name}: ${highlightedContact.unavailableNote}`
+    : ''
 
   // Pin the default highlight to the entry shown first, so a later list change keeps it.
   useEffect(() => {
@@ -517,7 +527,9 @@ export function ContactSelector({
                     >
                       <span className={`size-2 rounded-full flex-shrink-0 ${presenceColor}`} />
                       <span className="text-sm truncate flex-1">{contact.name}</span>
-                      <span className="text-xs text-fluux-muted truncate">{contact.jid}</span>
+                      {!contact.isTypedAddress && (
+                        <span className="text-xs text-fluux-muted truncate">{contact.jid}</span>
+                      )}
                       {contact.unavailableNote ? (
                         <span className="flex-shrink-0 rounded border border-fluux-muted/40 px-1.5 py-0.5 text-xs text-fluux-text">
                           {contact.unavailableNote}
@@ -550,19 +562,8 @@ export function ContactSelector({
               </div>
             )}
 
-            {/* A typed address that belongs to someone who cannot be chosen */}
-            {showTypedUnavailable && (
-              <div aria-disabled="true" className="flex items-center gap-2 px-3 py-2 cursor-not-allowed text-fluux-muted">
-                <span className="size-2 rounded-full flex-shrink-0 bg-fluux-muted" />
-                <span className="text-sm truncate flex-1">{searchJidNormalized}</span>
-                <span className="flex-shrink-0 rounded border border-fluux-muted/40 px-1.5 py-0.5 text-xs text-fluux-text">
-                  {typedUnavailableNote}
-                </span>
-              </div>
-            )}
-
             {/* No contacts found hint */}
-            {filteredContacts.length === 0 && !canAddAsJid && !showTypedUnavailable && search && (
+            {filteredContacts.length === 0 && !canAddAsJid && search && (
               <div className="px-3 py-2 text-sm text-fluux-muted">
                 {t('contacts.noContactsFound')}
               </div>

@@ -88,6 +88,7 @@ describe('InviteToRoomModal with people already in the room', () => {
     'alice@example.com',
     'alice@example.com/phone',
     'alice@example.com/tablet',
+    'alice@example.com/desktop@work',
     'ALICE@example.com',
   ])('shows why the typed address %s cannot be added', (address) => {
     openPicker(aliceOnTwoDevices(), address)

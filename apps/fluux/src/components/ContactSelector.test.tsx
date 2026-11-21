@@ -134,6 +134,31 @@ describe('ContactSelector', () => {
       expect(first).toContain(chosen)
     })
 
+    it('keeps the note for a typed address when another contact also matches the search', () => {
+      render(
+        <ContactSelector
+          selectedContacts={[]}
+          onSelectionChange={mockOnSelectionChange}
+          getUnavailableNote={noteFor}
+          extraSuggestions={[{ jid: 'fan@example.org', name: 'alice@example.com fan club' }]}
+        />
+      )
+      const input = screen.getByPlaceholderText('Search contacts...')
+      fireEvent.focus(input)
+      fireEvent.change(input, { target: { value: 'alice@example.com' } })
+
+      const listed = rows()
+      expect(listed).toHaveLength(2)
+      expect(listed[0]).toHaveTextContent('alice@example.com fan club')
+      expect(listed[0]).not.toHaveTextContent(NOTE)
+      expect(listed[1]).toHaveTextContent(NOTE)
+
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      expect(screen.getByRole('status')).toHaveTextContent(`alice@example.com: ${NOTE}`)
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(mockOnSelectionChange).not.toHaveBeenCalled()
+    })
+
     it('shows the note instead of offering a typed address', () => {
       const input = openSelector('alice@example.com/tablet')
 
