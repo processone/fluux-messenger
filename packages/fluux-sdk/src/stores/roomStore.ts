@@ -86,7 +86,7 @@ import { schedule, flush as flushThrottledStorage } from './shared/throttledStor
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
 // getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
-import { getResidentWindowSize } from './shared/residentWindow'
+import { getIdleResidentWindowSize, getResidentWindowSize } from './shared/residentWindow'
 import { lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
 import { sortMessagesByTimestamp } from './shared/messageArrayUtils'
 import { noteSavedCopyChanged } from './savedStore'
@@ -2276,7 +2276,9 @@ export const roomStore = createStore<RoomState>()(
         resident,
         messageToAdd,
         atLiveEdge,
-        roomTimelineConfig(),
+        state.activeRoomJid === roomJid
+          ? roomTimelineConfig()
+          : { ...roomTimelineConfig(), windowSize: getIdleResidentWindowSize() },
         appendObservation
       )
 

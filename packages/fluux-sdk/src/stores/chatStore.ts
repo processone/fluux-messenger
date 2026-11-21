@@ -67,7 +67,7 @@ import { flushKey, flush as flushThrottledStorage } from './shared/throttledStor
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
 // Read via getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
-import { getResidentWindowSize } from './shared/residentWindow'
+import { getIdleResidentWindowSize, getResidentWindowSize } from './shared/residentWindow'
 import { lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
 import { backfillArchiveIds, sortMessagesByTimestamp } from './shared/messageArrayUtils'
 import { archiveMoment, revivesArchivedConversation } from './shared/archiveRevival'
@@ -1910,7 +1910,9 @@ export const chatStore = createStore<ChatState>()(
             convMessages,
             msg,
             atLiveEdge,
-            chatTimelineConfig(),
+            state.activeConversationId === msg.conversationId
+              ? chatTimelineConfig()
+              : { ...chatTimelineConfig(), windowSize: getIdleResidentWindowSize() },
             appendObservation
           )
 

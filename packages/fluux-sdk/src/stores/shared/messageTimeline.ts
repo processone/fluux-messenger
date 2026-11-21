@@ -17,6 +17,7 @@
  */
 
 import { measured } from '../../utils/measure'
+import { compareExact, exactPosition } from './readState'
 import type { ArchiveIdentifiableMessage, TimestampedMessage } from './messageArrayUtils'
 import {
   sortMessagesByTimestamp,
@@ -145,9 +146,20 @@ export function appendLive<T extends TimelineMessage>(
   // under-count, the unrecoverable direction. `sortMessagesByTimestamp` is the
   // SAME comparator `loadOlderSlice`/`loadNewerSlice`/`latestSlice` already use
   // here, so all resident-array construction paths agree with the cache walk.
-  const sorted = sortMessagesByTimestamp([...messages, incoming], config.kind)
+  //
+  // The resident window is kept in that order, so an arrival that sorts at or
+  // after the newest resident row (the common live case) is already in place:
+  // the sort is stable and equal positions keep arrival order. Only an arrival
+  // older than the newest row (a delayed or out-of-order delivery) needs it.
+  const newest = messages[messages.length - 1]
+  const inPlace = newest === undefined ||
+    compareExact(exactPosition(newest, config.kind), exactPosition(incoming, config.kind)) <= 0
+  const sorted = inPlace
+    ? [...messages, incoming]
+    : sortMessagesByTimestamp([...messages, incoming], config.kind)
   const trimmed = trimWindow(sorted, config)
-  const residentIndex = trimmed.indexOf(incoming)
+  // An in-place arrival is the last row when kept, so search from the end.
+  const residentIndex = inPlace ? trimmed.lastIndexOf(incoming) : trimmed.indexOf(incoming)
   if (observation && residentIndex >= 0) {
     observation.placement =
       residentIndex === trimmed.length - 1 ? 'live-edge' : 'interior'

@@ -25,3 +25,17 @@ export function getResidentWindowSize(): number {
 export function setResidentWindowSize(size: number): void {
   residentWindowSize = Math.max(1, Math.floor(size))
 }
+
+/**
+ * The most live arrivals a conversation or room keeps resident while it is NOT the active one.
+ * Only the active view needs a long window; opening a conversation reloads it from the durable
+ * cache. A short tail still lets a repeated live delivery (an echo, a carbon) be recognised as a
+ * duplicate instead of counting twice, and keeps the idle array — and the work per arrival —
+ * from growing to the full window for every busy room that is never opened.
+ */
+const IDLE_RESIDENT_WINDOW_SIZE = 200
+
+/** Resident bound for a conversation or room that is not currently active. */
+export function getIdleResidentWindowSize(): number {
+  return Math.min(IDLE_RESIDENT_WINDOW_SIZE, residentWindowSize)
+}

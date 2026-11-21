@@ -91,6 +91,7 @@ import {
   exactPosition,
   type PointerOrder,
 } from '../stores/shared/readState'
+import { buildMessageIdentityIndex, nextPositionSharingIdentity } from '../stores/shared/messageArrayUtils'
 
 const DB_NAME = 'fluux-message-cache'
 // v3: add a SPARSE index on `encryptedPayload` so deferred decryption can list
@@ -1444,8 +1445,14 @@ export async function reconcileChatHistoryMessages(
     }
   }
   const current = resident()
+  // A resident message can only match a row it shares an identity key with, so look the
+  // candidates up instead of scanning every resident message for every row. The walk keeps
+  // scan order and re-reads the row's keys after each merge, as the scan did.
+  const residentIndex = buildMessageIdentityIndex(current, message => identityKeys(CHAT_SCOPE, message))
   rows = rows.map(row => {
-    for (const message of current) {
+    for (let at = nextPositionSharingIdentity(residentIndex, identityKeys(CHAT_SCOPE, row), -1); at !== -1;
+      at = nextPositionSharingIdentity(residentIndex, identityKeys(CHAT_SCOPE, row), at)) {
+      const message = current[at]
       if (message.conversationId === row.conversationId && chatMessageAuthor(message, { actorJid: row.from }) &&
           sameChatMessage(row, message)) {
         row = reconcileHistoryRow(row, serializeMessage(message))
@@ -1505,9 +1512,15 @@ export async function reconcileRoomHistoryMessages(
     }
   }
   const current = resident()
+  const residentIndex = buildMessageIdentityIndex(current, message => identityKeys(roomScope(message.roomJid), message))
   return rows.map(row => {
     const scope = roomScope(row.roomJid)
-    const matches = current.filter(message => message.roomJid === row.roomJid && roomStanzaIdsMergeable(row, message) && roomMessageAuthor(message, { actorJid: row.from, actorOccupantId: row.occupantId }) &&
+    // Only residents sharing an identity key with the row can match, in scan order.
+    const sharing: RoomMessage[] = []
+    const rowKeys = identityKeys(scope, row)
+    for (let at = nextPositionSharingIdentity(residentIndex, rowKeys, -1); at !== -1;
+      at = nextPositionSharingIdentity(residentIndex, rowKeys, at)) sharing.push(current[at])
+    const matches = sharing.filter(message => message.roomJid === row.roomJid && roomStanzaIdsMergeable(row, message) && roomMessageAuthor(message, { actorJid: row.from, actorOccupantId: row.occupantId }) &&
       sameLogicalMessage(scope, row, message) && !archiveIdentityConflict(backfillRoomStanzaId(row, serializeRoomMessage(message)), backfillRoomStanzaId(serializeRoomMessage(message), row)))
     for (const message of selectRoomMergeTargets(scope, row, matches)) {
       row = reconcile(row, serializeRoomMessage(message))

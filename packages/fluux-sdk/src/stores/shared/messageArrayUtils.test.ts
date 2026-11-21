@@ -10,6 +10,7 @@ import {
   prependOlderMessages,
   backfillArchiveIds,
 } from './messageArrayUtils'
+import { compareExact, exactPosition } from './readState'
 
 // Test message type
 interface TestMessage {
@@ -183,6 +184,28 @@ describe('messageArrayUtils', () => {
       expect(sorted[0].id).toBe('msg-1')
       expect(sorted[1].id).toBe('msg-2')
       expect(sorted[2].id).toBe('msg-3')
+    })
+
+    it.each(['chat', 'room'] as const)('orders shuffled %s rows exactly as the shared comparator does', (kind) => {
+      let seed = 0x1d
+      const random = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296
+      const pick = <T,>(values: readonly T[]) => values[Math.floor(random() * values.length)]
+      const roomJid = 'room@conference.example.com'
+      const rows = Array.from({ length: 300 }, (_, i) => ({
+        type: 'groupchat' as const,
+        id: pick(['a', 'b', 'c', `id${i % 7}`]),
+        roomJid,
+        from: `${roomJid}/${pick(['alice', 'bob'])}`,
+        body: '',
+        timestamp: new Date(1_000 + Math.floor(random() * 10)),
+        ...(random() < 0.5 ? { occupantId: pick(['o1', 'o2']) } : {}),
+        ...(random() < 0.6 ? { stanzaId: `archive-${Math.floor(random() * 5)}` } : {}),
+      }))
+      const expected = [...rows].sort((a, b) => compareExact(exactPosition(a, kind), exactPosition(b, kind)))
+
+      const sorted = sortMessagesByTimestamp(rows, kind)
+
+      sorted.forEach((row, index) => expect(row).toBe(expected[index]))
     })
 
     it('should not mutate original array', () => {
