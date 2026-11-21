@@ -154,7 +154,7 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
   }, [handlers])
 
   // Track previous state for change detection
-  const prevConversationsRef = useRef<Conversation[]>([])
+  const prevConversationsRef = useRef<Map<string, Conversation>>(new Map())
   const prevRoomsRef = useRef<Map<string, PrevRoomState>>(new Map())
 
   const prevRoomArrivalsRef = useRef<Map<string, RoomMessage>>(new Map())
@@ -206,12 +206,14 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
 
     const unsubscribeChat = chatStore.subscribe(state => {
       const conversations = Array.from(state.conversations.values())
+      // Keyed by id so each conversation finds its previous state in O(1)
+      // instead of scanning the whole previous list.
       const previous = prevConversationsRef.current
-      prevConversationsRef.current = conversations
+      prevConversationsRef.current = new Map(conversations.map(conv => [conv.id, conv]))
       const arrivals = state.lastArrivedMessage ?? new Map<string, Message>()
       const { onConversationMessage, onConversationRead } = handlersRef.current
       for (const conv of conversations) {
-        const prev = previous.find(candidate => candidate.id === conv.id)
+        const prev = previous.get(conv.id)
         if (conv.unreadCount === 0) pendingChats.delete(conv.id)
         if (prev && prev.unreadCount > 0 && conv.unreadCount === 0) onConversationRead?.(conv.id)
         if (onConversationMessage) {
@@ -306,7 +308,7 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
       pendingRooms.clear()
       prevArrivedMessageIdsRef.current.clear()
       prevRoomArrivalsRef.current = roomStore.getState().lastArrivedMessage
-      prevConversationsRef.current = []
+      prevConversationsRef.current = new Map()
       prevRoomsRef.current.clear()
     })
     return () => {
