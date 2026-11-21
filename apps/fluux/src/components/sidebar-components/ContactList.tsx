@@ -25,6 +25,12 @@ interface ContactListProps {
   activeContactJid?: string | null
 }
 
+type ListRow =
+  | { kind: 'requests'; key: string }
+  | { kind: 'header'; key: string; title: string }
+  | { kind: 'empty'; key: string; hasContacts: boolean }
+  | { kind: 'contact'; key: string; jid: string; group: 'online' | 'offline' | 'errored'; lastInGroup: boolean }
+
 export function ContactList({ onStartChat, onSelectContact, onManageUser, activeContactJid }: ContactListProps) {
   detectRenderLoop('ContactList')
   const { t } = useTranslation()
@@ -115,11 +121,6 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
 
   // Headers and requests share the contact scroll surface, so they participate
   // in the same measured window rather than shifting its offsets externally.
-  type ListRow =
-    | { kind: 'requests'; key: string }
-    | { kind: 'header'; key: string; title: string }
-    | { kind: 'empty'; key: string; hasContacts: boolean }
-    | { kind: 'contact'; key: string; jid: string; lastInGroup: boolean }
   const hasRequests = subscriptionRequests.length > 0
   const rows = useMemo(() => {
     const rows: ListRow[] = []
@@ -131,34 +132,13 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
     ] as const) {
       if (jids.length === 0) continue
       rows.push({ kind: 'header', key: `header:${group}`, title: `${title} — ${jids.length}` })
-      jids.forEach((jid, index) => rows.push({ kind: 'contact', key: jid, jid, lastInGroup: index === jids.length - 1 }))
+      jids.forEach((jid, index) => rows.push({ kind: 'contact', key: jid, jid, group, lastInGroup: index === jids.length - 1 }))
     }
     if (flatJids.length === 0) rows.push({ kind: 'empty', key: 'empty', hasContacts: entries.length > 0 })
     return rows
   }, [hasRequests, online, offline, errored, flatJids.length, entries.length, t])
   const rowIndexByJid = useMemo(() => new Map(rows.flatMap((row, index) => row.kind === 'contact' ? [[row.jid, index] as const] : [])), [rows])
-  const getRowKey = useMemo(() => (index: number) => rows[index].key, [rows])
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => listRef.current,
-    getItemKey: getRowKey,
-    estimateSize: (index) => rows[index].kind === 'header' ? 20 : 60,
-    overscan: 6,
-  })
-  // The shared navigation hook targets mounted nodes synchronously. A keyboard
-  // move outside the window has no node yet, so reveal it after selection commits.
-  // Track identity rather than position to avoid jumping on a presence reorder.
-  const lastKeyboardJid = useRef<string | null>(null)
-  useLayoutEffect(() => {
-    if (!isKeyboardNav) {
-      lastKeyboardJid.current = null
-      return
-    }
-    if (selectedJid === lastKeyboardJid.current) return
-    lastKeyboardJid.current = selectedJid
-    const index = selectedJid ? rowIndexByJid.get(selectedJid) : undefined
-    if (index !== undefined) virtualizer.scrollToIndex(index, { align: 'auto' })
-  }, [selectedJid, isKeyboardNav, rowIndexByJid, virtualizer])
+  const selectedRowIndex = selectedJid ? rowIndexByJid.get(selectedJid) : undefined
 
   const renderRow = (row: ListRow) => {
     if (row.kind === 'requests') return (
@@ -181,7 +161,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
     if (row.kind === 'header') return <h3 className="px-2 pb-1 text-xs font-semibold text-fluux-muted uppercase">{row.title}</h3>
     const itemProps = getItemProps(jidToIndex.get(row.jid) ?? -1)
     return (
-      <div style={{ paddingBottom: row.lastInGroup ? 16 : 2 }}>
+      <div data-contact-group={row.group} style={{ paddingBottom: row.lastInGroup ? 16 : 2 }}>
         <ContactItem
           jid={row.jid}
           isActive={row.jid === activeJid}
@@ -223,18 +203,14 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
 
       {/* Contact list */}
       <div ref={listRef} className="sidebar-scroll flex-1 min-h-0 overflow-y-auto px-2 pb-2" {...getContainerProps()}>
-        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-          {virtualizer.getVirtualItems().map((item) => (
-            <div
-              key={item.key}
-              ref={virtualizer.measureElement}
-              data-index={item.index}
-              style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${item.start}px)` }}
-            >
-              {renderRow(rows[item.index])}
-            </div>
-          ))}
-        </div>
+        <ContactListWindow
+          rows={rows}
+          listRef={listRef}
+          selectedJid={selectedJid}
+          selectedRowIndex={selectedRowIndex}
+          isKeyboardNav={isKeyboardNav}
+          renderRow={renderRow}
+        />
       </div>
       {renamingContact && (
         <RenameContactModal
@@ -248,6 +224,55 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
           onClose={() => setRenamingJid(null)}
         />
       )}
+    </div>
+  )
+}
+
+// TanStack's mutable instance cannot be memoized by React Compiler. Keep all
+// instance reads/commands here; the required ContactList stays compiled and only
+// passes immutable row data, selection and its renderer across this boundary.
+function ContactListWindow({ rows, listRef, selectedJid, selectedRowIndex, isKeyboardNav, renderRow }: {
+  rows: ListRow[]
+  listRef: React.RefObject<HTMLDivElement | null>
+  selectedJid: string | null
+  selectedRowIndex: number | undefined
+  isKeyboardNav: boolean
+  renderRow: (row: ListRow) => React.ReactNode
+}) {
+  const getRowKey = useMemo(() => (index: number) => rows[index].key, [rows])
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => listRef.current,
+    getItemKey: getRowKey,
+    estimateSize: (index) => rows[index].kind === 'header' ? 20 : 60,
+    overscan: 6,
+  })
+  // The shared navigation hook targets mounted nodes synchronously. A keyboard
+  // move outside the window has no node yet, so reveal it after selection commits.
+  // Track identity rather than position to avoid jumping on a presence reorder.
+  const lastKeyboardJid = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    if (!isKeyboardNav) {
+      lastKeyboardJid.current = null
+      return
+    }
+    if (selectedJid === lastKeyboardJid.current) return
+    lastKeyboardJid.current = selectedJid
+    if (selectedRowIndex !== undefined) virtualizer.scrollToIndex(selectedRowIndex, { align: 'auto' })
+  }, [selectedJid, isKeyboardNav, selectedRowIndex, virtualizer])
+
+  return (
+    <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+      {virtualizer.getVirtualItems().map((item) => (
+        <div
+          key={item.key}
+          ref={virtualizer.measureElement}
+          data-index={item.index}
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${item.start}px)` }}
+        >
+          {renderRow(rows[item.index])}
+        </div>
+      ))}
     </div>
   )
 }
