@@ -147,7 +147,6 @@ export function AccountMenu({ onLogout, onOpenProfile, zoneRef }: AccountMenuPro
     (el: HTMLButtonElement | null) => {
       rowRef.current = el
       // The anchored-menu hook measures its trigger through this ref object.
-      // eslint-disable-next-line react-compiler/react-compiler
       ;(menu.triggerRef as React.MutableRefObject<HTMLElement | null>).current = el
       if (zoneRef) zoneRef.current = el
     },
