@@ -62,7 +62,7 @@ const { RoomJoinError } = vi.hoisted(() => {
 vi.mock('@fluux/sdk', async importOriginal => ({
   ...await importOriginal<typeof import('@fluux/sdk')>(),
   connectionStore: { getState: () => ({ jid: shortcutState.jid }) },
-  rosterStore: { getState: () => ({ accountJid: shortcutState.rosterAccount, isLoaded: shortcutState.loaded }) },
+  rosterStore: { getState: () => ({ accountJid: shortcutState.rosterAccount, isLoaded: shortcutState.loaded, contacts: new Map(contactList.map(c => [c.jid, c])) }) },
   // Rooms arrive with the bookmarks.
   roomStore: {
     getState: () => ({
@@ -84,18 +84,15 @@ vi.mock('@fluux/sdk', async importOriginal => ({
       clearDraft: (id: string) => { chatDrafts.delete(id) },
     }),
   },
-  useChat: () => ({
+  useChatActions: () => ({
     addConversation: mockAddConversation,
   }),
-  useRoom: () => ({
+  useRoomActions: () => ({
     joinRoom: mockJoinRoom,
     joinResult: mockJoinResult,
     getRoomInfo: () => Promise.resolve(null),
     isNonAnonymousRoomAcknowledged: () => false,
     domainHostsRooms: mockDomainHostsRooms,
-  }),
-  useRoster: () => ({
-    contacts: contactList,
   }),
   RoomJoinError,
 }))
