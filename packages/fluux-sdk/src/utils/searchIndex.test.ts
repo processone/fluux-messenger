@@ -421,6 +421,52 @@ describe('searchIndex', () => {
       spy.mockRestore()
     })
 
+    it('matches an unscoped search filtered afterwards, ties and phrases included', async () => {
+      for (let i = 0; i < 40; i++) {
+        await indexMessage(createChatMessage(i % 3 ? 'alice@example.com' : 'bob@example.com', {
+          id: `tie-${i}`,
+          body: i % 4 ? `common word ${i}` : `common phrase here ${i}`,
+          timestamp: new Date(1_700_000_000_000 + Math.floor(i / 4) * 1000),
+        }))
+      }
+      await indexMessage(createRoomMessage('dev@conference.example.com', {
+        body: 'common phrase here in a room', stanzaId: 'tie-room',
+        timestamp: new Date(1_700_000_000_000 + 3000),
+      }))
+      const all = await search('common', { limit: 1000 })
+      const phraseAll = await search('"common phrase"', { limit: 1000 })
+      const cases: Array<[string, { conversationId?: string; isRoom?: boolean }, (r: SearchIndexResult) => boolean]> = [
+        ['common', { conversationId: 'alice@example.com' }, (r) => r.conversationId === 'alice@example.com'],
+        ['common', { isRoom: false }, (r) => !r.isRoom],
+        ['common', { conversationId: 'dev@conference.example.com', isRoom: true }, (r) => r.isRoom && r.conversationId === 'dev@conference.example.com'],
+        ['common', { conversationId: 'nobody@example.com' }, () => false],
+        ['"common phrase"', { conversationId: 'bob@example.com' }, (r) => r.conversationId === 'bob@example.com'],
+      ]
+      for (const [query, scope, keep] of cases) {
+        const base = query.startsWith('"') ? phraseAll : all
+        for (const limit of [1, 5, 1000]) {
+          const got = await search(query, { ...scope, limit })
+          expect(got.map((r) => r.indexId)).toEqual(base.filter(keep).slice(0, limit).map((r) => r.indexId))
+        }
+      }
+    })
+
+    it('fetches no excluded document when the limit truncates or a retraction is skipped', async () => {
+      await seed()
+      vi.spyOn(messageCache, 'areRetractedInCache').mockImplementation(async (messages) =>
+        messages.map((m) => m.id === 'scoped-59'))
+      const fetched: string[] = []
+      const get = IDBObjectStore.prototype.get
+      vi.spyOn(IDBObjectStore.prototype, 'get').mockImplementation(function (this: IDBObjectStore, ...args) {
+        if (this.name === 'search-docs') fetched.push(String(args[0]))
+        return get.apply(this, args)
+      })
+      const results = await search('common', { conversationId: 'alice@example.com', limit: 2 })
+      expect(results.map((r) => r.messageId)).toEqual(['scoped-57', 'scoped-55'])
+      expect(fetched.every((id) => id.startsWith('chat:alice@example.com'))).toBe(true)
+      vi.restoreAllMocks()
+    })
+
     it('judges retractions only for the documents it walks, not every match', async () => {
       await seed()
       const spy = vi.spyOn(messageCache, 'areRetractedInCache')
