@@ -86,7 +86,8 @@ import { schedule, flush as flushThrottledStorage } from './shared/throttledStor
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
 // getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
-import { getIdleResidentWindowSize, getResidentWindowSize } from './shared/residentWindow'
+import { idleResidentWindowFor, getResidentWindowSize } from './shared/residentWindow'
+import { createIdleEvictedLedger } from './shared/idleEvictedLedger'
 import { lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
 import { sortMessagesByTimestamp } from './shared/messageArrayUtils'
 import { noteSavedCopyChanged } from './savedStore'
@@ -679,6 +680,9 @@ const EMPTY_SET: Set<string> = new Set()
 function getRoomMessageKeys(m: RoomMessage): string[] {
   return identityKeys(roomScope(m.roomJid), m)
 }
+
+/** Rows pushed out of an idle room's short tail, kept for duplicate recognition only. */
+const idleEvictedRooms = createIdleEvictedLedger<RoomMessage>(getRoomMessageKeys, getResidentWindowSize)
 
 /** Timeline config for the shared resident-window machine (see shared/messageTimeline.ts). */
 function roomTimelineConfig(): timeline.TimelineConfig<RoomMessage> {
@@ -2272,15 +2276,21 @@ export const roomStore = createStore<RoomState>()(
       const atLiveEdge = state.windowAtLiveEdge.get(roomJid) !== false
       const resident = state.messages.get(roomJid) ?? []
       const appendObservation: timeline.AppendLiveObservation = {}
-      const append = timeline.appendLive(
-        resident,
-        messageToAdd,
-        atLiveEdge,
-        state.activeRoomJid === roomJid
-          ? roomTimelineConfig()
-          : { ...roomTimelineConfig(), windowSize: getIdleResidentWindowSize() },
-        appendObservation
-      )
+      const idle = state.activeRoomJid !== roomJid
+      const appendConfig = idle
+        ? { ...roomTimelineConfig(), windowSize: idleResidentWindowFor(resident, messageToAdd, isNoLocalStore) }
+        : roomTimelineConfig()
+      if (idle) {
+        if (resident.length === 0) idleEvictedRooms.forget(roomJid)
+        // A repeat of a row the short idle tail already dropped is still a duplicate.
+        const evicted = appendConfig.getMergeCandidates(messageToAdd, idleEvictedRooms.candidates(roomJid, messageToAdd))
+        if (evicted.some((held) => appendConfig.sameMessage(held, messageToAdd))) return state
+      }
+      const append = timeline.appendLive(resident, messageToAdd, atLiveEdge, appendConfig, appendObservation)
+      if (idle && append.kind === 'appended') {
+        const kept = new Set(append.messages)
+        idleEvictedRooms.remember(roomJid, resident.filter((held) => !kept.has(held)))
+      }
 
       if (append.kind === 'duplicate-unchanged') return state
       if (append.kind === 'duplicate-backfilled') {
@@ -2788,6 +2798,8 @@ export const roomStore = createStore<RoomState>()(
       const newMessages = [...resident]
       const updatedMessage = { ...resident[targetIdx], stanzaId: undefined }
       newMessages[targetIdx] = updatedMessage
+      // The archive id is part of the same-millisecond order key; keep the window in cache order.
+      const ordered = sortMessagesByTimestamp(newMessages, 'room')
 
       void messageCache.updateRoomMessage(
         roomJid,
@@ -2798,7 +2810,7 @@ export const roomStore = createStore<RoomState>()(
         resident[targetIdx],
       )
 
-      const written = withRoomMessageWindow(state, roomJid, newMessages)
+      const written = withRoomMessageWindow(state, roomJid, ordered)
       if (!written) return state
 
       const result: Partial<RoomState> = { ...written }

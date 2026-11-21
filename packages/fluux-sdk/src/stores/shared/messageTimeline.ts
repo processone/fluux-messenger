@@ -131,7 +131,8 @@ export function appendLive<T extends TimelineMessage>(
       config.mergeIdentity,
     )
     if (patched.length === 0) return { kind: 'duplicate-unchanged' }
-    return { kind: 'duplicate-backfilled', messages: backfilled, patched }
+    // A backfilled archive id can change a row's same-millisecond position, so restore cache order.
+    return { kind: 'duplicate-backfilled', messages: sortMessagesByTimestamp(backfilled, config.kind), patched }
   }
 
   if (!atLiveEdge) return { kind: 'gated' }
@@ -219,7 +220,7 @@ export function mergeArchive<T extends TimelineMessage>(
     // Backfill server stanzaIds from archived copies onto stanzaId-less resident
     // messages (e.g. own outgoing) BEFORE merging, so the live copy gains a valid
     // backward-pagination cursor. The archived copy itself still dedups away.
-    const { messages: existing, patched } = backfillArchiveIds(
+    const { messages: backfilledExisting, patched } = backfillArchiveIds(
       messages,
       incoming,
       config.getKeys,
@@ -227,6 +228,10 @@ export function mergeArchive<T extends TimelineMessage>(
       config.getMergeCandidates,
       config.mergeIdentity,
     )
+
+    // A backfill can move a row among its same-millisecond neighbours (the archive id is part
+    // of the room order key), so restore cache order before anything relies on it.
+    const existing = patched.length > 0 ? sortMessagesByTimestamp(backfilledExisting, config.kind) : backfilledExisting
 
     // Fetch-latest pages land at the LIVE edge and may sit entirely ABOVE the
     // resident window (bail after an incomplete forward catch-up). The backward

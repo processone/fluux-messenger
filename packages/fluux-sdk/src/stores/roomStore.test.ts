@@ -1179,6 +1179,36 @@ describe('roomStore', () => {
       expect(roomStore.getState().messages.get(activeJid)).toHaveLength(500)
     })
 
+    it('keeps the full window for an idle room holding memory-only messages, which the cache cannot give back', () => {
+      const roomJid = 'quick@conference.example.com'
+      roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
+      const base = Date.now()
+      const count = getIdleResidentWindowSize() + 100
+      for (let i = 0; i < count; i++) {
+        roomStore.getState().addMessage(roomJid, { ...createMessage(`quick-${i}`, roomJid, 'alice', `Message ${i}`), noLocalStore: true, timestamp: new Date(base + i) } as RoomMessage)
+      }
+
+      expect(roomStore.getState().messages.get(roomJid)).toHaveLength(count)
+    })
+
+    it('still recognises a repeat of a row the idle tail has already dropped', () => {
+      const roomJid = 'idle@conference.example.com'
+      roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
+      const base = Date.now()
+      const firstArrival = { ...createMessage('idle-0', roomJid, 'alice', 'first'), timestamp: new Date(base) }
+      roomStore.getState().addMessage(roomJid, firstArrival)
+      for (let i = 1; i <= getIdleResidentWindowSize() + 5; i++) {
+        roomStore.getState().addMessage(roomJid, { ...createMessage(`idle-${i}`, roomJid, 'alice', `Message ${i}`), timestamp: new Date(base + i) })
+      }
+      const unread = roomStore.getState().rooms.get(roomJid)?.unreadCount
+      const arrived = roomStore.getState().lastArrivedMessage
+
+      roomStore.getState().addMessage(roomJid, { ...firstArrival }, { isLiveArrival: true })
+
+      expect(roomStore.getState().rooms.get(roomJid)?.unreadCount).toBe(unread)
+      expect(roomStore.getState().lastArrivedMessage).toBe(arrived)
+    })
+
     it('does not count a repeated live delivery in the idle tail twice', () => {
       const roomJid = 'idle@conference.example.com'
       roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
@@ -2078,6 +2108,20 @@ describe('roomStore', () => {
         undefined,
         expect.objectContaining({ id: 'm1', stanzaId: 'uuid-sent' }),
       )
+    })
+
+    it('keeps same-millisecond rows in cache order once a stanzaId is cleared, so a later arrival lands after them', () => {
+      roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
+      const at = new Date(5_000)
+      const base = { ...createMessage('m', ROOM, 'alice', '', false, at) }
+      const first = { ...base, body: 'first', stanzaId: 'a-1' }
+      const second = { ...base, body: 'second', stanzaId: 'b-2' }
+      roomStore.setState({ messages: new Map([[ROOM, [first, second]]]) })
+
+      roomStore.getState().clearMessageStanzaId(ROOM, 'b-2')
+      roomStore.getState().addMessage(ROOM, { ...createMessage('later', ROOM, 'alice', 'later', false, new Date(6_000)) })
+
+      expect(roomWindow(ROOM).map(message => message.body)).toEqual(['second', 'first', 'later'])
     })
 
     it('is a no-op when no message carries the given stanzaId', () => {

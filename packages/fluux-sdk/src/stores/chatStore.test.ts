@@ -2678,6 +2678,34 @@ describe('chatStore', () => {
       expect(chatStore.getState().conversations.get('alice@example.com')?.unreadCount).toBe(500)
     })
 
+    it('keeps the full window for an idle conversation holding memory-only messages, which the cache cannot give back', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const base = Date.now()
+      const count = getIdleResidentWindowSize() + 100
+      for (let i = 0; i < count; i++) {
+        chatStore.getState().addMessage({ ...createMessage('alice@example.com', `Message ${i}`), id: `mem-${i}`, noLocalStore: true, timestamp: new Date(base + i) } as Message)
+      }
+
+      expect(chatStore.getState().messages.get('alice@example.com')).toHaveLength(count)
+    })
+
+    it('still recognises a repeat of a row the idle tail has already dropped', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const base = Date.now()
+      const firstArrival = { ...createMessage('alice@example.com', 'first'), id: 'idle-0', timestamp: new Date(base) }
+      chatStore.getState().addMessage(firstArrival)
+      for (let i = 1; i <= getIdleResidentWindowSize() + 5; i++) {
+        chatStore.getState().addMessage({ ...createMessage('alice@example.com', `Message ${i}`), id: `idle-${i}`, timestamp: new Date(base + i) })
+      }
+      const unread = chatStore.getState().conversations.get('alice@example.com')?.unreadCount
+      const arrived = chatStore.getState().lastArrivedMessage
+
+      chatStore.getState().addMessage({ ...firstArrival })
+
+      expect(chatStore.getState().conversations.get('alice@example.com')?.unreadCount).toBe(unread)
+      expect(chatStore.getState().lastArrivedMessage).toBe(arrived)
+    })
+
     it('does not count a repeated live delivery in the idle tail twice', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       const message = { ...createMessage('alice@example.com', 'once'), id: 'echoed' }
