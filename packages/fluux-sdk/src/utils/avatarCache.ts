@@ -190,8 +190,26 @@ function getDB(): Promise<IDBDatabase> {
   return opening
 }
 
+function isLocalAvatarKey(hash: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hash)
+}
+
+/** Whether a row for `hash` is stored, read without taking a write lock. */
+async function isStored(hash: string): Promise<boolean> {
+  try {
+    const db = await getDB()
+    return await new Promise<boolean>((resolve, reject) => {
+      const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).count(hash)
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result > 0)
+    })
+  } catch {
+    return false
+  }
+}
+
 async function matchesAvatarKey(hash: string, bytes: ArrayBuffer): Promise<boolean> {
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hash)) return true
+  if (isLocalAvatarKey(hash)) return true
   const digest = await crypto.subtle.digest('SHA-1', bytes)
   const actualHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
   return actualHash === hash.toLowerCase()
@@ -277,6 +295,14 @@ export async function cacheAvatar(
     return `data:${mimeType};base64,${base64}`
   }
 
+  if (blobUrlPool.has(hash) && !isLocalAvatarKey(hash) && await isStored(hash)) {
+    // A SHA-1 key names its bytes and they just matched it, so an entry that is already
+    // stored and pooled is this very image: rewriting it would only churn a write and
+    // revoke a URL that mounted avatars are showing. The pool is read again after the
+    // lookup, since a refresh or revoke may have replaced the URL while it ran.
+    const pooled = blobUrlPool.get(hash)
+    if (pooled) return pooled
+  }
   const existingUrl = blobUrlPool.get(hash)
   if (existingUrl) {
     URL.revokeObjectURL(existingUrl)
@@ -757,6 +783,14 @@ async function removeNoAvatar(jid: string, version: AvatarVersion): Promise<void
   try {
     const db = await getDB()
     if (!version.current()) return
+    // Presence repeats an unchanged avatar hash on every status change in every room,
+    // so most clears find nothing: look first, without a write lock, and only delete a row that exists.
+    const stored = await new Promise<boolean>((resolve, reject) => {
+      const request = db.transaction(NO_AVATAR_STORE_NAME, 'readonly').objectStore(NO_AVATAR_STORE_NAME).count(jid)
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result > 0)
+    })
+    if (!stored || !version.current()) return
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(NO_AVATAR_STORE_NAME, 'readwrite')
       const store = transaction.objectStore(NO_AVATAR_STORE_NAME)

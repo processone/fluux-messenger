@@ -87,6 +87,7 @@ import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, n
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
 // getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
+import { readAroundBounded, withoutRowsPastSlice } from './shared/aroundTail'
 import { lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
 import { sortMessagesByTimestamp } from './shared/messageArrayUtils'
 import { noteSavedCopyChanged } from './savedStore'
@@ -928,10 +929,11 @@ function mergeCachedRoomAround(
   roomJid: string,
   cachedMessages: RoomMessage[],
   anchorRow: MessageRowRef,
-  contextBefore: number
+  contextBefore: number,
+  tailTruncated = false
 ): Partial<Pick<RoomState, 'rooms' | 'messages' | 'windowAtLiveEdge' | 'roomMeta' | 'pendingRetractions'>> | null {
   if (!state.rooms.has(roomJid)) return null
-  const resident = state.messages.get(roomJid) ?? []
+  const resident = withoutRowsPastSlice(state.messages.get(roomJid) ?? [], cachedMessages, tailTruncated)
   const { merged, newestEvicted } = timeline.aroundSlice(
     reconcileCachedCorrections(resident, cachedMessages, getStorageScopeJid()),
     cachedMessages,
@@ -939,7 +941,7 @@ function mergeCachedRoomAround(
     contextBefore,
     roomTimelineConfig()
   )
-  return commitCachedRoomMessages(state, roomJid, merged, newestEvicted ? false : undefined)
+  return commitCachedRoomMessages(state, roomJid, merged, newestEvicted || tailTruncated ? false : undefined)
 }
 
 function captureRoomCacheRead(roomJid: string): () => boolean {
@@ -3520,12 +3522,23 @@ export const roomStore = createStore<RoomState>()(
       }
 
       try {
-        const slice = await messageCache.getRoomMessagesAround(roomJid, anchorRow, options).then(messages => refreshCachedCorrections(messages, canPublish))
+        const bound = getResidentWindowSize()
+        const contextBefore = options.before ?? messageCache.AROUND_CONTEXT_BEFORE
+        const { slice, tailTruncated } = await readAroundBounded(options, bound, anchorRow,
+          (after) => messageCache.getRoomMessagesAround(roomJid, anchorRow, { ...options, ...(after === undefined ? {} : { after }) })
+            .then(messages => refreshCachedCorrections(messages, canPublish)),
+          (candidate) => {
+            const resident = withoutRowsPastSlice(get().messages.get(roomJid) ?? [], candidate, true)
+            return timeline.aroundSlice(
+              reconcileCachedCorrections(resident, candidate, getStorageScopeJid()), candidate,
+              (messages) => findMessageRowIndex(messages, anchorRow), contextBefore, roomTimelineConfig(),
+            ).newestEvicted
+          })
         if (!canPublish()) return []
         if (slice.length > 0) {
           flushPendingRoomOccupants(roomJid)
           set((state) => !canPublish() ? state : mergeCachedRoomAround(state, roomJid, slice, anchorRow,
-            options.before ?? messageCache.AROUND_CONTEXT_BEFORE) ?? state)
+            contextBefore, tailTruncated) ?? state)
         }
         return slice
       } catch (error) {

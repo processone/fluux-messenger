@@ -5710,6 +5710,61 @@ describe('roomStore', () => {
       expect(roomWindow(roomJid)?.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
     })
+
+    // Opening a room at its read pointer used to read every newer cached row, though
+    // the resident window cannot hold more than its bound.
+    it('bounds the newer rows it reads to one resident window and leaves the live edge when it hits the bound', async () => {
+      const latest = roomMsgAt('newer-9', 9)
+      roomStore.setState({ messages: new Map([[roomJid, [latest]]]) })
+      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue([
+        roomMsgAt('anchor', 4), roomMsgAt('newer-5', 5), roomMsgAt('newer-6', 6), roomMsgAt('newer-7', 7),
+      ])
+      setResidentWindowSize(3)
+      try {
+        await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' })
+      } finally {
+        setResidentWindowSize(5000)
+      }
+
+      expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(roomJid, { id: 'anchor' }, { after: 3 })
+      // The bounded slice stopped short of the resident newest message, so it must not sit past a gap.
+      expect(roomWindow(roomJid)?.map((m) => m.id)).toEqual(['anchor', 'newer-5', 'newer-6'])
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
+    })
+
+    // Spam compaction keeps a hidden row as the slice's last row; a bounded slice that ends on tied
+    // timestamps with hidden rows would then end the window short of the unread row after them.
+    it('repeats the read unbounded when hidden-row compaction would leave the bounded window short', async () => {
+      const spam = (id: string, minute: number): RoomMessage => ({
+        ...roomMsgAt(id, minute), isRetracted: true, isModerated: true, moderationReason: 'spam', body: '',
+      })
+      const latest = roomMsgAt('latest', 7)
+      roomStore.setState({ messages: new Map([[roomJid, [latest]]]) })
+      // after: 3 returns exactly three newer rows, all hidden; the unread row ties with them but lies past the cap.
+      const bounded = [roomMsgAt('anchor', 3), spam('spam-a', 4), spam('spam-b', 4), spam('spam-c', 4)]
+      vi.mocked(messageCache.getRoomMessagesAround)
+        .mockResolvedValueOnce(bounded)
+        .mockResolvedValueOnce([...bounded, roomMsgAt('unread', 4), latest])
+      setResidentWindowSize(3)
+      try {
+        await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' })
+      } finally {
+        setResidentWindowSize(5000)
+      }
+
+      expect(vi.mocked(messageCache.getRoomMessagesAround).mock.calls.map(call => call[2]?.after)).toEqual([3, undefined])
+      expect(roomWindow(roomJid)?.map((m) => m.id)).toEqual(['anchor', 'unread', 'latest'])
+    })
+
+    it('keeps a caller-chosen newer bound and the live edge when the cache tail is shorter than the window', async () => {
+      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue([roomMsgAt('anchor', 4), roomMsgAt('newer-5', 5)])
+      await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' }, { before: 0, after: 10 })
+      expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(roomJid, { id: 'anchor' }, { before: 0, after: 10 })
+      vi.mocked(messageCache.getRoomMessagesAround).mockClear()
+      await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' })
+      expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(roomJid, { id: 'anchor' }, { after: 5000 })
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).not.toBe(false)
+    })
   })
 
   describe('loadOlderMessagesFromCache (sliding window)', () => {

@@ -68,6 +68,7 @@ import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, n
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
 // Read via getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
+import { readAroundBounded, withoutRowsPastSlice } from './shared/aroundTail'
 import { lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
 import { backfillArchiveIds, sortMessagesByTimestamp } from './shared/messageArrayUtils'
 import { archiveMoment, revivesArchivedConversation } from './shared/archiveRevival'
@@ -283,17 +284,18 @@ function mergeCachedChatAround(
   conversationId: string,
   cachedMessages: Message[],
   anchorRow: MessageRowRef,
-  contextBefore: number
+  contextBefore: number,
+  tailTruncated = false
 ): Partial<ChatState> | null {
   const { merged, newestEvicted } = timeline.aroundSlice(
-    reconcileCachedChatRows(state.messages.get(conversationId) || [], cachedMessages),
+    reconcileCachedChatRows(withoutRowsPastSlice(state.messages.get(conversationId) || [], cachedMessages, tailTruncated), cachedMessages),
     cachedMessages,
     (messages) => findMessageRowIndex(messages, anchorRow),
     contextBefore,
     chatTimelineConfig()
   )
   const update = commitCachedChatMessages(state, conversationId, merged)
-  if (!newestEvicted) return update
+  if (!newestEvicted && !tailTruncated) return update
   return { ...update, ...withChatMessageWindow(state, conversationId, { atLiveEdge: false }) }
 }
 
@@ -2996,11 +2998,22 @@ export const chatStore = createStore<ChatState>()(
         return withMessageCacheOperation('chat', conversationId, async () => {
           if (!canPublish()) return []
           try {
-            const slice = await messageCache.getMessagesAround(conversationId, anchorRow, options).then(messages => refreshCachedCorrections(messages, canPublish))
+            const bound = getResidentWindowSize()
+            const contextBefore = options.before ?? messageCache.AROUND_CONTEXT_BEFORE
+            const { slice, tailTruncated } = await readAroundBounded(options, bound, anchorRow,
+              (after) => messageCache.getMessagesAround(conversationId, anchorRow, { ...options, ...(after === undefined ? {} : { after }) })
+                .then(messages => refreshCachedCorrections(messages, canPublish)),
+              (candidate) => {
+                const resident = withoutRowsPastSlice(get().messages.get(conversationId) || [], candidate, true)
+                return timeline.aroundSlice(
+                  reconcileCachedChatRows(resident, candidate), candidate,
+                  (messages) => findMessageRowIndex(messages, anchorRow), contextBefore, chatTimelineConfig(),
+                ).newestEvicted
+              })
             if (!canPublish()) return []
             if (slice.length > 0) {
               set((state) => !canPublish() ? state : mergeCachedChatAround(state, conversationId, slice, anchorRow,
-                options.before ?? messageCache.AROUND_CONTEXT_BEFORE) ?? state)
+                contextBefore, tailTruncated) ?? state)
             }
             return slice
           } catch (error) {

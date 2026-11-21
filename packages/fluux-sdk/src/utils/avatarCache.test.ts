@@ -201,9 +201,12 @@ describe('avatarCache blob URL pool', () => {
       expect(createSpy).not.toHaveBeenCalled()
     })
 
-    it('revokes previous blob URL when re-caching same hash', async () => {
-      const url1 = await cacheAvatar(hashOf('data1'), btoa('data1'), 'image/png')
-      const url2 = await cacheAvatar(hashOf('data1'), btoa('data1'), 'image/png')
+    // A locally keyed avatar (UUID key) can be replaced with new bytes under the same key, so
+    // its old blob URL is revoked. A SHA-1 key names its bytes: re-caching it keeps the URL
+    // (see avatarCache.churn.test.ts).
+    it('revokes previous blob URL when a locally keyed avatar is replaced', async () => {
+      const url1 = await cacheAvatar(LOCAL_AVATAR_KEY, btoa('data1'), 'image/png')
+      const url2 = await cacheAvatar(LOCAL_AVATAR_KEY, btoa('data2'), 'image/png')
 
       expect(revokeSpy).toHaveBeenCalledWith(url1)
       expect(url2).not.toBe(url1)
