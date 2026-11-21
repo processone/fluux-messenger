@@ -215,6 +215,32 @@ test('save a room message and a chat message, open them from Saved, remove them'
   expect(page.context().pages()).toHaveLength(1)
 })
 
+test('a locked Saved list shows the unlock explanation instead of the zero pane, then the zero pane once unlocked', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+  await bootDemo(page, `/demo.html?tutorial=false#/messages/${encodeURIComponent(PEER)}`)
+  await activateChat(page, PEER)
+  // Disposable demo state: the list holds one sealed item and no readable entry; no key or account is involved.
+  await page.evaluate(() => {
+    const scope = window as unknown as { __savedStore: typeof savedStore }
+    scope.__savedStore.setState({ sealState: 'locked', lockedIds: { 'sealed-1': true }, entries: {}, loaded: true })
+  })
+  await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()
+  await expect(page.getByTestId('saved-locked-pane')).toBeVisible()
+  const pane = page.getByTestId('saved-locked-pane')
+  await expect(pane.getByRole('heading', { name: 'Saved messages are locked' })).toBeVisible()
+  await expect(pane.getByText('Unlock your key to read them.')).toBeVisible()
+  await expect(page.getByTestId('saved-zero-pane')).toHaveCount(0)
+  await expect(page.getByTestId('saved-row')).toHaveCount(0)
+  await page.screenshot({ path: process.env.SAVED_LOCKED_PICTURE ?? 'test-results/saved-locked.png' })
+  // Once nothing is sealed any more the ordinary zero pane takes over.
+  await page.evaluate(() => {
+    const scope = window as unknown as { __savedStore: typeof savedStore }
+    scope.__savedStore.setState({ sealState: 'unavailable', lockedIds: {} })
+  })
+  await expect(page.getByTestId('saved-zero-pane')).toBeVisible()
+  await expect(page.getByTestId('saved-locked-pane')).toHaveCount(0)
+})
+
 test('a pending outgoing message offers no Save', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
   await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(ROOM)}`)
