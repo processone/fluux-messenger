@@ -126,6 +126,19 @@ describe('MessageBubble', () => {
     fireEvent.click(screen.getAllByLabelText('chat.reactWith')[0])
     expect(targets).toEqual([stamped])
   })
+
+  it('FLM-402 highlights the whole find query as it is typed and clears when find closes', () => {
+    const message = createTestMessage({ body: 'Here is the final poster for the launch night' })
+    const props = createDefaultProps({ message })
+    const view = render(<MessageBubble {...props} highlightTerms={['po']} />)
+    const marks = () => Array.from(view.container.querySelectorAll('mark'), (mark) => mark.textContent)
+    expect(marks()).toEqual(['po'])
+    view.rerender(<MessageBubble {...props} highlightTerms={['poster']} />)
+    expect(marks()).toEqual(['poster'])
+    view.rerender(<MessageBubble {...props} highlightTerms={[]} />)
+    expect(marks()).toEqual([])
+  })
+
   it('expands only the selected chat twin', () => {
     const height = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(700)
     useExpandedMessagesStore.getState().clear()
