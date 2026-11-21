@@ -1,12 +1,12 @@
-# Vendored wry 0.57.2
+# Vendored wry 0.57.3
 
-This is the crates.io release of `wry` 0.57.2 with two modifications: the
+This is the crates.io release of `wry` 0.57.3 with two modifications: the
 [tauri-apps/wry#1856](https://github.com/tauri-apps/wry/pull/1856) backport and a
 Fluux-only macOS startup termination gate. The copy is selected through
 `[patch.crates-io]` in `apps/fluux/src-tauri/Cargo.toml`.
 
-Release base: `wry-v0.57.2`, upstream commit
-`bbba6b6312af92fbb969789a63768f4b4bb6d268` (also recorded in the crate archive).
+Release base: `wry-v0.57.3`, upstream commit
+`3b6eab2de073cd9da7ffeec94016db7441a0caa7` (also recorded in the crate archive).
 The backport is from #1856 at `a1e9973c44f1e6ccb6a1f17a16ded28be26d3ff1`,
 applied unchanged: the release's `url_scheme_handler.rs` is identical to that
 pull request's base, so the vendored file is the pull request's version.
@@ -32,7 +32,7 @@ The vendored `Cargo.toml` also allows the Rust lints `deprecated`,
 `unused_variables`, `unused_unsafe`, and `unexpected_cfgs` for this crate. Cargo
 caps diagnostics for registry dependencies, but exposes these upstream warnings
 for a local path dependency. These crate-wide allowances keep the Rust sources
-at 0.57.2 plus the backport; they also suppress future warnings in those categories
+at 0.57.3 plus the backport; they also suppress future warnings in those categories
 within wry. Fluux's own lint settings are unchanged.
 
 ## Manual macOS check

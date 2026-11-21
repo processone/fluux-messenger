@@ -13,7 +13,7 @@
 edition = "2024"
 rust-version = "1.85"
 name = "wry"
-version = "0.57.2"
+version = "0.57.3"
 authors = ["Tauri Programme within The Commons Conservancy"]
 build = "build.rs"
 exclude = [
@@ -379,6 +379,7 @@ features = [
     "NSValue",
     "NSRange",
     "NSRunLoop",
+    "NSURLResponse",
 ]
 default-features = false
 
