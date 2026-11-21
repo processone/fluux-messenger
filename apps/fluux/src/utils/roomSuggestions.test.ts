@@ -52,10 +52,10 @@ describe('buildRoomContactSuggestions', () => {
   })
 
   it('deduplicates occupant devices and affiliated bare addresses regardless of case, keeping the first nickname', () => {
-    const jid = 'james@fluux.chat'
+    const jid = 'James@fluux.chat'
     const occupants = new Map([
-      ['James', { nick: 'James', jid: 'James@fluux.chat/desktop', affiliation: 'member' as const, role: 'participant' as const }],
-      ['James on tablet', { nick: 'James on tablet', jid: `${jid}/tablet`, affiliation: 'member' as const, role: 'participant' as const }],
+      ['James', { nick: 'James', jid: `${jid}/desktop`, affiliation: 'member' as const, role: 'participant' as const }],
+      ['James on tablet', { nick: 'James on tablet', jid: `${jid.toLowerCase()}/tablet`, affiliation: 'member' as const, role: 'participant' as const }],
     ])
     const affiliatedMembers = [
       { jid: 'JAMES@fluux.chat', nick: 'James Chen', affiliation: 'member' as const },

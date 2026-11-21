@@ -214,7 +214,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
     const jids = new Set<string>()
     for (const tab of TABS) {
       for (const member of members[tab]) {
-        jids.add(member.jid.toLowerCase())
+        jids.add(member.jid)
       }
     }
     return Array.from(jids)

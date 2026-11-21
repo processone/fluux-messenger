@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
-import type { Room, RoomOccupant } from '@fluux/sdk'
-import { DEMO_CONTACTS } from '@/demo/contacts'
+import type { Contact, Room, RoomOccupant } from '@fluux/sdk'
+import { getBareJid } from '@fluux/sdk/core'
 import { RoomMembersModal } from './RoomMembersModal'
 import { RoomHatsModal } from './RoomHatsModal'
 
@@ -14,16 +14,23 @@ const { setAffiliation, queryAffiliationList, listHats, listHatAssignments, assi
   unassignHat: vi.fn(),
 }))
 
+// Demo identities with a deliberately mixed-case roster entry; no shared mutable roster.
+const contacts: Contact[] = [
+  { jid: 'Emma@fluux.chat', name: 'Emma Wilson', presence: 'online', subscription: 'both' },
+  { jid: 'sophia@fluux.chat', name: 'Sophia Rodriguez', presence: 'dnd', subscription: 'both' },
+  { jid: 'liam@fluux.chat', name: 'Liam Brooks', presence: 'online', subscription: 'both' },
+]
+
 // Keep the real selectors and address utilities; only the service hooks are stand-ins.
 vi.mock('@fluux/sdk', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@fluux/sdk')>()),
-  useRoster: () => ({ contacts: DEMO_CONTACTS.filter(c => c.jid !== 'james@fluux.chat') }),
+  useRoster: () => ({ contacts }),
   useRoomModeration: () => ({ setAffiliation, queryAffiliationList, listHats, listHatAssignments, assignHat, unassignHat }),
 }))
 
 const roomJid = 'team@conference.fluux.chat'
 const jamesJid = 'james@fluux.chat'
-const emma = DEMO_CONTACTS.find(c => c.jid === 'emma@fluux.chat')!
+const emma = contacts[0]
 const speaker = { uri: 'urn:hat:speaker', title: 'Speaker' }
 
 // Mirrors the demo room presences, including the device addresses parsed by MUC.
@@ -93,7 +100,9 @@ describe.each(['members', 'hats'] as const)('%s occupant suggestions', (kind) =>
   })
 
   it.each([false, true])('chooses a non-roster occupant once and acts on their bare address (mixed case: %s)', async (mixedCase) => {
-    const input = await openPicker(kind, room(mixedCase))
+    const fixture = room(mixedCase)
+    const expectedJid = getBareJid(fixture.occupants.get('James')!.jid!)
+    const input = await openPicker(kind, fixture)
     fireEvent.change(input, { target: { value: 'james' } })
 
     expect(rows()).toHaveLength(1)
@@ -102,23 +111,32 @@ describe.each(['members', 'hats'] as const)('%s occupant suggestions', (kind) =>
 
     const action = kind === 'members' ? setAffiliation : assignHat
     await waitFor(() => expect(action).toHaveBeenCalledExactlyOnceWith(
-      roomJid, jamesJid, kind === 'members' ? 'member' : speaker.uri,
+      roomJid, expectedJid, kind === 'members' ? 'member' : speaker.uri,
     ))
   })
 
   it.each([false, true])('excludes every device for existing membership or the selected hat (stored variant: %s)', async (storedVariant) => {
     const memberJid = storedVariant ? 'James@fluux.chat' : jamesJid
     const assignedJid = storedVariant ? 'James@fluux.chat/desktop' : jamesJid
-    queryAffiliationList.mockResolvedValue([{ jid: memberJid, affiliation: 'member' }])
-    listHatAssignments.mockResolvedValue([{ jid: assignedJid, ...speaker }])
+    queryAffiliationList.mockResolvedValue([
+      { jid: memberJid, affiliation: 'member' },
+      { jid: emma.jid.toUpperCase(), affiliation: 'member' },
+    ])
+    listHatAssignments.mockResolvedValue([
+      { jid: assignedJid, ...speaker },
+      { jid: `${emma.jid.toUpperCase()}${storedVariant ? '/phone' : ''}`, ...speaker },
+    ])
     const input = await openPicker(kind)
     // Wait for the loaded entry, not just the request's start.
     await screen.findByText(kind === 'members' ? memberJid : assignedJid)
     fireEvent.change(input, { target: { value: 'james' } })
 
     expect(rows()).toHaveLength(0)
+    fireEvent.change(input, { target: { value: 'emma' } })
+    expect(rows()).toHaveLength(0)
     if (kind === 'hats') {
-      fireEvent.click(screen.getByRole('button', { name: 'rooms.unassignHat' }))
+      const assignedRow = screen.getByText(assignedJid).parentElement!
+      fireEvent.click(within(assignedRow).getByRole('button', { name: 'rooms.unassignHat' }))
       await waitFor(() => expect(unassignHat).toHaveBeenCalledExactlyOnceWith(roomJid, assignedJid, speaker.uri))
     }
   })

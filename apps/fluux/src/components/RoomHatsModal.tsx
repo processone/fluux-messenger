@@ -113,7 +113,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
     if (!assignUri) return []
     return assignments
       .filter(a => a.uri === assignUri)
-      .map(a => getBareJid(a.jid).toLowerCase())
+      .map(a => getBareJid(a.jid))
   })()
 
   // ---------------------------------------------------------------------------
