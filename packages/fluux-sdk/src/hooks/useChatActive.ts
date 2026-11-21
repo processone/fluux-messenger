@@ -4,6 +4,8 @@ import type { MessageRowRef } from '../utils/messageIdentity'
 import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { chatStore } from '../stores/chatStore'
+import { connectionStore } from '../stores/connectionStore'
+import { logWarn } from '../core/logger'
 import { chatSelectors } from '../stores/chatSelectors'
 import { useChatStore, useConnectionStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
@@ -283,11 +285,18 @@ export function useChatActive() {
   }, [])
 
   // Sliding window: reset the resident window to the newest slice (jump-to-latest affordance).
-  const recenterToLatest = useCallback(() => {
+  // Without a readable cache, the newest messages are only in the archive.
+  const recenterToLatest = useCallback(async () => {
     const id = chatStore.getState().activeConversationId
-    if (!id) return Promise.resolve()
-    return chatStore.getState().recenterToLatest(id)
-  }, [])
+    if (!id) return
+    const fromCache = await chatStore.getState().recenterToLatest(id)
+    if (fromCache || connectionStore.getState().status !== 'online') return
+    try {
+      await client.messages.queryMAM({ with: id })
+    } catch (error) {
+      logWarn(`Chat: fetching the latest messages without a cache failed: ${String(error)}`)
+    }
+  }, [client])
 
   // Sliding window: whether the resident window includes the newest message. The chat flag is a
   // Map keyed by conversation; absent ⇒ at edge. `false` = slid up (load-newer trigger + jump-to-latest on).

@@ -1427,11 +1427,14 @@ describe.each<Kind>(['chat', 'room'])('%s cached correction hydration', kind => 
       await release.promise
       return result
     }
+    // Load-newer reads through the typed cache read; the other modes through the plain one.
     if (kind === 'chat') {
       if (mode === 'around') vi.spyOn(cache, 'getMessagesAround').mockImplementationOnce(block(cache.getMessagesAround))
+      else if (mode === 'newer') vi.spyOn(cache, 'readMessages').mockImplementationOnce(block(cache.readMessages))
       else vi.spyOn(cache, 'getMessages').mockImplementationOnce(block(cache.getMessages))
     } else {
       if (mode === 'around') vi.spyOn(cache, 'getRoomMessagesAround').mockImplementationOnce(block(cache.getRoomMessagesAround))
+      else if (mode === 'newer') vi.spyOn(cache, 'readRoomMessages').mockImplementationOnce(block(cache.readRoomMessages))
       else vi.spyOn(cache, 'getRoomMessages').mockImplementationOnce(block(cache.getRoomMessages))
     }
     return { started, release }

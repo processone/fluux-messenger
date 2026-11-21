@@ -949,6 +949,20 @@ function captureRoomCacheRead(roomJid: string): () => boolean {
   return () => scope.isCurrent() && epoch === roomCacheEpoch && entityEpoch === currentRoomEntityEpoch(roomJid)
 }
 
+/**
+ * The newest cached slice of a room, without writing the store, reporting an unreadable
+ * cache instead of an empty slice. A superseded read is an empty slice.
+ */
+function readLatestCachedRoomSlice(roomJid: string, limit: number): Promise<messageCache.CacheRead<RoomMessage[]>> {
+  const isCurrent = captureRoomCacheRead(roomJid)
+  return withMessageCacheOperation('room', roomJid, async () => {
+    if (!isCurrent()) return { status: 'ok', value: [] }
+    const read = await messageCache.readRoomMessages(roomJid, { limit, latest: true })
+    if (read.status === 'unavailable') return read
+    return { status: 'ok', value: await refreshCachedCorrections(read.value, isCurrent) }
+  })
+}
+
 function commitCachedRoomMessages(state: RoomState, roomJid: string, rawMerged: RoomMessage[], atLiveEdge?: boolean) {
   const existing = state.rooms.get(roomJid)
   if (!existing) return null
@@ -1316,8 +1330,9 @@ export interface RoomState {
   loadNewerMessagesFromCache: (roomJid: string, limit?: number) => Promise<RoomMessage[]>
   /**
    * Room counterpart of {@link ChatState.recenterToLatest} for the jump-to-latest action.
+   * Resolves false when the cache could not be read.
    */
-  recenterToLatest: (roomJid: string) => Promise<void>
+  recenterToLatest: (roomJid: string) => Promise<boolean>
   /** Load only the latest message from cache for sidebar preview (doesn't modify messages array) */
   loadPreviewFromCache: (roomJid: string) => Promise<RoomMessage | null>
   /**
@@ -3599,10 +3614,14 @@ export const roomStore = createStore<RoomState>()(
           const afterDate = newestInMemory.timestamp
 
           // Load newer messages from IndexedDB
-          const cachedMessages = await messageCache.getRoomMessages(roomJid, {
+          const read = await messageCache.readRoomMessages(roomJid, {
             after: afterDate,
             limit,
-          }).then(messages => refreshCachedCorrections(messages, isCurrent))
+          })
+          // An unreadable cache says nothing about newer rows: the window stays parked
+          // rather than claiming the tail.
+          if (read.status === 'unavailable' || !isCurrent()) return []
+          const cachedMessages = await refreshCachedCorrections(read.value, isCurrent)
           if (!isCurrent()) return []
 
           // Fewer than the requested limit came back ⇒ nothing more newer remains in the
@@ -3656,15 +3675,19 @@ export const roomStore = createStore<RoomState>()(
     // Jump-to-latest is the one latest-slice load that replaces a parked window, which
     // loadMessagesFromCache leaves in place, so it merges the peeked slice itself. A full
     // window's worth keeps the merge contiguous: keep-newest drops the parked rows.
-    const latest = await get().loadMessagesFromCache(roomJid, { limit: getResidentWindowSize(), peek: true })
+    const read = await readLatestCachedRoomSlice(roomJid, getResidentWindowSize())
+    const latest = read.status === 'ok' ? read.value : []
     if (latest.length > 0) flushPendingRoomOccupants(roomJid)
-    // The flag is forced true even when the newest window was already fully resident.
+    // The flag is forced true even when the newest window was already fully resident, and
+    // when the cache is unreadable: the caller then fetches the latest page from the
+    // archive, which a parked window would refuse.
     set((state) => {
       const update = latest.length > 0 ? mergeCachedRoomMessages(state, roomJid, latest) : null
       const base = update?.windowAtLiveEdge ?? state.windowAtLiveEdge
       if (base.get(roomJid) === true) return update ?? state
       return { ...(update ?? {}), windowAtLiveEdge: new Map(base).set(roomJid, true) }
     })
+    return read.status === 'ok'
   },
 
   // Load the latest non-ignored message from cache for sidebar preview

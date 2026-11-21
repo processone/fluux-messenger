@@ -43,13 +43,17 @@ Object.defineProperty(globalThis, 'localStorage', {
 // Mock messageCache to verify IndexedDB operations
 vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
+  const getMessages = vi.fn().mockResolvedValue([])
   return {
     ...actual,
     deleteConversationMessages: vi.fn().mockResolvedValue(undefined),
     saveMessage: vi.fn().mockResolvedValue(undefined),
     saveMessageWithResult: vi.fn().mockResolvedValue(true),
     saveMessages: vi.fn().mockResolvedValue(true),
-    getMessages: vi.fn().mockResolvedValue([]),
+    getMessages,
+    // The typed read serves what getMessages is mocked to return, as a readable cache.
+    readMessages: vi.fn((...args: Parameters<typeof actual.readMessages>) =>
+      getMessages(...args).then((value: Message[]) => ({ status: 'ok' as const, value }))),
     getMessagesAround: vi.fn().mockResolvedValue([]),
     updateMessage: vi.fn().mockResolvedValue(undefined),
     updateMessageReactions: vi.fn().mockResolvedValue(true),
@@ -4885,6 +4889,42 @@ describe('chatStore', () => {
       // Absent, not `true`: a window that claims nothing is what a reader looks like before it
       // has ever scrolled, and `has()` is how the store tells the two apart.
       expect(chatStore.getState().windowAtLiveEdge.has(conversationId)).toBe(false)
+    })
+
+    it('keeps the window parked when load-newer cannot read the cache', async () => {
+      seedSlidWindow()
+      await chatStore.getState().loadOlderMessagesFromCache(conversationId, 50)
+      vi.mocked(messageCache.readMessages).mockResolvedValueOnce({ status: 'unavailable' })
+
+      expect(await chatStore.getState().loadNewerMessagesFromCache(conversationId)).toEqual([])
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId)).toBe(false)
+    })
+
+    it('claims the tail when load-newer reads an empty cache', async () => {
+      seedSlidWindow()
+      await chatStore.getState().loadOlderMessagesFromCache(conversationId, 50)
+      vi.mocked(messageCache.getMessages).mockResolvedValue([])
+
+      await chatStore.getState().loadNewerMessagesFromCache(conversationId)
+      expect(chatStore.getState().windowAtLiveEdge.has(conversationId)).toBe(false)
+    })
+
+    it('reports an unreadable cache from jump-to-latest and still releases the window', async () => {
+      seedSlidWindow()
+      await chatStore.getState().loadOlderMessagesFromCache(conversationId, 50)
+      vi.mocked(messageCache.readMessages).mockResolvedValueOnce({ status: 'unavailable' })
+
+      expect(await chatStore.getState().recenterToLatest(conversationId)).toBe(false)
+      // Released so the caller's fetch-latest from the archive lands in the window.
+      expect(chatStore.getState().windowAtLiveEdge.has(conversationId)).toBe(false)
+    })
+
+    it('reports a readable cache from jump-to-latest', async () => {
+      seedSlidWindow()
+      await chatStore.getState().loadOlderMessagesFromCache(conversationId, 50)
+      vi.mocked(messageCache.getMessages).mockResolvedValue([chatMsgAt('latest-1', 99999)])
+
+      expect(await chatStore.getState().recenterToLatest(conversationId)).toBe(true)
     })
 
     it('leaves the resident window referentially stable when a live arrival is gated', async () => {

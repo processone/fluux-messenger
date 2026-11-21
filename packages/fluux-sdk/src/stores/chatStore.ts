@@ -121,6 +121,20 @@ function captureChatCacheRead(conversationId: string): () => boolean {
   return () => scope.isCurrent() && epoch === chatCacheEpoch && entityEpoch === currentChatEntityEpoch(conversationId)
 }
 
+/**
+ * The newest cached slice of a conversation, without writing the store, reporting an
+ * unreadable cache instead of an empty slice. A superseded read is an empty slice.
+ */
+function readLatestCachedChatSlice(conversationId: string, limit: number): Promise<messageCache.CacheRead<Message[]>> {
+  const isCurrent = captureChatCacheRead(conversationId)
+  return withMessageCacheOperation('chat', conversationId, async () => {
+    if (!isCurrent()) return { status: 'ok', value: [] }
+    const read = await messageCache.readMessages(conversationId, { limit, latest: true })
+    if (read.status === 'unavailable') return read
+    return { status: 'ok', value: await refreshCachedCorrections(read.value, isCurrent) }
+  })
+}
+
 function backfillChatPreviewIdentity(preview: Message | undefined, messages: readonly Message[]): Message | undefined {
   if (!preview || preview.stanzaId && preview.originId) return preview
   const matches = messages.filter(message => matchesCorrectionTarget(preview, message))
@@ -712,8 +726,10 @@ interface ChatState {
   /**
    * Jump-to-latest: reset the resident window to the newest slice from cache and mark the window
    * at the live edge, including when {@link loadMessagesFromCache} preserves a parked window.
+   * Resolves false when the cache could not be read: the window is released to the live edge
+   * without its newest messages, and the caller fetches them from the archive.
    */
-  recenterToLatest: (conversationId: string) => Promise<void>
+  recenterToLatest: (conversationId: string) => Promise<boolean>
   setTargetMessageId: (id: string | MessageRowRef | null) => void
   switchAccount: (jid: string | null) => void
   reset: () => void
@@ -3058,10 +3074,14 @@ export const chatStore = createStore<ChatState>()(
           }
 
           try {
-            const newerMessages = await messageCache.getMessages(conversationId, {
+            const read = await messageCache.readMessages(conversationId, {
               after: newestMessage.timestamp,
               limit,
-            }).then(messages => refreshCachedCorrections(messages, isCurrent))
+            })
+            // An unreadable cache says nothing about newer rows: the window stays parked
+            // rather than claiming the tail.
+            if (read.status === 'unavailable' || !isCurrent()) return []
+            const newerMessages = await refreshCachedCorrections(read.value, isCurrent)
             if (!isCurrent()) return []
 
             // Fewer than the requested limit came back ⇒ nothing more newer remains in the
@@ -3107,14 +3127,18 @@ export const chatStore = createStore<ChatState>()(
         // Jump-to-latest is the one latest-slice load that replaces a parked window, which
         // loadMessagesFromCache leaves in place, so it merges the peeked slice itself. A full
         // window's worth keeps the merge contiguous: keep-newest drops the parked rows.
-        const latest = await get().loadMessagesFromCache(conversationId, { limit: getResidentWindowSize(), peek: true })
-        // The slid flag is cleared even when the newest window was already fully resident.
+        const read = await readLatestCachedChatSlice(conversationId, getResidentWindowSize())
+        const latest = read.status === 'ok' ? read.value : []
+        // The slid flag is cleared even when the newest window was already fully resident,
+        // and when the cache is unreadable: the caller then fetches the latest page from the
+        // archive, which a parked window would refuse.
         set((state) => {
           const update = latest.length > 0 ? mergeCachedChatMessages(state, conversationId, latest) : null
           const window = withChatMessageWindow(state, conversationId, { atLiveEdge: null })
           if (!update && !window) return state
           return { ...update, ...window }
         })
+        return read.status === 'ok'
       },
 
       switchAccount: (jid) => {
