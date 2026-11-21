@@ -3553,6 +3553,41 @@ mod tests {
     }
 
     #[test]
+    fn rotated_backup_round_trip_keeps_retired_subkeys_in_component_fingerprints() {
+        // FLM-411: a sibling device rotates and backs up; this device, which still holds the
+        // earlier subkey, opens that backup. The components the backup reports must keep
+        // the retired subkey, though the public armor omits it.
+        let state = new_state();
+        let _ = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let rotated = runtime
+            .block_on(state.rotate_encryption_subkey("alice@example.com".into()))
+            .unwrap();
+        let tsk = Cert::from_bytes(rotated.secret_armored.as_bytes()).unwrap();
+        let backup = crate::openpgp_backup::encrypt_tsk_with_passphrase(
+            &armored_string(&tsk, KeyExport::Secret).unwrap(),
+            "round-trip-code",
+            true,
+        )
+        .unwrap();
+        let opened = runtime
+            .block_on(state.import_backup_all(backup, "round-trip-code".into()))
+            .unwrap();
+        assert_eq!(opened.len(), 1);
+        assert_eq!(opened[0].component_fingerprints, rotated.component_fingerprints);
+        let published = Cert::from_bytes(opened[0].public_armored.as_bytes()).unwrap();
+        let retired_kept = opened[0].component_fingerprints.len();
+        let published_components = 1 + published.keys().subkeys().count();
+        assert!(
+            retired_kept > published_components,
+            "public armor omits the retired subkey ({published_components}) while the backup components keep it ({retired_kept})"
+        );
+    }
+
+    #[test]
     fn validate_cert_reports_every_subkey_fingerprint() {
         // The own-key consistency check (OpenPGPPluginBase) compares subkey
         // fingerprints instead of raw bytes so a re-signed / expiry-stripped

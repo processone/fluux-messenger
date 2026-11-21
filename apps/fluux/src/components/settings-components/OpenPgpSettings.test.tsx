@@ -1208,7 +1208,7 @@ describe('backup identity states', () => {
     usePlatform('desktop')
     const rotate = vi.fn().mockResolvedValue({ fingerprint: FP })
     inspect.mockResolvedValue('out-of-date')
-    Object.assign(mockPlugin!, { backupRecordHoldsOtherKey: () => true, rotateEncryptionKey: rotate })
+    Object.assign(mockPlugin!, { backupHoldsOtherKey: () => true, rotateEncryptionKey: rotate })
     render(<OpenPgpSettings />)
     await screen.findByText('settings.encryption.backupStatusMismatch')
     fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupAction' }))
@@ -1234,6 +1234,22 @@ describe('backup identity states', () => {
     await screen.findByText('settings.encryption.backupStatusMismatch')
     fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupAction' }))
     await screen.findByText('settings.encryption.backupConflictTitle')
+  })
+
+  it('a successful check of a newer own-key file ends the foreign warning the record had given the old file', async () => {
+    let holdsOther = true
+    inspect.mockResolvedValue('out-of-date')
+    check.mockImplementation(async () => { holdsOther = false; return { outcome: 'confirmed', status: 'out-of-date' } })
+    Object.assign(mockPlugin!, { backupHoldsOtherKey: () => holdsOther })
+    render(<OpenPgpSettings />)
+    await screen.findByText('settings.encryption.backupStatusMismatch')
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupCheckAction' }))
+    fireEvent.change(await screen.findByRole('textbox'), { target: { value: 'ABCD-EFGH-JKLM-NPQR-STUV-WXYZ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupCheckConfirm' }))
+    await screen.findByText('settings.encryption.backupStatusOutOfDate')
+    expect(screen.queryByText('settings.encryption.backupStatusMismatch')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupAction' }))
+    await screen.findByText('settings.encryption.backupReplaceUnknownTitle')
   })
 
   it('uses the status returned by the check and toasts success only when confirmed', async () => {

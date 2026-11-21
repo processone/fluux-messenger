@@ -1847,6 +1847,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (this.ctx === ctx) await this.recordBackupIdentity(ctx.account.jid, armoredMessage, this.ownBundle, 'publish')
   }
 
+  /** Hash of the backup file the last inspection or check read; ownership evidence is bound to it. */
+  private lastBackupHash: string | null = null
+  /** A file a code check opened and found to hold another key, by account and hash. */
+  private otherKeyCheck: { jid: string; hash: string } | null = null
+
   /**
    * Record the identity of the backup file this device has just proven, from
    * the exact bytes the server holds. Never throws: a record that cannot be
@@ -1916,6 +1921,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       ctx.logger.debug(`${this.pluginName()}: secret-key backup inspection inconclusive: ${formatError(err)}`)
       return 'unknown'
     }
+    this.lastBackupHash = null
     if (armored === null) return this.ctx === ctx ? 'absent' : 'unknown'
     const jid = ctx.account.jid
     const bundle = this.ownBundle
@@ -1928,6 +1934,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       ctx.logger.debug(`${this.pluginName()}: backup identity could not be read: ${formatError(err)}`)
     }
     if (this.ctx !== ctx || this.ownBundle !== bundle) return 'unknown'
+    this.lastBackupHash = serverHash
     let record = readBackupIdentity(jid)
     if (!record && serverHash && own && bundle) {
       const marker = readBackedUpFingerprint(jid)
@@ -1942,15 +1949,20 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   /**
-   * Whether the record of the confirmed backup names a primary key other than this device's, as
-   * after a file install of another key. Settings keeps the older policy for that backup: it is
-   * another identity's, so rotation never overwrites it. Reads the local record only.
+   * Whether the backup file the last inspection or check read is known to hold another key than this
+   * device's: a code check opened that very file and found another key, or the record of that very file
+   * names another primary (as after a file install of another key). Settings keeps the older policy for
+   * it: the foreign warning, and a rotation that leaves that backup alone. The evidence is bound to the
+   * file's hash, so a later, different file never inherits it. Reads local state only.
    */
-  backupRecordHoldsOtherKey(): boolean {
+  backupHoldsOtherKey(): boolean {
     const jid = this.ctx?.account.jid
     const bundle = this.ownBundle
-    const record = jid ? readBackupIdentity(jid) : null
-    if (!bundle || !record) return false
+    const hash = this.lastBackupHash
+    if (!jid || !bundle || !hash) return false
+    if (this.otherKeyCheck?.jid === jid && this.otherKeyCheck.hash === hash) return true
+    const record = readBackupIdentity(jid)
+    if (!record || record.packetsSha256 !== hash) return false
     return !record.fingerprints.some((f) => fingerprintsEqual(f, bundle.fingerprint))
   }
 
@@ -1974,12 +1986,18 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const { bundles } = await this.backupImportAllWithLegacyFallback(ctx.account.jid, armored, passphrase, 'checkBackupWithCode', false)
     if (this.ctx !== ctx || this.ownBundle !== bundle) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup check account changed')
     const held = bundles.find((b) => fingerprintsEqual(b.fingerprint, bundle.fingerprint))
-    if (!held) return { outcome: 'other-key', status: 'unconfirmed' }
+    if (!held) {
+      this.lastBackupHash = await this.backupPacketsHash(armored).catch(() => null)
+      this.otherKeyCheck = this.lastBackupHash ? { jid: ctx.account.jid, hash: this.lastBackupHash } : null
+      return { outcome: 'other-key', status: 'unconfirmed' }
+    }
     await this.recordBackupIdentity(ctx.account.jid, armored, held, 'check')
     // The status of the file just opened, from the record and this key: no further download.
     const record = readBackupIdentity(ctx.account.jid)
+    const serverHash = await this.backupPacketsHash(armored).catch(() => null)
+    this.lastBackupHash = serverHash
     const status = record
-      ? backupIdentityStatus({ record, serverHash: await this.backupPacketsHash(armored).catch(() => null), ownFingerprints: await this.componentFingerprints(bundle).catch(() => null) })
+      ? backupIdentityStatus({ record, serverHash, ownFingerprints: await this.componentFingerprints(bundle).catch(() => null) })
       : 'unknown'
     return { outcome: 'confirmed', status }
   }

@@ -241,9 +241,39 @@ describe('server backup status follows the confirmed file', () => {
   it('names another key when the confirmed backup holds a different primary', async () => {
     const f = await setup()
     await f.plugin.restoreSecretKey(meta.backupPassphrase)
-    expect(f.plugin.backupRecordHoldsOtherKey()).toBe(false)
+    expect(await f.plugin.inspectSecretKeyBackup()).toBe('confirmed')
+    expect(f.plugin.backupHoldsOtherKey()).toBe(false)
     await f.plugin.importKeyFromFile(bobBackup, meta.backupPassphrase)
     expect(await f.plugin.inspectSecretKeyBackup()).toBe('out-of-date')
-    expect(f.plugin.backupRecordHoldsOtherKey()).toBe(true)
+    expect(f.plugin.backupHoldsOtherKey()).toBe(true)
+  })
+
+  it('rotation with a code-checked other-key backup leaves its bytes and code alone, and the evidence ends with that file', async () => {
+    const f = await setup()
+    await f.plugin.importKeyFromFile(bobBackup, meta.backupPassphrase)
+    const before = await f.plugin.fetchSecretKeyBackup()
+    expect(await f.plugin.checkBackupWithCode(meta.backupPassphrase)).toEqual({ outcome: 'other-key', status: 'unconfirmed' })
+    expect(f.plugin.backupHoldsOtherKey()).toBe(true)
+    // Settings rotates such a backup's key without a code (covered in OpenPgpSettings tests); nothing here publishes.
+    expect(f.publications).not.toContain(secretNode)
+    expect(await f.plugin.fetchSecretKeyBackup()).toBe(before)
+    expect((await f.plugin.checkBackupWithCode(meta.backupPassphrase)).outcome).toBe('other-key')
+    // Another device now replaces it with a backup of this very key: the old evidence does not carry over.
+    await f.plugin.importKeyFromFile(aliceBackup, meta.backupPassphrase)
+    f.nodes.set(secretNode, [await item(await f.plugin.exportBackup(otherCode))])
+    expect(await f.plugin.inspectSecretKeyBackup()).not.toBe('confirmed')
+    expect(f.plugin.backupHoldsOtherKey()).toBe(false)
+  })
+
+  it('a successful check of a newly replaced backup with this key ends the recorded other-key evidence', async () => {
+    const f = await setup()
+    await f.plugin.restoreSecretKey(meta.backupPassphrase)
+    await f.plugin.importKeyFromFile(bobBackup, meta.backupPassphrase)
+    expect(await f.plugin.inspectSecretKeyBackup()).toBe('out-of-date')
+    expect(f.plugin.backupHoldsOtherKey()).toBe(true)
+    await f.plugin.importKeyFromFile(aliceBackup, meta.backupPassphrase)
+    f.nodes.set(secretNode, [await item(await f.plugin.exportBackup(otherCode))])
+    expect((await f.plugin.checkBackupWithCode(otherCode)).outcome).toBe('confirmed')
+    expect(f.plugin.backupHoldsOtherKey()).toBe(false)
   })
 })

@@ -6,7 +6,7 @@ export interface BackupStatusReads {
   probeSecretKeyBackup?: () => Promise<BackupProbeResult>
   getOwnFingerprint?: () => string | null
   getBackedUpFingerprint?: () => string | null
-  backupRecordHoldsOtherKey?: () => boolean
+  backupHoldsOtherKey?: () => boolean
 }
 
 /**
@@ -29,12 +29,14 @@ export async function readBackupStatus(plugin: BackupStatusReads | null | undefi
 }
 
 /**
- * Whether the backup this device last confirmed belongs to another key. Settings keeps the older
- * policy for it: the foreign-backup warning, and rotation that leaves that backup alone.
+ * Whether the backup file just read is known to hold another key. The plugin binds that evidence to the
+ * file's hash, so read it together with every status update. Settings keeps the older policy for it: the
+ * foreign-backup warning, and rotation that leaves that backup alone. A plugin without the method falls
+ * back to its older marker, only for a backup that exists and is not confirmed.
  */
-export function readBackupHoldsOtherKey(plugin: BackupStatusReads | null | undefined): boolean {
-  if (!plugin) return false
-  if (plugin.backupRecordHoldsOtherKey) return plugin.backupRecordHoldsOtherKey()
+export function readBackupHoldsOtherKey(plugin: BackupStatusReads | null | undefined, status: BackupStatus): boolean {
+  if (!plugin || status === 'absent' || status === 'unknown' || status === 'confirmed') return false
+  if (plugin.backupHoldsOtherKey) return plugin.backupHoldsOtherKey()
   const marker = plugin.getBackedUpFingerprint?.() ?? null
-  return marker !== null && marker !== (plugin.getOwnFingerprint?.() ?? null)
+  return status === 'out-of-date' && marker !== null && marker !== (plugin.getOwnFingerprint?.() ?? null)
 }

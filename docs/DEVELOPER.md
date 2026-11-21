@@ -673,7 +673,8 @@ failed), `unconfirmed` (no record) or `unknown` (a failed read, hash or key read
 backup at its first read (`adopted`); a replacement made before then stays undetected. Check with code
 (`checkBackupWithCode`) decrypts in memory only, never installs, publishes or changes the key, and a
 wrong code changes nothing; a backup that opens but holds another key records nothing and Settings keeps
-the existing mismatch status until the backup is replaced or checked again.
+the existing mismatch status. That ownership evidence is bound to the hash of the file it describes, so
+a replaced or newly checked file never inherits it.
 
 Settings treats every state except `confirmed` as "a backup may exist" for replacement, rotation and
 deletion: one certainty reading drives the status, the factual known-presence replacement warning, the

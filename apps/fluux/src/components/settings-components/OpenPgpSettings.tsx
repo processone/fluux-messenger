@@ -148,10 +148,9 @@ export function OpenPgpSettings() {
   // unconfirmed when a backup exists; absent or unknown (could not check) otherwise.
   const [backupStatus, setBackupStatus] = useState<'checking' | BackupStatus>('checking')
   // The backup opened with its code but holds another key: shown as the existing mismatch.
-  const [checkedOtherKey, setBackupHoldsOtherKey] = useState(false)
-  // The confirmed file holds another primary key (read from the device's record).
-  const [recordedOtherKey, setRecordedOtherKey] = useState(false)
-  const backupHoldsOtherKey = checkedOtherKey || recordedOtherKey
+  // The file just read holds another primary key: a code check opened it, or the record of that
+  // file names one. Read from the plugin together with each status, so it never outlives the file.
+  const [backupHoldsOtherKey, setBackupHoldsOtherKey] = useState(false)
   const backupProbe: BackupProbeState = backupStatus === 'checking' || backupStatus === 'absent' || backupStatus === 'unknown'
     ? backupStatus
     : 'present'
@@ -656,7 +655,6 @@ export function OpenPgpSettings() {
     if (pluginStatus !== 'ready') {
       setBackupStatus('checking')
       setBackupHoldsOtherKey(false)
-      setRecordedOtherKey(false)
       return
     }
     let cancelled = false
@@ -667,10 +665,7 @@ export function OpenPgpSettings() {
       const result = await readBackupStatus(plugin)
       if (!cancelled) {
         setBackupStatus(result)
-        setRecordedOtherKey(result === 'out-of-date' && readBackupHoldsOtherKey(plugin))
-        // A checked other-key result belongs to the file that was opened. Only a state that
-        // cannot hold it ends it here; an action that replaces the backup ends it where it runs.
-        if (result === 'confirmed' || result === 'absent') setBackupHoldsOtherKey(false)
+        setBackupHoldsOtherKey(readBackupHoldsOtherKey(plugin, result))
       }
     })()
     return () => {
@@ -689,7 +684,6 @@ export function OpenPgpSettings() {
       }
       await plugin.backupSecretKey(passphrase)
       setShowBackupDialog(false)
-      setBackupHoldsOtherKey(false)
       // Re-probe now that we've published — status line should flip to
       // "backed up on server" without needing a page reload.
       setBackupProbeNonce((n) => n + 1)
@@ -732,7 +726,7 @@ export function OpenPgpSettings() {
   const handleCheckCodeConfirm = useCallback(
     async (passphrase: string) => {
       const plugin = client.e2ee?.getPlugin('openpgp') as
-        | { checkBackupWithCode?: (pp: string) => Promise<{ outcome: 'confirmed' | 'other-key'; status: BackupStatus }> }
+        | (BackupStatusReads & { checkBackupWithCode?: (pp: string) => Promise<{ outcome: 'confirmed' | 'other-key'; status: BackupStatus }> })
         | null
         | undefined
       if (!plugin?.checkBackupWithCode) {
@@ -740,10 +734,14 @@ export function OpenPgpSettings() {
       }
       const result = await plugin.checkBackupWithCode(passphrase)
       setShowCheckCodeDialog(false)
-      setBackupHoldsOtherKey(result.outcome === 'other-key')
-      if (result.outcome === 'other-key') return
-      // The status comes back with the check; no further download.
-      setBackupStatus(result.status)
+      // The status and the file's ownership come back together; no further download. A file the
+      // check found to hold another key keeps its status and gains the mismatch.
+      if (result.outcome === 'confirmed') {
+        setBackupStatus(result.status)
+        setBackupHoldsOtherKey(readBackupHoldsOtherKey(plugin, result.status))
+      } else {
+        setBackupHoldsOtherKey(true)
+      }
       if (result.status === 'confirmed') addToast('success', t('settings.encryption.backupCheckSuccess'))
     },
     [client, addToast, t],
@@ -775,7 +773,6 @@ export function OpenPgpSettings() {
       }
       setFingerprint(result.fingerprint)
       setShowRestoreDialog(false)
-      setBackupHoldsOtherKey(false)
       // A successful restore is proof the server backup exists — bump the
       // nonce so the effect re-probes instead of leaving a stale
       // `unknown`/`checking` status line telling the user we still can't
@@ -807,7 +804,6 @@ export function OpenPgpSettings() {
       setFingerprint(info.fingerprint)
       setPendingKeyPicker(null)
       setPendingImportFileArmored(null)
-      setBackupHoldsOtherKey(false)
       setBackupProbeNonce((n) => n + 1)
       addToast('success', t('settings.encryption.restoreSuccess'))
     },
@@ -858,7 +854,6 @@ export function OpenPgpSettings() {
         // Also on the failure path: the rotation itself committed, so
         // whatever the status line claimed before is stale either way.
         setBackupProbeNonce((n) => n + 1)
-        if (passphrase !== undefined) setBackupHoldsOtherKey(false)
       }
       addToast('success', t('settings.encryption.rotateSuccess'))
     },
