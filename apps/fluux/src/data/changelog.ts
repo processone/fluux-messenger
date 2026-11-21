@@ -71,6 +71,7 @@ export const changelog: ChangelogEntry[] = [
         'Replying to someone in a one-to-one chat no longer sends the name you gave them in your contacts. The quote that other apps show above your reply now names them by their address',
         'Invite to Room now lists contacts who are already in the room at the end, marked as already there, whichever device they joined from. They can no longer be invited again by mistake',
         'Shift+Tab in a contact list, such as Invite to Room, New Message or Forward, now moves to the previous contact and stays in the list, so Enter picks that contact instead of pressing Cancel',
+        'Manage Membership and Manage Hats now suggest each person in the room once by their account address, without a device suffix, so adding a member or assigning a hat applies to the person rather than one connection',
       ],
     }],
   },

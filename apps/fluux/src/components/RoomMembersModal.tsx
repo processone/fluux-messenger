@@ -343,6 +343,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
                 placeholder={t('rooms.jidPlaceholder')}
                 excludeJids={selectorExcludeJids}
                 extraSuggestions={extraSuggestions}
+                caseInsensitiveRosterMerge
               />
             </div>
             <select

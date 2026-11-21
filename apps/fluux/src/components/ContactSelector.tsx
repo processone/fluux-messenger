@@ -44,6 +44,8 @@ export interface ContactSelectorProps {
   getUnavailableNote?: (jid: string) => string | undefined
   /** Additional JID suggestions beyond roster contacts (e.g., room occupants, affiliated members) */
   extraSuggestions?: Array<{ jid: string; name?: string }>
+  /** Merge roster/suggestion case variants for account-level room management (default false). */
+  caseInsensitiveRosterMerge?: boolean
   /** Single-pick mode: when set, selecting a contact or typing a JID + Enter calls this once and skips chip selection. */
   onPick?: (jid: string) => void
   /** Whether a typed address outside the list can be picked (default true). */
@@ -82,6 +84,7 @@ export function ContactSelector({
   excludeJids = [],
   getUnavailableNote,
   extraSuggestions = [],
+  caseInsensitiveRosterMerge = false,
   onPick,
   allowTypedJid = true,
   inputId,
@@ -117,8 +120,13 @@ export function ContactSelector({
     return map
   })
 
-  // Build a set of roster JIDs for fast deduplication
-  const rosterJids = new Set(contacts.map(c => c.jid))
+  // Room-management pickers merge account case variants; other callers can distinguish
+  // exact destinations, such as a chat and a joined room with differently spelled addresses.
+  const rosterMergeKey = (jid: string) => caseInsensitiveRosterMerge ? jid.toLowerCase() : jid
+  const rosterJids = new Set(contacts.map(c => rosterMergeKey(c.jid)))
+  // Selection and exclusion comparisons never rewrite values passed to callers.
+  const selectedJids = new Set(selectedContacts.map(jid => jid.toLowerCase()))
+  const excludedJids = new Set(excludeJids.map(jid => jid.toLowerCase()))
 
   // Search text naming someone who cannot be chosen gets its own marked row, so the reason
   // shows whatever else the search matches and even if the text could not be added as typed.
@@ -138,8 +146,9 @@ export function ContactSelector({
     // Map roster contacts to unified type
     const rosterEntries: UnifiedContact[] = contacts
       .filter(contact => {
-        if (selectedContacts.includes(contact.jid)) return false
-        if (excludeJids.includes(contact.jid)) return false
+        const key = contact.jid.toLowerCase()
+        if (selectedJids.has(key)) return false
+        if (excludedJids.has(key)) return false
         if (search.trim() && !matchNameOrJid(contact.name, contact.jid, search)) return false
         return true
       })
@@ -161,9 +170,10 @@ export function ContactSelector({
     // Map and filter extra suggestions (dedupe against roster)
     const extraEntries: UnifiedContact[] = extraSuggestions
       .filter(s => {
-        if (rosterJids.has(s.jid)) return false
-        if (selectedContacts.includes(s.jid)) return false
-        if (excludeJids.includes(s.jid)) return false
+        const key = s.jid.toLowerCase()
+        if (rosterJids.has(rosterMergeKey(s.jid))) return false
+        if (selectedJids.has(key)) return false
+        if (excludedJids.has(key)) return false
         if (search.trim() && !matchNameOrJid(s.name || s.jid, s.jid, search)) return false
         return true
       })
@@ -219,8 +229,8 @@ export function ContactSelector({
   // Whether the search text is a JID the user can add outright.
   const searchIsValidJid = isValidJid(search)
   const canAddAsJid = allowTypedJid && searchIsValidJid && !typedUnavailableNote &&
-    !selectedContacts.includes(searchJidNormalized) &&
-    !excludeJids.includes(searchJidNormalized)
+    !selectedJids.has(searchJidNormalized) &&
+    !excludedJids.has(searchJidNormalized)
 
   // The popover shows suggestions, an add-this-JID row, or a no-match notice.
   const isPopoverOpen = isFocused && (filteredContacts.length > 0 || !!search)
@@ -351,7 +361,7 @@ export function ContactSelector({
       setHighlightedJid(null)
       return
     }
-    if (!selectedContacts.includes(jid)) {
+    if (!selectedJids.has(jid.toLowerCase())) {
       onSelectionChange([...selectedContacts, jid])
     }
     setSearch('')
@@ -434,8 +444,9 @@ export function ContactSelector({
       {selectedContacts.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
           {selectedContacts.map(jid => {
-            const contact = contacts.find(c => c.jid === jid)
-            const extra = !contact ? extraSuggestions.find(s => s.jid === jid) : undefined
+            const key = rosterMergeKey(jid)
+            const contact = contacts.find(c => rosterMergeKey(c.jid) === key)
+            const extra = !contact ? extraSuggestions.find(s => rosterMergeKey(s.jid) === key) : undefined
             const displayName = contact?.name || extra?.name || jid
             return (
               <span
