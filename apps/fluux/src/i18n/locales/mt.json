@@ -1479,6 +1479,10 @@
             "description": "Agħżel konversazzjoni mis-sidebar jew oħloq waħda mil-lista tal-kuntatti tiegħek.",
             "action": "Ibda konversazzjoni"
         },
+        "welcome": {
+            "title": "Merħba f'Fluux",
+            "description": "Ibda konversazzjoni ma' wieħed mill-kuntatti tiegħek, jew sib chat tal-grupp biex tingħaqad miegħu."
+        },
         "rooms": {
             "title": "Kmamar ta' Chat",
             "description": "Idħol f'kamra mill-bookmarks tiegħek jew oħloq chat ta' grupp ġdid.",

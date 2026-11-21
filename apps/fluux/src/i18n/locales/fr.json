@@ -1474,6 +1474,10 @@
             "description": "Sélectionnez une conversation dans la barre latérale ou créez en une depuis votre liste de contacts.",
             "action": "Démarrer une conversation"
         },
+        "welcome": {
+            "title": "Bienvenue dans Fluux",
+            "description": "Commencez une conversation avec l'un de vos contacts ou trouvez un salon à rejoindre."
+        },
         "rooms": {
             "title": "Salons de discussion",
             "description": "Rejoignez un salon depuis vos favoris ou créez une nouvelle discussion de groupe pour collaborer.",

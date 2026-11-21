@@ -1467,7 +1467,8 @@ describe('ChatLayout - EmptyState visual design', () => {
   })
 
   it('renders the empty-state with an accent mark and a display-font title', () => {
-    render(<ChatLayoutWithRouter initialRoute="/messages" />)
+    // The Rooms view has no first-run welcome, so it shows the plain empty pane.
+    render(<ChatLayoutWithRouter initialRoute="/rooms" />)
     // title carries the display font utility
     const title = screen.getByRole('heading', { level: 2 })
     expect(title.className).toMatch(/font-display/)
@@ -1475,6 +1476,16 @@ describe('ChatLayout - EmptyState visual design', () => {
     const mark = title.parentElement?.querySelector('.rounded-full')
     expect(mark?.className).toMatch(/fluux-brand/)
     expect(mark?.className).not.toMatch(/bg-fluux-sidebar/)
+    expect(screen.queryByText('Welcome to Fluux')).not.toBeInTheDocument()
+  })
+
+  it('welcomes an account with no conversation, offering to start one or browse rooms', () => {
+    setMockState({ conversations: new Map() })
+    render(<ChatLayoutWithRouter initialRoute="/messages" />)
+    expect(screen.getByRole('heading', { level: 2, name: 'Welcome to Fluux' })).toBeInTheDocument()
+    expect(screen.getByTestId('empty-state')).toHaveAttribute('data-first-run')
+    expect(screen.getByRole('button', { name: 'Start a conversation' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Browse Rooms' })).toBeInTheDocument()
   })
 })
 

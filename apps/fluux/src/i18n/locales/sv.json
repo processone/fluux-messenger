@@ -1471,6 +1471,10 @@
             "description": "Välj en konversation från sidofältet eller skapa en från din kontaktlista.",
             "action": "Starta ett samtal"
         },
+        "welcome": {
+            "title": "Välkommen till Fluux",
+            "description": "Starta en konversation med någon av dina kontakter, eller hitta en gruppchatt att gå med i."
+        },
         "rooms": {
             "title": "Chattrum",
             "description": "Gå med i ett rum från dina bokmärken eller skapa en ny gruppchatt för att börja chatta.",

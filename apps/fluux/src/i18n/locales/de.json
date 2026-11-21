@@ -1473,6 +1473,10 @@
             "description": "Wählen Sie eine Unterhaltung aus der Seitenleiste oder starten Sie eine neue aus Ihrer Kontaktliste.",
             "action": "Gespräch starten"
         },
+        "welcome": {
+            "title": "Willkommen bei Fluux",
+            "description": "Beginnen Sie eine Unterhaltung mit einem Ihrer Kontakte oder finden Sie einen Gruppenchat, dem Sie beitreten können."
+        },
         "rooms": {
             "title": "Chaträume",
             "description": "Treten Sie einem Raum aus Ihren Lesezeichen bei oder erstellen Sie einen neuen Gruppenchat.",

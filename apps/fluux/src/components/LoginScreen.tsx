@@ -3,8 +3,7 @@ import { reportStartupShell, isStartupRecoveryDisconnect } from '@/utils/startup
 import React, { useState, useEffect, useRef } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
-import { AppIconMark } from './brand/AppIconMark'
-import { HollowIconMark } from './brand/HollowIconMark'
+import { BrandMark } from './brand/BrandMark'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useConnectionStatus, useConnectionActions, useXMPPContext, deleteFastToken, classifyConnectionError, validateBareJid } from '@fluux/sdk'
 import { Loader2, KeyRound, Eye, EyeOff, Wrench } from 'lucide-react'
@@ -20,7 +19,6 @@ import { isShuttingDown } from '@/utils/appShutdown'
 import { prewarmOpenpgpUnlock } from '@/utils/openpgpPrewarm'
 import { ensureDeepLinkRouter } from '@/utils/deepLinkRouter'
 import { LoginErrorPanel } from './LoginErrorPanel'
-import { OverflowMenu } from './OverflowMenu'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
 import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
 import { useLoginPrefillDeepLink } from '@/hooks/useLoginPrefillDeepLink'
@@ -431,38 +429,16 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
         <div className="relative w-full max-w-md">
         {/* Logo / Header */}
         <div className="text-center mb-8">
-          {/* Brand mark: the app icon itself (aurora tile + white bubble), so the
-              login mark matches the installed app icon on the dock/home screen.
-              A soft aurora halo sits behind it for a little lift. */}
-          <div className="relative w-[72px] mx-auto mb-4">
-            <div
-              className="absolute -inset-2.5 rounded-[26px] blur-2xl opacity-45 pointer-events-none"
-              style={{ background: 'var(--fluux-grad)' }}
-              aria-hidden="true"
-            />
-            {/* Soft neutral shadow so the icon stays defined on pale/white
-                backgrounds (the halo glows on dark but doesn't define an edge on light). */}
-            {import.meta.env.VITE_FLUUX_ICON_STYLE === 'plain' ? (
-              <AppIconMark
-                size={72}
-                className="relative [filter:drop-shadow(0_6px_16px_rgba(26,32,64,0.22))]"
-              />
-            ) : (
-              <HollowIconMark
-                size={72}
-                className="relative [filter:drop-shadow(0_6px_16px_rgba(26,32,64,0.22))]"
-              />
-            )}
-          </div>
+          <BrandMark className="mb-4" />
           <h1 className="text-3xl font-semibold font-display tracking-tight text-fluux-text">{t('login.title')}</h1>
           <p className="text-fluux-muted mt-2">{t('login.subtitle')}</p>
         </div>
 
         {/* Login Form */}
-        <form onSubmit={handleSubmit} name="login" className="bg-fluux-sidebar rounded-lg p-6 space-y-4 border border-[color:var(--fluux-surface-divider)] shadow-[var(--fluux-shadow-overlay)]">
+        <form onSubmit={handleSubmit} name="login" className="bg-fluux-sidebar rounded-xl p-7 space-y-4 border border-[color:var(--fluux-surface-divider)] shadow-[var(--fluux-shadow-overlay)]">
           {/* JID Field */}
           <div>
-            <label htmlFor="jid" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
+            <label htmlFor="jid" className="block text-sm font-medium text-fluux-text mb-1.5">
               {t('login.jidLabel')}
             </label>
             <TextInput
@@ -488,7 +464,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
               disabled={isLoading}
               aria-invalid={showJidError}
               aria-describedby={showJidError ? 'jid-error' : undefined}
-              className={`w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
+              className={`w-full px-3 py-2.5 bg-fluux-bg text-fluux-text rounded-lg
                          border focus:border-fluux-brand
                          focus-visible:ring-2 focus-visible:ring-fluux-brand/50
                          placeholder:text-fluux-muted disabled:opacity-50
@@ -503,7 +479,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
 
           {/* Password Field */}
           <div>
-            <label htmlFor="password" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
+            <label htmlFor="password" className="block text-sm font-medium text-fluux-text mb-1.5">
               {t('login.passwordLabel')}
             </label>
             <div className="relative">
@@ -520,7 +496,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                 onChange={(e) => { setPassword(e.target.value); setCredentialsModified(true) }}
                 required
                 disabled={isLoading}
-                className="w-full px-3 py-2 pe-10 bg-fluux-bg text-fluux-text rounded
+                className="w-full px-3 py-2.5 pe-10 bg-fluux-bg text-fluux-text rounded-lg
                            border border-fluux-border focus:border-fluux-brand
                            focus-visible:ring-2 focus-visible:ring-fluux-brand/50
                            placeholder:text-fluux-muted disabled:opacity-50"
@@ -551,7 +527,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
               a saved server, a deep-link prefill, or a non-auth connect error. */}
           {(showServerField || advancedMode) && (
             <div>
-              <label htmlFor="server" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
+              <label htmlFor="server" className="block text-sm font-medium text-fluux-text mb-1.5">
                 {t('login.serverLabel')}
               </label>
               <TextInput
@@ -564,7 +540,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                 }}
                 placeholder={platform().nativeXmppProxy ? t('login.serverPlaceholderDesktop') : t('login.serverPlaceholder')}
                 disabled={isLoading}
-                className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
+                className="w-full px-3 py-2.5 bg-fluux-bg text-fluux-text rounded-lg
                            border border-fluux-border focus:border-fluux-brand
                            focus-visible:ring-2 focus-visible:ring-fluux-brand/50
                            placeholder:text-fluux-muted disabled:opacity-50"
@@ -603,18 +579,20 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                 </span>
               </span>
             </label>
-            <div className="ms-auto">
-              <OverflowMenu
-                ariaLabel={t('common.options')}
-                items={[{
-                  key: 'advanced-mode',
-                  label: t('login.advancedMode'),
-                  icon: Wrench,
-                  active: advancedMode,
-                  onClick: () => setAdvancedMode(!advancedMode),
-                }]}
-              />
-            </div>
+            {/* A visible toggle rather than a menu: it is the form's only option, and it reveals
+                the server field below. */}
+            <button
+              type="button"
+              aria-pressed={advancedMode}
+              onClick={() => setAdvancedMode(!advancedMode)}
+              disabled={isLoading}
+              className={`ms-auto shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors tap-target
+                         hover:bg-fluux-hover disabled:opacity-50
+                         ${advancedMode ? 'text-fluux-brand-on-tint bg-fluux-brand/10' : 'text-fluux-muted hover:text-fluux-text'}`}
+            >
+              <Wrench className="size-3.5" />
+              {t('login.advancedMode')}
+            </button>
           </div>
 
           {/* Keychain indicator */}
@@ -634,8 +612,8 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
           <button
             type="submit"
             disabled={isLoading || !jidValidation.valid || !password}
-            className="w-full py-2.5 bg-fluux-brand hover:bg-fluux-brand-hover
-                       text-fluux-text-on-accent font-medium rounded transition-colors
+            className="w-full py-3 bg-fluux-brand hover:bg-fluux-brand-hover
+                       text-fluux-text-on-accent font-semibold rounded-lg transition-colors
                        disabled:opacity-50 disabled:cursor-not-allowed
                        focus-visible:ring-2 focus-visible:ring-fluux-brand focus-visible:ring-offset-2 focus-visible:ring-offset-fluux-sidebar
                        flex items-center justify-center gap-2"

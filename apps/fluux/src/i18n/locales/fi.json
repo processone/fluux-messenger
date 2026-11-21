@@ -1471,6 +1471,10 @@
             "description": "Valitse keskustelu sivupalkista tai luo uusi yhteystietoluettelostasi.",
             "action": "Aloita keskustelu"
         },
+        "welcome": {
+            "title": "Tervetuloa Fluuxiin",
+            "description": "Aloita keskustelu jonkun yhteystietosi kanssa tai etsi ryhmäkeskustelu, johon liittyä."
+        },
         "rooms": {
             "title": "Keskusteluhuoneet",
             "description": "Liity huoneeseen kirjanmerkeistäsi tai luo uusi ryhmäkeskustelu aloittaaksesi keskustelun.",

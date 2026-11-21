@@ -1475,6 +1475,10 @@
             "description": "Pasirinkite pokalbį iš šoninės juostos arba sukurkite naują iš kontaktų sąrašo.",
             "action": "Pradėti pokalbį"
         },
+        "welcome": {
+            "title": "Sveiki atvykę į Fluux",
+            "description": "Pradėkite pokalbį su vienu iš savo kontaktų arba raskite grupinį pokalbį, prie kurio galite prisijungti."
+        },
         "rooms": {
             "title": "Pokalbių kambariai",
             "description": "Prisijunkite prie kambario iš žymių arba sukurkite naują grupinį pokalbį.",

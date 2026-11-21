@@ -1477,6 +1477,10 @@
             "description": "Vyberte konverzaci z postranního panelu nebo ji vytvořte ze seznamu kontaktů.",
             "action": "Zahájit konverzaci"
         },
+        "welcome": {
+            "title": "Vítejte ve Fluuxu",
+            "description": "Začněte konverzaci s některým ze svých kontaktů nebo najděte skupinový chat, ke kterému se připojíte."
+        },
         "rooms": {
             "title": "Chatovací místnosti",
             "description": "Vstupte do místnosti ze záložek nebo vytvořte nový skupinový chat.",

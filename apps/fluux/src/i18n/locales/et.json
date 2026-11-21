@@ -1473,6 +1473,10 @@
             "description": "Vali vestlus külgribalt või alusta uut kontaktide nimekirjast.",
             "action": "Alusta vestlust"
         },
+        "welcome": {
+            "title": "Tere tulemast Fluuxi",
+            "description": "Alusta vestlust mõne oma kontaktiga või leia grupivestlus, millega liituda."
+        },
         "rooms": {
             "title": "Vestlustoad",
             "description": "Liitu toaga oma järjehoidjatest või loo uus grupivestlus.",

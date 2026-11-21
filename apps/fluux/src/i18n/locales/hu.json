@@ -1471,6 +1471,10 @@
             "description": "Válasszon egy beszélgetést az oldalsávból, vagy indítson újat a névjegyzékből.",
             "action": "Beszélgetés indítása"
         },
+        "welcome": {
+            "title": "Üdvözöljük a Fluuxban",
+            "description": "Kezdjen beszélgetést valamelyik névjegyével, vagy keressen egy csoportos csevegést, amelyhez csatlakozhat."
+        },
         "rooms": {
             "title": "Csevegőszobák",
             "description": "Csatlakozzon egy szobához a könyvjelzőiből, vagy hozzon létre egy új csoportos csevegést.",

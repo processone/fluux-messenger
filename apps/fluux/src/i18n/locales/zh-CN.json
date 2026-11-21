@@ -1471,6 +1471,10 @@
             "description": "从侧边栏选择对话，或从您的联系人列表创建对话。",
             "action": "开始对话"
         },
+        "welcome": {
+            "title": "欢迎使用 Fluux",
+            "description": "与您的联系人开始对话，或查找要加入的群聊。"
+        },
         "rooms": {
             "title": "聊天室",
             "description": "从您的书签加入房间，或创建新群聊，即可开始聊天。",

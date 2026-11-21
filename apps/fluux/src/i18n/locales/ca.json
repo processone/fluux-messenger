@@ -1475,6 +1475,10 @@
             "description": "Selecciona una conversa de la barra lateral o crea'n una des de la teva llista de contactes.",
             "action": "Inicia una conversa"
         },
+        "welcome": {
+            "title": "Et donem la benvinguda a Fluux",
+            "description": "Comença una conversa amb algun dels teus contactes o troba un xat de grup per unir-t'hi."
+        },
         "rooms": {
             "title": "Sales de xat",
             "description": "Uneix-te a una sala dels teus marcadors o crea un xat de grup nou per començar a parlar.",

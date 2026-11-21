@@ -1473,6 +1473,10 @@
             "description": "Odaberite razgovor iz bočne trake ili stvorite novi iz popisa kontakata.",
             "action": "Pokrenite razgovor"
         },
+        "welcome": {
+            "title": "Dobro došli u Fluux",
+            "description": "Započnite razgovor s nekim od svojih kontakata ili pronađite grupni chat kojem se možete pridružiti."
+        },
         "rooms": {
             "title": "Sobe za razgovor",
             "description": "Pridružite se sobi iz vaših oznaka ili stvorite novi grupni razgovor.",

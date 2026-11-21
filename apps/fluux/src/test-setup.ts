@@ -136,6 +136,9 @@ void i18n.use(initReactI18next).init({
           rooms: {
             action: 'Create a room',
           },
+          welcome: {
+            title: 'Welcome to Fluux',
+          },
         },
         // Connection status (App auto-reconnect spinner)
         status: {
