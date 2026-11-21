@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { MAX_SUGGESTIONS } from '@/constants/ui'
 import type { RoomOccupant, RoomRole, MentionReference } from '@fluux/sdk'
 
 /**
@@ -138,7 +139,9 @@ export function useMentionAutocomplete(
       historyMatches.sort((a, b) => a.nick.localeCompare(b.nick))
     }
 
-    return [...result, ...occupantMatches, ...historyMatches]
+    // Bound both the rendered options and keyboard navigation to the same set.
+    // Apply the cap after matching so every nickname remains searchable.
+    return [...result, ...occupantMatches, ...historyMatches].slice(0, MAX_SUGGESTIONS)
   }
   const matches = buildMatches()
 

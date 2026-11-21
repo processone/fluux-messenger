@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useRoster, matchNameOrJid, chatStore } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { X } from 'lucide-react'
-import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
+import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS, MAX_SUGGESTIONS } from '@/constants/ui'
 import { anchorMenuToTrigger } from '@/hooks/useAnchoredMenu'
 import { getFloatingViewport, limitFloatingHeight } from '@/hooks/floatingViewport'
 
@@ -198,10 +198,20 @@ export function ContactSelector({
         unavailableNote: typedUnavailableNote,
       })
     }
-    return [
+    const ordered = [
       ...entries.filter(entry => !entry.unavailableNote),
       ...entries.filter(entry => entry.unavailableNote),
     ]
+    const visible = ordered.slice(0, MAX_SUGGESTIONS)
+    // An explicitly typed unavailable address must still explain why it cannot be
+    // chosen, even when a broad search already filled the suggestion limit.
+    const typedUnavailable = typedUnavailableNote
+      ? ordered.find(entry => entry.jid.toLowerCase().split('/')[0] === typedBareJid)
+      : undefined
+    if (typedUnavailable && !visible.includes(typedUnavailable)) {
+      visible[visible.length - 1] = typedUnavailable
+    }
+    return visible
   })()
 
   // A highlighted address that leaves the list highlights nothing until the user chooses again.

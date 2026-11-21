@@ -1,4 +1,5 @@
 import { markUserScrollIntent } from '../utils/scrollbarReveal'
+import { MAX_SUGGESTIONS } from '@/constants/ui'
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
@@ -488,6 +489,10 @@ function CommandPaletteContent({
         t,
       )
     }
+
+    // Keep broad searches and type-only views bounded. Filtering happens first so
+    // a narrower query can still find any entity, not just the first page.
+    grouped = grouped.map((group) => ({ ...group, items: group.items.slice(0, MAX_SUGGESTIONS) }))
 
     // Append "Search messages" gateway when user has typed a query
     if (searchQuery && filterMode !== 'commands') {
