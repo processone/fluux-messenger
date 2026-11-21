@@ -15,6 +15,8 @@
  * setups don't stomp each other.
  */
 
+import { clearBackupIdentity } from './backupIdentity'
+
 const LEGACY_STORAGE_PREFIX = 'fluux:openpgp:backedUpFingerprint:'
 // Earlier installs could mark an unrelated file as backed up. None of those
 // claims can be trusted; establish this version only from confirmed evidence.
@@ -83,4 +85,6 @@ export function clearBackedUpFingerprint(bareJid: string): void {
   } catch {
     // ignored — see writeBackedUpFingerprint
   }
+  // The identity record of the same backup goes with it (FLM-411).
+  clearBackupIdentity(bareJid)
 }

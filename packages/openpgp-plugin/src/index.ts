@@ -1,5 +1,6 @@
 /** Public entry of @fluux/openpgp-plugin. */
 export * from './armorDetect'
+export * from './backupIdentity'
 export * from './backupKeyMaterial'
 export * from './backupMarker'
 export * from './backupPassphrase'

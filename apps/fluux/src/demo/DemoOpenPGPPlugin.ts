@@ -14,6 +14,7 @@ import type {
 import type {
   KeyBundle,
   BackupProbeResult,
+  BackupStatus,
   KeyDecision,
   OwnKeyConflict,
   TrustStateVerdict,
@@ -228,6 +229,21 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
     await delay(200)
     // Demo mode has no failing transport, so the probe is always definitive.
     return this.state.hasBackup ? 'present' : 'absent'
+  }
+
+  /** Demo mode confirms a backup only when it was made or checked for the current key. */
+  async inspectSecretKeyBackup(): Promise<BackupStatus> {
+    await delay(200)
+    if (!this.state.hasBackup) return 'absent'
+    return this.state.backupFingerprint !== null && this.state.backupFingerprint === this.state.fingerprint ? 'confirmed' : 'unconfirmed'
+  }
+
+  async checkBackupWithCode(passphrase: string): Promise<{ outcome: 'confirmed' | 'other-key'; status: BackupStatus }> {
+    await delay(300)
+    if (!this.state.hasBackup) throw new Error('No backup on the server')
+    if (passphrase !== this.state.backupPassphrase) throw new Error('Wrong backup code')
+    this.state.backupFingerprint = this.state.fingerprint
+    return { outcome: 'confirmed', status: 'confirmed' }
   }
 
   getBackedUpFingerprint(): string | null {

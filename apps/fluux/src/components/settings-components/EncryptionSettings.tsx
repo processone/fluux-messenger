@@ -18,6 +18,8 @@ const OPENPGP_STATE_KEYS: Record<OpenPgpOverviewState, string> = {
   'on-backed-up': 'stateOnBackedUp',
   'on-no-backup': 'stateOnNoBackup',
   'on-backup-unconfirmed': 'stateOnBackupUnconfirmed',
+  'on-backup-changed': 'stateOnBackupChanged',
+  'on-backup-out-of-date': 'stateOnBackupOutOfDate',
 }
 
 interface EncryptionSettingsProps {

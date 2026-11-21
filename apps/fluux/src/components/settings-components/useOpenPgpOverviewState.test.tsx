@@ -65,6 +65,15 @@ describe('useOpenPgpOverviewState', () => {
     await waitFor(() => expect(result.current).toBe('on-backed-up'))
   })
 
+  it('reads the plugin\'s backup identity: changed and out of date (FLM-411)', async () => {
+    plugin.inspectSecretKeyBackup = () => Promise.resolve('changed')
+    const first = renderHook(() => useOpenPgpOverviewState())
+    await waitFor(() => expect(first.result.current).toBe('on-backup-changed'))
+    plugin.inspectSecretKeyBackup = () => Promise.resolve('out-of-date')
+    const second = renderHook(() => useOpenPgpOverviewState())
+    await waitFor(() => expect(second.result.current).toBe('on-backup-out-of-date'))
+  })
+
   it('shows a warning known locally while the server requests are still pending', () => {
     platformFlags = { nativeOpenpgp: true }
     plugin.isKeychainBacked = () => false

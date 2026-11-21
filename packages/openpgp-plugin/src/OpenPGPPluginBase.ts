@@ -75,6 +75,15 @@ import {
   writeBackedUpFingerprint,
 } from './backupMarker'
 import {
+  backupIdentityStatus,
+  normalizeBackupFingerprints,
+  readBackupIdentity,
+  sha256Hex,
+  writeBackupIdentity,
+  type BackupConfirmedBy,
+  type BackupStatus,
+} from './backupIdentity'
+import {
   LEGACY_VERIFICATIONS_NODE,
   VERIFICATION_SETS_NODE,
   fetchLegacyVerifications,
@@ -1833,6 +1842,118 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       { accessModel: 'whitelist', maxItems: 1, persistItems: true },
     )
     writeBackedUpFingerprint(ctx.account.jid, this.ownBundle.fingerprint)
+    // The published file is the one this device now vouches for (FLM-411).
+    if (this.ctx === ctx) await this.recordBackupIdentity(ctx.account.jid, armoredMessage, this.ownBundle, 'publish')
+  }
+
+  /**
+   * Record the identity of the backup file this device has just proven, from
+   * the exact bytes the server holds. Never throws: a record that cannot be
+   * made leaves the backup unconfirmed, which is the honest answer.
+   */
+  private async recordBackupIdentity(
+    accountJid: string,
+    armoredBackup: string,
+    bundle: KeyBundle,
+    confirmedBy: BackupConfirmedBy,
+  ): Promise<void> {
+    try {
+      const [packetsSha256, fingerprints] = await Promise.all([
+        this.backupPacketsHash(armoredBackup),
+        this.componentFingerprints(bundle.publicArmored),
+      ])
+      if (this.ctx?.account.jid !== accountJid) return
+      writeBackupIdentity(accountJid, {
+        version: 1,
+        packetsSha256,
+        fingerprints,
+        confirmedBy,
+        confirmedAt: new Date(this.now()).toISOString(),
+      })
+    } catch (err) {
+      this.ctx?.logger.debug(`${this.pluginName()}: could not record the backup identity: ${formatError(err)}`)
+    }
+  }
+
+  /** SHA-256 of the decoded backup packets, so armor line wrapping never changes it. */
+  private async backupPacketsHash(armoredBackup: string): Promise<string> {
+    const raw = dearmorOpenPgpBlock(armoredBackup)
+    if (!raw) throw new Error('Expected an ASCII-armored OpenPGP block')
+    return sha256Hex(raw)
+  }
+
+  /** Sorted primary and subkey fingerprints of a public certificate. */
+  private async componentFingerprints(publicArmored: string): Promise<string[]> {
+    const cert = await this.validateCert(publicArmored)
+    return normalizeBackupFingerprints([cert.fingerprint, ...cert.subkeyFingerprints])
+  }
+
+  /**
+   * What a Settings read can say about the server backup, from the one file it
+   * downloads: no passphrase and no further server request. Compares the hash
+   * of that file with the identity this device recorded (FLM-411).
+   *
+   * A device that only holds the older fingerprint marker for this very key
+   * records the current backup here, the first time it is read, so nobody has
+   * to enter a code; a replacement made before that read stays undetected.
+   * A failed read, hash or key read is `unknown`, never confirmed.
+   */
+  async inspectSecretKeyBackup(): Promise<BackupStatus> {
+    const ctx = this.ctx
+    if (!ctx) return 'unknown'
+    let armored: string | null
+    try {
+      armored = await this.fetchSecretKeyBackup()
+    } catch (err) {
+      ctx.logger.debug(`${this.pluginName()}: secret-key backup inspection inconclusive: ${formatError(err)}`)
+      return 'unknown'
+    }
+    if (armored === null) return this.ctx === ctx ? 'absent' : 'unknown'
+    const jid = ctx.account.jid
+    const bundle = this.ownBundle
+    let serverHash: string | null = null
+    let own: string[] | null = null
+    try {
+      serverHash = await this.backupPacketsHash(armored)
+      if (bundle) own = await this.componentFingerprints(bundle.publicArmored)
+    } catch (err) {
+      ctx.logger.debug(`${this.pluginName()}: backup identity could not be read: ${formatError(err)}`)
+    }
+    if (this.ctx !== ctx || this.ownBundle !== bundle) return 'unknown'
+    let record = readBackupIdentity(jid)
+    if (!record && serverHash && own && bundle) {
+      const marker = readBackedUpFingerprint(jid)
+      if (marker && fingerprintsEqual(marker, bundle.fingerprint)) {
+        record = { version: 1, packetsSha256: serverHash, fingerprints: own, confirmedBy: 'adopted', confirmedAt: new Date(this.now()).toISOString() }
+        writeBackupIdentity(jid, record)
+      }
+    }
+    return backupIdentityStatus({ record, serverHash, ownFingerprints: own })
+  }
+
+  /**
+   * Confirm the server backup with its code, in memory only. Nothing is
+   * installed, published or changed: a wrong code throws and leaves the record
+   * as it was. When the backup opens and holds this device's key, its identity
+   * is recorded; when it holds another key, nothing is recorded and the result
+   * says so.
+   */
+  async checkBackupWithCode(passphrase: string): Promise<{ outcome: 'confirmed' | 'other-key'; status: BackupStatus }> {
+    const ctx = this.requireCtx()
+    const bundle = this.ownBundle
+    if (!bundle) {
+      throw new E2EEPluginError('permanent', 'no-identity', `${this.pluginName()}: no identity to check against the backup`)
+    }
+    const armored = await this.fetchSecretKeyBackup()
+    if (!armored) {
+      throw new E2EEPluginError('permanent', 'no-backup', `${this.pluginName()}: no secret-key backup found on server`)
+    }
+    const { bundles } = await this.backupImportAllWithLegacyFallback(ctx.account.jid, armored, passphrase, 'checkBackupWithCode', false)
+    if (this.ctx !== ctx || this.ownBundle !== bundle) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup check account changed')
+    const held = bundles.find((b) => fingerprintsEqual(b.fingerprint, bundle.fingerprint))
+    if (!held) return { outcome: 'other-key', status: 'unconfirmed' }
+    await this.recordBackupIdentity(ctx.account.jid, armored, held, 'check')
+    return { outcome: 'confirmed', status: await this.inspectSecretKeyBackup() }
   }
 
   /**
@@ -2130,6 +2251,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // An export re-encrypts the key, so different packet bytes need a
       // read-only decryption/fingerprint check, not an assumption of mismatch.
       let backedUp = fromServer
+      // The file the server holds, whenever this install proves it: it, never the imported file, is what is recorded.
+      let provenServerBackup: string | null = fromServer ? backupMessage : null
       if (!fromServer) {
         try {
           const serverBackup = await this.fetchSecretKeyBackup()
@@ -2147,6 +2270,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
               })
               backedUp = bundles.some(key => fingerprintsEqual(key.fingerprint, bundle.fingerprint))
             }
+            if (backedUp) provenServerBackup = serverBackup
           }
         } catch (err) {
           // A missing code, failed read or unreadable backup cannot prove a new
@@ -2155,7 +2279,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         }
       }
       if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
-      if (backedUp) writeBackedUpFingerprint(ctx.account.jid, bundle.fingerprint)
+      if (backedUp) {
+        writeBackedUpFingerprint(ctx.account.jid, bundle.fingerprint)
+        if (provenServerBackup) await this.recordBackupIdentity(ctx.account.jid, provenServerBackup, bundle, fromServer ? 'restore' : 'install')
+      }
 
       const current = () => this.ctx === ctx && this.ownBundle === bundle
       try {
