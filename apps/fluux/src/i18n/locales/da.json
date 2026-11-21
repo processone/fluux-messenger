@@ -1470,6 +1470,10 @@
             "description": "Vælg en samtale fra sidebjælken eller opret en fra din kontaktliste.",
             "action": "Start en samtale"
         },
+        "welcome": {
+            "title": "Velkommen til Fluux",
+            "description": "Start en samtale med en af dine kontakter, eller find en gruppechat, du kan deltage i."
+        },
         "rooms": {
             "title": "Chatrum",
             "description": "Deltag i et rum fra dine bogmærker eller opret en ny gruppechat for at begynde at chatte.",

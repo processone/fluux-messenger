@@ -1474,6 +1474,10 @@
             "description": "Seleziona una conversazione dalla barra laterale o creane una dalla lista contatti.",
             "action": "Inizia una conversazione"
         },
+        "welcome": {
+            "title": "Ti diamo il benvenuto in Fluux",
+            "description": "Inizia una conversazione con uno dei tuoi contatti o trova una chat di gruppo a cui unirti."
+        },
         "rooms": {
             "title": "Stanze di chat",
             "description": "Entra in una stanza dai preferiti o crea una nuova chat di gruppo per iniziare.",

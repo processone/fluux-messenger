@@ -1475,6 +1475,10 @@
             "description": "Vyberte konverzáciu z bočného panela alebo vytvorte novú zo zoznamu kontaktov.",
             "action": "Začať konverzáciu"
         },
+        "welcome": {
+            "title": "Vitajte vo Fluuxe",
+            "description": "Začnite konverzáciu s niektorým zo svojich kontaktov alebo nájdite skupinový chat, ku ktorému sa pripojíte."
+        },
         "rooms": {
             "title": "Chatovacie miestnosti",
             "description": "Pripojte sa k miestnosti zo záložiek alebo vytvorte nový skupinový chat.",

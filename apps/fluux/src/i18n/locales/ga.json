@@ -1476,6 +1476,10 @@
             "description": "Roghnaigh comhrá ón mbarra taoibh nó cruthaigh ceann ó do liosta teagmhálacha.",
             "action": "Tosaigh comhrá"
         },
+        "welcome": {
+            "title": "Fáilte go Fluux",
+            "description": "Tosaigh comhrá le duine de do theagmhálacha, nó aimsigh comhrá grúpa le dul isteach ann."
+        },
         "rooms": {
             "title": "Seomraí Comhrá",
             "description": "Téigh isteach i seomra ó do leabharmharcanna nó cruthaigh comhrá grúpa nua.",

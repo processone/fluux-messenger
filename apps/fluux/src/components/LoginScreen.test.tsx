@@ -204,12 +204,11 @@ describe('LoginScreen', () => {
             expect(screen.queryByPlaceholderText('login.serverPlaceholder')).not.toBeInTheDocument()
         })
 
-        it('should show server field when advanced mode is toggled via kebab', async () => {
+        it('should show server field when advanced mode is toggled', async () => {
             render(<LoginScreen />)
 
-            // Open the kebab menu and click Advanced mode
-            fireEvent.click(screen.getByRole('button', { name: 'common.options' }))
-            fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'login.advancedMode' }))
+            // Turn on Advanced mode
+            fireEvent.click(screen.getByRole('button', { name: 'login.advancedMode' }))
 
             // Server input should now be visible
             expect(await screen.findByPlaceholderText('login.serverPlaceholder')).toBeInTheDocument()
@@ -362,8 +361,7 @@ describe('LoginScreen', () => {
 
             fireEvent.change(screen.getByLabelText('login.jidLabel'), { target: { value: 'alice@process-one.net' } })
             fireEvent.change(screen.getByLabelText('login.passwordLabel'), { target: { value: 'secret' } })
-            fireEvent.click(screen.getByRole('button', { name: 'common.options' }))
-            fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'login.advancedMode' }))
+            fireEvent.click(screen.getByRole('button', { name: 'login.advancedMode' }))
             const serverInput = await screen.findByPlaceholderText('login.serverPlaceholder')
             fireEvent.change(serverInput, { target: { value: 'chat.custom.net' } })
             fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
@@ -430,8 +428,7 @@ describe('LoginScreen', () => {
             fireEvent.change(screen.getByLabelText('login.jidLabel'), { target: { value: 'alice@example.com' } })
             fireEvent.change(screen.getByLabelText('login.passwordLabel'), { target: { value: 'secret' } })
             // Show and fill server field via the kebab menu
-            fireEvent.click(screen.getByRole('button', { name: 'common.options' }))
-            fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'login.advancedMode' }))
+            fireEvent.click(screen.getByRole('button', { name: 'login.advancedMode' }))
             const serverInput = await screen.findByPlaceholderText('login.serverPlaceholder')
             fireEvent.change(serverInput, { target: { value: 'wss://custom.example.com/ws' } })
             fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
@@ -688,29 +685,29 @@ describe('LoginScreen — Aurora branding', () => {
   })
 })
 
-describe('LoginScreen — advanced-mode kebab', () => {
+describe('LoginScreen — advanced-mode toggle', () => {
   beforeEach(() => {
     useAdvancedModeStore.setState({ advancedMode: false })
     mockUseConnection.mockReturnValue({ status: 'offline', error: null, connect: mockConnect })
   })
 
-  it('renders the kebab and hides the server field by default', () => {
+  it('renders the toggle off and hides the server field by default', () => {
     render(<LoginScreen />)
-    expect(screen.getByRole('button', { name: 'common.options' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'login.advancedMode' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.queryByText('login.serverLabel')).not.toBeInTheDocument()
     // The old inline advanced-mode checkbox is gone.
     expect(document.querySelector('#advanced-mode')).toBeNull()
   })
 
-  it('reveals the server field when advanced mode is enabled via the kebab', async () => {
+  it('reveals the server field when advanced mode is enabled via the toggle', async () => {
     render(<LoginScreen />)
-    fireEvent.click(screen.getByRole('button', { name: 'common.options' }))
-    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'login.advancedMode' }))
+    fireEvent.click(screen.getByRole('button', { name: 'login.advancedMode' }))
 
     await waitFor(() => {
       expect(screen.getByText('login.serverLabel')).toBeInTheDocument()
     })
     expect(useAdvancedModeStore.getState().advancedMode).toBe(true)
+    expect(screen.getByRole('button', { name: 'login.advancedMode' })).toHaveAttribute('aria-pressed', 'true')
   })
 })
 

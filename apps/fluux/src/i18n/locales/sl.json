@@ -1476,6 +1476,10 @@
             "description": "Izberite pogovor iz stranske vrstice ali ustvarite novega iz seznama stikov.",
             "action": "Začni pogovor"
         },
+        "welcome": {
+            "title": "Dobrodošli v Fluuxu",
+            "description": "Začnite pogovor z enim od svojih stikov ali poiščite skupinski klepet, ki se mu lahko pridružite."
+        },
         "rooms": {
             "title": "Klepetalnice",
             "description": "Pridružite se sobi iz zaznamkov ali ustvarite nov skupinski klepet.",

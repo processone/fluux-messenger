@@ -1470,6 +1470,10 @@
             "description": "Veldu samtal frá hliðarstikunni eða búðu til nýtt úr tengiliðalistanum þínum.",
             "action": "Hefja samtal"
         },
+        "welcome": {
+            "title": "Velkomin í Fluux",
+            "description": "Hefðu samtal við einhvern tengiliða þinna eða finndu hópspjall til að ganga í."
+        },
         "rooms": {
             "title": "Spjallherbergi",
             "description": "Gangt í herbergi úr bókamerkjum þínum eða búðu til nýtt hópspjall.",

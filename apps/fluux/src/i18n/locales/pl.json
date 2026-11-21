@@ -1476,6 +1476,10 @@
             "description": "Wybierz rozmowę z paska bocznego lub rozpocznij nową z listy kontaktów.",
             "action": "Rozpocznij rozmowę"
         },
+        "welcome": {
+            "title": "Witamy w Fluux",
+            "description": "Rozpocznij rozmowę z jednym ze swoich kontaktów lub znajdź czat grupowy, do którego możesz dołączyć."
+        },
         "rooms": {
             "title": "Pokoje czatowe",
             "description": "Dołącz do pokoju z zakładek lub utwórz nowy czat grupowy, aby rozpocząć rozmowę.",

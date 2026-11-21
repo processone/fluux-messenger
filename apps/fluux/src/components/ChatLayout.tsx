@@ -22,6 +22,8 @@ import { CommandPalette } from './CommandPalette'
 import { AppBar } from './AppBar'
 import { ToastContainer } from './ToastContainer'
 import { CreateRoomModal } from './CreateRoomModal'
+import { BrowseRoomsModal } from './BrowseRoomsModal'
+import { BrandMark } from './brand/BrandMark'
 import {
   // Vanilla stores for imperative .getState() access
   chatStore, roomStore, consoleStore, adminStore, rosterStore, searchStore,
@@ -316,6 +318,7 @@ function ChatLayoutContent() {
 
   // Create-room modal state (mirroring RoomsList)
   const [showCreateRoom, setShowCreateRoom] = useState(false)
+  const [showBrowseRooms, setShowBrowseRooms] = useState(false)
 
   // Room occupants panel state (persisted across view switches)
   const [showRoomOccupants, setShowRoomOccupants] = useState(false)
@@ -1224,6 +1227,7 @@ function ChatLayoutContent() {
                   ? { label: t('emptyState.rooms.action'), onClick: () => setShowCreateRoom(true) }
                   : undefined
               }
+              onBrowseRooms={() => setShowBrowseRooms(true)}
             />
           )}
           </RegionErrorBoundary>
@@ -1235,6 +1239,7 @@ function ChatLayoutContent() {
 
       {/* Create room modal (lifted from RoomsList for empty-state action) */}
       {showCreateRoom && <CreateRoomModal onClose={() => setShowCreateRoom(false)} />}
+      {showBrowseRooms && <BrowseRoomsModal onClose={() => setShowBrowseRooms(false)} />}
 
       {/* XMPP Console Panel */}
       <Suspense fallback={null}>
@@ -1263,8 +1268,48 @@ function ChatLayoutContent() {
   )
 }
 
-function EmptyState({ sidebarView, primaryAction }: { sidebarView: SidebarView; primaryAction?: { label: string; onClick: () => void } }) {
+function EmptyState({ sidebarView, primaryAction, onBrowseRooms }: {
+  sidebarView: SidebarView
+  primaryAction?: { label: string; onClick: () => void }
+  /** Offered beside the primary action on the first-run welcome. */
+  onBrowseRooms?: () => void
+}) {
   const { t } = useTranslation()
+  // An account with no conversation at all, archived ones included, is new: greet it instead of
+  // pointing at a sidebar that has nothing to select.
+  const isFirstRun = useChatStore((s) => s.conversations.size === 0) && sidebarView === 'messages'
+
+  if (isFirstRun) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted px-6 text-center" data-testid="empty-state" data-first-run="">
+        <BrandMark size={64} className="mb-6" />
+        <h2 className="text-2xl font-semibold font-display text-fluux-text mb-2">{t('emptyState.welcome.title')}</h2>
+        <p className="max-w-sm">{t('emptyState.welcome.description')}</p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+          {primaryAction && (
+            <button
+              type="button"
+              onClick={primaryAction.onClick}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-fluux-brand hover:bg-fluux-brand-hover text-fluux-text-on-accent text-sm font-medium rounded-lg transition-colors"
+            >
+              <Plus className="size-4" />
+              {primaryAction.label}
+            </button>
+          )}
+          {onBrowseRooms && (
+            <button
+              type="button"
+              onClick={onBrowseRooms}
+              className="inline-flex items-center gap-2 px-4 py-2 border border-fluux-border hover:bg-fluux-hover text-fluux-text text-sm font-medium rounded-lg transition-colors"
+            >
+              <Hash className="size-4" />
+              {t('rooms.browseRooms')}
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   // Icon matches the icon-rail glyph for each view, using the same lucide set
   // as the rest of the app (no hand-rolled Material SVG paths).

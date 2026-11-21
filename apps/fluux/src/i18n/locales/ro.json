@@ -1474,6 +1474,10 @@
             "description": "Selectează o conversație din bara laterală sau creează una din lista de contacte.",
             "action": "Pornește o conversație"
         },
+        "welcome": {
+            "title": "Bun venit în Fluux",
+            "description": "Începe o conversație cu unul dintre contactele tale sau găsește un chat de grup în care să intri."
+        },
         "rooms": {
             "title": "Camere de discuții",
             "description": "Intră într-o cameră din semnele de carte sau creează o nouă conversație de grup.",
