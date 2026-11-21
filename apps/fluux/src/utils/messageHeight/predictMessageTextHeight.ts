@@ -95,7 +95,8 @@ function predictCapped(
 // not the message: the SDK reallocates message objects. The character budget counts each body
 // once across contexts; retaining multiple contexts keeps fallback and calibrated widths reusable
 // across conversation remounts.
-const MAX_CACHED_PREDICTIONS = 1000
+// Sized to hold a full 5,000-message window, so one new message does not re-predict the window.
+const MAX_CACHED_PREDICTIONS = 5000
 const MAX_CACHED_CHARS = 8_000_000
 const MAX_CACHED_CONTEXTS = 4
 const predictionCache = new Map<string, Map<string, MessagePrediction>>()

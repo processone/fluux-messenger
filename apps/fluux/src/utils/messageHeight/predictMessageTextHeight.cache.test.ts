@@ -90,8 +90,21 @@ describe('predictMessageTextHeight cost', () => {
     expect(prepare).toHaveBeenCalledTimes(8)
   })
 
+  it('holds a full 5,000-message window across a new message', () => {
+    for (let i = 0; i < 5000; i++) predictMessageTextHeight(`body ${i}`, 560, FONT, 22)
+    vi.mocked(prepare).mockClear()
+    for (let i = 0; i < 5000; i++) predictMessageTextHeight(`body ${i}`, 560, FONT, 22)
+    expect(prepare).not.toHaveBeenCalled()
+    predictMessageTextHeight('body 5000', 560, FONT, 22)
+    expect(prepare).toHaveBeenCalledTimes(1)
+    predictMessageTextHeight('body 1', 560, FONT, 22)
+    expect(prepare).toHaveBeenCalledTimes(1)
+    predictMessageTextHeight('body 0', 560, FONT, 22)
+    expect(prepare).toHaveBeenCalledTimes(2)
+  })
+
   it('counts bodies rather than contexts toward the entry limit', () => {
-    for (let i = 0; i < 1000; i++) {
+    for (let i = 0; i < 5000; i++) {
       predictMessageTextHeight(`body ${i}`, 560, FONT, 22)
       predictMessageTextHeight(`body ${i}`, 800, FONT, 22)
     }
@@ -99,7 +112,7 @@ describe('predictMessageTextHeight cost', () => {
     predictMessageTextHeight('body 0', 560, FONT, 22)
     predictMessageTextHeight('body 0', 800, FONT, 22)
     expect(prepare).not.toHaveBeenCalled()
-    predictMessageTextHeight('body 1000', 560, FONT, 22)
+    predictMessageTextHeight('body 5000', 560, FONT, 22)
     predictMessageTextHeight('body 0', 560, FONT, 22)
     expect(prepare).toHaveBeenCalledTimes(2)
   })
