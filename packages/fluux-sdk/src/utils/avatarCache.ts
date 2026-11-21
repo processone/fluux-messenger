@@ -295,13 +295,15 @@ export async function cacheAvatar(
     return `data:${mimeType};base64,${base64}`
   }
 
-  const existingUrl = blobUrlPool.get(hash)
-  if (existingUrl && !isLocalAvatarKey(hash) && await isStored(hash)) {
+  if (blobUrlPool.has(hash) && !isLocalAvatarKey(hash) && await isStored(hash)) {
     // A SHA-1 key names its bytes and they just matched it, so an entry that is already
     // stored and pooled is this very image: rewriting it would only churn a write and
-    // revoke a URL that mounted avatars are showing.
-    return existingUrl
+    // revoke a URL that mounted avatars are showing. The pool is read again after the
+    // lookup, since a refresh or revoke may have replaced the URL while it ran.
+    const pooled = blobUrlPool.get(hash)
+    if (pooled) return pooled
   }
+  const existingUrl = blobUrlPool.get(hash)
   if (existingUrl) {
     URL.revokeObjectURL(existingUrl)
     blobUrlPool.delete(hash)

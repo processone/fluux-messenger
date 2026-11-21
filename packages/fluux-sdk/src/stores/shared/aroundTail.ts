@@ -25,3 +25,29 @@ export function withoutRowsPastSlice<T extends { timestamp: Date }>(
   const lastSliceTime = slice[slice.length - 1].timestamp.getTime()
   return resident.filter(message => message.timestamp.getTime() <= lastSliceTime)
 }
+
+/**
+ * Read a load-around slice bounded to one resident window of newer rows.
+ *
+ * The bound is only safe when the window trim really evicts the newest rows: the hidden-row
+ * compaction inside the trim can leave a bounded slice shorter than the window, and then
+ * the window would end inside the cache with its tail unread (and, at a tied timestamp,
+ * a continuation by exclusive timestamp would skip rows). In that case the read is repeated
+ * unbounded, which is the previous behaviour.
+ *
+ * @param read reads the slice; `after` undefined means no bound
+ * @param evictsNewest whether the shared around-slice trim evicts the newest row for this bounded slice
+ */
+export async function readAroundBounded<T>(
+  options: { after?: number },
+  bound: number,
+  anchorRow: MessageRowRef,
+  read: (after: number | undefined) => Promise<T[]>,
+  evictsNewest: (slice: T[]) => boolean,
+): Promise<{ slice: T[]; tailTruncated: boolean }> {
+  if (options.after !== undefined) return { slice: await read(options.after), tailTruncated: false }
+  const slice = await read(bound)
+  if (rowsAfterAnchor(slice, anchorRow) < bound) return { slice, tailTruncated: false }
+  if (evictsNewest(slice)) return { slice, tailTruncated: true }
+  return { slice: await read(undefined), tailTruncated: false }
+}

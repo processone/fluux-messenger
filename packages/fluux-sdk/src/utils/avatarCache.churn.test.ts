@@ -5,7 +5,7 @@ import { Blob } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import {
   cacheAvatar, clearNoAvatar, markNoAvatar, hasNoAvatar, getCachedAvatar,
-  _resetBlobUrlPoolForTesting, _resetDBForTesting,
+  revokeAllBlobUrls, _resetBlobUrlPoolForTesting, _resetDBForTesting,
 } from './avatarCache'
 
 // Intent: presence repeats an unchanged avatar hash on every status change in every room,
@@ -68,4 +68,15 @@ it('clearing a negative entry that is not stored takes no write lock, and clears
   await clearNoAvatar('someone@example.test')
   expect(modes.filter(m => m.startsWith('no-avatar-jids') && m.endsWith(':readwrite'))).toHaveLength(1)
   expect(await hasNoAvatar('someone@example.test')).toBe(false)
+})
+
+it('never returns a URL that was revoked while it checked the stored row', async () => {
+  const first = await cacheAvatar(hash, base64, 'image/png')
+  const pending = cacheAvatar(hash, base64, 'image/png')
+  // A resume refresh replaces the pooled URL while the stored-row lookup is in flight.
+  revokeAllBlobUrls()
+  const second = await pending
+  expect(second).not.toBe(first)
+  expect(revoke).toHaveBeenCalledWith(first)
+  expect(await getCachedAvatar(hash)).toBe(second)
 })
