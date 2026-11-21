@@ -123,19 +123,28 @@ describe('InviteToRoomModal with people already in the room', () => {
     )
   })
 
-  it('stops inviting a chosen contact who joins while the window is open', () => {
+  it('clears a chosen contact who joins, and needs them chosen again after they leave', () => {
     const { rerender } = openPicker(aliceOnTwoDevices(), 'bob')
     fireEvent.keyDown(input(), { key: 'Enter' })
     expect(sendButton()).toBeEnabled()
 
-    const joined = roomWith(
+    const withBob = roomWith(
       occupant('alice', 'alice@example.com/phone'),
       occupant('bob', 'bob@example.com/desktop'),
     )
-    rerender(<InviteToRoomModal isOpen onClose={() => {}} room={joined} />)
+    rerender(<InviteToRoomModal isOpen onClose={() => {}} room={withBob} />)
+    expect(sendButton()).toBeDisabled()
 
+    rerender(<InviteToRoomModal isOpen onClose={() => {}} room={aliceOnTwoDevices()} />)
     expect(sendButton()).toBeDisabled()
     fireEvent.click(sendButton())
     expect(inviteMultipleToRoom).not.toHaveBeenCalled()
+
+    fireEvent.change(input(), { target: { value: 'bob' } })
+    fireEvent.keyDown(input(), { key: 'Enter' })
+    fireEvent.click(sendButton())
+    expect(inviteMultipleToRoom).toHaveBeenCalledWith(
+      'team@conference.example.com', ['bob@example.com'], undefined,
+    )
   })
 })

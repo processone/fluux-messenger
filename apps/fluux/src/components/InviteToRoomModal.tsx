@@ -46,8 +46,10 @@ function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
   const isInRoom = (jid: string) => occupantBareJids.has(getBareJid(jid).toLowerCase())
   const alreadyInRoom = t('rooms.alreadyInRoom')
 
-  // Someone chosen before they joined the room stops being invited.
+  // Someone chosen before they joined the room is cleared for good: if they leave
+  // again, they are invited only after being chosen again.
   const invitees = selectedContacts.filter(jid => !isInRoom(jid))
+  if (invitees.length !== selectedContacts.length) setSelectedContacts(invitees)
 
   const handleInvite = () => {
     if (invitees.length === 0) return
