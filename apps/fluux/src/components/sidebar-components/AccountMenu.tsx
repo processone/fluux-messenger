@@ -207,6 +207,8 @@ export function AccountMenu({ onLogout, onOpenProfile, zoneRef }: AccountMenuPro
   const handleMenuKeyDown = (e: React.KeyboardEvent) => {
     const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Tab']
     if (!keys.includes(e.key)) return
+    // The phone sheet's own focus trap already wraps Tab; handling it again would skip an item.
+    if (e.key === 'Tab' && isMobile) return
     const items = Array.from(getMenuEl()?.querySelectorAll<HTMLElement>(ITEM_SELECTOR) ?? [])
     if (items.length === 0) return
     // Typing in the status field keeps Home/End for the caret.
@@ -366,13 +368,14 @@ export function AccountMenu({ onLogout, onOpenProfile, zoneRef }: AccountMenuPro
   )
 
   const statusText = statusMessage || presenceLabel
+  const rowTooltip = `${name} · ${step ? t(`status.${step}`) : statusText}`
   const rowLabel = `${name}, ${step ? t(`status.${step}`) : statusText}`
 
   return (
     <>
       <div className="relative flex items-center gap-1 min-w-0" ref={wrapperRef}>
         <div className="min-w-0 flex-1">
-          <Tooltip content={name} position="top" disabled={isOpen} className="min-w-0 block">
+          <Tooltip content={rowTooltip} position="top" disabled={isOpen} className="min-w-0 block">
             <button
               type="button"
               ref={setTrigger}

@@ -87,7 +87,9 @@ vi.mock('@/hooks', () => ({
 vi.mock('../AboutModal', () => ({ AboutModal: () => <div>about-modal</div> }))
 vi.mock('../ChangelogModal', () => ({ ChangelogModal: () => null }))
 vi.mock('../Avatar', () => ({ Avatar: () => null }))
-vi.mock('../Tooltip', () => ({ Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
+vi.mock('../Tooltip', () => ({
+  Tooltip: ({ children, content }: { children: React.ReactNode; content: string }) => <div data-tooltip={content}>{children}</div>,
+}))
 
 const row = () => screen.getByTestId('account-row')
 
@@ -207,6 +209,30 @@ describe('AccountMenu row and menu', () => {
     expect(screen.getByRole('menuitem', { name: 'menu.logOut' })).toBeInTheDocument()
     expect(screen.queryByText('menu.keyboardShortcuts')).not.toBeInTheDocument()
     expect(screen.queryByText('menu.showConsole')).not.toBeInTheDocument()
+  })
+})
+
+describe('AccountMenu disclosure and phone sheet keys', () => {
+  it('discloses the full name and status in the row tooltip', () => {
+    statusMessage = 'A very long status message that the row truncates'
+    render(<AccountMenu onLogout={vi.fn()} onOpenProfile={vi.fn()} />)
+    expect(row().parentElement).toHaveAttribute('data-tooltip', 'Mickaël · A very long status message that the row truncates')
+  })
+
+  it.each([true, false])('wraps Tab at both ends of the real phone sheet once (online: %s)', async (online) => {
+    mobile = true
+    store.state = { ...store.state, status: online ? 'online' : 'reconnecting' }
+    render(<AccountMenu onLogout={vi.fn()} onOpenProfile={vi.fn()} />)
+    fireEvent.click(row())
+    await act(async () => { await new Promise((r) => requestAnimationFrame(() => r(null))) })
+    const sheet = screen.getByRole('dialog')
+    const items = Array.from(sheet.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled)'))
+    const last = items[items.length - 1]
+    last.focus()
+    fireEvent.keyDown(last, { key: 'Tab' })
+    expect(document.activeElement).toBe(items[0])
+    fireEvent.keyDown(items[0], { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(last)
   })
 })
 
