@@ -250,7 +250,10 @@ test('custom window controls participate in the shared inset keyboard ring', asy
   })
   await page.goto('/')
   const controls = page.locator('.window-controls .window-control')
-  await expect(controls).toHaveCount(3)
+  // The entry imports main asynchronously after its boot checks; on the dev
+  // launcher that module graph can still be loading after the default 5s
+  // assertion budget. Wait for actual controls within the project's test gate.
+  await expect(controls).toHaveCount(3, { timeout: test.info().timeout })
   for (const mode of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: mode })
     if (mode === 'light') await expect(page.locator('html')).toHaveClass(/light/)
