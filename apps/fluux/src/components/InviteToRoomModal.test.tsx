@@ -63,7 +63,8 @@ vi.mock('./ContactSelector', () => ({
 }))
 
 // Mock SDK hooks
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  getBareJid: (await importOriginal<typeof import('@fluux/sdk')>()).getBareJid,
   useRoomActions: () => ({
     inviteMultipleToRoom: mockInviteMultipleToRoom,
   }),
@@ -549,6 +550,34 @@ describe('InviteToRoomModal', () => {
       // Check that occupant JIDs are passed to ContactSelector
       expect(capturedExcludeJids).toContain('alice@example.com')
       expect(capturedExcludeJids).toContain('existing@example.com')
+    })
+
+    it('excludes an occupant by bare JID whichever resources they joined from', () => {
+      const room = createMockRoom()
+      room.occupants.set('alice', {
+        nick: 'alice',
+        jid: 'alice@example.com/phone',
+        affiliation: 'member',
+        role: 'participant',
+      })
+      room.occupants.set('alice-laptop', {
+        nick: 'alice-laptop',
+        jid: 'alice@example.com/laptop',
+        affiliation: 'member',
+        role: 'participant',
+      })
+
+      render(
+        <InviteToRoomModal
+          isOpen={true}
+          onClose={mockOnClose}
+          room={room}
+        />
+      )
+
+      expect(capturedExcludeJids).toContain('alice@example.com')
+      expect(capturedExcludeJids).not.toContain('alice@example.com/phone')
+      expect(capturedExcludeJids).not.toContain('alice@example.com/laptop')
     })
 
     it('should filter out occupants without JIDs', () => {

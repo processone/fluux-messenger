@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
-import { useRoomActions, type Room } from '@fluux/sdk'
+import { getBareJid, useRoomActions, type Room } from '@fluux/sdk'
 import { UserPlus, Send } from 'lucide-react'
 import { ContactSelector } from './ContactSelector'
 import { ModalShell } from './ModalShell'
@@ -38,10 +38,11 @@ function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
   const [reason, setReason] = useState('')
 
-  // Get list of JIDs already in the room (occupants)
+  // Occupants' real JIDs usually carry a resource, while the roster holds bare JIDs.
   const occupantJids = Array.from(room.occupants.values())
     .map(o => o.jid)
     .filter((jid): jid is string => !!jid)
+    .map(jid => getBareJid(jid))
 
   const handleInvite = () => {
     if (selectedContacts.length === 0) return
