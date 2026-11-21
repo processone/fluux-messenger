@@ -89,8 +89,6 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
   // Use focused selectors instead of useConnection() to avoid re-renders when unrelated values change
   // (e.g., ownResources updates shouldn't re-render the entire sidebar)
   const jid = useConnectionStore((s) => s.jid)
-  const ownAvatar = useConnectionStore((s) => s.ownAvatar)
-  const ownNickname = useConnectionStore((s) => s.ownNickname)
   // Get methods from client (not from store)
   const { client } = useXMPP()
   const { markAllRoomsRead } = useRoomActions()
@@ -111,8 +109,6 @@ export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, 
   // Diagnostic: track every selector value per render. Dev-only (guarded inside
   // trackSelectorChange). Helps pinpoint unstable selectors causing render loops.
   trackSelectorChange('Sidebar', 'jid', jid)
-  trackSelectorChange('Sidebar', 'ownAvatar', ownAvatar)
-  trackSelectorChange('Sidebar', 'ownNickname', ownNickname)
   trackSelectorChange('Sidebar', 'isAdmin', isAdmin)
   trackSelectorChange('Sidebar', 'totalUnread', totalUnread)
   trackSelectorChange('Sidebar', 'roomTabTone', roomTabTone)
