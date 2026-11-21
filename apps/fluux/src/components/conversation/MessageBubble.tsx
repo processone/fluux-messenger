@@ -902,15 +902,16 @@ export const MessageBubble = memo(function MessageBubble({
             </>
           )}
 
-          {message.forwarded && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption && (
-            <ForwardedCopyCard message={message} formatTime={formatTime} isDarkMode={isDarkMode} />
+          {copyShown && (
+            <ForwardedCopyCard message={message} formatTime={formatTime} isDarkMode={isDarkMode} onMediaLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />
           )}
 
           {/* A structured copy already shows the source, so no second preview of the same link. */}
           {!(message.forwarded && !message.isRetracted) && <RoomMessageLinkPreview message={message} formatTime={formatTime} isDarkMode={isDarkMode} onSourceShown={hasForwardFallback ? setSourceShown : undefined} />}
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
-          {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}
+          {/* A forwarded copy draws the file inside its own quote. */}
+          {!message.isRetracted && !copyShown && <MessageAttachments attachment={message.attachment} onMediaLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}
 
           {/* Link preview - hidden for retracted */}
           {!message.isRetracted && message.linkPreview && <LinkPreviewCard preview={message.linkPreview} onLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}

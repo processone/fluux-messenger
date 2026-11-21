@@ -225,4 +225,29 @@ describe('forward on a one-to-one message', () => {
     renderDirect(message as Partial<BaseMessage>)
     expect(screen.queryAllByRole('button', { name: 'chat.forwardMessageLink' })).toHaveLength(0)
   })
+
+  // FLM-403: a forwarded file is drawn inside the forward quote, once, and its clicks do not open the original.
+  describe('forwarded file inside the quote', () => {
+    const attachment = { url: 'https://upload.example/p.png', name: 'p.png', mediaType: 'image/png' }
+    const forwardedFile = { forwarded: { author: 'Bob', text: 'Look at this' }, references: undefined, attachment }
+
+    it('draws the image inside the forwarded copy, and only once', () => {
+      const { container } = render(<MessageBubble {...bubble(forwardedFile)} />)
+      const card = container.querySelector('[data-forwarded-copy]')!
+      expect(card.querySelectorAll('img')).toHaveLength(1)
+      expect(container.querySelectorAll('img[src*="upload.example"]')).toHaveLength(1)
+    })
+
+    it('keeps the file outside the card when the message is not a forwarded copy', () => {
+      const { container } = render(<MessageBubble {...bubble({ attachment, references: undefined })} />)
+      expect(container.querySelector('[data-forwarded-copy]')).toBeNull()
+      expect(container.querySelectorAll('img[src*="upload.example"]')).toHaveLength(1)
+    })
+
+    it('keeps the file visible when the copy is not drawn', () => {
+      const { container } = render(<MessageBubble {...bubble({ ...forwardedFile, isRetracted: false, encryptedPayload: '<encrypted/>' })} />)
+      expect(container.querySelector('[data-forwarded-copy]')).toBeNull()
+      expect(container.querySelectorAll('img[src*="upload.example"]')).toHaveLength(1)
+    })
+  })
 })
