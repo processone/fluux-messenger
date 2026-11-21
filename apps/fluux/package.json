@@ -42,7 +42,7 @@
     "pretauri:android:build": "npm run tauri:android:prepare",
     "tauri:android:build": "tauri android build --apk",
     "pretauri:ios:init": "node scripts/mobile-share-resources.mjs",
-    "lint:compiler": "node --test scripts/checkReactCompiler.test.mjs && node scripts/checkReactCompiler.mjs"
+    "lint:compiler": "node scripts/checkReactCompiler.mjs && node --test scripts/checkReactCompiler.test.mjs"
   },
   "dependencies": {
     "@chenglou/pretext": "^1.0.0",

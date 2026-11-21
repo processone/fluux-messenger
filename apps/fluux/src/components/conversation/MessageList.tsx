@@ -447,6 +447,7 @@ export function MessageList<T extends BaseMessage>({
   // Build once when virtualization first becomes active in this mount.
   // MessageList remounts on conversation changes; an inactive flag may turn on later.
   const [measurementSeed, setMeasurementSeed] = useState<{ value?: ReadonlyMap<string, number> } | null>(null)
+  let initialMeasurements = measurementSeed?.value
   if (virtualized && measurementSeed === null) {
     // One-shot per page load: fill the module cache from the persisted snapshot so the
     // FIRST mount after a reload seeds real heights (the in-memory cache alone dies with
@@ -476,9 +477,11 @@ export function MessageList<T extends BaseMessage>({
       candidates: stored.size,
       rows: virtualItems.length,
     })
-    setMeasurementSeed({ value: result.size ? result : undefined })
+    // The adapter consumes the seed on this pass, before React re-renders
+    // with the saved state. Its measurement cache cannot be seeded afterward.
+    initialMeasurements = result.size ? result : undefined
+    setMeasurementSeed({ value: initialMeasurements })
   }
-  const initialMeasurements = measurementSeed?.value
 
   // Write-back: record each row's measured height to the persistent cache. A repeated measurement
   // for the same row also carries the authoritative delta from @tanstack's ResizeObserver. Positive

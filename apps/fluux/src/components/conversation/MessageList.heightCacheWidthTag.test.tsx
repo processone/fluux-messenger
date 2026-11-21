@@ -45,8 +45,10 @@ interface AdapterArgs {
   items: readonly { key: string }[]
   onMeasured?: (key: string, size: number) => void
   sampleEstimateMetrics?: () => void
+  initialMeasurements?: ReadonlyMap<string, number>
 }
 let adapter: AdapterArgs
+let adapterCalls: AdapterArgs[] = []
 /** The mounted window: which item indices the virtualizer double renders. */
 let isMounted: (index: number) => boolean = () => true
 
@@ -54,6 +56,7 @@ let isMounted: (index: number) => boolean = () => true
 // measurement and sampling callbacks to the test, which plays the adapter's part.
 vi.mock('./tanstackMessageVirtualizer', () => ({
   useTanstackMessageVirtualizer: (args: AdapterArgs) => {
+    adapterCalls.push(args)
     adapter = args
     const stub: MessageVirtualizer = {
       getVirtualItems: () => args.items.flatMap((item, index) =>
@@ -137,6 +140,7 @@ describe('MessageList height cache width tag', () => {
     __clearHeightCache()
     columnPx = COLUMN_AT_1280_PX
     isMounted = () => true
+    adapterCalls = []
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -173,6 +177,29 @@ describe('MessageList height cache width tag', () => {
     expect(getConversationWidthBucket(CONVERSATION)).toBe(600)
     expect(getCachedHeight(CONVERSATION, firstIncomingKey, scale)).toBeUndefined()
     expect(getCachedHeight(CONVERSATION, lastOwnKey, scale)).toBe(OWN_ROW_PX)
+  })
+
+  // Regression from compiling MessageList: a render-phase state update must not
+  // delay the seed until the next pass. The real adapter/library consumes it on
+  // its first call, before building its measurement cache. Use the same measured
+  // Chromium row fixture and real persisted cache as the width-tag checks above.
+  it('supplies persisted row heights on the first adapter call when reopening', () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(INCOMING_ROW_PX)
+    const view = render(list())
+    const incoming = itemIndices(false).slice(0, 19)
+    const key = adapter.items[incoming[0]].key
+    const scale = useSettingsStore.getState().fontSize
+    showWindow(view, incoming, INCOMING_ROW_PX)
+    const measuredHeight = getCachedHeight(CONVERSATION, key, scale)
+    expect(measuredHeight).toBeDefined()
+    view.unmount()
+    expect(localStorage.getItem(HEIGHT_CACHE_STORAGE_KEY)).not.toBeNull()
+
+    // A fresh page has only the persisted payload, not the in-memory heights.
+    __clearHeightCache()
+    const firstReopenCall = adapterCalls.length
+    render(list())
+    expect(adapterCalls[firstReopenCall].initialMeasurements?.get(key)).toBe(measuredHeight)
   })
 
   it('persists a window of own replies under the real width bucket when the list unmounts', () => {
