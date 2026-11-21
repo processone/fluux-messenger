@@ -214,6 +214,8 @@ test('handled presence arrows restore keyboard modality and inset menu focus', a
   await boot(page, 'dark')
   await page.getByTestId('account-row').click()
   await expect(page.locator('html')).toHaveAttribute('data-focus-modality', 'pointer')
+  // Focus enters the menu on the current presence a frame after opening; arrow only once it has.
+  await expect(page.getByRole('menuitemradio', { name: 'Online', exact: true })).toBeFocused()
   // The account menu moves focus itself on arrow keys, and the key marks keyboard modality.
   await page.keyboard.press('ArrowDown')
   await expect(page.locator('html')).toHaveAttribute('data-focus-modality', 'keyboard')
