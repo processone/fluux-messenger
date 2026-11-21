@@ -394,7 +394,7 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
 
     },
     blocked: hooks.blocked,
-    blocking: (_currentVersion, _blockedVersion, event) => hooks.release(event.target as IDBDatabase),
+    blocking: (_currentVersion, blockedVersion, event) => hooks.release(event.target as IDBDatabase, blockedVersion),
     terminated: hooks.lost,
   }), { database: targetDbName, onClosed: () => forgetConnection(ready) })
 

@@ -1902,6 +1902,20 @@
         "description": "This part of Fluux couldn't be displayed. The rest of the app keeps working.",
         "panel": "This panel couldn't be displayed.",
         "message": "This message couldn't be displayed.",
-        "retry": "Try again"
+        "retry": "Try again",
+        "appDescription": "Fluux ran into an unexpected error. Reloading usually fixes it.",
+        "renderLoopTitle": "Fluux stopped a rendering loop",
+        "renderLoopDescription": "Fluux detected a rendering loop and stopped it before the app froze. This is a bug. Copying the diagnostic info helps us fix it.",
+        "recentStateChanges": "Recent state changes ({{count}})",
+        "technicalDetails": "Technical details",
+        "copyDiagnostic": "Copy diagnostic info",
+        "copyFailed": "Copy failed",
+        "reloadApp": "Reload Fluux",
+        "forceReloadHint": "If this keeps happening, press Cmd+Shift+R (Ctrl+Shift+R on Windows and Linux) to force a reload."
+    },
+    "storageOutdated": {
+        "title": "Fluux was updated in another tab",
+        "description": "Reload this tab to use the new version. Until then, history and search may be slower.",
+        "reload": "Reload"
     }
 }

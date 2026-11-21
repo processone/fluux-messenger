@@ -116,7 +116,7 @@ for (const width of [500, 390]) {
     await page.waitForFunction(() => (window as Window & { __fluuxDemoReady?: boolean }).__fluuxDemoReady === true)
     await waitForStressRoom(page)
     await settle(page)
-    await expect(page.getByText('Something Went Wrong', { exact: true })).toHaveCount(0)
+    await expect(page.getByText('Something went wrong', { exact: true })).toHaveCount(0)
     expect(errors.filter(error => /Maximum update depth|Render loop detected/i.test(error))).toEqual([])
     await expect(scroller.locator('[data-message-id]').first()).toBeAttached()
     expect(await page.evaluate(jid => {

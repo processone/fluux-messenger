@@ -1904,6 +1904,20 @@
         "description": "Ovaj dio aplikacije Fluux nije moguće prikazati. Ostatak aplikacije i dalje radi.",
         "panel": "Ovu ploču nije moguće prikazati.",
         "message": "Ovu poruku nije moguće prikazati.",
-        "retry": "Pokušaj ponovno"
+        "retry": "Pokušaj ponovno",
+        "appDescription": "Fluux je naišao na neočekivanu pogrešku. Ponovno učitavanje obično to rješava.",
+        "renderLoopTitle": "Fluux je zaustavio petlju iscrtavanja",
+        "renderLoopDescription": "Fluux je otkrio petlju iscrtavanja i zaustavio je prije nego što se aplikacija zamrznula. To je pogreška. Kopiranje dijagnostičkih podataka pomaže nam da je ispravimo.",
+        "recentStateChanges": "Nedavne promjene stanja ({{count}})",
+        "technicalDetails": "Tehnički detalji",
+        "copyDiagnostic": "Kopiraj dijagnostičke podatke",
+        "copyFailed": "Kopiranje nije uspjelo",
+        "reloadApp": "Ponovno učitaj Fluux",
+        "forceReloadHint": "Ako se to nastavi događati, pritisnite Cmd+Shift+R (Ctrl+Shift+R na Windowsima i Linuxu) za prisilno ponovno učitavanje."
+    },
+    "storageOutdated": {
+        "title": "Fluux je ažuriran u drugoj kartici",
+        "description": "Ponovno učitajte ovu karticu za korištenje nove verzije. Do tada povijest i pretraživanje mogu biti sporiji.",
+        "reload": "Ponovno učitaj"
     }
 }

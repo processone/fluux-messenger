@@ -28,7 +28,7 @@ describe('RenderLoopBoundary', () => {
       ),
     ).not.toThrow()
 
-    expect(screen.getByText('Something Went Wrong')).toBeInTheDocument()
+    expect(screen.getByText('errorBoundary.title')).toBeInTheDocument()
   })
 
   it('still shows the render-loop UI for a render-loop Error', () => {
@@ -40,6 +40,6 @@ describe('RenderLoopBoundary', () => {
       </RenderLoopBoundary>,
     )
 
-    expect(screen.getByText('Render Loop Detected')).toBeInTheDocument()
+    expect(screen.getByText('errorBoundary.renderLoopTitle')).toBeInTheDocument()
   })
 })

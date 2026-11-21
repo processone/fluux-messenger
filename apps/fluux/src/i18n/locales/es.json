@@ -1906,6 +1906,20 @@
         "description": "No se pudo mostrar esta parte de Fluux. El resto de la aplicación sigue funcionando.",
         "panel": "No se pudo mostrar este panel.",
         "message": "No se pudo mostrar este mensaje.",
-        "retry": "Reintentar"
+        "retry": "Reintentar",
+        "appDescription": "Fluux encontró un error inesperado. Recargar suele solucionarlo.",
+        "renderLoopTitle": "Fluux detuvo un bucle de renderizado",
+        "renderLoopDescription": "Fluux detectó un bucle de renderizado y lo detuvo antes de que la aplicación se congelara. Es un error. Copiar la información de diagnóstico nos ayuda a corregirlo.",
+        "recentStateChanges": "Cambios de estado recientes ({{count}})",
+        "technicalDetails": "Detalles técnicos",
+        "copyDiagnostic": "Copiar información de diagnóstico",
+        "copyFailed": "Error al copiar",
+        "reloadApp": "Recargar Fluux",
+        "forceReloadHint": "Si sigue ocurriendo, pulsa Cmd+Mayús+R (Ctrl+Mayús+R en Windows y Linux) para forzar la recarga."
+    },
+    "storageOutdated": {
+        "title": "Fluux se actualizó en otra pestaña",
+        "description": "Recarga esta pestaña para usar la nueva versión. Mientras tanto, el historial y la búsqueda pueden ir más lentos.",
+        "reload": "Recargar"
     }
 }

@@ -21,6 +21,18 @@ export function _setBlockedOpenTimeoutForTesting(ms: number | null): void {
   defaultBlockedTimeoutMs = ms
 }
 
+const outdatedListeners = new Set<(database: string) => void>()
+
+/**
+ * Listen for a newer client taking over a database: its schema is now ahead
+ * of this code, so the cache stays unavailable until the page reloads.
+ * Returns the unsubscribe function.
+ */
+export function onStorageOutdated(listener: (database: string) => void): () => void {
+  outdatedListeners.add(listener)
+  return () => { outdatedListeners.delete(listener) }
+}
+
 /** An IndexedDB open gave up waiting for another connection to close. */
 export class StorageBlockedError extends Error {
   constructor(readonly database: string) {
@@ -40,10 +52,11 @@ export interface GuardedOpenHooks {
    */
   proceed: () => boolean
   /**
-   * Another connection wants a newer version (`versionchange`, idb's
-   * `blocking`). Closes this connection so the upgrade can run.
+   * Another connection wants a newer version or a deletion (`versionchange`,
+   * idb's `blocking`). Closes this connection so it can proceed. Pass the
+   * event's `newVersion`: null for a deletion.
    */
-  release: (db: { close(): void }) => void
+  release: (db: { close(): void }, newVersion: number | null) => void
   /** The browser closed the connection (idb's `terminated`, `close`). */
   lost: () => void
 }
@@ -102,9 +115,12 @@ export function openGuarded<T extends { close(): void }>(
       stopWaiting()
       return !abandoned
     },
-    release: (db) => {
+    release: (db, newVersion) => {
       db.close()
       onClosed()
+      if (newVersion !== null) {
+        for (const listener of outdatedListeners) listener(database)
+      }
     },
     lost: onClosed,
   }
@@ -145,7 +161,7 @@ export function openIndexedDB(name: string, version: number, { upgrade, ...optio
     }
     request.onsuccess = () => {
       const db = request.result
-      db.onversionchange = () => hooks.release(db)
+      db.onversionchange = (event) => hooks.release(db, event.newVersion)
       db.onclose = hooks.lost
       resolve(db)
     }

@@ -834,6 +834,25 @@ export interface ConsoleEvents {
 }
 
 // ============================================================================
+// Storage Events
+// ============================================================================
+
+export interface StorageEvents {
+  /**
+   * A newer version of the client, typically open in another tab, upgraded a
+   * local cache database. This client released its connection so the upgrade
+   * could run, and keeps working without that cache until it reloads.
+   *
+   * Emitted once per database. Deleting a database (clearing local data) does
+   * not emit it.
+   */
+  'storage:outdated': {
+    /** The IndexedDB database the newer client upgraded. */
+    database: string
+  }
+}
+
+// ============================================================================
 // Raw Stanza Events (for advanced usage)
 // ============================================================================
 
@@ -886,6 +905,7 @@ export interface SDKEvents
     BlockingEvents,
     AdminEvents,
     ConsoleEvents,
+    StorageEvents,
     StanzaEvents,
     DemoEvents {}
 

@@ -1904,6 +1904,20 @@
         "description": "Dieser Teil von Fluux konnte nicht angezeigt werden. Der Rest der App funktioniert weiterhin.",
         "panel": "Dieser Bereich konnte nicht angezeigt werden.",
         "message": "Diese Nachricht konnte nicht angezeigt werden.",
-        "retry": "Erneut versuchen"
+        "retry": "Erneut versuchen",
+        "appDescription": "In Fluux ist ein unerwarteter Fehler aufgetreten. Neu laden behebt das meist.",
+        "renderLoopTitle": "Fluux hat eine Rendering-Schleife gestoppt",
+        "renderLoopDescription": "Fluux hat eine Rendering-Schleife erkannt und gestoppt, bevor die App einfror. Das ist ein Fehler. Die Diagnoseinformationen helfen uns, ihn zu beheben.",
+        "recentStateChanges": "Letzte Zustandsänderungen ({{count}})",
+        "technicalDetails": "Technische Details",
+        "copyDiagnostic": "Diagnoseinformationen kopieren",
+        "copyFailed": "Kopieren fehlgeschlagen",
+        "reloadApp": "Fluux neu laden",
+        "forceReloadHint": "Wenn das weiterhin passiert, drücke Cmd+Umschalt+R (Strg+Umschalt+R unter Windows und Linux), um ein Neuladen zu erzwingen."
+    },
+    "storageOutdated": {
+        "title": "Fluux wurde in einem anderen Tab aktualisiert",
+        "description": "Lade diesen Tab neu, um die neue Version zu verwenden. Bis dahin können Verlauf und Suche langsamer sein.",
+        "reload": "Neu laden"
     }
 }

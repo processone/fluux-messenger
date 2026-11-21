@@ -28,6 +28,7 @@ import { useEncryptionSettingsStore } from './stores/encryptionSettingsStore'
 import { setOpenPGPTrustView, type OpenPGPTrustView } from './e2ee/openpgpTrustView'
 import { setSessionPassphrase, clearSessionPassphrase } from '@fluux/openpgp-plugin'
 import { RenderLoopBoundary, RenderLoopWarningBanner } from './components/RenderLoopBoundary'
+import { StorageOutdatedBanner } from './components/StorageOutdatedBanner'
 import { WindowControls } from './components/WindowControls'
 import { ROUTER_USE_TRANSITIONS } from './config/routerTransitions'
 import { DemoTutorialProvider } from './demo/tutorial/DemoTutorialProvider'
@@ -326,6 +327,7 @@ const application = (
         <App />
         {params.get('share') === '1' && <ShareInbox api={demoShareInbox} />}
       </HashRouter>
+      <StorageOutdatedBanner />
     </DemoTutorialProvider>
   </ThemeProvider>
 )

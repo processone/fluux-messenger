@@ -1910,6 +1910,20 @@
         "description": "تعذّر عرض هذا الجزء من Fluux. يواصل باقي التطبيق العمل.",
         "panel": "تعذّر عرض هذه اللوحة.",
         "message": "تعذّر عرض هذه الرسالة.",
-        "retry": "إعادة المحاولة"
+        "retry": "إعادة المحاولة",
+        "appDescription": "واجه Fluux خطأً غير متوقع. عادةً ما تحل إعادة التحميل المشكلة.",
+        "renderLoopTitle": "أوقف Fluux حلقة عرض",
+        "renderLoopDescription": "اكتشف Fluux حلقة عرض وأوقفها قبل أن يتجمد التطبيق. هذا خطأ برمجي. يساعدنا نسخ معلومات التشخيص على إصلاحه.",
+        "recentStateChanges": "تغييرات الحالة الأخيرة ({{count}})",
+        "technicalDetails": "التفاصيل التقنية",
+        "copyDiagnostic": "نسخ معلومات التشخيص",
+        "copyFailed": "فشل النسخ",
+        "reloadApp": "إعادة تحميل Fluux",
+        "forceReloadHint": "إذا تكرر ذلك، اضغط Cmd+Shift+R (أو Ctrl+Shift+R على Windows وLinux) لفرض إعادة التحميل."
+    },
+    "storageOutdated": {
+        "title": "تم تحديث Fluux في علامة تبويب أخرى",
+        "description": "أعد تحميل علامة التبويب هذه لاستخدام الإصدار الجديد. حتى ذلك الحين، قد يكون السجل والبحث أبطأ.",
+        "reload": "إعادة التحميل"
     }
 }

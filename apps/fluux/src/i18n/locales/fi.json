@@ -1902,6 +1902,20 @@
         "description": "Tätä Fluuxin osaa ei voitu näyttää. Muu sovellus toimii edelleen.",
         "panel": "Tätä paneelia ei voitu näyttää.",
         "message": "Tätä viestiä ei voitu näyttää.",
-        "retry": "Yritä uudelleen"
+        "retry": "Yritä uudelleen",
+        "appDescription": "Fluux kohtasi odottamattoman virheen. Uudelleenlataus yleensä korjaa sen.",
+        "renderLoopTitle": "Fluux pysäytti piirtosilmukan",
+        "renderLoopDescription": "Fluux havaitsi piirtosilmukan ja pysäytti sen ennen kuin sovellus jumittui. Tämä on virhe. Diagnostiikkatiedot auttavat meitä korjaamaan sen.",
+        "recentStateChanges": "Viimeaikaiset tilamuutokset ({{count}})",
+        "technicalDetails": "Tekniset tiedot",
+        "copyDiagnostic": "Kopioi diagnostiikkatiedot",
+        "copyFailed": "Kopiointi epäonnistui",
+        "reloadApp": "Lataa Fluux uudelleen",
+        "forceReloadHint": "Jos tämä toistuu, paina Cmd+Shift+R (Windowsissa ja Linuxissa Ctrl+Shift+R) pakottaaksesi uudelleenlatauksen."
+    },
+    "storageOutdated": {
+        "title": "Fluux päivitettiin toisessa välilehdessä",
+        "description": "Lataa tämä välilehti uudelleen käyttääksesi uutta versiota. Siihen asti historia ja haku voivat olla hitaampia.",
+        "reload": "Lataa uudelleen"
     }
 }

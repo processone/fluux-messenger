@@ -1910,6 +1910,20 @@
         "description": "Din il-parti ta' Fluux ma setgħetx tintwera. Il-bqija tal-app tibqa' taħdem.",
         "panel": "Dan il-pannell ma setax jintwera.",
         "message": "Dan il-messaġġ ma setax jintwera.",
-        "retry": "Erġa ipprova"
+        "retry": "Erġa ipprova",
+        "appDescription": "Fluux iltaqa' ma' żball mhux mistenni. Normalment jissolva billi terġa' ttella'.",
+        "renderLoopTitle": "Fluux waqqaf ċiklu ta’ rendering",
+        "renderLoopDescription": "Fluux induna b’ċiklu ta’ rendering u waqqfu qabel ma l-app iffriżat. Dan huwa bug. L-informazzjoni dijanjostika tgħinna nirranġawh.",
+        "recentStateChanges": "Bidliet riċenti fl-istat ({{count}})",
+        "technicalDetails": "Dettalji tekniċi",
+        "copyDiagnostic": "Ikkopja l-informazzjoni dijanjostika",
+        "copyFailed": "L-ikkopjar falla",
+        "reloadApp": "Erġa' tella' Fluux",
+        "forceReloadHint": "Jekk dan jibqa' jiġri, agħfas Cmd+Shift+R (Ctrl+Shift+R fuq Windows u Linux) biex iġġiegħel it-tagħbija mill-ġdid."
+    },
+    "storageOutdated": {
+        "title": "Fluux ġie aġġornat f'tab ieħor",
+        "description": "Erġa' tella' din it-tab biex tuża l-verżjoni l-ġdida. Sa dakinhar, l-istorja u t-tfittxija jistgħu jkunu aktar bil-mod.",
+        "reload": "Erġa' tella'"
     }
 }

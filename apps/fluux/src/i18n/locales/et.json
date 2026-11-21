@@ -1904,6 +1904,20 @@
         "description": "Seda Fluuxi osa ei saanud kuvada. Ülejäänud rakendus töötab edasi.",
         "panel": "Seda paneeli ei saanud kuvada.",
         "message": "Seda sõnumit ei saanud kuvada.",
-        "retry": "Proovi uuesti"
+        "retry": "Proovi uuesti",
+        "appDescription": "Fluuxis tekkis ootamatu viga. Tavaliselt aitab uuesti laadimine.",
+        "renderLoopTitle": "Fluux peatas renderdustsükli",
+        "renderLoopDescription": "Fluux tuvastas renderdustsükli ja peatas selle enne, kui rakendus hangus. See on viga. Diagnostikateave aitab meil selle parandada.",
+        "recentStateChanges": "Hiljutised olekumuutused ({{count}})",
+        "technicalDetails": "Tehnilised üksikasjad",
+        "copyDiagnostic": "Kopeeri diagnostikateave",
+        "copyFailed": "Kopeerimine ebaõnnestus",
+        "reloadApp": "Laadi Fluux uuesti",
+        "forceReloadHint": "Kui see kordub, vajuta Cmd+Shift+R (Windowsis ja Linuxis Ctrl+Shift+R), et sundida uuesti laadimist."
+    },
+    "storageOutdated": {
+        "title": "Fluux uuendati teisel vahekaardil",
+        "description": "Uue versiooni kasutamiseks laadi see vahekaart uuesti. Seni võivad ajalugu ja otsing olla aeglasemad.",
+        "reload": "Laadi uuesti"
     }
 }
