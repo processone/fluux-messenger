@@ -33,13 +33,16 @@ jobs:
           # The merge base with main needs history.
           fetch-depth: 0
 
-      # An empty or unreadable list makes the classifier run every scope,
-      # so a failed fetch costs minutes and never skips a check.
+      # A failed fetch, diff or classifier fails this job, so the check jobs are
+      # skipped and the run is visibly red. A diff that lists nothing makes the
+      # classifier run every scope. --no-renames lists both sides of a move, so
+      # moving source into an ignored path (docs/) still selects its scope.
       - name: Classify files changed since main
         id: classify
+        shell: bash
         run: |
           git fetch --no-tags origin main:refs/remotes/origin/main
-          git diff --name-only origin/main...HEAD > changed-files.txt
+          git diff --no-renames --name-only origin/main...HEAD > changed-files.txt
           echo "Changed files ($(wc -l < changed-files.txt)):"
           sed 's/^/  /' changed-files.txt
           scripts/ci-changed-scopes.sh < changed-files.txt | tee -a "$GITHUB_OUTPUT"

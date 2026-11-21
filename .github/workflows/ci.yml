@@ -49,6 +49,9 @@ jobs:
       # is visibly broken rather than quietly green.
       - name: Classify changed files
         id: classify
+        # Explicit bash adds pipefail, so a failing classifier fails the job
+        # instead of hiding behind tee.
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -62,7 +65,7 @@ jobs:
           fi
           gh api --paginate \
             "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
-            --jq '.[].filename' > changed-files.txt
+            --jq '.[] | .filename, (.previous_filename // empty)' > changed-files.txt
 
           echo "Changed files ($(wc -l < changed-files.txt)):"
           sed 's/^/  /' changed-files.txt
