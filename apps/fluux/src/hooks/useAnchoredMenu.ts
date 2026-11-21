@@ -87,6 +87,7 @@ export function useAnchoredMenu(
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState<MenuPoint>({ x: 0, y: 0 })
+  const placeRef = useRef<(() => void) | null>(null)
 
   useLayoutEffect(() => {
     if (!isOpen || !triggerRef.current || !menuRef.current) return
@@ -103,17 +104,26 @@ export function useAnchoredMenu(
       const next = anchorMenuToTrigger(trigger, menu, viewport, direction)
       if (next.x !== position.x || next.y !== position.y) setPosition(next)
     }
+    placeRef.current = place
     place()
     const observer = new ResizeObserver(place)
     observer.observe(menuElement)
     observer.observe(triggerElement)
     window.addEventListener('resize', place)
     return () => {
+      placeRef.current = null
       observer.disconnect()
       window.removeEventListener('resize', place)
       restoreHeight()
     }
   }, [isOpen, position.x, position.y, direction])
+
+  // A render can change the menu's size, as when a submenu replaces its parent
+  // list. Measure in that commit: the resize observer reports only after the
+  // browser has painted the new size at the old position.
+  useLayoutEffect(() => {
+    placeRef.current?.()
+  })
 
   return { triggerRef, menuRef, position }
 }
