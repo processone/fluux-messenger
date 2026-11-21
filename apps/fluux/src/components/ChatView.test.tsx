@@ -19,6 +19,17 @@ import type { ConversationEncryptionState } from '@/hooks/useConversationEncrypt
 import { ChatView } from './ChatView'
 import { messageRowId } from './conversation/messageRowIdentity'
 import type { Message, Contact, Conversation, FileAttachment } from '@fluux/sdk'
+import type { MessageListProps } from './conversation/MessageList'
+
+// Observe the real list boundary without replacing its rendering or row identity.
+const mockListProps = vi.fn<(props: MessageListProps<Message>) => void>()
+vi.mock('./conversation/MessageList', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./conversation/MessageList')>()
+  return { ...actual, MessageList: (props: MessageListProps<Message>) => {
+    mockListProps(props)
+    return <actual.MessageList {...props} />
+  } }
+})
 
 vi.mock('./EmojiPicker', () => ({ EmojiPicker: () => <div data-testid="emoji-picker" /> }))
 
@@ -68,6 +79,8 @@ const mockSendCorrection = vi.fn()
 const mockRetractMessage = vi.fn()
 const mockFetchHistory = vi.fn()
 const mockClearFirstNewMessageId = vi.fn()
+const mockAdvanceReadPointer = vi.fn()
+const mockClient = { e2ee: null }
 const mockClearAnimation = vi.fn()
 const mockProcessMessageForLinkPreview = vi.fn().mockResolvedValue(undefined)
 
@@ -145,7 +158,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
     clearAnimation: mockClearAnimation,
     clearFirstNewMessageId: mockClearFirstNewMessageId,
     resyncDividerToReadPointer: vi.fn(),
-    advanceReadPointer: vi.fn(),
+    advanceReadPointer: mockAdvanceReadPointer,
     firstNewMessageRow: undefined,
     readPointerId: undefined,
     supportsMAM: mockSupportsMAM,
@@ -208,7 +221,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   // so the EncryptionChip renders nothing and these tests stay
   // unaffected by E2EE UX changes.
   useXMPPContext: () => ({
-    client: { e2ee: null },
+    client: mockClient,
   }),
   // Used by auroraSenderColor (imported by ChatMessageBubble)
   generateConsistentColorHexSync: () => '#4a90d9',
@@ -391,6 +404,7 @@ vi.mock('lucide-react', () => ({
   Loader2: () => <span data-testid="icon-loader">Loading</span>,
   ChevronUp: () => <span data-testid="icon-chevron-up">Up</span>,
   ChevronDown: () => <span data-testid="icon-chevron-down">Down</span>,
+  ChevronRight: () => <span data-testid="icon-chevron-right" aria-hidden="true">Right</span>,
   Lock: () => <span data-testid="icon-lock">Lock</span>,
   Shield: () => <span data-testid="icon-shield">Shield</span>,
   ShieldCheck: () => <span data-testid="icon-shield-check">ShieldCheck</span>,
@@ -408,12 +422,16 @@ vi.mock('lucide-react', () => ({
 }))
 
 // Create hoisted mock for MessageComposer (React 19: ref is a regular prop)
-const { MockMessageComposer } = vi.hoisted(() => {
+const { MockMessageComposer, mockComposerCallbacks } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require('react')
+  const mockComposerCallbacks = vi.fn()
   return {
+    mockComposerCallbacks,
     MockMessageComposer: function MockMessageComposer(
-      { placeholder, onSend, editingMessage, pendingAttachment, onRemovePendingAttachment }: {
+      { placeholder, onSend, editingMessage, pendingAttachment, onRemovePendingAttachment, onEncryptionClick, onComposingChange }: {
+        onEncryptionClick?: () => void
+        onComposingChange?: (active: boolean) => void
         placeholder: string
         onSend: (text: string) => void
         editingMessage?: { id: string; rowId?: string } | null
@@ -421,6 +439,7 @@ const { MockMessageComposer } = vi.hoisted(() => {
         onRemovePendingAttachment?: () => void
       },
     ) {
+      mockComposerCallbacks({ onEncryptionClick, onComposingChange })
       return React.createElement('div', { 'data-testid': 'message-composer', 'data-edit-id': editingMessage?.id, 'data-edit-row-id': editingMessage?.rowId },
         pendingAttachment && React.createElement('div', { 'data-testid': 'pending-attachment' },
           pendingAttachment.file.name,
@@ -483,6 +502,64 @@ describe('ChatView', () => {
     // Reset mock functions
     vi.clearAllMocks()
     mockUploadFile.mockReset()
+  })
+
+  // Source: the callback-stabilization audit. This owns callback identities and
+  // current-conversation routing; browser proof owns the list render count.
+  it('retains list and encryption callbacks through ten composing flips and refreshes the conversation', async () => {
+    mockActiveConversation = { id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0 }
+    mockActiveMessages = [createMessage({ id: 'message', stanzaId: 'archive-one' })]
+    mockEncryptionState = { kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'AAAA', trust: 'tofu', canVerify: true }
+    const { container, rerender } = render(<ChatView />)
+    const listProps = () => mockListProps.mock.calls.at(-1)![0]
+    const composerCallbacks = () => mockComposerCallbacks.mock.calls.at(-1)![0] as {
+      onEncryptionClick?: () => void
+      onComposingChange: (active: boolean) => void
+    }
+    const initial = listProps()
+    const initialEncryptionClick = composerCallbacks().onEncryptionClick
+    expect(initialEncryptionClick).toBeTypeOf('function')
+    for (let flip = 0; flip < 10; flip++) {
+      const composing = flip % 2 === 0
+      act(() => composerCallbacks().onComposingChange(composing))
+      expect(container.querySelector('.composer-active') !== null).toBe(composing)
+      expect(listProps().clearFirstNewMessageId).toBe(initial.clearFirstNewMessageId)
+      expect(listProps().onMessageSeen).toBe(initial.onMessageSeen)
+      expect(composerCallbacks().onEncryptionClick).toBe(initialEncryptionClick)
+    }
+    const rowId = messageRowId(mockActiveMessages[0])!
+    act(() => {
+      listProps().clearFirstNewMessageId?.()
+      listProps().onMessageSeen?.(rowId)
+    })
+    expect(mockClearFirstNewMessageId).toHaveBeenLastCalledWith('alice@example.com')
+    expect(mockAdvanceReadPointer).toHaveBeenLastCalledWith('alice@example.com', expect.objectContaining({ id: 'message', stanzaId: 'archive-one' }))
+
+    await act(async () => composerCallbacks().onEncryptionClick?.())
+    fireEvent.click(screen.getByRole('button', { name: 'chat.verifyPeer.showFullFingerprints' }))
+    expect(screen.getByText('AAAA')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }))
+
+    mockActiveConversation = { id: 'bob@example.com', name: 'Bob', type: 'chat', unreadCount: 0 }
+    mockEncryptionState = { kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'BBBB', trust: 'tofu', canVerify: true }
+    rerender(<ChatView />)
+    expect(listProps().clearFirstNewMessageId).not.toBe(initial.clearFirstNewMessageId)
+    expect(listProps().onMessageSeen).not.toBe(initial.onMessageSeen)
+    expect(composerCallbacks().onEncryptionClick).not.toBe(initialEncryptionClick)
+    act(() => {
+      listProps().clearFirstNewMessageId?.()
+      listProps().onMessageSeen?.(rowId)
+    })
+    expect(mockClearFirstNewMessageId).toHaveBeenLastCalledWith('bob@example.com')
+    expect(mockAdvanceReadPointer).toHaveBeenLastCalledWith('bob@example.com', expect.objectContaining({ id: 'message', stanzaId: 'archive-one' }))
+    await act(async () => composerCallbacks().onEncryptionClick?.())
+    fireEvent.click(screen.getByRole('button', { name: 'chat.verifyPeer.showFullFingerprints' }))
+    expect(screen.getByText('BBBB')).toBeInTheDocument()
+    expect(screen.queryByText('AAAA')).not.toBeInTheDocument()
+
+    mockEncryptionState = { kind: 'disabled' }
+    rerender(<ChatView />)
+    expect(composerCallbacks().onEncryptionClick).toBeUndefined()
   })
 
   it('confirms a reaction only after the send is accepted', async () => {

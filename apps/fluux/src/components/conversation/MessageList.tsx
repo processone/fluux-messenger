@@ -75,6 +75,9 @@ import { findResidentRowIndex, messageRowId, messageRowKey, messageRowKeys } fro
 import { useArrivalJump } from './useArrivalJump'
 import { ForwardMessageProvider } from './forwardMessageContext'
 
+// Selection is row-identified; an id-less row falls back to its client id.
+const getMessageId = (message: BaseMessage) => messageRowId(message) ?? message.id
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -790,8 +793,7 @@ export function MessageList<T extends BaseMessage>({
       containerRef: scrollContainerRef,
       messages: deduplicatedMessages,
       formatForCopy: formatMessageForCopy,
-      // Selection is row-identified; an id-less row falls back to its client id.
-      getMessageId: (m) => messageRowId(m) ?? m.id,
+      getMessageId,
       conversationId,
       enabled: !staticMode,
     })
