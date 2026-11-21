@@ -202,16 +202,15 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
       </div>
 
       {/* Contact list */}
-      <div ref={listRef} className="sidebar-scroll flex-1 min-h-0 overflow-y-auto px-2 pb-2" {...getContainerProps()}>
-        <ContactListWindow
-          rows={rows}
-          listRef={listRef}
-          selectedJid={selectedJid}
-          selectedRowIndex={selectedRowIndex}
-          isKeyboardNav={isKeyboardNav}
-          renderRow={renderRow}
-        />
-      </div>
+      <ContactListWindow
+        rows={rows}
+        listRef={listRef}
+        containerProps={getContainerProps()}
+        selectedJid={selectedJid}
+        selectedRowIndex={selectedRowIndex}
+        isKeyboardNav={isKeyboardNav}
+        renderRow={renderRow}
+      />
       {renamingContact && (
         <RenameContactModal
           contact={renamingContact}
@@ -231,9 +230,10 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
 // TanStack's mutable instance cannot be memoized by React Compiler. Keep all
 // instance reads/commands here; the required ContactList stays compiled and only
 // passes immutable row data, selection and its renderer across this boundary.
-function ContactListWindow({ rows, listRef, selectedJid, selectedRowIndex, isKeyboardNav, renderRow }: {
+function ContactListWindow({ rows, listRef, containerProps, selectedJid, selectedRowIndex, isKeyboardNav, renderRow }: {
   rows: ListRow[]
   listRef: React.RefObject<HTMLDivElement | null>
+  containerProps: React.HTMLAttributes<HTMLDivElement>
   selectedJid: string | null
   selectedRowIndex: number | undefined
   isKeyboardNav: boolean
@@ -262,17 +262,21 @@ function ContactListWindow({ rows, listRef, selectedJid, selectedRowIndex, isKey
   }, [selectedJid, isKeyboardNav, selectedRowIndex, virtualizer])
 
   return (
-    <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-      {virtualizer.getVirtualItems().map((item) => (
-        <div
-          key={item.key}
-          ref={virtualizer.measureElement}
-          data-index={item.index}
-          style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${item.start}px)` }}
-        >
-          {renderRow(rows[item.index])}
-        </div>
-      ))}
+    // Own the host node so its ref attaches before this component's layout
+    // effects connect the virtualizer, including a non-replaying release mount.
+    <div ref={listRef} className="sidebar-scroll flex-1 min-h-0 overflow-y-auto px-2 pb-2" {...containerProps}>
+      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+        {virtualizer.getVirtualItems().map((item) => (
+          <div
+            key={item.key}
+            ref={virtualizer.measureElement}
+            data-index={item.index}
+            style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${item.start}px)` }}
+          >
+            {renderRow(rows[item.index])}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

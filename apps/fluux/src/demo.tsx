@@ -10,6 +10,7 @@ import { demoShareInbox } from './demo/shareInbox'
  * URL parameters:
  *   ?tutorial=false  — disable tutorial tooltips (for video recording)
  *   ?scene=showcase  — curated marketing data instead of the test fixture
+ *   ?strict=false    — use a non-replaying mount for release lifecycle checks
  */
 
 import React from 'react'
@@ -335,8 +336,12 @@ const application = (
   </ThemeProvider>
 )
 
+// Release lifecycle tests must not have StrictMode's development effect replay
+// repair a missed first-mount subscription. The interactive demo keeps its default.
+const DemoMount = params.get('strict') === 'false' ? React.Fragment : React.StrictMode
+
 const renderDemo = () => ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+  <DemoMount>
     <RenderLoopBoundary>
       <XMPPProvider client={demoClient}>
         {AnomalyInstaller ? (
@@ -352,7 +357,7 @@ const renderDemo = () => ReactDOM.createRoot(document.getElementById('root')!).r
     <WindowControls />
     {/* Tells the e2e boot when the shell's startup navigation is done. */}
     <ShellSettledProbe />
-  </React.StrictMode>,
+  </DemoMount>,
 )
 
 // Animation is started inside DemoTutorialProvider's useEffect to avoid

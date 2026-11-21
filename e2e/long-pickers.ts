@@ -11,11 +11,11 @@ const ROSTER_SIZE = 2000
 const lastContact = `Colleague ${ROSTER_SIZE - 1}`
 const lastNick = `U0_${ROSTER_SIZE - 1}`
 
-async function bootLongRoster(page: Page) {
+async function bootLongRoster(page: Page, replayEffects = true) {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
   // No activate:1: that fixture deliberately reasserts the room route for three
   // seconds and would undo navigation made while testing the other surfaces.
-  await bootDemo(page, `/demo.html?tutorial=false&stress=rooms:1,messages:5,occupants:${ROSTER_SIZE},msgStep:0`)
+  await bootDemo(page, `/demo.html?tutorial=false&stress=rooms:1,messages:5,occupants:${ROSTER_SIZE},msgStep:0${replayEffects ? '' : '&strict=false'}`)
   await seedRoster(page)
 }
 
@@ -35,6 +35,36 @@ async function seedRoster(page: Page, shortNames = false) {
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 })
   await bootLongRoster(page)
+})
+
+// The release ref-order regression can be hidden by development StrictMode's
+// replay. Mount this real demo without that replay, and also run it against the
+// production bundle: the first paint must already have rows, before any search
+// input, selection or later parent render can reconnect the virtualizer.
+test('Contacts first paint shows a preloaded roster without input or selection', async ({ page }) => {
+  await bootLongRoster(page, false)
+  await page.evaluate(() => {
+    const state = window as unknown as { __contactsFirstPaint?: { rows: number; query: string; hash: string } }
+    const observer = new MutationObserver(() => {
+      const search = document.querySelector<HTMLInputElement>('input[placeholder="Search contacts..."]')
+      const scroller = document.querySelector('.sidebar-scroll .sidebar-scroll')
+      if (!search || !scroller) return
+      observer.disconnect()
+      requestAnimationFrame(() => {
+        state.__contactsFirstPaint = { rows: scroller.querySelectorAll('[data-contact-jid]').length, query: search.value, hash: location.hash }
+      })
+    })
+    observer.observe(document.getElementById('root')!, { childList: true, subtree: true })
+  })
+  await page.locator('[data-nav="contacts"]').click()
+  await page.waitForFunction(() => (window as unknown as { __contactsFirstPaint?: unknown }).__contactsFirstPaint)
+  const firstPaint = await page.evaluate(() => (window as unknown as { __contactsFirstPaint: { rows: number; query: string; hash: string } }).__contactsFirstPaint)
+  await test.info().attach('contacts-first-paint', { body: JSON.stringify(firstPaint, null, 2), contentType: 'application/json' })
+  expect(firstPaint.rows).toBeGreaterThan(0)
+  expect(firstPaint.rows).toBeLessThan(MAX_SUGGESTIONS)
+  expect(firstPaint.query).toBe('')
+  expect(firstPaint.hash).toBe('#/contacts')
+  await expect(page.locator('[data-contact-jid]').first()).toBeVisible()
 })
 
 test('palette bounds each group and still opens a late contact', async ({ page }) => {
