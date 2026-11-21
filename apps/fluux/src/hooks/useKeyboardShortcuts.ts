@@ -589,7 +589,7 @@ function getPlatform(): 'mac' | 'windows' | 'linux' {
  * Mac: ⌘ ⇧ ? (with spaces between symbols)
  * Windows/Linux: Ctrl+Shift+?
  */
-export function formatShortcutKey(shortcut: ShortcutDefinition): string {
+export function formatShortcutKey(shortcut: Pick<ShortcutDefinition, 'key' | 'modifiers'>): string {
   const platform = getPlatform()
   const isMac = platform === 'mac'
   const parts: string[] = []

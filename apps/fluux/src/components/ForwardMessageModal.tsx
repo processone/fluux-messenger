@@ -4,10 +4,12 @@ import type { FileAttachment } from '@fluux/sdk'
 import { useChatActions, useRoomActions, useRoster, roomStore } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { encryptionSendErrorKey, isKeysAwaitingDecision } from '@/e2ee/encryptionSendError'
+import { formatShortcutKey } from '@/hooks/useKeyboardShortcuts'
 import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
 import { trackSend } from '@/utils/pendingSends'
 import { composeForward, composeForwardWithCopy, type ForwardQuote } from '@/utils/forwardMessage'
 import { ContactSelector } from './ContactSelector'
+import { usesMobileEnterKey } from './composer/mobileEnter'
 import { ModalShell } from './ModalShell'
 import { TextArea } from './ui/TextInput'
 
@@ -39,6 +41,8 @@ export function ForwardMessageModal({ link, quote, attachment, onClose }: Forwar
   const inFlight = useRef(false)
   const commentRef = useRef<HTMLTextAreaElement>(null)
   const pickerId = useId()
+  // As in the chat composer, Enter adds a line on phones; Cmd-Enter (Ctrl-Enter) sends everywhere.
+  const enterAddsLine = usesMobileEnterKey()
 
   const chats = new Map(contacts.filter(contact => !rooms.has(contact.jid)).map(contact => [contact.jid, contact.name || contact.jid]))
   for (const conversation of conversations.values()) {
@@ -127,7 +131,16 @@ export function ForwardMessageModal({ link, quote, attachment, onClose }: Forwar
         </div>
         <label className="block text-sm text-fluux-text">
           {t('chat.forwardComment')}
+          {/* Enter sends and Shift-Enter adds a line, as in the chat composer; an Enter that confirms an input-method composition is the input method's. */}
           <TextArea ref={commentRef} value={comment} onChange={event => setComment(event.target.value)} disabled={sending} rows={3}
+            onKeyDown={event => {
+              if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.keyCode === 229) return
+              if (event.metaKey || event.ctrlKey || (!event.shiftKey && !usesMobileEnterKey())) {
+                event.preventDefault()
+                // A held key repeats here after picking a destination with Enter: that press must not also send.
+                if (!event.repeat) void send()
+              }
+            }}
             className="mt-1 w-full p-2 rounded bg-fluux-bg text-fluux-text border border-fluux-hover resize-none" />
         </label>
         {attachment && <p className="text-xs text-fluux-muted break-all">{attachment.name ?? attachment.url}</p>}
@@ -145,9 +158,10 @@ export function ForwardMessageModal({ link, quote, attachment, onClose }: Forwar
       <div className="flex justify-end gap-2 px-4 py-3 border-t border-fluux-hover">
         <button type="button" onClick={onClose} disabled={sending}
           className="px-4 py-2 text-sm rounded text-fluux-muted hover:bg-fluux-hover disabled:opacity-50">{t('common.cancel')}</button>
-        <button type="button" onClick={() => { void send() }} disabled={!validDestination || sending}
+        <button type="button" onClick={() => { void send() }} disabled={!validDestination || sending} aria-keyshortcuts={enterAddsLine ? 'Meta+Enter Control+Enter' : 'Enter'}
           className="px-4 py-2 text-sm rounded bg-fluux-brand text-fluux-text-on-accent hover:bg-fluux-brand-hover disabled:opacity-50 disabled:cursor-not-allowed">
           {t(sending ? 'chat.forwardSending' : 'chat.forwardSend')}
+          {!sending && <kbd aria-hidden="true" className="hidden sm:inline ms-2 font-sans text-xs">{formatShortcutKey({ key: 'Enter', modifiers: enterAddsLine ? ['meta'] : [] })}</kbd>}
         </button>
       </div>
     </ModalShell>

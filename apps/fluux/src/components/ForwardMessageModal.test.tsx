@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { ForwardMessageModal } from './ForwardMessageModal'
 import { sendsSettled } from '@/utils/pendingSends'
+import { formatShortcutKey } from '@/hooks/useKeyboardShortcuts'
+import { setPlatformForTesting } from '@/platform'
 import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
 import { ForwardMessageProvider, useForwardMessage } from './conversation/forwardMessageContext'
 
@@ -85,6 +87,53 @@ describe('ForwardMessageModal', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
     expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('emma@fluux.chat', `Please review\n${link}`, marked('Please review\n'))
     expect(fixture.roomSend).not.toHaveBeenCalled()
+  })
+
+  // Requested keys: Enter sends and Shift-Enter adds a line, as in the chat composer; Cmd-Enter
+  // (Ctrl-Enter off Mac) still sends, and the Send button shows the key that sends.
+  it.each([['Enter', {}], ['Cmd-Enter', { metaKey: true }], ['Ctrl-Enter', { ctrlKey: true }]])('sends once with %s from the comment, never with Shift-Enter, a held key, mid-composition or without a destination', async (_, modifier) => {
+    const onClose = vi.fn()
+    render(<ForwardMessageModal link={link} onClose={onClose} />)
+    const comment = screen.getByLabelText('chat.forwardComment')
+    fireEvent.keyDown(comment, { key: 'Enter', ...modifier })
+    choose('em')
+    fireEvent.change(comment, { target: { value: 'Please review' } })
+    expect(fireEvent.keyDown(comment, { key: 'Enter', shiftKey: true })).toBe(true)
+    expect(fireEvent.keyDown(comment, { key: 'Enter', isComposing: true })).toBe(true)
+    // The auto-repeat of the Enter that picked the destination lands here: no send, no stray line.
+    expect(fireEvent.keyDown(comment, { key: 'Enter', repeat: true, ...modifier })).toBe(false)
+    expect(fixture.chatSend).not.toHaveBeenCalled()
+    const button = screen.getByRole('button', { name: 'chat.forwardSend' })
+    expect(button).toHaveTextContent(formatShortcutKey({ key: 'Enter' }))
+    expect(button).toHaveAttribute('aria-keyshortcuts', 'Enter')
+    fireEvent.keyDown(comment, { key: 'Enter', ...modifier })
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(fixture.chatSend).toHaveBeenCalledExactlyOnceWith('emma@fluux.chat', `Please review\n${link}`, marked('Please review\n'))
+  })
+
+  // As in the chat composer, Enter adds a line on a phone; Cmd-Enter still sends, as the button shows.
+  it('adds a line with Enter on a phone-width layout and sends with Cmd-Enter', async () => {
+    const restorePlatform = setPlatformForTesting({ shell: 'web' })
+    const width = window.innerWidth
+    window.innerWidth = 390
+    try {
+      const onClose = vi.fn()
+      render(<ForwardMessageModal link={link} onClose={onClose} />)
+      const comment = screen.getByLabelText('chat.forwardComment')
+      choose('em')
+      fireEvent.change(comment, { target: { value: 'Please review' } })
+      expect(fireEvent.keyDown(comment, { key: 'Enter' })).toBe(true)
+      expect(fixture.chatSend).not.toHaveBeenCalled()
+      const button = screen.getByRole('button', { name: 'chat.forwardSend' })
+      expect(button).toHaveTextContent(formatShortcutKey({ key: 'Enter', modifiers: ['meta'] }))
+      expect(button).toHaveAttribute('aria-keyshortcuts', 'Meta+Enter Control+Enter')
+      fireEvent.keyDown(comment, { key: 'Enter', metaKey: true })
+      await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+      expect(fixture.chatSend).toHaveBeenCalledOnce()
+    } finally {
+      restorePlatform()
+      window.innerWidth = width
+    }
   })
 
   it('sends the comment, an attributed quote and the link, with the quote and link marked as fallback', async () => {
