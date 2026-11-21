@@ -327,11 +327,11 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   }, [])
 
   const conversationId = activeConversation?.id
-  const handleClearFirstNewMessageId = () => {
+  const handleClearFirstNewMessageId = useCallback(() => {
     if (conversationId) {
       clearFirstNewMessageId(conversationId)
     }
-  }
+  }, [conversationId, clearFirstNewMessageId])
 
   // Gate the on-arrival read-pointer advance on a
   // REAL viewport-at-live-edge signal instead of `isActive && windowVisible`
@@ -372,11 +372,11 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // Viewport observer callback: advance the read pointer as the user scrolls.
   // The observer reports a ROW HANDLE; decoding it keeps the occupant attached
   // across the SDK boundary instead of collapsing to a client id.
-  const handleMessageSeen = (rowId: string) => {
+  const handleMessageSeen = useCallback((rowId: string) => {
     if (conversationId) {
       advanceReadPointer(conversationId, messageRowRefFromRowId(rowId))
     }
-  }
+  }, [conversationId, advanceReadPointer])
 
   // E2EE: encryption status displayed as an icon in the chat header.
   // Hooks must run before the early return below.
@@ -416,6 +416,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
       identityId: identityId ?? null,
     })
   }, [client, activeConversation, encryptionState])
+  const handleEncryptionClick = useCallback(() => void handleOpenVerify(), [handleOpenVerify])
   const decideTrust = useCallback(
     async (decision: 'verified' | 'tofu', successKey: string) => {
       if (!verifyDialogState.open || !verifyDialogState.identityId) return
@@ -500,7 +501,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           onSearchInConversation={handleSearchInConversation}
           onShowSavedInConversation={handleShowSaved}
           encryptionState={encryptionState}
-          onEncryptionClick={canDecideTrust ? () => void handleOpenVerify() : undefined}
+          onEncryptionClick={canDecideTrust ? handleEncryptionClick : undefined}
           onDisableEncryptionClick={encryptionState.kind === 'encrypted' ? handleDisableEncryption : undefined}
           onEnableEncryptionClick={encryptionState.kind === 'plaintextForced' ? handleEnableEncryption : undefined}
           onReviewKeysClick={
@@ -688,7 +689,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             isConnected={isConnected}
             onSwitchToMessages={onSwitchToMessages}
             encryptionState={encryptionState}
-            onEncryptionClick={canDecideTrust ? () => void handleOpenVerify() : undefined}
+            onEncryptionClick={canDecideTrust ? handleEncryptionClick : undefined}
             isDarkMode={resolvedMode === 'dark'}
           />
         </ConversationTail>
