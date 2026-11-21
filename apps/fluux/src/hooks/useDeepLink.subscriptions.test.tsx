@@ -45,7 +45,7 @@ describe('useDeepLink store subscriptions', () => {
     const mounted = renders
     act(() => {
       for (let i = 0; i < 50; i++) {
-        rosterStore.getState().updatePresence(`c${i}@example.org/res`, 'online', 0)
+        rosterStore.getState().updatePresence(`c${i}@example.org/res`, 'chat', 0)
       }
       chatStore.getState().addConversation({ id: 'x@example.org', name: 'X', type: 'chat', unreadCount: 0 })
       roomStore.getState().addRoom({
