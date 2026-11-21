@@ -328,14 +328,15 @@ describe('CommandPalette', () => {
       expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument()
     })
 
-    it('should filter items by keywords', () => {
+    it('uses category keywords for actions, not entity rows', () => {
       render(<CommandPalette {...defaultProps} />)
       const input = screen.getByPlaceholderText('Go to...')
 
-      // 'muc' is a keyword for rooms
+      // Category keywords still find actions without making every room a match.
       fireEvent.change(input, { target: { value: 'muc' } })
 
-      expect(screen.getByText('Development')).toBeInTheDocument()
+      expect(screen.getByText('Join Room')).toBeInTheDocument()
+      expect(screen.queryByText('Development')).not.toBeInTheDocument()
       expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument()
     })
 
@@ -1479,19 +1480,18 @@ describe('CommandPalette', () => {
       expect(screen.getByRole('button', { name: /Babette Martin/ })).toBeInTheDocument()
     })
 
-    it('preserves section and conversation order without duplicating the open contact', () => {
+    it('ranks identity ahead of body matches without duplicating the open contact', () => {
       render(<CommandPalette {...defaultProps} />)
       fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: 'bab' } })
       const rows = within(screen.getByRole('dialog')).getAllByRole('button')
       expect(rows.slice(0, 4).map(row => row.textContent)).toEqual([
-        expect.stringContaining('Other Person'),
         expect.stringContaining('Babetteperson42'),
         expect.stringContaining('Babette Martin'),
+        expect.stringContaining('Other Person'),
         expect.stringContaining('Babette Dupont'),
       ])
       expect(screen.getAllByText('person42@example.test')).toHaveLength(1)
       expect(screen.getByText('Babette Dupont').closest('button')!.parentElement).toHaveTextContent('Contacts')
-      fireEvent.keyDown(screen.getByPlaceholderText('Go to...'), { key: 'ArrowDown' })
       fireEvent.keyDown(screen.getByPlaceholderText('Go to...'), { key: 'Enter' })
       expect(mockSetActiveConversation).toHaveBeenCalledWith('person42@example.test')
     })

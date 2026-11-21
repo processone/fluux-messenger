@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Näytetään {{shown}}/{{total}}. Rajaa kirjoittamalla lisää",
         "cancel": "Peruuta",
         "save": "Tallenna",
         "saving": "Tallennetaan...",

@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "{{shown}} di {{total}} risultati. Continua a digitare per restringere la ricerca",
         "cancel": "Annulla",
         "save": "Salva",
         "saving": "Salvataggio...",

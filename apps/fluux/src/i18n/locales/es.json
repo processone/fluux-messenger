@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Mostrando {{shown}} de {{total}}. Escribe más para acotar",
         "cancel": "Cancelar",
         "save": "Guardar",
         "saving": "Guardando...",

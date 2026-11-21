@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Zobrazeno {{shown}} z {{total}}. Upřesněte hledání dalším psaním",
         "cancel": "Zrušit",
         "save": "Uložit",
         "saving": "Ukládání...",

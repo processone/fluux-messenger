@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Se afișează {{shown}} din {{total}}. Continuați să tastați pentru a restrânge",
         "cancel": "Anulare",
         "save": "Salvare",
         "saving": "Se salvează...",

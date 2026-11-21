@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Wyświetlono {{shown}} z {{total}}. Wpisz więcej, aby zawęzić wyniki",
         "cancel": "Anuluj",
         "save": "Zapisz",
         "saving": "Zapisywanie...",

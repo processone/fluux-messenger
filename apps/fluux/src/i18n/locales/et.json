@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Kuvatakse {{shown}}/{{total}}. Täpsustamiseks kirjuta rohkem",
         "cancel": "Tühista",
         "save": "Salvesta",
         "saving": "Salvestamine...",

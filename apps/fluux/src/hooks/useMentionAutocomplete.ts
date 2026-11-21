@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { MAX_SUGGESTIONS } from '@/constants/ui'
+import { suggestionMatchRank } from '@/utils/suggestionMatchRank'
 import type { RoomOccupant, RoomRole, MentionReference } from '@fluux/sdk'
 
 /**
@@ -20,7 +21,8 @@ export interface MentionAutocompleteState {
   triggerIndex: number // Position of @ in text
   selectedIndex: number // Keyboard navigation index
   navSerial?: number // Counts Up/Down moves made by the key handler (handled move vs reset)
-  matches: MentionMatch[] // Filtered matches (includes @all + occupants)
+  matches: MentionMatch[] // Visible matches (includes @all + occupants)
+  totalMatches: number // Matching nicks before the visible suggestion limit
 }
 
 /**
@@ -28,8 +30,8 @@ export interface MentionAutocompleteState {
  *
  * Detects @ mentions in text and provides autocomplete suggestions
  * from room occupants and message history authors, plus @all for
- * room-wide mentions. Occupants are listed first, followed by
- * history-only nicks (people who posted but are no longer present).
+ * room-wide mentions. Exact and prefix matches come first; ties keep occupants
+ * ahead of history-only nicks (people who posted but are no longer present).
  *
  * @example
  * ```tsx
@@ -139,11 +141,12 @@ export function useMentionAutocomplete(
       historyMatches.sort((a, b) => a.nick.localeCompare(b.nick))
     }
 
-    // Bound both the rendered options and keyboard navigation to the same set.
-    // Apply the cap after matching so every nickname remains searchable.
-    return [...result, ...occupantMatches, ...historyMatches].slice(0, MAX_SUGGESTIONS)
+    return [...result, ...occupantMatches, ...historyMatches]
+      .sort((a, b) => suggestionMatchRank(query, a.nick) - suggestionMatchRank(query, b.nick))
   }
-  const matches = buildMatches()
+  const allMatches = buildMatches()
+  // Rendered options and keyboard navigation use the same bounded, ranked set.
+  const matches = allMatches.slice(0, MAX_SUGGESTIONS)
 
   // Reset selection when matches change (guard: only call setState when value actually changes)
   if (selectedIndex >= matches.length && selectedIndex !== 0) {
@@ -216,6 +219,7 @@ export function useMentionAutocomplete(
       selectedIndex,
       navSerial,
       matches,
+      totalMatches: allMatches.length,
     },
     selectMatch,
     moveSelection,

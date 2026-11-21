@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Sýni {{shown}} af {{total}}. Skrifaðu meira til að þrengja leitina",
         "cancel": "Hætta við",
         "save": "Vista",
         "saving": "Vista...",

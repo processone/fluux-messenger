@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "{{shown}} van {{total}} getoond. Typ verder om te verfijnen",
         "cancel": "Annuleren",
         "save": "Opslaan",
         "saving": "Opslaan...",

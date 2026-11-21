@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "{{shown}} von {{total}} angezeigt. Zum Eingrenzen weitertippen",
         "cancel": "Abbrechen",
         "save": "Speichern",
         "saving": "Speichern...",

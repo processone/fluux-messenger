@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Prikazanih {{shown}} od {{total}}. Vnesite več za ožji izbor",
         "cancel": "Prekliči",
         "save": "Shrani",
         "saving": "Shranjujem...",

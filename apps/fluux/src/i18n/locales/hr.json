@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Prikazano {{shown}} od {{total}}. Upišite više za sužavanje pretrage",
         "cancel": "Odustani",
         "save": "Spremi",
         "saving": "Spremanje...",

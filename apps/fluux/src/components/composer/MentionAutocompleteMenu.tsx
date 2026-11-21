@@ -4,12 +4,14 @@ import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useTranslation } from 'react-i18next'
 import { Users } from 'lucide-react'
 import { Avatar } from '../Avatar'
+import { SuggestionLimitHint } from '../ui/SuggestionLimitHint'
 import { autocompleteOptionId } from './autocompleteAria'
 import type { MentionMatch } from '../../hooks/useMentionAutocomplete'
 
 interface MentionAutocompleteMenuProps {
   id: string
   matches: MentionMatch[]
+  totalMatches?: number
   selectedIndex: number
   /** Up/Down moves made by the key handler; a selection change without a new move is a reset. */
   navSerial?: number
@@ -24,6 +26,7 @@ interface MentionAutocompleteMenuProps {
 export function MentionAutocompleteMenu({
   id,
   matches,
+  totalMatches = matches.length,
   selectedIndex,
   navSerial,
   onSelect,
@@ -51,6 +54,7 @@ export function MentionAutocompleteMenu({
       className="absolute bottom-full inset-x-0 mb-1 max-h-48 overflow-y-auto
                  fluux-popover rounded-lg z-30"
     >
+      <SuggestionLimitHint shown={matches.length} total={totalMatches} />
       {matches.map((match, idx) => (
         <button
           key={match.nick}

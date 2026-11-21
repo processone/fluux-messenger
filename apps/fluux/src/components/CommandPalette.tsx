@@ -1,5 +1,7 @@
 import { markUserScrollIntent } from '../utils/scrollbarReveal'
 import { MAX_SUGGESTIONS } from '@/constants/ui'
+import { suggestionMatchRank } from '@/utils/suggestionMatchRank'
+import { SuggestionLimitHint } from './ui/SuggestionLimitHint'
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
@@ -65,6 +67,7 @@ interface ItemGroup {
   type: ItemType
   label: string
   items: CommandItem[]
+  totalCount?: number
 }
 
 interface CommandPaletteProps {
@@ -102,8 +105,8 @@ function parseQuery(query: string): { filterMode: FilterMode; searchQuery: strin
 // =============================================================================
 
 function itemMatchesQuery(item: CommandItem, searchQuery: string): boolean {
-  // Check keywords
-  if (item.keywords?.some((k) => k.toLowerCase().includes(searchQuery))) {
+  // Category keywords describe commands/views, not every entity in a category.
+  if ((item.type === 'action' || item.type === 'view') && item.keywords?.some((k) => k.toLowerCase().includes(searchQuery))) {
     return true
   }
 
@@ -492,7 +495,13 @@ function CommandPaletteContent({
 
     // Keep broad searches and type-only views bounded. Filtering happens first so
     // a narrower query can still find any entity, not just the first page.
-    grouped = grouped.map((group) => ({ ...group, items: group.items.slice(0, MAX_SUGGESTIONS) }))
+    grouped = grouped.map((group) => ({
+      ...group,
+      totalCount: group.items.length,
+      items: [...group.items]
+        .sort((a, b) => suggestionMatchRank(searchQuery, a.label, a.sublabel) - suggestionMatchRank(searchQuery, b.label, b.sublabel))
+        .slice(0, MAX_SUGGESTIONS),
+    }))
 
     // Append "Search messages" gateway when user has typed a query
     if (searchQuery && filterMode !== 'commands') {
@@ -661,6 +670,7 @@ function CommandPaletteContent({
                 <div className="px-4 command-group-label text-xs font-semibold text-fluux-muted uppercase tracking-wide font-display">
                   {group.label}
                 </div>
+                <SuggestionLimitHint shown={group.items.length} total={group.totalCount ?? group.items.length} />
                 {group.items.map((item) => {
                   const itemIndex = indexById.get(item.id) ?? 0
                   const isSelected = itemIndex === effectiveIndex

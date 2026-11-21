@@ -3,6 +3,8 @@ import { render } from '@testing-library/react'
 import { ContactList } from './ContactList'
 import type { Contact } from '@fluux/sdk'
 
+vi.mock('@tanstack/react-virtual', () => import('./contactListTestVirtualizer'))
+
 // Each contact row renders exactly one Avatar — count them to detect over-rendering.
 const avatarRenders = { count: 0 }
 

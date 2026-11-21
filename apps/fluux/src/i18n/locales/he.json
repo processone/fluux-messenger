@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "מוצגות {{shown}} מתוך {{total}} תוצאות. הקלידו עוד כדי לצמצם",
         "cancel": "בטל",
         "save": "שמור",
         "saving": "שומר...",

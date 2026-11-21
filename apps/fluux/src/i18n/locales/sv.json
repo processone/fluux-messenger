@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Visar {{shown}} av {{total}}. Skriv mer för att begränsa",
         "cancel": "Avbryt",
         "save": "Spara",
         "saving": "Sparar...",

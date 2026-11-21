@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Viser {{shown}} af {{total}}. Skriv mere for at indsnævre",
         "cancel": "Annuller",
         "save": "Gem",
         "saving": "Gemmer...",

@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "{{shown}} / {{total}} találat látható. Gépeljen tovább a szűkítéshez",
         "cancel": "Mégse",
         "save": "Mentés",
         "saving": "Mentés...",

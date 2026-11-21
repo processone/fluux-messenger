@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Zobrazených {{shown}} z {{total}}. Spresnite vyhľadávanie ďalším písaním",
         "cancel": "Zrušiť",
         "save": "Uložiť",
         "saving": "Ukladá sa...",

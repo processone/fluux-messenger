@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "{{total}}개 중 {{shown}}개 표시. 검색어를 더 입력해 범위를 좁히세요",
         "cancel": "취소",
         "save": "저장",
         "saving": "저장 중...",

@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "عرض {{shown}} من {{total}}. اكتب المزيد لتضييق النتائج",
         "cancel": "إلغاء",
         "save": "حفظ",
         "saving": "جارٍ الحفظ...",

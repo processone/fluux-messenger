@@ -2321,6 +2321,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     <MentionAutocompleteMenu
       id={mentionListboxId}
       matches={mentionState.matches}
+      totalMatches={mentionState.totalMatches}
       selectedIndex={mentionState.selectedIndex}
       navSerial={mentionState.navSerial}
       onSelect={handleMentionSelect}

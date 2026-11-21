@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Rodoma {{shown}} iš {{total}}. Įveskite daugiau, kad susiaurintumėte paiešką",
         "cancel": "Atšaukti",
         "save": "Išsaugoti",
         "saving": "Išsaugoma...",

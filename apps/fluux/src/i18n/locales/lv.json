@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Tiek rādīti {{shown}} no {{total}}. Rakstiet vairāk, lai sašaurinātu meklēšanu",
         "cancel": "Atcelt",
         "save": "Saglabāt",
         "saving": "Saglabā...",

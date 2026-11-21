@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "显示 {{shown}} / {{total}} 项，继续输入以缩小范围",
         "cancel": "取消",
         "save": "保存",
         "saving": "正在保存…",

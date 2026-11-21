@@ -1,6 +1,5 @@
 import React, { useState, useRef, useLayoutEffect, useMemo, memo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { MAX_SUGGESTIONS } from '@/constants/ui'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { useContextMenu, useTypeToFocus, useListKeyboardNav } from '@/hooks'
@@ -45,6 +44,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const [searchQuery, setSearchQuery] = useState('')
+  const [renamingContact, setRenamingContact] = useState<Contact | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const zoneRef = useSidebarZone()
@@ -75,13 +75,13 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
 
   // Mount-scoped handlers keep row props stable. Publish the latest actions
   // after commit, so an abandoned render cannot change a visible row's actions.
-  const latestRef = useRef({ onSelectContact, onStartChat, removeContact, renameContact, onManageUser })
-  useLayoutEffect(() => { latestRef.current = { onSelectContact, onStartChat, removeContact, renameContact, onManageUser } })
+  const latestRef = useRef({ onSelectContact, onStartChat, removeContact, onManageUser })
+  useLayoutEffect(() => { latestRef.current = { onSelectContact, onStartChat, removeContact, onManageUser } })
   const [rowHandlers] = useState(() => ({
     onSelect: (contact: Contact) => latestRef.current.onSelectContact?.(contact),
     onStartChat: (contact: Contact) => latestRef.current.onStartChat?.(contact),
     onRemove: (jid: string) => latestRef.current.removeContact(jid),
-    onRename: (jid: string, name: string) => latestRef.current.renameContact(jid, name),
+    onRename: (contact: Contact) => setRenamingContact(contact),
     onManageUser: (jid: string) => latestRef.current.onManageUser?.(jid),
   }))
   const onManageUserStable = onManageUser ? rowHandlers.onManageUser : undefined
@@ -113,6 +113,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
   type ListRow =
     | { kind: 'requests'; key: string }
     | { kind: 'header'; key: string; title: string }
+    | { kind: 'empty'; key: string; hasContacts: boolean }
     | { kind: 'contact'; key: string; jid: string; lastInGroup: boolean }
   const hasRequests = subscriptionRequests.length > 0
   const rows = useMemo(() => {
@@ -127,18 +128,17 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
       rows.push({ kind: 'header', key: `header:${group}`, title: `${title} — ${jids.length}` })
       jids.forEach((jid, index) => rows.push({ kind: 'contact', key: jid, jid, lastInGroup: index === jids.length - 1 }))
     }
+    if (flatJids.length === 0) rows.push({ kind: 'empty', key: 'empty', hasContacts: entries.length > 0 })
     return rows
-  }, [hasRequests, online, offline, errored, t])
+  }, [hasRequests, online, offline, errored, flatJids.length, entries.length, t])
   const rowIndexByJid = useMemo(() => new Map(rows.flatMap((row, index) => row.kind === 'contact' ? [[row.jid, index] as const] : [])), [rows])
   const getRowKey = useMemo(() => (index: number) => rows[index].key, [rows])
-  const windowed = flatJids.length > MAX_SUGGESTIONS
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => listRef.current,
     getItemKey: getRowKey,
     estimateSize: (index) => rows[index].kind === 'header' ? 20 : 60,
     overscan: 6,
-    enabled: windowed,
   })
   // The shared navigation hook targets mounted nodes synchronously. A keyboard
   // move outside the window has no node yet, so reveal it after selection commits.
@@ -152,8 +152,8 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
     if (selectedJid === lastKeyboardJid.current) return
     lastKeyboardJid.current = selectedJid
     const index = selectedJid ? rowIndexByJid.get(selectedJid) : undefined
-    if (windowed && index !== undefined) virtualizer.scrollToIndex(index, { align: 'auto' })
-  }, [selectedJid, isKeyboardNav, windowed, rowIndexByJid, virtualizer])
+    if (index !== undefined) virtualizer.scrollToIndex(index, { align: 'auto' })
+  }, [selectedJid, isKeyboardNav, rowIndexByJid, virtualizer])
 
   const renderRow = (row: ListRow) => {
     if (row.kind === 'requests') return (
@@ -172,6 +172,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
         ))}
       </div>
     )
+    if (row.kind === 'empty') return <ListEmpty icon={row.hasContacts ? Search : Users} title={t(row.hasContacts ? 'contacts.noContactsFound' : 'contacts.noContacts')} />
     if (row.kind === 'header') return <h3 className="px-2 pb-1 text-xs font-semibold text-fluux-muted uppercase">{row.title}</h3>
     const itemProps = getItemProps(jidToIndex.get(row.jid) ?? -1)
     return (
@@ -216,29 +217,27 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
       </div>
 
       {/* Contact list */}
-      <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto px-2 pb-2" {...getContainerProps()}>
-        {entries.length === 0 || flatJids.length === 0 ? (
-          <>
-            {subscriptionRequests.length > 0 && renderRow({ kind: 'requests', key: 'requests' })}
-            {entries.length === 0
-              ? <ListEmpty icon={Users} title={t('contacts.noContacts')} />
-              : <ListEmpty icon={Search} title={t('contacts.noContactsFound')} />}
-          </>
-        ) : windowed ? (
-          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-            {virtualizer.getVirtualItems().map((item) => (
-              <div
-                key={item.key}
-                ref={virtualizer.measureElement}
-                data-index={item.index}
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${item.start}px)` }}
-              >
-                {renderRow(rows[item.index])}
-              </div>
-            ))}
-          </div>
-        ) : rows.map((row) => <div key={row.key}>{renderRow(row)}</div>)}
+      <div ref={listRef} className="sidebar-scroll flex-1 min-h-0 overflow-y-auto px-2 pb-2" {...getContainerProps()}>
+        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+          {virtualizer.getVirtualItems().map((item) => (
+            <div
+              key={item.key}
+              ref={virtualizer.measureElement}
+              data-index={item.index}
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${item.start}px)` }}
+            >
+              {renderRow(rows[item.index])}
+            </div>
+          ))}
+        </div>
       </div>
+      {renamingContact && (
+        <RenameContactModal
+          contact={renamingContact}
+          onRename={(name) => renameContact(renamingContact.jid, name)}
+          onClose={() => setRenamingContact(null)}
+        />
+      )}
     </div>
   )
 }
@@ -251,7 +250,7 @@ interface ContactItemProps {
   onSelect: (contact: Contact) => void
   onStartChat: (contact: Contact) => void
   onRemove: (jid: string) => void
-  onRename: (jid: string, name: string) => Promise<void>
+  onRename: (contact: Contact) => void
   onManageUser?: (jid: string) => void
   onMouseEnter?: (e: React.MouseEvent) => void
   onMouseMove?: (e: React.MouseEvent) => void
@@ -274,7 +273,6 @@ const ContactItem = memo(function ContactItem({
 }: ContactItemProps) {
   const { t } = useTranslation()
   const menu = useContextMenu()
-  const [showRenameModal, setShowRenameModal] = useState(false)
   // Focused permission hook — useAdmin() subscribes to ~15 admin store
   // values; ContactItem only needs these three. Each ContactItem instance
   // gets its own subscription, so narrower selectors mean fewer rows
@@ -310,7 +308,7 @@ const ContactItem = memo(function ContactItem({
 
   const handleRename = () => {
     menu.close()
-    setShowRenameModal(true)
+    onRename(contact)
   }
 
   const handleManage = () => {
@@ -416,15 +414,6 @@ const ContactItem = memo(function ContactItem({
             <span>{t('contacts.removeContact')}</span>
           </button>
         </SidebarMenuPortal>
-      )}
-
-      {/* Rename Modal */}
-      {showRenameModal && (
-        <RenameContactModal
-          contact={contact}
-          onRename={(name) => onRename(contact.jid, name)}
-          onClose={() => setShowRenameModal(false)}
-        />
       )}
     </>
   )
