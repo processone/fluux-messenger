@@ -22,6 +22,7 @@ export {
   getMessage,
   getMessageByStanzaId,
   getMessages,
+  getMessagesAround,
   getMessageCount,
   updateMessage,
   deleteMessage,
@@ -33,6 +34,7 @@ export {
   getRoomMessage,
   getRoomMessageByStanzaId,
   getRoomMessages,
+  getRoomMessagesAround,
   getRoomMessageCount,
   updateRoomMessage,
   deleteRoomMessage,
@@ -42,7 +44,7 @@ export {
   clearAllMessages,
   isMessageCacheAvailable,
 } from '../utils/messageCache'
-export type { GetMessagesOptions } from '../utils/messageCache'
+export type { GetMessagesOptions, GetMessagesAroundOptions } from '../utils/messageCache'
 
 // Avatar cache operations
 export {

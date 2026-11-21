@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
-import type { roomStore, savedStore } from '@fluux/sdk/stores'
+import type { chatStore, roomStore, savedStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
 import { waitForActions } from './harness/messageInteraction'
 import { activateChat } from './harness/scrollHarness'
@@ -94,6 +94,36 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await expect(rows.first()).toContainText('The door code is on the board')
   await expect(rows.nth(1)).toContainText(body.slice(0, 20))
 
+  // Browsing is read-only: it must not join, ask the server for history, activate a conversation or move a read pointer.
+  const readState = () => page.evaluate(({ room, peer }) => {
+    const scope = window as unknown as { __roomStore: typeof roomStore; __chatStore: typeof chatStore }
+    const rooms = scope.__roomStore.getState()
+    const chats = scope.__chatStore.getState()
+    return {
+      activeRoom: rooms.activeRoomJid, activeChat: chats.activeConversationId,
+      room: [rooms.rooms.get(room)?.joined, rooms.rooms.get(room)?.unreadCount, rooms.rooms.get(room)?.mentionsCount],
+      chat: chats.conversations.get(peer)?.unreadCount,
+    }
+  }, { room: ROOM, peer: PEER })
+  const before = await readState()
+  expect(before.activeRoom).toBeNull()
+  expect(before.activeChat).toBeNull()
+  await page.evaluate(() => {
+    const client = (window as unknown as { __demoClient: Record<string, Record<string, unknown>> }).__demoClient
+    const calls: string[] = []
+    ;(window as unknown as { __sdkCalls: string[] }).__sdkCalls = calls
+    for (const namespace of ['rooms', 'messages']) {
+      const target = client[namespace]
+      if (!target) continue
+      const names = new Set([...Object.getOwnPropertyNames(Object.getPrototypeOf(target)), ...Object.keys(target)])
+      for (const name of names) {
+        const original = target[name]
+        if (name === 'constructor' || typeof original !== 'function') continue
+        target[name] = (...args: unknown[]) => { calls.push(`${namespace}.${name}`); return (original as (...a: unknown[]) => unknown).apply(target, args) }
+      }
+    }
+  })
+
   // The central pane opens the newest entry inside its conversation, read-only, with the message highlighted.
   const preview = page.getByTestId('saved-preview')
   await expect(preview).toBeVisible()
@@ -106,18 +136,27 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await expect(preview.locator(`[data-message-id="${roomId}"].message-highlight-persistent`)).toBeInViewport()
   await expect(rows.nth(1)).toHaveAttribute('aria-current', 'true')
 
-  // Go to message opens the room conversation with the original highlighted.
-  await preview.getByRole('button', { name: 'Go to message' }).click()
+  // Browsing two cache-hit entries left everything as it was and called nothing on the rooms or messages APIs.
+  expect(await readState()).toEqual(before)
+  expect(await page.evaluate(() => (window as unknown as { __sdkCalls: string[] }).__sdkCalls)).toEqual([])
+
+  // A click on the highlighted message opens the room conversation with the original highlighted.
+  await preview.locator(`[data-message-id="${roomId}"].message-highlight-persistent`).click()
   await expect(page).toHaveURL(new RegExp(`/rooms/${encodeURIComponent(ROOM)}$`))
   await expect(page.locator(`[data-message-id="${roomId}"].message-highlight`)).toBeInViewport()
   await expect(await savedEntry(page, 'Room actions')).toHaveText('Saved messages (1)')
   await page.keyboard.press('Escape')
 
-  // Open the chat entry with a double-click on its row.
+  // Go to message opens the chat entry (the newest, shown on arrival) in its conversation.
   await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()
-  await page.getByTestId('saved-row').first().dblclick()
+  await page.getByTestId('saved-preview').getByRole('button', { name: 'Go to message' }).click()
   await expect(page).toHaveURL(new RegExp(`/messages/${encodeURIComponent(PEER)}$`))
   await expect(page.locator('[data-message-id="saved-chat-1"].message-highlight')).toBeInViewport()
+
+  // A double-click on a row opens its conversation too.
+  await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()
+  await page.getByTestId('saved-row').nth(1).dblclick()
+  await expect(page).toHaveURL(new RegExp(`/rooms/${encodeURIComponent(ROOM)}$`))
 
   // Remove both from the list; the empty state says how to save one.
   await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
 import { useWindowDrag, useRouteSync, useFollowUnarchivedActive } from '@/hooks'
 import { useHingePosture } from '@/hooks/useHingePosture'
-import { useSavedOpener } from '@/hooks/useSavedOpener'
+import type { SavedOpener } from '@/hooks/useSavedOpener'
 import { useModalStore } from '@/stores/modalStore'
 import { useUpdateAffordance } from '@/stores/appUpdateStore'
 import {
@@ -77,11 +77,11 @@ interface SidebarProps {
   activeContactJid?: string | null
   // Handler for view changes - ensures all state cleanup happens in one place
   onViewChange: (view: SidebarView) => void
+  /** Opens saved messages. Owned above the sidebar and the Saved pane, so a pending room join outlives both. */
+  savedOpener: SavedOpener
 }
 
-export function Sidebar({ mobileRailOnly = false, onSelectContact, onStartChat, onStartChatWithJid, onManageUser, adminCategory, onAdminCategoryChange, sidebarListRef, accountRef, activeContactJid, onViewChange }: SidebarProps) {
-  // Above the Saved list, so a room join and a failure shown on an entry outlive the list itself.
-  const savedOpener = useSavedOpener()
+export function Sidebar({ savedOpener, mobileRailOnly = false, onSelectContact, onStartChat, onStartChatWithJid, onManageUser, adminCategory, onAdminCategoryChange, sidebarListRef, accountRef, activeContactJid, onViewChange }: SidebarProps) {
   detectRenderLoop('Sidebar')
   const { t } = useTranslation()
   // Get current view from URL

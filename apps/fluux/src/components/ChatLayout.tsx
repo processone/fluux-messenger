@@ -48,6 +48,7 @@ import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotificat
 import { useSDKErrorToasts } from '@/hooks/useSDKErrorToasts'
 import { useSavedScopeStore, useSavedSelectionStore } from '@/stores/savedScopeStore'
 import { useSavedRefusalToast } from '@/hooks/useSavedRefusalToast'
+import { useSavedOpener } from '@/hooks/useSavedOpener'
 import { useReactionNotifications } from '@/hooks/useReactionNotifications'
 import { reportStartupShell } from '@/utils/startupRecovery'
 import { useEasterEggNotifications } from '@/hooks/useEasterEggNotifications'
@@ -223,6 +224,9 @@ function ModalHost({
 }
 
 function ChatLayoutContent() {
+  // Above the Saved list and the Saved pane: opening an unjoined room switches the layout and unmounts the
+  // pane, and the pending join and a failure shown on a row must outlive it.
+  const savedOpener = useSavedOpener()
   // Detect render loops before they freeze the UI
   detectRenderLoop('ChatLayout')
 
@@ -1133,6 +1137,7 @@ function ChatLayoutContent() {
             accountRef={accountRef}
             activeContactJid={selectedContact?.jid}
             onViewChange={handleSidebarViewChange}
+            savedOpener={savedOpener}
           />
           </RegionErrorBoundary>
         </div>
@@ -1227,7 +1232,7 @@ function ChatLayoutContent() {
             // A wide window shows the selected saved message in its conversation. A small screen
             // shows the list alone, where a tap opens the conversation.
             <Suspense fallback={<ViewLoadingFallback />}>
-              <SavedPane />
+              <SavedPane onOpen={savedOpener.open} />
             </Suspense>
           ) : activationHoldsMainPane ? (
             <ViewLoadingFallback onBack={sidebarView === 'rooms' ? handleRoomBack : handleChatBack} />

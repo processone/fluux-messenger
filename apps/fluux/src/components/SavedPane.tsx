@@ -13,51 +13,59 @@ import {
   Bookmark, BookmarkPlus, CornerUpLeft, CornerUpRight, ExternalLink, Lock, MonitorSmartphone, MoreHorizontal, ShieldCheck, Smile, Trash2,
 } from 'lucide-react'
 import {
-  connectionStore, findLatestCopy, getBareJid, useContactIdentities,
+  connectionStore, findLatestCopy, getBareJid, messageRowRef, useContactIdentities,
   type Message, type RoomMessage, type SavedMessage,
 } from '@fluux/sdk'
-import { getMessages, getRoomMessages } from '@fluux/sdk/cache'
-import { useConnectionStore, useRoomStore, useRosterStore } from '@fluux/sdk/react'
+import { getMessagesAround, getRoomMessagesAround } from '@fluux/sdk/cache'
+import { useChatStore, useConnectionStore, useRoomStore, useRosterStore, useSavedStore } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
 import { RoomAvatar } from './RoomAvatar'
 import {
-  SearchContextMessageList, chatSearchContextRowId, mergeContextMessages, useScrollToContextTarget,
+  SearchContextMessageList, chatSearchContextRowId, useScrollToContextTarget,
 } from './SearchContextView'
 import { messageRowId } from './conversation/messageRowIdentity'
 import { useConversationName, useRowText } from './sidebar-components/SavedView'
-import { useSavedOpener } from '@/hooks/useSavedOpener'
 import { useSavedList } from '@/hooks/useSavedList'
 import { useMode, useWindowDrag } from '@/hooks'
 
 /** Messages read from the cache on each side of the saved one. */
 const CONTEXT_SIZE = 50
 
-type Context = { messages: (Message | RoomMessage)[]; target?: Message | RoomMessage; loading: boolean; complete: boolean }
+type Context = { messages: (Message | RoomMessage)[]; target?: Message | RoomMessage; loading: boolean }
 
-/** The saved message's neighbours from this device's cache, and the cached copy of the message itself. */
+/**
+ * The saved message's neighbours from this device's cache, around the cached copy of the message
+ * itself. Only a copy `findLatestCopy` accepts (same message by the shared Saved identity rules)
+ * is shown as the original; without one the pane shows the saved copy alone. It reads again when
+ * a durable edit or a change to the conversation's resident window arrives, without going back
+ * to loading, so the reader keeps their place.
+ */
 function useSavedContext(entry: SavedMessage): Context {
-  const [context, setContext] = useState<Context>({ messages: [], loading: true, complete: false })
+  const [context, setContext] = useState<Context>({ messages: [], loading: true })
+  const isRoom = entry.type === 'groupchat'
+  const chatWindow = useChatStore((s) => isRoom ? undefined : s.messages.get(entry.conversationJid))
+  const roomWindow = useRoomStore((s) => isRoom ? s.messages.get(entry.conversationJid) : undefined)
+  const copyVersion = useSavedStore((s) => s.copyVersion)
   useEffect(() => {
     let cancelled = false
-    setContext({ messages: [], loading: true, complete: false })
     void (async () => {
       try {
-        const isRoom = entry.type === 'groupchat'
         const target = await findLatestCopy(entry, connectionStore.getState().jid ?? '')
-        const at = new Date(entry.sentAt ?? target?.timestamp ?? entry.savedAt)
-        const read = (isRoom ? getRoomMessages : getMessages) as (jid: string, options: { before?: Date; after?: Date; limit: number }) => Promise<(Message | RoomMessage)[]>
-        const before = await read(entry.conversationJid, { before: at, limit: CONTEXT_SIZE })
-        const after = await read(entry.conversationJid, { after: new Date(at.getTime() - 1), limit: CONTEXT_SIZE })
-        const messages = mergeContextMessages(before, after, entry.conversationJid, isRoom)
-        const shown = target ?? messages.find((m) => m.id === entry.messageId)
-        if (!cancelled) setContext({ messages, target: shown, loading: false, complete: before.length < CONTEXT_SIZE })
+        const options = { before: CONTEXT_SIZE, after: CONTEXT_SIZE }
+        const messages = target
+          ? await (isRoom
+            ? getRoomMessagesAround(entry.conversationJid, messageRowRef(target), options)
+            : getMessagesAround(entry.conversationJid, messageRowRef(target), options))
+          : []
+        const index = target ? messages.findIndex((m) => m.id === target.id) : -1
+        if (!cancelled) setContext({ messages, target: index >= 0 ? messages[index] : undefined, loading: false })
       } catch (error) {
         console.warn('Could not read the context of a saved message', error)
-        if (!cancelled) setContext({ messages: [], loading: false, complete: false })
+        if (!cancelled) setContext({ messages: [], loading: false })
       }
     })()
     return () => { cancelled = true }
-  }, [entry])
+  }, [entry, isRoom, chatWindow, roomWindow, copyVersion])
   return context
 }
 
@@ -70,14 +78,14 @@ function ConversationAvatar({ entry, name }: { entry: SavedMessage; name: string
     : <Avatar identifier={entry.conversationJid} name={name} avatarUrl={contact?.avatar} size="sm" />
 }
 
-function SavedPreview({ entry, index, total, onRemove }: {
+function SavedPreview({ entry, index, total, onRemove, onOpen }: {
   entry: SavedMessage
+  onOpen: (entry: SavedMessage) => Promise<void>
   index: number
   total: number
   onRemove: (id: string) => void
 }) {
   const { t, i18n } = useTranslation()
-  const { open } = useSavedOpener()
   const { dragRegionProps } = useWindowDrag()
   const { resolvedMode } = useMode()
   const name = useConversationName(entry) ?? ''
@@ -86,13 +94,13 @@ function SavedPreview({ entry, index, total, onRemove }: {
   const jid = useConnectionStore((s) => s.jid)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownNickname = useConnectionStore((s) => s.ownNickname)
-  const { messages, target, loading, complete } = useSavedContext(entry)
+  const { messages, target, loading } = useSavedContext(entry)
   const scrollRef = useRef<HTMLElement>(null)
   const isAtBottomRef = useRef(false)
   const isRoom = entry.type === 'groupchat'
   const rowId = target ? (isRoom ? messageRowId(target) : chatSearchContextRowId(target)) : undefined
   useScrollToContextTarget(scrollRef, rowId, entry.id, loading)
-  const goToMessage = () => { void open(entry) }
+  const goToMessage = () => { void onOpen(entry) }
   const savedOn = new Date(entry.savedAt).toLocaleDateString(i18n.language, { month: 'short', day: 'numeric' })
 
   return (
@@ -108,7 +116,7 @@ function SavedPreview({ entry, index, total, onRemove }: {
         </div>
       </header>
       <div className="flex-1 flex flex-col min-h-0 p-1">
-        {target && messages.length > 0 ? (
+        {target && !entry.deleted && !target.isRetracted ? (
           <SearchContextMessageList
             messages={messages}
             conversationId={`saved-preview:${entry.conversationJid}`}
@@ -123,7 +131,8 @@ function SavedPreview({ entry, index, total, onRemove }: {
             isDarkMode={resolvedMode === 'dark'}
             scrollerRef={scrollRef}
             isAtBottomRef={isAtBottomRef}
-            isHistoryComplete={complete}
+            // The cache cannot prove where the conversation begins, so no start marker is claimed.
+            isHistoryComplete={false}
             isLoading={loading}
           />
         ) : loading ? (
@@ -132,7 +141,7 @@ function SavedPreview({ entry, index, total, onRemove }: {
           // The history is not on this device: show the copy that was saved, and nothing more.
           <div className="flex-1 flex flex-col items-center justify-center px-6 text-center" data-testid="saved-copy-only">
             <blockquote className="max-w-xl rounded-xl border border-fluux-border bg-fluux-bg/40 p-4 text-start text-fluux-text break-words">{copyText}</blockquote>
-            <p className="mt-3 text-sm text-fluux-muted">{t('saved.copyOnly')}</p>
+            {!entry.deleted && !target?.isRetracted && <p className="mt-3 text-sm text-fluux-muted">{t('saved.copyOnly')}</p>}
           </div>
         )}
       </div>
@@ -220,8 +229,9 @@ function ZeroPane() {
   )
 }
 
-export function SavedPane() {
+/** `onOpen` is the app's one Saved opener (owned above the pane), so a pending room join survives the layout change it causes. */
+export function SavedPane({ onOpen }: { onOpen: (entry: SavedMessage) => Promise<void> }) {
   const { saved, current, remove, lockedCount } = useSavedList()
   if (!current) return lockedCount > 0 ? <LockedPane /> : <ZeroPane />
-  return <SavedPreview key={current.id} entry={current} index={saved.indexOf(current)} total={saved.length} onRemove={remove} />
+  return <SavedPreview key={current.id} entry={current} index={saved.indexOf(current)} total={saved.length} onRemove={remove} onOpen={onOpen} />
 }
