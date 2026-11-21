@@ -51,14 +51,14 @@ describe('buildRoomContactSuggestions', () => {
     expect(result).toEqual([{ jid: 'carol@example.com', name: 'Carol' }])
   })
 
-  it('deduplicates occupant devices and their affiliated bare address, keeping the first nickname', () => {
+  it('deduplicates occupant devices and affiliated bare addresses regardless of case, keeping the first nickname', () => {
     const jid = 'james@fluux.chat'
     const occupants = new Map([
-      ['James', { nick: 'James', jid: `${jid}/desktop`, affiliation: 'member' as const, role: 'participant' as const }],
+      ['James', { nick: 'James', jid: 'James@fluux.chat/desktop', affiliation: 'member' as const, role: 'participant' as const }],
       ['James on tablet', { nick: 'James on tablet', jid: `${jid}/tablet`, affiliation: 'member' as const, role: 'participant' as const }],
     ])
     const affiliatedMembers = [
-      { jid, nick: 'James Chen', affiliation: 'member' as const },
+      { jid: 'JAMES@fluux.chat', nick: 'James Chen', affiliation: 'member' as const },
       { jid: 'olivia@fluux.chat', nick: 'Olivia', affiliation: 'member' as const },
     ]
     const result = buildRoomContactSuggestions(createRoom({ occupants, affiliatedMembers }))

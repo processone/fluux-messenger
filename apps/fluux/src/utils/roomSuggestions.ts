@@ -17,7 +17,7 @@ export function buildRoomContactSuggestions(room: Room): ContactSuggestion[] {
 
   for (const occupant of room.occupants.values()) {
     if (!occupant.jid) continue
-    const jid = getBareJid(occupant.jid)
+    const jid = getBareJid(occupant.jid).toLowerCase()
     if (!seen.has(jid)) {
       seen.add(jid)
       result.push({ jid, name: occupant.nick })
@@ -26,9 +26,10 @@ export function buildRoomContactSuggestions(room: Room): ContactSuggestion[] {
 
   if (room.affiliatedMembers) {
     for (const member of room.affiliatedMembers) {
-      if (!seen.has(member.jid)) {
-        seen.add(member.jid)
-        result.push({ jid: member.jid, name: member.nick })
+      const jid = member.jid.toLowerCase()
+      if (!seen.has(jid)) {
+        seen.add(jid)
+        result.push({ jid, name: member.nick })
       }
     }
   }

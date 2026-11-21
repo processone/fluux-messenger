@@ -5,19 +5,20 @@ import { DEMO_CONTACTS } from '@/demo/contacts'
 import { RoomMembersModal } from './RoomMembersModal'
 import { RoomHatsModal } from './RoomHatsModal'
 
-const { setAffiliation, queryAffiliationList, listHats, listHatAssignments, assignHat } = vi.hoisted(() => ({
+const { setAffiliation, queryAffiliationList, listHats, listHatAssignments, assignHat, unassignHat } = vi.hoisted(() => ({
   setAffiliation: vi.fn(),
   queryAffiliationList: vi.fn(),
   listHats: vi.fn(),
   listHatAssignments: vi.fn(),
   assignHat: vi.fn(),
+  unassignHat: vi.fn(),
 }))
 
 // Keep the real selectors and address utilities; only the service hooks are stand-ins.
 vi.mock('@fluux/sdk', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@fluux/sdk')>()),
   useRoster: () => ({ contacts: DEMO_CONTACTS.filter(c => c.jid !== 'james@fluux.chat') }),
-  useRoomModeration: () => ({ setAffiliation, queryAffiliationList, listHats, listHatAssignments, assignHat }),
+  useRoomModeration: () => ({ setAffiliation, queryAffiliationList, listHats, listHatAssignments, assignHat, unassignHat }),
 }))
 
 const roomJid = 'team@conference.fluux.chat'
@@ -26,11 +27,11 @@ const emma = DEMO_CONTACTS.find(c => c.jid === 'emma@fluux.chat')!
 const speaker = { uri: 'urn:hat:speaker', title: 'Speaker' }
 
 // Mirrors the demo room presences, including the device addresses parsed by MUC.
-function room(): Room {
+function room(mixedCase = false): Room {
   const occupants: RoomOccupant[] = [
     { nick: 'You', jid: 'you@fluux.chat/desktop', affiliation: 'owner', role: 'moderator' },
-    { nick: 'Emma', jid: 'emma@fluux.chat/phone', affiliation: 'none', role: 'participant' },
-    { nick: 'James', jid: `${jamesJid}/desktop`, affiliation: 'none', role: 'participant' },
+    { nick: 'Emma', jid: `${mixedCase ? 'Emma' : 'emma'}@fluux.chat/phone`, affiliation: 'none', role: 'participant' },
+    { nick: 'James', jid: `${mixedCase ? 'James@fluux.chat' : jamesJid}/desktop`, affiliation: 'none', role: 'participant' },
     { nick: 'James on tablet', jid: `${jamesJid}/tablet`, affiliation: 'none', role: 'participant' },
     { nick: 'Sophia', jid: 'sophia@fluux.chat', affiliation: 'none', role: 'participant' },
     { nick: 'Liam Brooks', affiliation: 'none', role: 'participant' },
@@ -48,12 +49,12 @@ function room(): Room {
   }
 }
 
-async function openPicker(kind: 'members' | 'hats') {
+async function openPicker(kind: 'members' | 'hats', fixture = room()) {
   if (kind === 'members') {
-    render(<RoomMembersModal room={room()} onClose={() => {}} />)
+    render(<RoomMembersModal room={fixture} onClose={() => {}} />)
     await waitFor(() => expect(queryAffiliationList).toHaveBeenCalled())
   } else {
-    render(<RoomHatsModal room={room()} onClose={() => {}} />)
+    render(<RoomHatsModal room={fixture} onClose={() => {}} />)
     await screen.findByText(speaker.title)
     fireEvent.click(screen.getByRole('button', { name: /rooms.hatsAssignments/ }))
     await waitFor(() => expect(listHatAssignments).toHaveBeenCalled())
@@ -78,10 +79,11 @@ describe.each(['members', 'hats'] as const)('%s occupant suggestions', (kind) =>
     listHats.mockResolvedValue([speaker])
     listHatAssignments.mockResolvedValue([])
     assignHat.mockResolvedValue(undefined)
+    unassignHat.mockResolvedValue(undefined)
   })
 
-  it('merges a resource occupant with their roster row, keeping the roster name', async () => {
-    const input = await openPicker(kind)
+  it.each([false, true])('merges a resource occupant with their roster row (mixed case: %s)', async (mixedCase) => {
+    const input = await openPicker(kind, room(mixedCase))
     fireEvent.change(input, { target: { value: 'emma' } })
 
     expect(rows()).toHaveLength(1)
@@ -90,8 +92,8 @@ describe.each(['members', 'hats'] as const)('%s occupant suggestions', (kind) =>
     expect(rows()[0]).not.toHaveTextContent('/phone')
   })
 
-  it('chooses a non-roster occupant once across devices and acts on their bare address', async () => {
-    const input = await openPicker(kind)
+  it.each([false, true])('chooses a non-roster occupant once and acts on their bare address (mixed case: %s)', async (mixedCase) => {
+    const input = await openPicker(kind, room(mixedCase))
     fireEvent.change(input, { target: { value: 'james' } })
 
     expect(rows()).toHaveLength(1)
@@ -104,15 +106,21 @@ describe.each(['members', 'hats'] as const)('%s occupant suggestions', (kind) =>
     ))
   })
 
-  it('excludes every device when the bare address already has the membership or selected hat', async () => {
-    queryAffiliationList.mockResolvedValue([{ jid: jamesJid, affiliation: 'member' }])
-    listHatAssignments.mockResolvedValue([{ jid: jamesJid, ...speaker }])
+  it.each([false, true])('excludes every device for existing membership or the selected hat (stored variant: %s)', async (storedVariant) => {
+    const memberJid = storedVariant ? 'James@fluux.chat' : jamesJid
+    const assignedJid = storedVariant ? 'James@fluux.chat/desktop' : jamesJid
+    queryAffiliationList.mockResolvedValue([{ jid: memberJid, affiliation: 'member' }])
+    listHatAssignments.mockResolvedValue([{ jid: assignedJid, ...speaker }])
     const input = await openPicker(kind)
     // Wait for the loaded entry, not just the request's start.
-    await screen.findByText(jamesJid)
+    await screen.findByText(kind === 'members' ? memberJid : assignedJid)
     fireEvent.change(input, { target: { value: 'james' } })
 
     expect(rows()).toHaveLength(0)
+    if (kind === 'hats') {
+      fireEvent.click(screen.getByRole('button', { name: 'rooms.unassignHat' }))
+      await waitFor(() => expect(unassignHat).toHaveBeenCalledExactlyOnceWith(roomJid, assignedJid, speaker.uri))
+    }
   })
 
   it('keeps a bare-address contact and does not turn an anonymous nickname into another suggestion', async () => {

@@ -11,6 +11,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import type { Room, Hat } from '@fluux/sdk'
+import { getBareJid } from '@fluux/sdk/core'
 import { useRoomModeration, generateConsistentColorHexSync } from '@fluux/sdk'
 import { ModalShell } from './ModalShell'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -112,7 +113,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
     if (!assignUri) return []
     return assignments
       .filter(a => a.uri === assignUri)
-      .map(a => a.jid)
+      .map(a => getBareJid(a.jid).toLowerCase())
   })()
 
   // ---------------------------------------------------------------------------
