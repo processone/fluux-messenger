@@ -637,7 +637,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             // CSS (index.css), instead of threading `isComposing` into every row's
             // `hideToolbar` prop — which re-rendered (and relayouted) the whole
             // non-virtualized room list on each typing burst (parity with ChatView).
-            className={`focus-zone flex-1 flex flex-col min-h-0 p-1 relative${isComposing ? ' composer-active' : ''}`}
+            // pt-px leaves room only for the 1px inset focus outline, so the list (and its top fade)
+            // starts right at the header's bottom line.
+            className={`focus-zone flex-1 flex flex-col min-h-0 px-1 pb-1 pt-px relative${isComposing ? ' composer-active' : ''}`}
           >
             {find.isOpen && (
               <FindOnPageBar

@@ -179,7 +179,7 @@ export function ChatHeader({
   return (
     <>
     <header
-      className="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-2 md:gap-3"
+      className="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg gap-2 md:gap-3"
       onMouseDown={handleMouseDown}
       onContextMenu={handleContextMenu}
       {...dragRegionProps}

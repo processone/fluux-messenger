@@ -2538,7 +2538,7 @@ describe('MessageList scroll behavior', () => {
         render(renderList(createTestMessages(5)))
         const scroller = document.querySelector('[data-message-list]')!
         const wrapper = Array.from(scroller.children).find(
-          (c) => c instanceof HTMLDivElement
+          (c) => c instanceof HTMLDivElement && !c.hasAttribute('data-scroll-fade')
         ) as Element
         const observer = MockResizeObserver.observing(wrapper)
         expect(observer).toBeDefined()

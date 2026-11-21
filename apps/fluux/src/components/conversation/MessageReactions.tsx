@@ -128,15 +128,11 @@ export const MessageReactions = memo(function MessageReactions({
               }
               onReaction(emoji)
             } : undefined}
-            className={`inline-flex items-center gap-1 px-1.5 py-0.5 touch:px-2.5 touch:py-1.5 rounded-full text-xs
-                       border transition-colors ${
-                         myReactions.includes(emoji)
-                           ? 'bg-fluux-brand/20 border-fluux-brand'
-                           : 'bg-fluux-surface border-fluux-border hover:bg-fluux-hover'
-                       } ${!onReaction ? 'cursor-default' : ''}`}
+            className={`reaction-chip inline-flex items-center gap-1 px-1.5 py-0.5 touch:px-2.5 touch:py-1.5 rounded-full text-xs
+                       transition-colors ${myReactions.includes(emoji) ? 'fluux-accent-tint' : ''} ${!onReaction ? 'cursor-default' : ''}`}
           >
             <span>{emoji}</span>
-            <span className="text-fluux-muted">{reactors.length}</span>
+            <span className={myReactions.includes(emoji) ? 'font-medium text-fluux-text' : 'text-fluux-muted'}>{reactors.length}</span>
           </button>
         </Tooltip>
       ))}
@@ -158,7 +154,7 @@ export const MessageReactions = memo(function MessageReactions({
             type="button"
             data-reaction-emoji={overflow[0][0]}
             aria-label={t('chat.reactions')}
-            className="inline-flex items-center px-1.5 py-0.5 touch:px-2.5 touch:py-1.5 rounded-full text-xs bg-fluux-muted/20 text-fluux-muted"
+            className="reaction-chip inline-flex items-center px-1.5 py-0.5 touch:px-2.5 touch:py-1.5 rounded-full text-xs text-fluux-muted"
           >
             +{overflow.length}
           </button>

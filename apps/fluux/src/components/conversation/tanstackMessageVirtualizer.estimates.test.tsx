@@ -6,7 +6,6 @@ import { act, render } from '@testing-library/react'
 import { useCallback, useLayoutEffect } from 'react'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
-import { useRowMetrics } from './useRowMetrics'
 
 const observers = new Map<Element, ResizeObserverCallback>()
 beforeEach(() => {
@@ -256,77 +255,5 @@ it('leaves an animated scroll to its own target', () => {
 
   expect(scroller.scrollTop).toBe(top)
   expect(scroller.scrollTo).not.toHaveBeenCalled()
-  view.unmount()
-})
-
-// The real sampler, wired as MessageList wires it: only own hug-width bubbles are mounted, then
-// an incoming row mounts during the backward scroll, its observer measures it, and the content
-// width is resampled at full width.
-it('keeps the reader in place when an own-only width sample gives way to the full width', async () => {
-  const scroller = scrollerWithSpacer()
-  const scrollRef = { current: scroller }
-  const items = Array.from({ length: ROWS }, (_, index) => ({ key: `row-${index}` }))
-  const indexById = new Map(items.map((item, index) => [item.key, index]))
-  const handle: { current?: MessageVirtualizer } = {}
-  const refreshes: boolean[] = []
-  const nodes = new Map<number, HTMLElement>()
-  const lines = (width: number) => Math.ceil(4000 / width)
-  function Harness({ incoming }: { incoming: boolean }) {
-    const metrics = useRowMetrics(scrollRef, first => {
-      refreshes.push(first)
-      handle.current!.refreshEstimates!(first)
-    })
-    const virtualizer = useTanstackMessageVirtualizer({
-      items, indexById, scrollRef, sampleEstimateMetrics: metrics.sample,
-      // A long text wraps onto more lines the narrower the sampled width.
-      estimateSize: () => 22 * lines(metrics.metricsRef.current.contentWidthPx),
-    })
-    useLayoutEffect(() => { handle.current = virtualizer }, [virtualizer])
-    const mounted = incoming ? [19, 20, 21, 22] : [20, 21, 22]
-    return <div style={{ height: virtualizer.getTotalSize() }}>
-      {mounted.map(index => (
-        <div key={index} data-index={index} ref={node => {
-          if (!node) return
-          nodes.set(index, node)
-          node.getBoundingClientRect = () => new DOMRect(0, 0, 800, 50)
-          virtualizer.measureElement(node)
-        }}>
-          <div {...(index === 19 ? {} : { 'data-msg-own': '' })}>
-            <div data-msg-text ref={node => {
-              if (node) Object.defineProperty(node, 'clientWidth', { configurable: true, value: index === 19 ? 888 : 44 })
-            }}>{index === 19 ? 'An incoming message' : 'ok'}</div>
-          </div>
-        </div>
-      ))}
-    </div>
-  }
-  const view = render(<Harness incoming={false} />, { container: scroller })
-  await act(async () => {})
-  expect(refreshes).toEqual([true])
-  const virtualizer = () => handle.current!
-  const placement = () => virtualizer().getMessageStart!('row-21')! - scroller.scrollTop
-  const readAt = () => virtualizer().getMessageStart!('row-21')! + 10
-  act(() => {
-    scroller.scrollTop = readAt() + 100
-    scroller.dispatchEvent(new Event('scroll'))
-  })
-  act(() => {
-    scroller.scrollTop = readAt()
-    scroller.dispatchEvent(new Event('scroll'))
-  })
-  const before = placement()
-
-  await act(async () => { view.rerender(<Harness incoming />) })
-  const row = nodes.get(19)!
-  await act(async () => {
-    observers.get(row)!([
-      { target: row, borderBoxSize: [{ blockSize: 50 }] } as unknown as ResizeObserverEntry,
-    ], {} as ResizeObserver)
-  })
-
-  expect(refreshes).toEqual([true, false])
-  expect(virtualizer().getMessageStart!('row-1')! - virtualizer().getMessageStart!('row-0')!)
-    .toBe(22 * lines(888))
-  expect(placement()).toBe(before)
   view.unmount()
 })

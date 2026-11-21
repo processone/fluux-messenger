@@ -13,30 +13,19 @@ function setWidth(e: Element, w: number): void {
 }
 
 describe('pickWidthSampleEl', () => {
-  it('prefers a text element outside own (hug-width) bubbles', () => {
-    // Own bubbles are w-fit: their [data-msg-text] clientWidth is the hugged TEXT width, not
-    // the available content width — sampling one poisons the width bucket for the whole
-    // conversation (bucket churns with whichever row happens to be first).
+  it('skips whisper cards, whose inset narrows their text box', () => {
     const root = el(`
-      <div data-msg-chrome="cont" data-msg-own><div data-msg-text>ok</div></div>
-      <div data-msg-chrome="header"><div data-msg-text>a longer peer message</div></div>
+      <div data-msg-chrome="cont" data-msg-whisper><div data-msg-text>a whisper</div></div>
+      <div data-msg-chrome="header"><div data-msg-text>a peer message</div></div>
     `)
-    const own = root.querySelector('[data-msg-own] [data-msg-text]')!
     const peer = root.querySelector('[data-msg-chrome="header"] [data-msg-text]')!
-    setWidth(own, 38)
-    setWidth(peer, 890)
     expect(pickWidthSampleEl(root)).toBe(peer)
   })
 
-  it('falls back to the widest own text element when only own rows are mounted', () => {
-    const root = el(`
-      <div data-msg-chrome="cont" data-msg-own><div data-msg-text>ok</div></div>
-      <div data-msg-chrome="cont" data-msg-own><div data-msg-text>a much longer own message</div></div>
-    `)
-    const [short, long] = Array.from(root.querySelectorAll('[data-msg-text]'))
-    setWidth(short, 38)
-    setWidth(long, 542)
-    expect(pickWidthSampleEl(root)).toBe(long)
+  it('returns null when only whisper cards are mounted', () => {
+    expect(pickWidthSampleEl(el(`
+      <div data-msg-chrome="cont" data-msg-whisper><div data-msg-text>a whisper</div></div>
+    `))).toBeNull()
   })
 
   it('returns null when nothing is mounted', () => {
@@ -45,29 +34,32 @@ describe('pickWidthSampleEl', () => {
 })
 
 describe('realContentWidthPx', () => {
-  // The height cache's width tag follows this value, so a hugged own text box must never pass
-  // for the real width (the tag would move and wipe the conversation's heights). A renderer
-  // without the content column marker keeps the full-width text box as the real width.
-  // Widths are the demo app's at 1280px wide in Chromium.
-  it('outside a content column, trusts only a full-width text box', () => {
+  // The height cache's width tag follows this value. Widths are the demo app's at 1280px wide
+  // in Chromium.
+  it('reads the content column a row sits in', () => {
     const root = el(`
-      <div data-msg-chrome="cont" data-msg-own><div data-msg-text>short own reply</div></div>
-      <div data-msg-chrome="cont"><div data-msg-text>a longer peer message</div></div>
+      <div data-msg-column><div data-msg-chrome="cont"><div data-msg-text>a peer message</div></div></div>
     `)
-    const [own, peer] = Array.from(root.querySelectorAll<HTMLElement>('[data-msg-text]'))
-    setWidth(own, 142)
-    setWidth(peer, 888)
-    expect(realContentWidthPx(own)).toBeUndefined()
-    expect(realContentWidthPx(peer)).toBe(888)
+    setWidth(root.querySelector('[data-msg-column]')!, 888)
+    const text = root.querySelector<HTMLElement>('[data-msg-text]')!
+    setWidth(text, 880)
+    expect(realContentWidthPx(text)).toBe(888)
+  })
+
+  it('outside a content column, trusts the text box', () => {
+    const root = el(`<div data-msg-chrome="cont"><div data-msg-text>a peer message</div></div>`)
+    const text = root.querySelector<HTMLElement>('[data-msg-text]')!
+    setWidth(text, 888)
+    expect(realContentWidthPx(text)).toBe(888)
   })
 })
 
 // Mirrors MessageBubble: the chrome row holds the sender header (header rows only), then the
 // collapsible body, then whatever decorates the message.
 const SENDER = '<div data-msg-sender>Alice 14:30</div>'
-function row(shape: 'header' | 'cont', body: string, opts: { own?: boolean; before?: string; after?: string } = {}): string {
+function row(shape: 'header' | 'cont', body: string, opts: { whisper?: boolean; before?: string; after?: string } = {}): string {
   const header = shape === 'header' ? SENDER : ''
-  return `<div data-msg-chrome="${shape}"${opts.own ? ' data-msg-own' : ''}>${header}${opts.before ?? ''}<div>${body}</div>${opts.after ?? ''}</div>`
+  return `<div data-msg-chrome="${shape}"${opts.whisper ? ' data-msg-whisper' : ''}>${header}${opts.before ?? ''}<div>${body}</div>${opts.after ?? ''}</div>`
 }
 const TEXT = '<div data-msg-text>plain text</div>'
 
@@ -84,9 +76,9 @@ describe('pickChromeSampleEl', () => {
     expect(pickChromeSampleEl(root, 'cont')).toBe(clean)
   })
 
-  it('skips own hug-width rows (their text box does not span the content width)', () => {
+  it('skips whisper cards (their inset and padding are not ordinary chrome)', () => {
     const root = el(`
-      ${row('header', TEXT, { own: true })}
+      ${row('header', TEXT, { whisper: true })}
       ${row('header', TEXT)}
     `)
     const peer = root.querySelectorAll('[data-msg-chrome="header"]')[1]
