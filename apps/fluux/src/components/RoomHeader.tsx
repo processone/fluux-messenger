@@ -266,7 +266,7 @@ export function RoomHeader({
             onClick={onToggleOccupants}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors tap-target
                        ${showOccupants
-                         ? 'bg-fluux-brand/20 text-fluux-brand'
+                         ? 'bg-fluux-brand/20 text-fluux-brand-on-tint'
                          : 'hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text'
                        }`}
             aria-label={showOccupants ? t('rooms.hideMembers') : t('rooms.showMembers')}

@@ -123,7 +123,7 @@ export function IosNotificationsCard({
           <button
             type="button"
             onClick={onRequestPermission}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand-on-tint hover:text-fluux-text
                        bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
           >
             {t('settings.requestPermission')}

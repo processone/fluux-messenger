@@ -968,7 +968,7 @@ Steps to follow:
       expect(mention).toBeTruthy()
       // Should have inline color style (not brand class)
       expect(mention.style.color).toBeTruthy()
-      expect(mention.classList.contains('text-fluux-brand')).toBe(false)
+      expect(mention.classList.contains('text-fluux-brand-on-tint')).toBe(false)
     })
 
     it('uses consistent color per user (same nick = same color)', () => {
@@ -1000,7 +1000,7 @@ Steps to follow:
       const mention = container.querySelector('[data-mention]') as HTMLElement
       expect(mention).toBeTruthy()
       // @all has no nick → falls back to brand color class
-      expect(mention.classList.contains('text-fluux-brand')).toBe(true)
+      expect(mention.classList.contains('text-fluux-brand-on-tint')).toBe(true)
       expect(mention.style.color).toBeFalsy()
     })
 

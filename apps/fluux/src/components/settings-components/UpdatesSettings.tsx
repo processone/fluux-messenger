@@ -38,7 +38,7 @@ export function UpdatesSettings() {
 
           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             {update.available && (
-              <span className="px-2 py-0.5 text-xs font-medium bg-fluux-brand/20 text-fluux-brand rounded-full">
+              <span className="px-2 py-0.5 text-xs font-medium bg-fluux-brand/20 text-fluux-brand-on-tint rounded-full">
                 {update.version}
               </span>
             )}
@@ -70,7 +70,7 @@ export function UpdatesSettings() {
               <button
                 type="button"
                 onClick={update.checkForUpdate}
-                className="flex max-w-full items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
+                className="flex max-w-full items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand-on-tint hover:text-fluux-text
                            bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
               >
                 <RefreshCw className="size-4 shrink-0" />

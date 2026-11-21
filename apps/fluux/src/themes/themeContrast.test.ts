@@ -349,3 +349,49 @@ describe('Encryption icon non-text contrast (WCAG 1.4.11 >= 3:1)', () => {
     expect(r).toBeGreaterThanOrEqual(3)
   })
 })
+
+// Accent text on an accent tint (text-fluux-brand-on-tint over bg-fluux-brand/20).
+// Each theme tunes its accent to clear AA as text on the bare canvas, so a tint
+// behind it gives that margin away. The on-tint token mixes the accent toward
+// white (dark) or black (light); this checks it holds AA on the strongest tint
+// those pills use, on every surface they sit on. Popovers are left out in dark
+// mode: their float surface is lighter than the canvas, as it is for plain
+// accent text.
+const TEXT_ACCENT_LIFT = css.match(
+  /:root\[data-theme='fluux'\]:not\(\.light\)\s*\{\s*--fluux-text-accent:\s*([^;]+);/,
+)?.[1]
+const ON_TINT = {
+  dark: css.match(/--fluux-text-accent-on-tint:\s*color-mix\(in srgb, var\(--fluux-text-accent\) ([\d.]+)%, #fff\)/)?.[1],
+  light: css.match(/--fluux-text-accent-on-tint:\s*color-mix\(in srgb, var\(--fluux-text-accent\) ([\d.]+)%, #000\)/)?.[1],
+}
+
+describe('Builtin theme accent text on an accent tint', () => {
+  it('reads the token definitions from index.css', () => {
+    expect(TEXT_ACCENT_LIFT).toBeTruthy()
+    expect(ON_TINT.dark).toBeTruthy()
+    expect(ON_TINT.light).toBeTruthy()
+  })
+
+  for (const theme of builtinThemes) {
+    for (const mode of ['dark', 'light'] as const) {
+      const surfaces = mode === 'dark'
+        ? ['chat-bg', 'sidebar-bg', 'bg-primary', 'bg-secondary']
+        : ['chat-bg', 'sidebar-bg', 'bg-primary', 'bg-secondary', 'bg-float']
+      for (const surface of surfaces) {
+        it(`[${theme.id}/${mode}] on-tint accent text clears WCAG AA on a 20% tint over ${surface}`, () => {
+          const vars = { ...themeTokens(theme, mode) }
+          if (theme.id === 'fluux' && mode === 'dark') vars['--fluux-text-accent'] = TEXT_ACCENT_LIFT!
+          const base = resolve_(`var(--fluux-${surface})`, vars)
+          const fill = resolve_('var(--fluux-bg-accent)', vars)
+          const tint = over([fill[0], fill[1], fill[2], fill[3] * 0.2], base)
+          const accent = resolve_('var(--fluux-text-accent)', vars)
+          const p = parseFloat(ON_TINT[mode]!) / 100
+          const toward = mode === 'dark' ? 255 : 0
+          const text = [0, 1, 2].map((k) => accent[k] * p + toward * (1 - p))
+          const l1 = relLum(text), l2 = relLum(tint)
+          expect((Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)).toBeGreaterThanOrEqual(4.5)
+        })
+      }
+    }
+  }
+})

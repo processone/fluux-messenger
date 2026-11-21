@@ -377,7 +377,7 @@ export function ContactSelector({
             return (
               <span
                 key={jid}
-                className="inline-flex items-center gap-1 px-2 py-0.5 bg-fluux-brand/20 text-fluux-brand rounded-full text-sm"
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-fluux-brand/20 text-fluux-brand-on-tint rounded-full text-sm"
               >
                 {displayName}
                 <button

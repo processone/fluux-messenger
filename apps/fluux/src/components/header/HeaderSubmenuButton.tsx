@@ -26,7 +26,7 @@ export function HeaderSubmenuButton({ ariaLabel, tooltip, icon: Icon, active, gr
   useCloseOnEscape(() => setOpen(false), open)
 
   const idle = 'hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text'
-  const on = 'bg-fluux-brand/20 text-fluux-brand'
+  const on = 'bg-fluux-brand/20 text-fluux-brand-on-tint'
 
   return (
     <div className="relative" ref={containerRef}>

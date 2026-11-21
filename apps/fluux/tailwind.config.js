@@ -1,6 +1,19 @@
 import plugin from 'tailwindcss/plugin'
 import containerQueries from '@tailwindcss/container-queries'
 
+// Theme colours are runtime CSS variables, which Tailwind cannot parse, so an
+// opacity modifier on a plain 'var(...)' string (bg-fluux-brand/20) compiles to
+// nothing. Each colour is instead a function: without a modifier it is the bare
+// variable, exactly as before; with one it mixes the variable with transparent.
+// color-mix accepts every token format the themes use (hex, rgb/rgba, hsl/hsla,
+// var() chains, color-mix) and multiplies any alpha the token already carries.
+// The opacityVariable branch is the unmodified utility, where Tailwind passes
+// var(--tw-*-opacity): keep the bare variable there so plain classes are unchanged.
+export const alphaVar = (name) => ({ opacityValue, opacityVariable } = {}) =>
+  opacityVariable !== undefined || opacityValue === undefined || String(opacityValue) === '1'
+    ? `var(${name})`
+    : `color-mix(in srgb, var(${name}) calc(${opacityValue} * 100%), transparent)`
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -12,62 +25,65 @@ export default {
       // Accent AS TEXT reads --fluux-text-accent, which may differ from the fill
       // (bg/border/ring-fluux-brand keep --fluux-bg-accent). See index.css.
       textColor: {
-        fluux: { brand: 'var(--fluux-text-accent)' },
+        fluux: {
+          brand: alphaVar('--fluux-text-accent'),
+          // Accent text that sits on an accent tint (bg-fluux-brand/10, /20).
+          'brand-on-tint': alphaVar('--fluux-text-accent-on-tint'),
+        },
       },
       colors: {
         // Fluux color palette — 3-tier design tokens (Foundation → Semantic → Component)
         // Tailwind aliases point to the most specific tier available.
         fluux: {
           // Backgrounds
-          'bg': 'var(--fluux-bg-primary)',
-          'bg-secondary': 'var(--fluux-bg-secondary)',
-          'sidebar': 'var(--fluux-sidebar-bg)',
-          'chat': 'var(--fluux-chat-bg)',
-          'surface': 'var(--fluux-bg-tertiary)',
-          'hover': 'var(--fluux-bg-hover)',
-          'message-hover': 'var(--fluux-message-hover)',
-          'active': 'var(--fluux-bg-active)',
-          'float': 'var(--fluux-bg-float)',
-          'float-hover': 'var(--fluux-bg-float-hover)',
-          'sidebar-item-active': 'var(--fluux-sidebar-item-active)',
-          'sidebar-item-active-accent': 'var(--fluux-sidebar-item-active-accent)',
-          'selection': 'var(--fluux-selection-bg)',
+          'bg': alphaVar('--fluux-bg-primary'),
+          'bg-secondary': alphaVar('--fluux-bg-secondary'),
+          'sidebar': alphaVar('--fluux-sidebar-bg'),
+          'chat': alphaVar('--fluux-chat-bg'),
+          'surface': alphaVar('--fluux-bg-tertiary'),
+          'hover': alphaVar('--fluux-bg-hover'),
+          'message-hover': alphaVar('--fluux-message-hover'),
+          'active': alphaVar('--fluux-bg-active'),
+          'float': alphaVar('--fluux-bg-float'),
+          'float-hover': alphaVar('--fluux-bg-float-hover'),
+          'sidebar-item-active': alphaVar('--fluux-sidebar-item-active'),
+          'sidebar-item-active-accent': alphaVar('--fluux-sidebar-item-active-accent'),
+          'selection': alphaVar('--fluux-selection-bg'),
           // Text
-          'text': 'var(--fluux-text-normal)',
-          'muted': 'var(--fluux-text-muted)',
-          'link': 'var(--fluux-text-link)',
+          'text': alphaVar('--fluux-text-normal'),
+          'muted': alphaVar('--fluux-text-muted'),
+          'link': alphaVar('--fluux-text-link'),
           // Accents
-          'brand': 'var(--fluux-bg-accent)',
-          'brand-hover': 'var(--fluux-bg-accent-hover)',
-          'text-on-accent': 'var(--fluux-text-on-accent)',
-          // Private (whisper) — pre-composed alpha variants (Tailwind opacity
-          // modifiers don't apply to var() colors, so each tint is its own token)
-          'private': 'var(--fluux-private)',
-          'private-soft': 'var(--fluux-private-soft)',
-          'private-border': 'var(--fluux-private-border)',
-          'private-hover': 'var(--fluux-private-hover)',
+          'brand': alphaVar('--fluux-bg-accent'),
+          'brand-hover': alphaVar('--fluux-bg-accent-hover'),
+          'text-on-accent': alphaVar('--fluux-text-on-accent'),
+          // Private (whisper): pre-composed alpha variants, tuned per theme
+          'private': alphaVar('--fluux-private'),
+          'private-soft': alphaVar('--fluux-private-soft'),
+          'private-border': alphaVar('--fluux-private-border'),
+          'private-hover': alphaVar('--fluux-private-hover'),
           // Badge
-          'badge': 'var(--fluux-badge-bg)',
-          'badge-text': 'var(--fluux-badge-text)',
-          'badge-strong': 'var(--fluux-badge-strong)',
+          'badge': alphaVar('--fluux-badge-bg'),
+          'badge-text': alphaVar('--fluux-badge-text'),
+          'badge-strong': alphaVar('--fluux-badge-strong'),
           // Aurora identity tokens
-          'accent-2': 'var(--fluux-accent-2)',
+          'accent-2': alphaVar('--fluux-accent-2'),
           // Encryption affordance (shields, locks) — single source of truth so
           // the header shield, composer lock, and per-message lock match.
-          'encryption': 'var(--fluux-text-encryption)',
+          'encryption': alphaVar('--fluux-text-encryption'),
           // Status (semantic purpose, not color)
-          'green': 'var(--fluux-status-success)',
-          'yellow': 'var(--fluux-status-warning)',
-          'presence-away': 'var(--fluux-presence-away)',
-          'presence-dnd': 'var(--fluux-presence-dnd)',
-          'red': 'var(--fluux-status-error)',
+          'green': alphaVar('--fluux-status-success'),
+          'yellow': alphaVar('--fluux-status-warning'),
+          'presence-away': alphaVar('--fluux-presence-away'),
+          'presence-dnd': alphaVar('--fluux-presence-dnd'),
+          'red': alphaVar('--fluux-status-error'),
           // Error AS TEXT/icon. Split from `red` (status-error): that token is the
           // fill (danger button, toast border), tuned dark so white text
           // on it clears AA, which leaves it sub-AA as red text on dark surfaces.
           // Use text-fluux-error for error text/icons; bg-fluux-red for fills.
-          'error': 'var(--fluux-text-error)',
-          'gray': 'var(--fluux-color-gray)',
-          'border': 'var(--fluux-border-color)',
+          'error': alphaVar('--fluux-text-error'),
+          'gray': alphaVar('--fluux-color-gray'),
+          'border': alphaVar('--fluux-border-color'),
         }
       },
       fontFamily: {

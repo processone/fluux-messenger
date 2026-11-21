@@ -181,7 +181,7 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
                 disabled={creating}
                 className={`relative flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center transition-colors disabled:opacity-50 ${
                   template === key
-                    ? 'border-fluux-brand bg-fluux-brand/10 text-fluux-brand'
+                    ? 'border-fluux-brand bg-fluux-brand/10 text-fluux-brand-on-tint'
                     : 'border-fluux-border bg-fluux-bg text-fluux-muted hover:border-fluux-text hover:text-fluux-text'
                 }`}
               >

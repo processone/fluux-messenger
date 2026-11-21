@@ -111,16 +111,16 @@ function CategoryButton({
       onClick={onClick}
       className={`w-full px-3 py-2 touch:min-h-11 flex items-center gap-2 rounded-lg transition-colors
                  ${isActive
-                   ? 'bg-fluux-brand/10 text-fluux-brand'
+                   ? 'bg-fluux-brand/10 text-fluux-brand-on-tint'
                    : 'hover:bg-fluux-hover text-fluux-text'
                  }`}
     >
-      <Icon className={`size-4 flex-shrink-0 ${isActive ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
+      <Icon className={`size-4 flex-shrink-0 ${isActive ? 'text-fluux-brand-on-tint' : 'text-fluux-muted'}`} />
       <span className="text-sm font-medium flex-1 text-start">{label}</span>
       {count !== undefined && (
         <span className={`text-xs px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center
                         ${isActive
-                          ? 'bg-fluux-brand/20 text-fluux-brand'
+                          ? 'bg-fluux-brand/20 text-fluux-brand-on-tint'
                           : 'bg-fluux-bg text-fluux-muted'
                         }`}>
           {count.toLocaleString()}
