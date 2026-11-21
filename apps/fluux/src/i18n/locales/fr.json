@@ -1894,7 +1894,11 @@
         "locked": "Les messages enregistrés sont verrouillés",
         "lockedHint": "Ils sont scellés avec votre clé OpenPGP. Déverrouillez votre clé pour les lire.",
         "lockedSome": "{{count}} messages enregistrés restent verrouillés tant que votre clé OpenPGP n'est pas déverrouillée.",
-        "unverified": "Non vérifié : non scellé avec votre clé"
+        "unverified": "Non vérifié : non scellé avec votre clé",
+        "headerButton": "Enregistrés dans cette conversation ({{count}}). Vous seul les voyez.",
+        "scopeLabel": "Dans {{name}}",
+        "clearScope": "Afficher tous les messages enregistrés",
+        "onlyYou": "Vous seul voyez vos messages enregistrés"
     },
     "errorBoundary": {
         "title": "Un problème est survenu",

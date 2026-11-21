@@ -29,6 +29,8 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   // The notification level resolvers are pure; keep the real ones.
   resolveNotifyLevel: (await importOriginal<typeof import('@fluux/sdk')>()).resolveNotifyLevel,
   savedNotifyLevel: (await importOriginal<typeof import('@fluux/sdk')>()).savedNotifyLevel,
+  // The header's Saved count reads the real saved store.
+  useSavedCountInConversation: (await importOriginal<typeof import('@fluux/sdk')>()).useSavedCountInConversation,
   generateConsistentColorHexSync: () => '#4a90d9',
   getUniqueOccupantCount: () => 0,
 }))

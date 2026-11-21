@@ -43,6 +43,7 @@ import { useSoundNotification } from '@/hooks/useSoundNotification'
 import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
 import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotifications'
 import { useSDKErrorToasts } from '@/hooks/useSDKErrorToasts'
+import { useSavedScopeStore } from '@/stores/savedScopeStore'
 import { useSavedRefusalToast } from '@/hooks/useSavedRefusalToast'
 import { useReactionNotifications } from '@/hooks/useReactionNotifications'
 import { reportStartupShell } from '@/utils/startupRecovery'
@@ -345,6 +346,7 @@ function ChatLayoutContent() {
     navigateToAdmin,
     navigateToSettings,
     navigateToSearch,
+    navigateToSaved,
   } = useViewNavigation(selectedContact)
 
   // ── Scroll-debug: SCREEN navigation trace ────────────────────────────────
@@ -891,6 +893,16 @@ function ChatLayoutContent() {
     navigateToSearch()
   }
 
+  // Open the Saved tab narrowed to one conversation. The main pane keeps that conversation open.
+  const handleShowSavedInConversation = (conversationId: string) => {
+    useSavedScopeStore.getState().setScope(conversationId)
+    navigateToSaved()
+  }
+  // The narrowing ends with the Saved tab.
+  useEffect(() => {
+    if (sidebarView !== 'saved') useSavedScopeStore.getState().setScope(null)
+  }, [sidebarView])
+
   // Handle starting a conversation from contact profile or double-click
   const handleStartConversation = (contact: Contact) => {
     const chatState = chatStore.getState()
@@ -1124,6 +1136,7 @@ function ChatLayoutContent() {
               onShowProfile={handleShowProfileFromRoom}
               findOnPageRef={findOnPageRef}
               onSearchInConversation={handleSearchInConversation}
+              onShowSavedInConversation={handleShowSavedInConversation}
               covered={mobileOccupants && !previewOccupantsBack}
               onCloseMobileOccupants={() => occupantsPane.back(() => setShowRoomOccupants(false))}
               renderMobileOccupants={mobileOccupants ? (panel) => (
@@ -1133,7 +1146,7 @@ function ChatLayoutContent() {
               ) : undefined}
             />
           ) : activeConversationId ? (
-            <ChatView onBack={() => mainPane.back(handleChatBack)} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} onShowProfile={handleShowProfileFromRoom} />
+            <ChatView onBack={() => mainPane.back(handleChatBack)} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} onShowSavedInConversation={handleShowSavedInConversation} onShowProfile={handleShowProfileFromRoom} />
           ) : selectedContact ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <ContactProfileView

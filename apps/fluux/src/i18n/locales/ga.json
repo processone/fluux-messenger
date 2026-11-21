@@ -1897,7 +1897,11 @@
         "locked": "Saved messages are locked",
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
-        "unverified": "Not verified: not sealed with your key"
+        "unverified": "Not verified: not sealed with your key",
+        "headerButton": "Sábháilte sa chomhrá seo ({{count}}). Ní fheiceann ach tusa iad.",
+        "scopeLabel": "I {{name}}",
+        "clearScope": "Taispeáin gach teachtaireacht shábháilte",
+        "onlyYou": "Ní fheiceann ach tusa do theachtaireachtaí sábháilte"
     },
     "errorBoundary": {
         "title": "Tharla earráid",

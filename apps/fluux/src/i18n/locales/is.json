@@ -1891,7 +1891,11 @@
         "locked": "Saved messages are locked",
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
-        "unverified": "Not verified: not sealed with your key"
+        "unverified": "Not verified: not sealed with your key",
+        "headerButton": "Vistað í þessu samtali ({{count}}). Aðeins þú sérð þau.",
+        "scopeLabel": "Í {{name}}",
+        "clearScope": "Sýna öll vistuð skilaboð",
+        "onlyYou": "Aðeins þú sérð vistuðu skilaboðin þín"
     },
     "errorBoundary": {
         "title": "Eitthvað fór úrskeiðis",

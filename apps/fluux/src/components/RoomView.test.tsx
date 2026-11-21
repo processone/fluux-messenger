@@ -183,6 +183,8 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   findMessageRowIndex: (await importOriginal<typeof import('@fluux/sdk')>()).findMessageRowIndex,
   // Saving a message uses the SDK's own identity and builder; keep the real ones.
   buildSavedMessage: (await importOriginal<typeof import('@fluux/sdk')>()).buildSavedMessage,
+  // The header's Saved count reads the real saved store.
+  useSavedCountInConversation: (await importOriginal<typeof import('@fluux/sdk')>()).useSavedCountInConversation,
   canSaveMessage: (await importOriginal<typeof import('@fluux/sdk')>()).canSaveMessage,
   findSavedEntry: (await importOriginal<typeof import('@fluux/sdk')>()).findSavedEntry,
   savedStore: (await importOriginal<typeof import('@fluux/sdk')>()).savedStore,

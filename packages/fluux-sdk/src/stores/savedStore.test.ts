@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { savedStore, findSavedEntry, clearSavedLocalData } from './savedStore'
+import { savedStore, findSavedEntry, selectSavedInConversation, clearSavedLocalData } from './savedStore'
 import { savedItemId } from '../utils/savedMessageKeys'
 import { setStorageScopeJid } from '../utils/storageScope'
 import { noteRetractedIdentity, roomRetractionAliases, _clearRetractedIdentitiesForTesting } from '../utils/retractedIdentities'
@@ -321,6 +321,18 @@ describe('clearing another account', () => {
       s().applyNotify({ upserts: [], removedIds: ['l', 'r'] })
       expect(s().remote).toEqual({})
       expect(s().lockedIds).toEqual({})
+    })
+  })
+
+  describe('selectSavedInConversation', () => {
+    it('keeps only the entries of one conversation, in the order given, and nothing for an unknown one', () => {
+      s().save(entry('a', { savedAt: 1 }))
+      s().save(entry('b', { savedAt: 3 }))
+      s().save(entry('c', { savedAt: 2, conversationJid: 'emma@example.org', type: 'chat', from: 'emma@example.org' }))
+      const listed = Object.values(s().entries).sort((a, b) => b.savedAt - a.savedAt)
+      expect(selectSavedInConversation(listed, 'team@conference.example').map((e) => e.id)).toEqual(['b', 'a'])
+      expect(selectSavedInConversation(listed, 'emma@example.org').map((e) => e.id)).toEqual(['c'])
+      expect(selectSavedInConversation(listed, 'nobody@example.org')).toEqual([])
     })
   })
 })

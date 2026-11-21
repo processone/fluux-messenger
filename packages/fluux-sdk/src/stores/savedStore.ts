@@ -113,6 +113,11 @@ function writeQueue(state: Pick<SavedState, 'pending' | 'entries'>): void {
 
 const initial = { entries: {}, pending: {}, remote: {}, removed: {}, revisions: {}, loaded: false, limit: undefined, refusals: 0, hydrated: false, copyVersion: 0, generation: 0, sealState: 'unavailable' as const, lockedIds: {}, migrating: {} }
 
+/** The entries of one conversation (a contact's JID or a room's), in the order given. Locked items hide their conversation, so they are never in a listed set. */
+export function selectSavedInConversation(entries: Iterable<SavedMessage>, conversationJid: string): SavedMessage[] {
+  return Array.from(entries).filter((entry) => entry.conversationJid === conversationJid)
+}
+
 /** Is this message already saved (by any of its identities)? */
 export function findSavedEntry(entries: Record<string, SavedMessage>, probe: SavedIdentity): SavedMessage | undefined {
   return Object.values(entries).find((entry) => sameSavedMessage(entry, probe))

@@ -121,9 +121,17 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         break
       case 'settings':
       case 'search':
-      case 'saved':
         if (currentConversationId) setActiveConversation(null)
         if (currentRoomJid) setActiveRoom(null)
+        break
+      case 'saved':
+        // On a wide window a conversation's Saved button opens the tab beside that conversation,
+        // which stays open (choosing the Saved tab itself closes it, see navigateToView). On a
+        // small screen an open conversation would hide the list, so it closes as for search.
+        if (isSmallScreen()) {
+          if (currentConversationId) setActiveConversation(null)
+          if (currentRoomJid) setActiveRoom(null)
+        }
         break
     }
   }, [sidebarView, setActiveConversation, setActiveRoom])

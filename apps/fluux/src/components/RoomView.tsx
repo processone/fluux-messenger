@@ -107,6 +107,7 @@ interface RoomViewProps {
   findOnPageRef?: RefObject<FindOnPageHandle | null>
   /** Callback to open search scoped to a room */
   onSearchInConversation?: (conversationId: string) => void
+  onShowSavedInConversation?: (conversationId: string) => void
   /** Covered by another pane (the mobile member list), so out of reach of focus and assistive technology. */
   covered?: boolean
   /** Wrap the mobile member panel in the layout-owned navigation pane. */
@@ -123,7 +124,7 @@ const EMPTY_IGNORED_ARRAY: import('@fluux/sdk/stores').IgnoredUser[] = []
 // Stable empty fallback for the composer's NON-reactive occupants read.
 const EMPTY_OCCUPANTS: Map<string, RoomOccupant> = new Map()
 
-export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation, covered = false, renderMobileOccupants, onCloseMobileOccupants }: RoomViewProps) {
+export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation, onShowSavedInConversation, covered = false, renderMobileOccupants, onCloseMobileOccupants }: RoomViewProps) {
   const { t } = useTranslation()
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
@@ -153,6 +154,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Handler to open search scoped to this room
   const handleSearchInConversation = activeRoom && onSearchInConversation
     ? () => onSearchInConversation(activeRoom.jid)
+    : undefined
+
+  const handleShowSaved = activeRoom && onShowSavedInConversation
+    ? () => onShowSavedInConversation(activeRoom.jid)
     : undefined
 
   // Contact identity (name/avatar) lookup for occupant + message-row avatars. Sourced from
@@ -592,6 +597,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             setSubject={setSubject}
             destroyRoom={destroyRoom}
             onSearchInConversation={handleSearchInConversation}
+            onShowSavedInConversation={handleShowSaved}
             onBulkModeration={canBulkModerate(activeRoom) ? () => {
               setBulkModerationSender(undefined)
               setBulkModerationReason(undefined)

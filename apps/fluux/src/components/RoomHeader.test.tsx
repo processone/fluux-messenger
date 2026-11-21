@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { RoomHeader } from './RoomHeader'
-import type { Room, RoomOccupant } from '@fluux/sdk'
+import { savedStore, type Room, type RoomOccupant } from '@fluux/sdk'
 import { useToastStore } from '@/stores/toastStore'
 
 // Mock i18next
@@ -108,6 +108,9 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   // The notification level resolvers are pure; keep the real ones.
   resolveNotifyLevel: (await importOriginal<typeof import('@fluux/sdk')>()).resolveNotifyLevel,
   savedNotifyLevel: (await importOriginal<typeof import('@fluux/sdk')>()).savedNotifyLevel,
+  // The saved count reads the real saved store, so the test saves real entries.
+  useSavedCountInConversation: (await importOriginal<typeof import('@fluux/sdk')>()).useSavedCountInConversation,
+  savedStore: (await importOriginal<typeof import('@fluux/sdk')>()).savedStore,
   generateConsistentColorHexSync: () => '#4a90d9',
   getUniqueOccupantCount: (occupants: Iterable<{ jid?: string }>) => {
     const bareJids = new Set<string>()
@@ -1046,6 +1049,51 @@ describe('RoomHeader', () => {
       // Dropdown should close, modal should be open
       expect(screen.queryByText('Room settings')).not.toBeInTheDocument()
       expect(screen.getByTestId('hats-modal')).toBeInTheDocument()
+    })
+  })
+
+  describe('Saved in this room', () => {
+    const saveHere = (jid: string) => savedStore.getState().save({
+      id: 'sv1', conversationJid: jid, type: 'groupchat', from: `${jid}/Alice`, text: 'kept', savedAt: 1000, stanzaId: 's1', stanzaIdBy: jid,
+    })
+    const renderHeader = (onShowSaved = vi.fn()) => {
+      render(
+        <RoomHeader
+          room={createRoom()}
+          showOccupants={false}
+          onToggleOccupants={mockOnToggleOccupants}
+          setRoomNotifyLevel={mockSetRoomNotifyLevel}
+          setRoomAvatar={mockSetRoomAvatar}
+          clearRoomAvatar={mockClearRoomAvatar}
+          submitRoomConfig={mockSubmitRoomConfig}
+          setSubject={mockSetSubject}
+          destroyRoom={mockDestroyRoom}
+          onShowSavedInConversation={onShowSaved}
+        />
+      )
+      return onShowSaved
+    }
+    beforeEach(() => { savedStore.getState().reset() })
+
+    it('shows no Saved button where nothing is saved', () => {
+      renderHeader()
+      expect(screen.queryByTestId('header-saved')).toBeNull()
+    })
+
+    it('shows the count where something is saved here, and opens the Saved tab', () => {
+      saveHere('room@conference.example.com')
+      const onShowSaved = renderHeader()
+      const button = screen.getByTestId('header-saved')
+      expect(button).toHaveTextContent('1')
+      expect(button).toHaveAccessibleName('saved.headerButton')
+      fireEvent.click(button)
+      expect(onShowSaved).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores messages saved from another conversation', () => {
+      saveHere('other@conference.example.com')
+      renderHeader()
+      expect(screen.queryByTestId('header-saved')).toBeNull()
     })
   })
 })

@@ -1891,7 +1891,11 @@
         "locked": "Saved messages are locked",
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
-        "unverified": "Not verified: not sealed with your key"
+        "unverified": "Not verified: not sealed with your key",
+        "headerButton": "Tallennettu tähän keskusteluun ({{count}}). Vain sinä näet ne.",
+        "scopeLabel": "Keskustelussa {{name}}",
+        "clearScope": "Näytä kaikki tallennetut viestit",
+        "onlyYou": "Vain sinä näet tallennetut viestisi"
     },
     "errorBoundary": {
         "title": "Jokin meni pieleen",

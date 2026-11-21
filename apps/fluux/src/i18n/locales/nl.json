@@ -1891,7 +1891,11 @@
         "locked": "Saved messages are locked",
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
-        "unverified": "Not verified: not sealed with your key"
+        "unverified": "Not verified: not sealed with your key",
+        "headerButton": "Opgeslagen in dit gesprek ({{count}}). Alleen jij ziet ze.",
+        "scopeLabel": "In {{name}}",
+        "clearScope": "Alle opgeslagen berichten tonen",
+        "onlyYou": "Alleen jij ziet je opgeslagen berichten"
     },
     "errorBoundary": {
         "title": "Er is iets misgegaan",

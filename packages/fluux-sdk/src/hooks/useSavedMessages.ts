@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { savedStore, findSavedEntry } from '../stores/savedStore'
+import { savedStore, findSavedEntry, selectSavedInConversation } from '../stores/savedStore'
 import { connectionStore } from '../stores/connectionStore'
 import { useSavedStore } from '../react/storeHooks'
 import { buildSavedMessage, canSaveMessage } from '../utils/savedMessageBuilder'
@@ -59,4 +59,14 @@ export function useSavedMessages() {
   }, [findSaved])
 
   return { saved, loaded, limit, lockedCount, sealState, pending, isSaved, findSaved, save, remove, canSave: canSaveMessage, itemId: savedItemId }
+}
+
+/**
+ * How many saved messages come from one conversation. The count of
+ * {@link selectSavedInConversation}, read without re-rendering on other changes.
+ *
+ * @category Hooks
+ */
+export function useSavedCountInConversation(conversationJid: string | undefined): number {
+  return useSavedStore((s) => conversationJid ? selectSavedInConversation(Object.values(s.entries), conversationJid).length : 0)
 }

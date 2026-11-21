@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
-import type { roomStore } from '@fluux/sdk/stores'
+import type { roomStore, savedStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
 import { waitForActions } from './harness/messageInteraction'
 import { activateChat } from './harness/scrollHarness'
@@ -33,6 +33,10 @@ test('save a room message and a chat message, open them from Saved, remove them'
     return scope.__roomStore.getState().messages.get(roomJid)!.find(row => row.id === roomId)!.body
   }, { roomJid: ROOM, roomId })
 
+  // Nothing is saved yet: the room header is up (it has Search) but shows no Saved button.
+  await expect(page.getByRole('button', { name: 'Search in conversation' })).toBeVisible()
+  await expect(page.getByTestId('header-saved')).toHaveCount(0)
+
   // Save the room message.
   let row = await openMore(page, roomId)
   await row.getByRole('button', { name: 'Save message', exact: true }).click()
@@ -48,7 +52,29 @@ test('save a room message and a chat message, open them from Saved, remove them'
     location.hash = `#/messages/${encodeURIComponent(peer)}`
   }, PEER)
   row = await openMore(page, 'saved-chat-1')
+  // This chat has nothing saved yet, while the room does: no button here.
+  await expect(page.getByRole('button', { name: 'Search in conversation' })).toBeVisible()
+  await expect(page.getByTestId('header-saved')).toHaveCount(0)
   await row.getByRole('button', { name: 'Save message', exact: true }).click()
+
+  // The chat header shows only this conversation's count; it opens the Saved tab narrowed to it.
+  await expect(page.getByTestId('header-saved')).toHaveText('1')
+  await page.getByTestId('header-saved').click()
+  await expect(page).toHaveURL(/\/saved/)
+  await expect(page.getByTestId('saved-row')).toHaveCount(1)
+  await expect(page.getByTestId('saved-row')).toContainText('The door code is on the board')
+  await expect(page.getByTestId('saved-scope')).toBeVisible()
+  await expect(page.getByTestId('saved-private-note')).toHaveText('Only you see your saved messages')
+  await expect(page.getByTestId('saved-conversation')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Show all saved messages' }).click()
+  await expect(page.getByTestId('saved-scope')).toHaveCount(0)
+  await expect(page.getByTestId('saved-row')).toHaveCount(2)
+
+  // Choosing a row of the narrowed list opens the message highlighted in this conversation.
+  await page.getByTestId('header-saved').click()
+  await expect(page.getByTestId('saved-row')).toHaveCount(1)
+  await page.getByTestId('saved-row').click()
+  await expect(page.locator('[data-message-id="saved-chat-1"].message-highlight')).toBeInViewport()
 
   // Both appear in Saved, newest saved first.
   await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()
@@ -62,6 +88,7 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await rows.nth(1).click()
   await expect(page).toHaveURL(new RegExp(`/rooms/${encodeURIComponent(ROOM)}$`))
   await expect(page.locator(`[data-message-id="${roomId}"].message-highlight`)).toBeInViewport()
+  await expect(page.getByTestId('header-saved')).toHaveText('1')
 
   // Open the chat entry.
   await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()
@@ -116,4 +143,68 @@ test('pressing Enter on Remove removes the entry and does not open the original'
   await page.keyboard.press('Enter')
   await expect(page.getByText('No saved messages')).toBeVisible()
   await expect(page).toHaveURL(/\/saved/)
+})
+
+test('on a phone the header button shows the narrowed list and Back from a row returns to the Saved list', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+  await page.setViewportSize({ width: 390, height: 844 })
+  await bootDemo(page, `/demo.html?tutorial=false#/messages/${encodeURIComponent(PEER)}`)
+  await activateChat(page, PEER)
+  await page.evaluate(peer => {
+    const scope = window as unknown as { __demoClient: DemoClient; __savedStore: typeof savedStore }
+    scope.__demoClient.stopAnimation()
+    scope.__demoClient.emitSDK('chat:message', { message: {
+      type: 'chat', id: 'saved-phone-1', conversationId: peer, from: peer, body: 'Phone saved check',
+      stanzaId: 'archive-saved-phone-1', originId: undefined, timestamp: new Date(), isOutgoing: false,
+    }, isLiveArrival: true })
+    scope.__savedStore.getState().save({
+      id: 'phone1', conversationJid: peer, type: 'chat', from: peer, text: 'Phone saved check',
+      savedAt: Date.now(), sentAt: Date.now(), messageId: 'saved-phone-1', stanzaId: 'archive-saved-phone-1',
+    })
+    scope.__savedStore.getState().save({
+      id: 'phone2', conversationJid: 'room@conference.example', type: 'groupchat', from: 'room@conference.example/Al', text: 'Elsewhere',
+      savedAt: Date.now() - 1000, stanzaId: 'archive-elsewhere', stanzaIdBy: 'room@conference.example',
+    })
+  }, PEER)
+
+  // On a phone the header collapses the button into the More actions menu; it opens the narrowed list instead of leaving the chat on screen.
+  await page.getByRole('button', { name: 'More actions' }).click()
+  await page.getByRole('menuitem', { name: /Saved in this conversation \(1\)/ }).click()
+  await expect(page).toHaveURL(/\/saved/)
+  await expect(page.getByTestId('saved-scope')).toBeVisible()
+  await expect(page.getByTestId('saved-row')).toHaveCount(1)
+
+  // Opening the row shows the conversation; Back returns to the narrowed list.
+  await page.getByTestId('saved-row').click()
+  await expect(page).toHaveURL(new RegExp(`/messages/${encodeURIComponent(PEER)}$`))
+  await page.goBack()
+  await expect(page).toHaveURL(/\/saved/)
+  // Leaving the Saved tab ended the narrowing: Back shows the full list.
+  await expect(page.getByTestId('saved-row')).toHaveCount(2)
+  await expect(page.getByTestId('saved-scope')).toHaveCount(0)
+})
+
+test('removing the last saved message of the narrowed conversation shows the full list', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+  await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(ROOM)}`)
+  await activateChat(page, PEER)
+  await page.evaluate(peer => {
+    const scope = window as unknown as { __demoClient: DemoClient; __savedStore: typeof savedStore }
+    scope.__demoClient.stopAnimation()
+    scope.__savedStore.getState().save({
+      id: 'only1', conversationJid: peer, type: 'chat', from: peer, text: 'The only one here',
+      savedAt: Date.now(), sentAt: Date.now(), messageId: 'saved-only-1', stanzaId: 'archive-only-1',
+    })
+    scope.__savedStore.getState().save({
+      id: 'other1', conversationJid: 'room@conference.example', type: 'groupchat', from: 'room@conference.example/Al', text: 'Elsewhere',
+      savedAt: Date.now() - 1000, stanzaId: 'archive-elsewhere', stanzaIdBy: 'room@conference.example',
+    })
+  }, PEER)
+  await page.getByTestId('header-saved').click()
+  await expect(page.getByTestId('saved-scope')).toBeVisible()
+  await expect(page.getByTestId('saved-row')).toHaveCount(1)
+  await page.getByTestId('saved-row').getByRole('button', { name: 'Remove from saved' }).click()
+  await expect(page.getByTestId('saved-scope')).toHaveCount(0)
+  await expect(page.getByTestId('saved-row')).toHaveCount(1)
+  await expect(page.getByTestId('saved-row')).toContainText('Elsewhere')
 })

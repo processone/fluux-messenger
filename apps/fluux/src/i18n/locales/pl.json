@@ -1897,7 +1897,11 @@
         "locked": "Saved messages are locked",
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
-        "unverified": "Not verified: not sealed with your key"
+        "unverified": "Not verified: not sealed with your key",
+        "headerButton": "Zapisane w tej rozmowie ({{count}}). Widzisz je tylko ty.",
+        "scopeLabel": "W: {{name}}",
+        "clearScope": "Pokaż wszystkie zapisane wiadomości",
+        "onlyYou": "Tylko ty widzisz swoje zapisane wiadomości"
     },
     "errorBoundary": {
         "title": "Coś poszło nie tak",

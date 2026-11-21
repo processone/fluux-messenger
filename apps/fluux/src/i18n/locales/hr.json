@@ -1893,7 +1893,11 @@
         "locked": "Saved messages are locked",
         "lockedHint": "They are sealed with your OpenPGP key. Unlock your key to read them.",
         "lockedSome": "{{count}} saved messages are locked until your OpenPGP key is unlocked.",
-        "unverified": "Not verified: not sealed with your key"
+        "unverified": "Not verified: not sealed with your key",
+        "headerButton": "Spremljeno u ovom razgovoru ({{count}}). Vidite ih samo vi.",
+        "scopeLabel": "U: {{name}}",
+        "clearScope": "Prikaži sve spremljene poruke",
+        "onlyYou": "Spremljene poruke vidite samo vi"
     },
     "errorBoundary": {
         "title": "Nešto nije u redu",
