@@ -361,3 +361,43 @@ describe('useFocusZones', () => {
     })
   })
 })
+
+// FLM-508 layout B: the account row is the fourth keyboard area, after the composer.
+describe('useFocusZones account row', () => {
+  it('tabs from the composer to the account row and wraps to the sidebar list', () => {
+    const refs = createMockRefs()
+    const account = document.createElement('button')
+    document.body.appendChild(account)
+    refs.account = { current: account }
+    renderHook(() => useFocusZones(refs))
+
+    refs.composer.current?.focus()
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab' })) })
+    expect(document.activeElement).toBe(account)
+
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab' })) })
+    expect(document.activeElement).toBe(refs.sidebarList.current)
+
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true })) })
+    expect(document.activeElement).toBe(account)
+
+    account.remove()
+    cleanupMockRefs(refs)
+  })
+
+  it('skips an account row that cannot take focus', () => {
+    const refs = createMockRefs()
+    const account = document.createElement('button')
+    account.disabled = true
+    document.body.appendChild(account)
+    refs.account = { current: account }
+    renderHook(() => useFocusZones(refs))
+
+    refs.composer.current?.focus()
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab' })) })
+    expect(document.activeElement).toBe(refs.sidebarList.current)
+
+    account.remove()
+    cleanupMockRefs(refs)
+  })
+})

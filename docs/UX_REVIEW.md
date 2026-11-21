@@ -102,10 +102,10 @@ recurring XMPP-onboarding question.
 
 ## 4. Reconnection & network state
 
-*Source: `apps/fluux/src/components/sidebar-components/PresenceSelector.tsx`*
+*Source: `apps/fluux/src/components/sidebar-components/AccountMenu.tsx`*
 
 This is the single most invisible piece of state in the app. The connection
-status only appears as a colour change inside the user menu chip at the
+status only appears as a colour change inside the account row at the
 bottom-left of the sidebar. None of the captured screenshots make it visible
 because the demo client is in a synthetic "online" state.
 
