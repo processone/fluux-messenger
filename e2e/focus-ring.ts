@@ -222,3 +222,55 @@ test('handled presence arrows restore keyboard modality and inset menu focus', a
   await expect(option).toHaveCSS('outline-width', '2px')
   await expect(option).toHaveCSS('outline-offset', '-2px')
 })
+
+// Render the actual custom-chrome controls in the application entry, with only
+// native window IPC replaced. This proves focus CSS, not Windows operations,
+// signing, keychain access or native window-manager integration.
+test('custom window controls participate in the shared inset keyboard ring', async ({ page, browserName }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'Win32', configurable: true })
+    Object.defineProperty(Navigator.prototype, 'userAgent', {
+      get: () => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36', configurable: true,
+    })
+    localStorage.setItem('fluux:disable-tcp-proxy', 'true')
+    const callbacks = new Map<number, unknown>()
+    let next = 0
+    ;(window as any).__TAURI_INTERNALS__ = {
+      metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
+      transformCallback: (callback: unknown) => { callbacks.set(++next, callback); return next },
+      unregisterCallback: (id: number) => callbacks.delete(id),
+      convertFileSrc: (file: string) => file,
+      invoke: async (command: string) => {
+        if (command === 'plugin:window|is_decorated' || command === 'plugin:window|is_fullscreen' || command === 'plugin:window|is_maximized') return false
+        if (command === 'plugin:event|listen') return ++next
+        return null
+      },
+    }
+    ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} }
+  })
+  await page.goto('/')
+  const controls = page.locator('.window-controls .window-control')
+  await expect(controls).toHaveCount(3)
+  for (const mode of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: mode })
+    if (mode === 'light') await expect(page.locator('html')).toHaveClass(/light/)
+    else await expect(page.locator('html')).not.toHaveClass(/light/)
+    for (let i = 0; i < await controls.count(); i++) {
+      const button = controls.nth(i)
+      await page.keyboard.press('Tab')
+      await button.focus()
+      await expect(button).toHaveCSS('outline-style', 'solid')
+      await expect(button).toHaveCSS('outline-width', '2px')
+      await expect(button).toHaveCSS('outline-offset', '-2px')
+      console.log('Window focus', browserName, mode, await button.evaluate(el => {
+        const style = getComputedStyle(el)
+        return { control: el.getAttribute('aria-label'), width: style.outlineWidth, offset: style.outlineOffset, color: style.outlineColor }
+      }))
+      if (process.env.FLUUX_FOCUS_PROOF) {
+        await page.locator('.window-controls').screenshot({ path: join(process.env.FLUUX_FOCUS_PROOF, `window-${browserName}-${mode}-${i}.png`) })
+      }
+      await button.click()
+      await expect(button).toHaveCSS('outline-style', 'none')
+    }
+  }
+})
