@@ -69,6 +69,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The OMEMO plugin resolves the library through its built output, so
+      # the type check needs it built first (ci.yml does the same).
+      - name: Build OMEMO library
+        run: npm run build --workspace=@fluux/omemo
+
       - name: Type check
         run: npm run typecheck
 
