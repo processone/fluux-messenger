@@ -989,7 +989,7 @@ export function MessageComposer({
   const keyChanged = enc?.kind === 'blocked'
 
   return (
-    <form onSubmit={handleSubmit} className={`composer-form px-4 pt-2 ${platform().os === 'ios' ? 'pb-safe-2' : 'pb-safe'} relative`}>
+    <form onSubmit={handleSubmit} className={`composer-form px-4 ${platform().os === 'ios' ? 'pb-safe-2' : 'pb-safe'} relative`}>
       {/* Custom content above input (e.g., mention autocomplete) */}
       {aboveInput}
 

@@ -1094,7 +1094,8 @@ export function MessageList<T extends BaseMessage>({
           Geometry is unchanged from the overlay: pt-2 above the pill + the footer's pb-2 inside the
           scroller put ~16px between the last message and the pill whenever the scroller is at the
           live edge — half that clearance lives in the scroll CONTENT, so it sits below the fold as
-          soon as it is not — and pb-0.5 leaves it just off the composer. Sizing the band from the
+          soon as it is not — and pb-2 keeps it off the composer card, which starts right under the
+          band. Sizing the band from the
           pill (rather than a fixed height) keeps that true if the pill's height changes, which is
           what lets the label take a second line: a crowded room or a wordier locale wraps instead
           of being cut off (issue #1151). Two lines is the cap — beyond that the band would take
@@ -1102,7 +1103,7 @@ export function MessageList<T extends BaseMessage>({
           max-w keeps it clear of the bottom-end FAB, which still floats at its own bottom-4 and so
           does not move when the band appears. */}
       {typingUsers.length > 0 && (
-        <div className="shrink-0 px-4 pt-2 pb-0.5 pointer-events-none">
+        <div className="shrink-0 px-4 pt-2 pb-2 pointer-events-none">
           <div
             data-typing-pill
             className="inline-block max-w-[calc(100%-4rem)] rounded-full bg-fluux-float border border-fluux-border shadow-lg px-3 py-1.5 animate-toast-in"

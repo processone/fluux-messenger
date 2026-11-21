@@ -1570,9 +1570,6 @@ html, body {
  * its spacing follows viewport width; input/send spacing follows card width. */
 @media (hover: none), (pointer: coarse) {
   @media (max-width: 419.98px) {
-    .composer-form {
-      padding-top: 0.25rem;
-    }
     .composer-form.pb-safe {
       padding-bottom: 0.5rem;
     }
