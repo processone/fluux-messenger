@@ -3,7 +3,7 @@ import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 import { resolveAccentPreset, useThemeStore } from '@/stores/themeStore'
 import type { AccentPreset } from '@/themes/types'
 import { resolveTransparency } from '@/themes/transparency'
-import { FOCUS_SURFACES, guardedFocusRing, type FocusRgb } from '@/themes/focusRing'
+import { guardedFocusRing, paintedFocusSurfaces, type FocusRgba } from '@/themes/focusRing'
 import { platform } from '@/platform'
 import { setIosAppearance } from '@/platform/ios/appearance'
 import { measureSystemBodySize, rootFontSize } from '@/utils/systemTextSize'
@@ -195,14 +195,16 @@ function applyFocusRing(accent: { h: number; s: number; l: number }, resolved: '
   probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;forced-color-adjust:none'
   document.body.appendChild(probe)
   try {
-    const surfaces = FOCUS_SURFACES.map(token => {
-      probe.style.color = `var(${token})`
+    const read = (color: string): FocusRgba => {
+      probe.style.color = color
       context.clearRect(0, 0, 1, 1)
       context.fillStyle = getComputedStyle(probe).color
       context.fillRect(0, 0, 1, 1)
       const data = context.getImageData(0, 0, 1, 1).data
-      return [data[0], data[1], data[2]] as FocusRgb
-    })
+      return [data[0], data[1], data[2], data[3] / 255]
+    }
+    const [r, g, b] = read('Canvas')
+    const surfaces = paintedFocusSurfaces(token => read(`var(${token})`), [r, g, b])
     const ring = guardedFocusRing(accent, resolved, surfaces)
     document.documentElement.style.setProperty('--fluux-focus-ring', `rgb(${ring.join(', ')})`)
   } finally {

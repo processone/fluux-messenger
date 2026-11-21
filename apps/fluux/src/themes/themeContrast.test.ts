@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url'
 import { dirname, resolve } from 'path'
 import { builtinThemes } from './builtins'
 import { DEFAULT_ACCENT_PRESETS } from './defaultAccents'
-import { FOCUS_SURFACES, focusHslToRgb, guardedFocusRing } from './focusRing'
+import { focusHslToRgb, guardedFocusRing, paintedFocusSurfaces } from './focusRing'
 import { auroraSenderColor } from '@/utils/senderColor'
 import type { ThemeDefinition } from './types'
 
@@ -402,6 +402,18 @@ describe('Builtin theme accent text on an accent tint', () => {
 // against each adjacent surface. Use the shipped palettes and preset values,
 // resolved exactly like the existing contrast checks rather than invented colours.
 describe('Guarded keyboard focus contrast', () => {
+  it('measures Solarized translucent hover over its chat and sidebar backdrops', () => {
+    const theme = builtinThemes.find(theme => theme.id === 'solarized')!
+    const vars = themeTokens(theme, 'dark')
+    const hover = resolve_('var(--fluux-bg-hover)', vars)
+    const surfaces = paintedFocusSurfaces(token => resolve_(`var(${token})`, vars), [255, 255, 255])
+    for (const token of ['--fluux-chat-bg', '--fluux-sidebar-bg']) {
+      const backdrop = resolve_(`var(${token})`, vars)
+      const painted = over(hover, backdrop)
+      expect(surfaces).toContainEqual(painted)
+    }
+  })
+
   for (const theme of builtinThemes) {
     for (const mode of ['dark', 'light'] as const) {
       const presets = [null, ...(theme.accentPresets ?? DEFAULT_ACCENT_PRESETS)]
@@ -413,10 +425,7 @@ describe('Guarded keyboard focus contrast', () => {
             s: parseFloat(vars['--fluux-accent-s']),
             l: parseFloat(vars['--fluux-accent-l']),
           }
-          const surfaces = FOCUS_SURFACES.map(token => {
-            const [r, g, b] = resolve_(`var(${token})`, vars)
-            return [r, g, b] as const
-          })
+          const surfaces = paintedFocusSurfaces(token => resolve_(`var(${token})`, vars), [255, 255, 255])
           const ring = guardedFocusRing(accent, mode, surfaces)
           const initial = focusHslToRgb({ ...accent, l: Math.min(100, accent.l + (mode === 'dark' ? 8 : 0)) })
           const alreadyReadable = surfaces.every(surface => {

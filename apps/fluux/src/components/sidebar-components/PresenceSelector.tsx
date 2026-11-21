@@ -156,7 +156,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
               key={option.value}
               onClick={() => void handleSelectPresence(option.value)}
               onMouseEnter={() => setFocusedIndex(index)}
-              className={`w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text transition-colors ${
+              className={`focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text transition-colors ${
                 focusedIndex === index ? 'bg-fluux-hover' : 'hover:bg-fluux-hover'
               }`}
             >

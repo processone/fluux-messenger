@@ -373,7 +373,7 @@ export const MessageToolbar = memo(function MessageToolbar({
                 type="button"
                 disabled={!onToggleSaved}
                 onClick={() => { onToggleSaved?.(); setShowMoreMenu(false) }}
-                className="w-full px-3 py-2 text-sm text-start hover:bg-fluux-hover transition-colors flex items-center gap-2"
+                className="focus-ring-inset w-full px-3 py-2 text-sm text-start hover:bg-fluux-hover transition-colors flex items-center gap-2"
               >
                 {isSaved ? <BookmarkMinus className="size-4" /> : <BookmarkPlus className="size-4" />}
                 {isSaved ? t('chat.removeFromSaved') : t('chat.saveMessage')}
@@ -384,7 +384,7 @@ export const MessageToolbar = memo(function MessageToolbar({
                 type="button"
                 disabled={!onCopyMessageLink}
                 onClick={() => { onCopyMessageLink?.(); setShowMoreMenu(false) }}
-                className="w-full px-3 py-2 text-sm text-start hover:bg-fluux-hover transition-colors flex items-center gap-2"
+                className="focus-ring-inset w-full px-3 py-2 text-sm text-start hover:bg-fluux-hover transition-colors flex items-center gap-2"
               >
                 <Link2 className="size-4" />
                 {t('chat.copyMessageLink')}
@@ -394,7 +394,7 @@ export const MessageToolbar = memo(function MessageToolbar({
               type="button"
               onClick={handleDelete}
               disabled={!canDelete}
-              className="w-full px-3 py-2 text-sm text-start text-red-500 hover:bg-fluux-hover transition-colors flex items-center gap-2"
+              className="focus-ring-inset w-full px-3 py-2 text-sm text-start text-red-500 hover:bg-fluux-hover transition-colors flex items-center gap-2"
             >
               <Trash2 className="size-4" />
               {t('chat.deleteMessage')}

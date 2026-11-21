@@ -1388,7 +1388,7 @@ html, body {
  * pointer modality also clears Chromium's retained :focus-visible on a button
  * that was already focused. Text inputs keep their native clicked indicator. */
 .user-interacted:not([data-focus-modality="pointer"]) :focus-visible:where(:not(html):not(body):not(#root):not(.no-focus-ring)),
-.user-interacted[data-focus-modality="pointer"] :is(input, textarea, [contenteditable="true"]):focus-visible:where(:not(.no-focus-ring)),
+.user-interacted[data-focus-modality="pointer"] :is(input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="tel"], input[type="password"], input[type="number"], textarea, [contenteditable="true"]):focus-visible:where(:not(.no-focus-ring)),
 .user-interacted:not([data-focus-modality="pointer"]) .keyboard-focus-row {
   outline: 2px solid var(--fluux-focus-ring);
   outline-offset: 2px;
@@ -1413,9 +1413,10 @@ html, body {
 }
 
 @media (forced-colors: active) {
-  .user-interacted :focus-visible:not(.no-focus-ring),
-  .user-interacted .keyboard-focus-row {
-    outline-color: Highlight;
+  .user-interacted {
+    /* Override the token, not a lower-specificity outline declaration. This
+       reaches keyboard rows and clicked text fields through the same rule. */
+    --fluux-focus-ring: Highlight !important;
   }
 }
 

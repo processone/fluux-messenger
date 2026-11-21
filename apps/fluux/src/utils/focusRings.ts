@@ -8,6 +8,7 @@ export function installFocusRings() {
     root.classList.add('user-interacted')
     root.dataset.focusModality = modality
   }
-  document.addEventListener('mousedown', () => mark('pointer'))
-  document.addEventListener('keydown', () => mark('keyboard'))
+  window.addEventListener('mousedown', () => mark('pointer'), true)
+  // Observe before React/overlay handlers consume a key and stop propagation.
+  window.addEventListener('keydown', () => mark('keyboard'), true)
 }

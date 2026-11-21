@@ -1,6 +1,7 @@
 import { contrastRatio, getLuminance } from '@/utils/contrastColor'
 
 export type FocusRgb = readonly [number, number, number]
+export type FocusRgba = readonly [number, number, number, number]
 export interface FocusAccent { h: number; s: number; l: number }
 
 /** Surfaces next to the shared keyboard indicator, including flush list rows. */
@@ -8,6 +9,25 @@ export const FOCUS_SURFACES = [
   '--fluux-chat-bg', '--fluux-sidebar-bg', '--fluux-bg-hover',
   '--fluux-modal-bg', '--fluux-bg-float',
 ] as const
+
+/** Composite before measuring: transparent hover is painted on several surfaces. */
+export function paintedFocusSurfaces(read: (token: string) => FocusRgba, canvas: FocusRgb): FocusRgb[] {
+  const over = (fg: FocusRgba, bg: FocusRgb): FocusRgb => [
+    fg[0] * fg[3] + bg[0] * (1 - fg[3]),
+    fg[1] * fg[3] + bg[1] * (1 - fg[3]),
+    fg[2] * fg[3] + bg[2] * (1 - fg[3]),
+  ]
+  const [chatColor, sidebarColor, hoverColor, dialogColor, popoverColor] = FOCUS_SURFACES.map(read)
+  const shell = over(read('--fluux-bg-primary'), canvas)
+  const chat = over(chatColor, shell)
+  const sidebar = over(sidebarColor, shell)
+  // Dialogs and popovers can sit over either content pane. Preserve each real
+  // backing surface rather than pretending their alpha channel is opaque.
+  const dialogs = [chat, sidebar].map(bg => over(dialogColor, bg))
+  const popovers = [chat, sidebar, ...dialogs].map(bg => over(popoverColor, bg))
+  const bases = [chat, sidebar, ...dialogs, ...popovers]
+  return [...bases, ...bases.map(bg => over(hoverColor, bg))]
+}
 
 /** Quantize like the painted sRGB colour before measuring non-text contrast. */
 export function focusHslToRgb({ h, s, l }: FocusAccent): FocusRgb {

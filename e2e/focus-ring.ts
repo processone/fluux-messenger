@@ -114,6 +114,14 @@ test('forced colours keep the keyboard indicator', async ({ page, browserName })
     return color
   })
   await expect(rail).toHaveCSS('outline-color', highlight)
+  const pane = page.locator('.focus-zone').first()
+  await tabTo(page, pane)
+  await page.keyboard.press('ArrowDown')
+  await expect(page.locator('.keyboard-focus-row')).toHaveCSS('outline-color', highlight)
+  await page.getByRole('button', { name: 'New message', exact: true }).first().click()
+  const field = page.locator('[data-modal="true"] input').first()
+  await field.click()
+  await expect(field).toHaveCSS('outline-color', highlight)
 })
 
 // Exercise useTheme's browser-resolved path, not only the pure guard. The custom
@@ -122,26 +130,40 @@ test('theme, accent and system-mode changes refresh the guarded token', async ({
   await boot(page, 'dark')
   await page.evaluate(() => {
     const state = (window as any).__themeStore.getState()
-    const nord = state.getAllThemes().find((t: any) => t.id === 'nord')
-    state.installTheme({ ...nord, id: 'focus-proof-nord', name: 'Nord copy' })
-    state.setActiveTheme('focus-proof-nord')
+    const solarized = state.getAllThemes().find((t: any) => t.id === 'solarized')
+    state.installTheme({ ...solarized, id: 'focus-proof-solarized', name: 'Solarized copy' })
+    state.setActiveTheme('focus-proof-solarized')
   })
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'focus-proof-nord')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'focus-proof-solarized')
   const read = () => page.evaluate(() => {
     const root = document.documentElement
     const probe = document.createElement('span')
     document.body.appendChild(probe)
-    const rgb = (token: string) => {
-      probe.style.color = `var(${token})`
-      return getComputedStyle(probe).color.match(/[\d.]+/g)!.slice(0, 3).map(Number)
+    // Resolve through real painted pixels, preserving every layer's alpha.
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 1
+    const context = canvas.getContext('2d')!
+    const rgb = (...layers: string[]) => {
+      context.clearRect(0, 0, 1, 1)
+      for (const token of layers) {
+        probe.style.color = token.startsWith('--') ? `var(${token})` : token
+        context.fillStyle = getComputedStyle(probe).color
+        context.fillRect(0, 0, 1, 1)
+      }
+      return Array.from(context.getImageData(0, 0, 1, 1).data).slice(0, 3)
     }
     const lum = (rgb: number[]) => {
       const c = rgb.map(v => v / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
       return c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722
     }
     const ring = rgb('--fluux-focus-ring')
-    const ratios = ['--fluux-chat-bg', '--fluux-sidebar-bg', '--fluux-bg-hover', '--fluux-modal-bg', '--fluux-bg-float'].map(token => {
-      const a = lum(ring), b = lum(rgb(token))
+    const shell = ['Canvas', '--fluux-bg-primary']
+    const panes = ['--fluux-chat-bg', '--fluux-sidebar-bg'].map(token => [...shell, token])
+    const dialogs = panes.map(layers => [...layers, '--fluux-modal-bg'])
+    const popovers = [...panes, ...dialogs].map(layers => [...layers, '--fluux-bg-float'])
+    const bases = [...panes, ...dialogs, ...popovers]
+    const ratios = [...bases, ...bases.map(layers => [...layers, '--fluux-bg-hover'])].map(layers => {
+      const a = lum(ring), b = lum(rgb(...layers))
       return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
     })
     probe.remove()
@@ -162,4 +184,41 @@ test('theme, accent and system-mode changes refresh the guarded token', async ({
   await expect(page.locator('html')).toHaveClass(/light/)
   await expect.poll(async () => (await read()).color).not.toBe(dark)
   await expect.poll(async () => (await read()).minimum).toBeGreaterThanOrEqual(3)
+})
+
+
+// These actual inputs share one pointer exception; none is a text editor.
+// A same-control click must clear keyboard styling even when Blink retains
+// :focus-visible (checkbox/radio/range are not the text-input exception).
+test('clicked checkbox and slider do not retain keyboard rings', async ({ page }) => {
+  await page.goto('/')
+  const checkbox = page.locator('input[type="checkbox"]').first()
+  await expect(checkbox).toBeVisible()
+  await page.keyboard.press('Tab')
+  await checkbox.focus()
+  await expect(checkbox).toHaveCSS('outline-width', '2px')
+  await checkbox.click()
+  await expect(checkbox).toHaveCSS('outline-style', 'none')
+  await boot(page, 'dark')
+  await page.evaluate(() => { location.hash = '/settings/accessibility' })
+  const slider = page.locator('#accessibility-font-size')
+  await expect(slider).toBeVisible()
+  await page.keyboard.press('Tab')
+  await slider.focus()
+  await expect(slider).toHaveCSS('outline-width', '2px')
+  await slider.click()
+  await expect(slider).toHaveCSS('outline-style', 'none')
+})
+
+test('handled presence arrows restore keyboard modality and inset menu focus', async ({ page }) => {
+  await boot(page, 'dark')
+  await page.getByRole('button', { name: 'Online', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-focus-modality', 'pointer')
+  // PresenceSelector consumes this key in capture phase before document bubble.
+  await page.keyboard.press('ArrowDown')
+  await expect(page.locator('html')).toHaveAttribute('data-focus-modality', 'keyboard')
+  const option = page.getByRole('button', { name: 'Away', exact: true })
+  await option.focus()
+  await expect(option).toHaveCSS('outline-width', '2px')
+  await expect(option).toHaveCSS('outline-offset', '-2px')
 })

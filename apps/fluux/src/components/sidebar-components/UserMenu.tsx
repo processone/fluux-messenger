@@ -86,7 +86,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                   toggleConsole()
                   setIsOpen(false)
                 }}
-                className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+                className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
               >
                 <Terminal className="size-4" />
                 <span>{consoleOpen ? t('menu.hideConsole') : t('menu.showConsole')}</span>
@@ -100,7 +100,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                 setShowChangelog(true)
                 setIsOpen(false)
               }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+              className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <Sparkles className="size-4" />
               <span>{t('menu.whatsNew')}</span>
@@ -114,7 +114,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                   modalOpen('shortcutHelp')
                   setIsOpen(false)
                 }}
-                className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+                className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
               >
                 <Keyboard className="size-4" />
                 <span>{t('menu.keyboardShortcuts')}</span>
@@ -127,7 +127,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setIsOpen(false)}
-              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+              className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <Bug className="size-4" />
               <span>{t('menu.reportIssue')}</span>
@@ -140,7 +140,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                 setShowAbout(true)
                 setIsOpen(false)
               }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+              className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <Info className="size-4" />
               <span>{t('menu.about')}</span>
@@ -156,7 +156,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                 setShowLogoutConfirm(true)
                 setIsOpen(false)
               }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
+              className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
             >
               <LogOut className="size-4" />
               <span>{t('menu.logOut')}</span>
