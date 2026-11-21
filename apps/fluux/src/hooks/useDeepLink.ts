@@ -7,7 +7,7 @@
  * Uses React Router for navigation instead of callback handlers.
  */
 import { useEffect, useRef, useCallback } from 'react'
-import { useChat, useRoom, useRoster, chatStore, roomStore, connectionStore, rosterStore, type Conversation, parseXmppUri, parseRoomMessageLink, isMucJid, getBareJid, getLocalPart, boundedPlainText } from '@fluux/sdk'
+import { useChatActions, useRoomActions, chatStore, roomStore, connectionStore, rosterStore, type Conversation, parseXmppUri, parseRoomMessageLink, isMucJid, getBareJid, getLocalPart, boundedPlainText } from '@fluux/sdk'
 import { addDraftText, type DraftOperations } from './useConversationDraft'
 import { useModalStore } from '@/stores/modalStore'
 import { useConnectionStore, useRosterStore, useRoomStore } from '@fluux/sdk/react'
@@ -55,25 +55,24 @@ const roomServiceByDomain = new Map<string, boolean>()
 export function useDeepLink() {
   const navigate = useNavigate()
   const openRoomMessageLink = useRoomMessageLink()
-  const { addConversation } = useChat()
-  const { joinRoom, joinResult, getRoomInfo, isNonAnonymousRoomAcknowledged, domainHostsRooms } = useRoom()
+  // Action-only hooks: this hook is always mounted, so it must not subscribe
+  // to the roster, chats or rooms (a presence burst would re-render it).
+  const { addConversation } = useChatActions()
+  const { joinRoom, joinResult, getRoomInfo, isNonAnonymousRoomAcknowledged, domainHostsRooms } = useRoomActions()
   const { navigateToConversation, navigateToRoom, navigateToContactRequests } = useNavigateToTarget()
   const { t } = useTranslation()
   const addToast = useToastStore((s) => s.addToast)
-  const { contacts } = useRoster()
   // Use focused selectors to only subscribe to jid and status
   const jid = useConnectionStore((s) => s.jid)
   const status = useConnectionStore((s) => s.status)
   const rosterReady = useRosterStore((s) => rosterLoadedFor(jid, s))
   const bookmarksLoaded = useRoomStore((s) => s.bookmarksLoaded)
-  const contactsRef = useRef(contacts)
   const jidRef = useRef(jid)
 
   // Keep refs updated
   useEffect(() => {
-    contactsRef.current = contacts
     jidRef.current = jid
-  }, [contacts, jid])
+  }, [jid])
 
   /**
    * Whether an address is a room, from the first step that knows it: rooms
@@ -83,7 +82,7 @@ export function useDeepLink() {
    */
   const isRoomAddress = async (bareJid: string): Promise<boolean> => {
     if (roomStore.getState().rooms.has(bareJid)) return true
-    if (contactsRef.current.some(c => c.jid === bareJid) || chatStore.getState().hasConversation(bareJid)) return false
+    if (rosterStore.getState().contacts.has(bareJid) || chatStore.getState().hasConversation(bareJid)) return false
     const domain = bareJid.slice(bareJid.indexOf('@') + 1)
     let hostsRooms = roomServiceByDomain.get(domain)
     if (hostsRooms === undefined) {
@@ -159,7 +158,7 @@ export function useDeepLink() {
     if (parsed.action === 'subscribe') {
       if (isOwnAddress) return
       if (await isRoomAddress(bareJid)) { openRoomWithoutJoining(bareJid); return }
-      const contact = contactsRef.current.find(c => c.jid === bareJid)
+      const contact = rosterStore.getState().contacts.get(bareJid)
       if (contact && (contact.subscription === 'to' || contact.subscription === 'both')) {
         navigateToConversation(bareJid)
         return
@@ -235,7 +234,7 @@ export function useDeepLink() {
       const chatState = chatStore.getState()
       if (!chatState.hasConversation(contactJid)) {
         // Find contact name from roster, or use JID
-        const contact = contactsRef.current.find(c => c.jid === contactJid)
+        const contact = rosterStore.getState().contacts.get(contactJid)
         const name = contact?.name || getLocalPart(contactJid)
 
         // Create new conversation
