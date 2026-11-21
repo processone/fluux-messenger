@@ -76,6 +76,11 @@ export type UnsubscribeBindings = () => void
  * flush the relevant room before proceeding. Asynchronous avatar completion
  * waits for the pending batch; unrelated events do not flush it.
  *
+ * Contact presence aggregates immediately for protocol getContact reads and publishes
+ * to UI subscribers in a 16 ms batch. Membership/name/error mutations are ordering
+ * barriers; avatar completion joins the pending contact. Replacement/account reset
+ * cancels pending presence. Cleanup flushes accepted presence.
+ *
  * The returned function removes subscriptions and flushes accepted upserts.
  * Its `flushOccupants(roomJid?)` method commits one room or all rooms immediately.
  * Its `waitForOccupants(roomJid)` method waits for that room's currently queued
@@ -149,7 +154,10 @@ export function createStoreBindings(
   // Lifecycle status/error/JID are owned by the connection machine. Discovery
   // diagnostics arrive separately in the SDK event and belong to this binding.
   on('connection:status', ({ status, discoveryFailure }) => {
-    if (status !== 'online') flushOccupants()
+    if (status !== 'online') {
+      flushOccupants()
+      getStores().roster.flushPresence?.()
+    }
     getStores().connection.setDiscoveryFailure(status === 'error' ? discoveryFailure ?? null : null)
   })
 
@@ -655,7 +663,8 @@ export function createStoreBindings(
 
   on('contacts:presence', (payload) => {
     const stores = getStores()
-    stores.roster.updatePresence(
+    const updatePresence = stores.roster.queuePresence ?? stores.roster.updatePresence
+    updatePresence(
       payload.fullJid,
       payload.show,
       payload.priority,
@@ -667,7 +676,8 @@ export function createStoreBindings(
 
   on('contacts:presence-offline', ({ fullJid }) => {
     const stores = getStores()
-    stores.roster.removePresence(fullJid)
+    const removePresence = stores.roster.queuePresenceRemoval ?? stores.roster.removePresence
+    removePresence(fullJid)
   })
 
   on('contacts:presence-error', ({ jid, error }) => {
@@ -677,7 +687,8 @@ export function createStoreBindings(
 
   on('contacts:avatar', ({ jid, avatar, avatarHash }) => {
     const stores = getStores()
-    stores.roster.updateAvatar(jid, avatar, avatarHash)
+    const updateAvatar = stores.roster.queueAvatar ?? stores.roster.updateAvatar
+    updateAvatar(jid, avatar, avatarHash)
   })
 
   // ============================================================================
@@ -857,6 +868,7 @@ export function createStoreBindings(
 
   // Return cleanup function
   return Object.assign(() => {
+    getStores().roster.flushPresence?.()
     for (const unsub of unsubscribers) {
       unsub()
     }

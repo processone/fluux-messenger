@@ -55,6 +55,7 @@ const SUITES = [
   { name: 'message-updates', testMatch: 'message-updates.ts' },
   { name: 'message-links', testMatch: 'message-links.ts' },
   { name: 'xmpp-link-actions', testMatch: 'xmpp-link-actions.ts' },
+  { name: 'contact-presence', testMatch: 'contact-presence.ts' },
   { name: 'saved-messages', testMatch: 'saved-messages.ts' },
   { name: 'message-context-menu', testMatch: 'message-context-menu.ts' },
   { name: 'header-context-menu', testMatch: 'header-context-menu.ts' },
