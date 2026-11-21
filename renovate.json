@@ -72,8 +72,10 @@
     {
       "groupName": "Rust crates",
       "groupSlug": "rust",
+      "description": "Not merged automatically: this group moves the vendored wry copy and Cargo.lock together, and a green status does not prove the lockfile and the vendored wry agree (see apps/fluux/src-tauri/vendor/wry/FLUUX_PATCH.md). A person confirms before it lands.",
       "matchManagers": ["cargo"],
-      "matchUpdateTypes": ["minor", "patch"]
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": false
     },
     {
       "groupName": "GitHub Actions (CI)",
