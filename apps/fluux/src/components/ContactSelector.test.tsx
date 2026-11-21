@@ -371,6 +371,36 @@ describe('ContactSelector', () => {
       expect(mockOnSelectionChange).toHaveBeenCalledWith(['alice@example.com'])
     })
 
+    // Real key events reach the picker before React has run the effects of the previous
+    // keystroke, so these events are dispatched outside act(), which would flush them.
+    it.each([
+      { situation: 'with the highlight untouched', moves: 0, query: 'bob', picked: 'bob@example.com' },
+      { situation: 'after moving the highlight to an entry that still matches', moves: 1, query: 'li', picked: 'charlie@example.com' },
+    ])('picks the first narrowed entry when Enter follows the keystroke at once, $situation', ({ moves, query, picked }) => {
+      render(
+        <ContactSelector
+          selectedContacts={[]}
+          onSelectionChange={mockOnSelectionChange}
+        />
+      )
+      const input = screen.getByPlaceholderText('Search contacts...') as HTMLInputElement
+      fireEvent.focus(input)
+      for (let move = 0; move < moves; move++) fireEvent.keyDown(input, { key: 'ArrowDown' })
+
+      const scope = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+      const actEnvironment = scope.IS_REACT_ACT_ENVIRONMENT
+      scope.IS_REACT_ACT_ENVIRONMENT = false
+      try {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, query)
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      } finally {
+        scope.IS_REACT_ACT_ENVIRONMENT = actEnvironment
+      }
+
+      expect(mockOnSelectionChange).toHaveBeenCalledExactlyOnceWith([picked])
+    })
+
     it('should navigate down with ArrowDown', () => {
       render(
         <ContactSelector

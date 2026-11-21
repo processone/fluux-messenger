@@ -84,8 +84,11 @@ export function ContactSelector({
   const [search, setSearch] = useState('')
   // The highlight is kept by address, not by position: the list can gain or lose an
   // entry while open (a first message from someone new, a room you leave), and Enter
-  // must still pick the entry that is highlighted. `null` means the first entry.
-  const [highlightedJid, setHighlightedJid] = useState<string | null>(null)
+  // must still pick the entry that is highlighted. It also records the search it was
+  // made for, so a new search starts at the first entry in the very render that shows
+  // it: Enter can arrive before any effect has run. `null` means the first entry.
+  const [highlight, setHighlight] = useState<{ jid: string; search: string } | null>(null)
+  const highlightedJid = highlight?.search === search ? highlight.jid : null
   const [isFocused, setIsFocused] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -167,11 +170,6 @@ export function ContactSelector({
     : filteredContacts.findIndex(contact => contact.jid === highlightedJid)
   const firstJid = filteredContacts[0]?.jid ?? null
 
-  // Typing starts over at the first match.
-  useEffect(() => {
-    setHighlightedJid(null)
-  }, [search])
-
   const cancelPendingBlur = () => {
     if (blurTimerRef.current === null) return
     clearTimeout(blurTimerRef.current)
@@ -192,8 +190,8 @@ export function ContactSelector({
 
   // Pin the default highlight to the entry shown first, so a later list change keeps it.
   useEffect(() => {
-    if (isPopoverOpen && highlightedJid === null && firstJid !== null) setHighlightedJid(firstJid)
-  }, [isPopoverOpen, highlightedJid, firstJid])
+    if (isPopoverOpen && highlightedJid === null && firstJid !== null) setHighlight({ jid: firstJid, search })
+  }, [isPopoverOpen, highlightedJid, firstJid, search])
 
   // Place the popover against the input, in viewport coordinates.
   //
@@ -289,14 +287,14 @@ export function ContactSelector({
     if (onPick) {
       onPick(jid)
       setSearch('')
-      setHighlightedJid(null)
+      setHighlight(null)
       return
     }
     if (!selectedContacts.includes(jid)) {
       onSelectionChange([...selectedContacts, jid])
     }
     setSearch('')
-    setHighlightedJid(null)
+    setHighlight(null)
     inputRef.current?.focus()
   }
 
@@ -342,7 +340,7 @@ export function ContactSelector({
       const next = highlightedIndex < 0
         ? (step > 0 ? 0 : count - 1)
         : (highlightedIndex + step + count) % count
-      setHighlightedJid(filteredContacts[next].jid)
+      setHighlight({ jid: filteredContacts[next].jid, search })
     }
 
     switch (e.key) {
