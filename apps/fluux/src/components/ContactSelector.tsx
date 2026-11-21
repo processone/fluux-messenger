@@ -167,10 +167,13 @@ export function ContactSelector({
     : filteredContacts.findIndex(contact => contact.jid === highlightedJid)
   const firstJid = filteredContacts[0]?.jid ?? null
 
-  // Typing starts over at the first match.
-  useEffect(() => {
+  // A changed search starts over at the first match. The two updates render together
+  // because a key pressed right after typing can arrive before any effect has run.
+  const changeSearch = (next: string) => {
+    if (next === search) return
+    setSearch(next)
     setHighlightedJid(null)
-  }, [search])
+  }
 
   const cancelPendingBlur = () => {
     if (blurTimerRef.current === null) return
@@ -191,9 +194,8 @@ export function ContactSelector({
   const isPopoverOpen = isFocused && (filteredContacts.length > 0 || !!search)
 
   // Pin the default highlight to the entry shown first, so a later list change keeps it.
-  useEffect(() => {
-    if (isPopoverOpen && highlightedJid === null && firstJid !== null) setHighlightedJid(firstJid)
-  }, [isPopoverOpen, highlightedJid, firstJid])
+  // Done while rendering: an effect's update could be overtaken by the next keystroke.
+  if (isPopoverOpen && highlightedJid === null && firstJid !== null) setHighlightedJid(firstJid)
 
   // Place the popover against the input, in viewport coordinates.
   //
@@ -327,7 +329,7 @@ export function ContactSelector({
     // Escape clears search
     if (e.key === 'Escape') {
       e.preventDefault()
-      setSearch('')
+      changeSearch('')
       return
     }
 
@@ -401,7 +403,7 @@ export function ContactSelector({
           id={inputId}
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => changeSearch(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => { cancelPendingBlur(); setIsFocused(true) }}
           // Closing is deferred so a click can land on the popover before it goes
