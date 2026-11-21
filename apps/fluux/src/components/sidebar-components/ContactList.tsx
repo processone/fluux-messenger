@@ -435,7 +435,7 @@ const ContactItem = memo(function ContactItem({
           <button
             type="button"
             onClick={handleStartChat}
-            className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+            className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
           >
             <MessageCircle className="size-4" />
             <span>{t('contacts.startChat')}</span>
@@ -443,7 +443,7 @@ const ContactItem = memo(function ContactItem({
           <button
             type="button"
             onClick={handleRename}
-            className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+            className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
           >
             <Pencil className="size-4" />
             <span>{t('contacts.rename')}</span>
@@ -454,7 +454,7 @@ const ContactItem = memo(function ContactItem({
               <button
                 type="button"
                 onClick={handleManage}
-                className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+                className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
               >
                 <Server className="size-4" />
                 <span>{t('contacts.manage')}</span>
@@ -465,7 +465,7 @@ const ContactItem = memo(function ContactItem({
           <button
             type="button"
             onClick={handleRemove}
-            className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
+            className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
           >
             <Trash2 className="size-4" />
             <span>{t('contacts.removeContact')}</span>

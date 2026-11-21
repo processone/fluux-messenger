@@ -519,7 +519,7 @@ export const RoomItem = memo(function RoomItem({
             <button
               type="button"
               onClick={() => { menu.close(); onJoin(roomJid) }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+              className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <LogIn className="size-4" />
               <span>{t('rooms.joinRoom')}</span>
@@ -531,7 +531,7 @@ export const RoomItem = memo(function RoomItem({
             <button
               type="button"
               onClick={() => { menu.close(); onEditBookmark(roomJid) }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+              className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <Pencil className="size-4" />
               <span>{t('rooms.editBookmark')}</span>
@@ -543,7 +543,7 @@ export const RoomItem = memo(function RoomItem({
             <button
               type="button"
               onClick={() => { menu.close(); onToggleAutojoin(roomJid) }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+              className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               {room.autojoin ? (
                 <>
@@ -569,7 +569,7 @@ export const RoomItem = memo(function RoomItem({
             <button
               type="button"
               onClick={() => { menu.close(); onLeave(roomJid) }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
+              className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
             >
               <LogOut className="size-4" />
               <span>{t('rooms.leaveRoom')}</span>
@@ -581,7 +581,7 @@ export const RoomItem = memo(function RoomItem({
             <button
               type="button"
               onClick={() => { menu.close(); onRemoveBookmark(roomJid) }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
+              className="focus-ring-inset w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
             >
               <BookmarkX className="size-4" />
               <span>{t('rooms.removeBookmark')}</span>
