@@ -7,6 +7,7 @@
 import { avatarCacheState, invalidateAllAvatarVersions, withAvatarIdentity, type AvatarVersion } from './avatarState'
 import { clearAllUnansweredLookups } from './unansweredLookups'
 import { getBareJid } from '../core/jid'
+import { openIndexedDB } from './idbConnection'
 
 const DB_NAME = 'fluux-avatar-cache'
 const DB_VERSION = 5
@@ -154,21 +155,13 @@ function getDB(): Promise<IDBDatabase> {
     return Promise.reject(new Error('IndexedDB not available'))
   }
 
-  dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-
-    request.onerror = () => {
-      // Drop the failed promise so a later call can retry the open.
-      dbPromise = null
-      reject(request.error)
-    }
-
-    request.onsuccess = () => {
-      resolve(request.result)
-    }
-
-    request.onupgradeneeded = () => {
-      const db = request.result
+  // A failed or closed connection is dropped so a later call reopens it.
+  const forget = () => {
+    if (dbPromise === opening) dbPromise = null
+  }
+  const opening = openIndexedDB(DB_NAME, DB_VERSION, {
+    onClosed: forget,
+    upgrade: (db, _oldVersion, transaction) => {
       // Avatar blob store (v1)
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'hash' })
@@ -183,17 +176,18 @@ function getDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(NO_AVATAR_STORE_NAME)) {
         db.createObjectStore(NO_AVATAR_STORE_NAME, { keyPath: 'jid' })
       } else {
-        const noAvatarStore = request.transaction!.objectStore(NO_AVATAR_STORE_NAME)
+        const noAvatarStore = transaction.objectStore(NO_AVATAR_STORE_NAME)
         if (noAvatarStore.indexNames.contains('type')) noAvatarStore.deleteIndex('type')
       }
       // PEP-forbidden domains store (v4) - domain-level negative cache
       if (!db.objectStoreNames.contains(PEP_FORBIDDEN_STORE_NAME)) {
         db.createObjectStore(PEP_FORBIDDEN_STORE_NAME, { keyPath: 'domain' })
       }
-    }
+    },
   })
-
-  return dbPromise
+  dbPromise = opening
+  void opening.catch(forget)
+  return opening
 }
 
 async function matchesAvatarKey(hash: string, bytes: ArrayBuffer): Promise<boolean> {

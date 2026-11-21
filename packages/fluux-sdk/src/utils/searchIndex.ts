@@ -9,6 +9,7 @@
  */
 
 import { openDB, type IDBPDatabase, type IDBPTransaction, type DBSchema } from 'idb'
+import { openGuarded } from './idbConnection'
 import type { Message, RoomMessage } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { captureStorageScope, getStorageScopeJid } from './storageScope'
@@ -221,9 +222,18 @@ function getDB(
   }
 
   dbNameForPromise = targetDbName
-  dbPromise = openDB<SearchIndexSchema>(targetDbName, DB_VERSION, {
+  const forget = () => {
+    if (dbPromise !== opening) return
+    dbPromise = null
+    dbNameForPromise = null
+  }
+  const opening = openGuarded((hooks) => openDB<SearchIndexSchema>(targetDbName, DB_VERSION, {
     upgrade(db, oldVersion, _newVersion, tx) {
       void tx.done.catch(() => {})
+      if (!hooks.proceed()) {
+        tx.abort()
+        return
+      }
       if (!db.objectStoreNames.contains(TOKENS_STORE)) {
         db.createObjectStore(TOKENS_STORE, { keyPath: 'token' })
       }
@@ -250,9 +260,13 @@ function getDB(
         })
       }
     },
-  })
-
-  return dbPromise
+    blocked: hooks.blocked,
+    blocking: (_currentVersion, _blockedVersion, event) => hooks.release(event.target as IDBDatabase),
+    terminated: hooks.lost,
+  }), { database: targetDbName, onClosed: forget })
+  dbPromise = opening
+  void opening.catch(forget)
+  return opening
 }
 
 // =============================================================================

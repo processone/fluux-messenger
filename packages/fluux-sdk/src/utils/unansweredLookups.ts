@@ -1,5 +1,6 @@
 import { avatarCacheState, invalidateAllAvatarVersions, type AvatarVersion } from './avatarState'
 import { RequestTimeoutError } from '../core/errors'
+import { openIndexedDB } from './idbConnection'
 
 export const AVATAR_LOOKUP_TIMEOUT_MS = 10_000
 const SHORT_RETRY_MS = 5 * 60_000
@@ -11,15 +12,22 @@ interface State { version?: AvatarVersion; jid: string; hash?: string; entry?: E
 const states = new Map<string, Promise<State>>()
 let database: Promise<IDBDatabase> | undefined
 
+function openLookupDatabase(): Promise<IDBDatabase> {
+  const forget = () => {
+    if (database === opening) database = undefined
+  }
+  const opening = openIndexedDB('fluux-unanswered-lookups', 1, {
+    upgrade: (db) => { db.createObjectStore('jids', { keyPath: 'jid' }) },
+    onClosed: forget,
+  })
+  void opening.catch(forget)
+  return opening
+}
+
 // Silence has its own cache so legacy definitive no-avatar entries keep their meaning.
 async function store(operation: 'read' | 'write' | 'clear', jid = '', entry?: Entry): Promise<Entry | undefined> {
   if (typeof indexedDB === 'undefined') return undefined
-  database ??= new Promise((resolve, reject) => {
-    const request = indexedDB.open('fluux-unanswered-lookups', 1)
-    request.onupgradeneeded = () => request.result.createObjectStore('jids', { keyPath: 'jid' })
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
-  })
+  database ??= openLookupDatabase()
   const db = await database
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('jids', operation === 'read' ? 'readonly' : 'readwrite')

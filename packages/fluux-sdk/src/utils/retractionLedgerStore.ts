@@ -11,6 +11,7 @@
  */
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
+import { openGuarded } from './idbConnection'
 import type { VerifiedRetraction } from './retractedIdentities'
 
 const DB_NAME = 'fluux-retraction-ledger'
@@ -54,20 +55,29 @@ function getDB(scopeJid: string | null): Promise<IDBPDatabase<RetractionLedgerSc
   }
 
   dbNameForPromise = targetDbName
-  const opening = openDB<RetractionLedgerSchema>(targetDbName, DB_VERSION, {
-    upgrade(db) {
+  // A failed or closed connection must be reopenable, and must not invalidate
+  // a connection opened for another account meanwhile.
+  const forget = () => {
+    if (dbPromise !== opening) return
+    dbPromise = null
+    dbNameForPromise = null
+  }
+  const opening = openGuarded((hooks) => openDB<RetractionLedgerSchema>(targetDbName, DB_VERSION, {
+    upgrade(db, _oldVersion, _newVersion, transaction) {
+      if (!hooks.proceed()) {
+        // The abort rejects `done`; the open's own rejection reports the outcome.
+        void transaction.done.catch(() => {})
+        transaction.abort()
+        return
+      }
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'key' })
     },
-  })
+    blocked: hooks.blocked,
+    blocking: (_currentVersion, _blockedVersion, event) => hooks.release(event.target as IDBDatabase),
+    terminated: hooks.lost,
+  }), { database: targetDbName, onClosed: forget })
   dbPromise = opening
-  void opening.catch(() => {
-    // A failed open must be retryable, and must not invalidate a connection
-    // opened for another account meanwhile.
-    if (dbPromise === opening) {
-      dbPromise = null
-      dbNameForPromise = null
-    }
-  })
+  void opening.catch(forget)
   return opening
 }
 

@@ -36,7 +36,17 @@ export class IndexedDBStorageBackend implements StorageBackend {
           db.createObjectStore(STORE_NAME)
         }
       }
-      req.onsuccess = (e) => resolve((e.target as IDBOpenDBRequest).result)
+      req.onsuccess = () => {
+        const db = req.result
+        // Another tab upgrading or deleting this database waits until every
+        // open connection closes; the next access reopens.
+        db.onversionchange = () => {
+          db.close()
+          this.forget(db)
+        }
+        db.onclose = () => this.forget(db)
+        resolve(db)
+      }
       req.onerror = () => reject(req.error)
     })
   }
@@ -86,6 +96,10 @@ export class IndexedDBStorageBackend implements StorageBackend {
       }
       req.onerror = () => reject(req.error)
     })
+  }
+
+  private forget(db: IDBDatabase): void {
+    if (this.db === db) this.db = null
   }
 
   private async requireDb(): Promise<IDBDatabase> {
