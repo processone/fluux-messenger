@@ -181,7 +181,7 @@
         "manage": "Gérer",
         "searchContacts": "Rechercher des contacts...",
         "addMoreContacts": "Ajouter d'autres contacts...",
-        "keyboardHint": "Tab/↑↓ pour naviguer, Entrée pour sélectionner",
+        "keyboardHint": "Tab/↑↓ pour naviguer, Entrée pour sélectionner, Échap pour fermer",
         "noContactsFound": "Aucun contact trouvé",
         "pressEnterToAdd": "Appuyez sur Entrée pour ajouter",
         "encryption": {

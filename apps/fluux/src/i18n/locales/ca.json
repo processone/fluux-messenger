@@ -178,7 +178,7 @@
         "manage": "Gestiona",
         "searchContacts": "Cerca contactes...",
         "addMoreContacts": "Afegeix més contactes...",
-        "keyboardHint": "Tab/↑↓ per navegar, Enter per seleccionar",
+        "keyboardHint": "Tab/↑↓ per navegar, Enter per seleccionar, Esc per tancar",
         "noContactsFound": "No s'han trobat contactes",
         "pressEnterToAdd": "Prem Enter per afegir",
         "blockUser": "Bloquejar usuari",

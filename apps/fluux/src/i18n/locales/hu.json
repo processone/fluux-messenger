@@ -176,7 +176,7 @@
         "manage": "Kezelés",
         "searchContacts": "Névjegyek keresése...",
         "addMoreContacts": "További névjegyek hozzáadása...",
-        "keyboardHint": "Tab/↑↓ a navigáláshoz, Enter a kiválasztáshoz",
+        "keyboardHint": "Tab/↑↓ a navigáláshoz, Enter a kiválasztáshoz, Esc a bezáráshoz",
         "noContactsFound": "Nem található névjegy",
         "pressEnterToAdd": "Nyomja meg az Entert a hozzáadáshoz",
         "blockUser": "Felhasználó tiltása",
