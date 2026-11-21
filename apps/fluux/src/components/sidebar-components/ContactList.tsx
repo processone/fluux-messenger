@@ -44,7 +44,12 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const [searchQuery, setSearchQuery] = useState('')
-  const [renamingContact, setRenamingContact] = useState<Contact | null>(null)
+  const [renamingJid, setRenamingJid] = useState<string | null>(null)
+  const renamingContact = useRosterStore((state) => renamingJid ? state.contacts.get(renamingJid) : undefined)
+  // Removal ends this edit session, even if the same address is added later.
+  useLayoutEffect(() => {
+    if (renamingJid && !renamingContact) setRenamingJid(null)
+  }, [renamingJid, renamingContact])
   const searchInputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const zoneRef = useSidebarZone()
@@ -81,7 +86,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
     onSelect: (contact: Contact) => latestRef.current.onSelectContact?.(contact),
     onStartChat: (contact: Contact) => latestRef.current.onStartChat?.(contact),
     onRemove: (jid: string) => latestRef.current.removeContact(jid),
-    onRename: (contact: Contact) => setRenamingContact(contact),
+    onRename: (contact: Contact) => setRenamingJid(contact.jid),
     onManageUser: (jid: string) => latestRef.current.onManageUser?.(jid),
   }))
   const onManageUserStable = onManageUser ? rowHandlers.onManageUser : undefined
@@ -234,8 +239,13 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
       {renamingContact && (
         <RenameContactModal
           contact={renamingContact}
-          onRename={(name) => renameContact(renamingContact.jid, name)}
-          onClose={() => setRenamingContact(null)}
+          onRename={async (name) => {
+            // Recheck at the write boundary as well as hiding the dialog on removal.
+            if (rosterStore.getState().contacts.has(renamingContact.jid)) {
+              await renameContact(renamingContact.jid, name)
+            }
+          }}
+          onClose={() => setRenamingJid(null)}
         />
       )}
     </div>

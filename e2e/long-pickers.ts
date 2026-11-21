@@ -45,7 +45,11 @@ test('palette bounds each group and still opens a late contact', async ({ page }
   await input.fill('@colleague')
   const contacts = palette.locator('.command-group-label').filter({ hasText: /^Contacts$/ }).locator('..').locator('.command-row')
   await expect(contacts).toHaveCount(MAX_SUGGESTIONS)
-  await expect(palette.locator('[data-suggestion-limit]')).toHaveText(`Showing ${MAX_SUGGESTIONS} of ${ROSTER_SIZE}, type to narrow`)
+  const status = palette.getByRole('status').filter({ hasText: `Showing ${MAX_SUGGESTIONS} of ${ROSTER_SIZE}, type to narrow` })
+  await expect(status).toHaveText(`Showing ${MAX_SUGGESTIONS} of ${ROSTER_SIZE}, type to narrow`)
+  await expect(status).toHaveAttribute('aria-live', 'polite')
+  await expect(status).toHaveAttribute('aria-atomic', 'true')
+  await expect(input).toBeFocused()
   await input.fill(`@colleague${ROSTER_SIZE - 1}`)
   await expect(contacts).toHaveCount(1)
   await expect(palette.locator('[data-suggestion-limit]')).toHaveCount(0)
@@ -61,7 +65,10 @@ test('recipient suggestions stay bounded and selected contacts stay excluded', a
   await input.focus()
   const suggestions = page.getByTestId('contact-suggestions').getByRole('button')
   await expect(suggestions).toHaveCount(MAX_SUGGESTIONS)
-  await expect(page.getByTestId('contact-suggestions').locator('[data-suggestion-limit]')).toHaveText(`Showing ${MAX_SUGGESTIONS} of ${ROSTER_SIZE}, type to narrow`)
+  const status = page.getByTestId('contact-suggestions').getByRole('status')
+  await expect(status).toHaveText(`Showing ${MAX_SUGGESTIONS} of ${ROSTER_SIZE}, type to narrow`)
+  await expect(status).toHaveAttribute('aria-live', 'polite')
+  await expect(input).toBeFocused()
   await input.fill(`colleague${ROSTER_SIZE - 1}`)
   await expect(suggestions).toHaveCount(1)
   await input.press('ArrowDown')
@@ -80,7 +87,12 @@ test('mention suggestions bound keyboard navigation and retain late nicknames', 
   await page.keyboard.type('@')
   const options = page.getByRole('listbox').getByRole('option')
   await expect(options).toHaveCount(MAX_SUGGESTIONS)
-  await expect(page.getByRole('listbox').locator('[data-suggestion-limit]')).toHaveText(`Showing ${MAX_SUGGESTIONS} of ${ROSTER_SIZE + 1}, type to narrow`)
+  const status = page.getByRole('status').filter({ hasText: `Showing ${MAX_SUGGESTIONS} of ${ROSTER_SIZE + 1}, type to narrow` })
+  await expect(status).toHaveText(`Showing ${MAX_SUGGESTIONS} of ${ROSTER_SIZE + 1}, type to narrow`)
+  await expect(status).toHaveAttribute('aria-live', 'polite')
+  await expect(page.getByRole('listbox').getByRole('status')).toHaveCount(0)
+  await expect(page.getByRole('listbox').locator('[data-suggestion-limit]')).toHaveCount(0)
+  await expect(editor).toBeFocused()
   await editor.press('ArrowUp')
   await expect(options.last()).toHaveAttribute('aria-selected', 'true')
   // The combobox's announced descendant must name an option that actually exists.
@@ -197,12 +209,9 @@ test('review: an exact history-only mention outranks current occupant prefixes',
 })
 
 test('review: rename text survives a presence reorder that unmounts its contact row', async ({ page }) => {
-  await page.locator('[data-nav="contacts"]').click()
   const jid = 'colleague0001@example.test'
   const row = page.locator(`[data-contact-jid="${jid}"]`)
-  await row.click({ button: 'right' })
-  await page.getByRole('button', { name: 'Rename', exact: true }).click()
-  const input = page.locator('#contact-name')
+  const input = await openRename(page, jid)
   await input.fill('Project coordinator')
   await page.evaluate(jid => {
     (window as unknown as { __demoClient: DemoClient }).__demoClient.emitSDK('contacts:presence-error', { jid, error: 'Remote server unavailable' })
@@ -231,4 +240,69 @@ test('review: the actual Contacts scrollbar retains each light theme color', asy
       return getComputedStyle(element, '::-webkit-scrollbar-thumb').backgroundColor === getComputedStyle(outer, '::-webkit-scrollbar-thumb').backgroundColor
     })).toBe(true)
   }
+})
+
+
+// Observe the real SDK serialization boundary; the demo's transport still owns
+// delivery. No replacement rename implementation can hide a roster write here.
+async function watchRosterWrites(page: Page) {
+  await page.evaluate(() => {
+    const scope = window as unknown as { __demoClient: DemoClient; __rosterWrites: string[] }
+    scope.__rosterWrites = []
+    const client = scope.__demoClient as unknown as { beginStanzaSend(stanza: { name: string; toString(): string }): Promise<void> }
+    const original = client.beginStanzaSend.bind(client)
+    client.beginStanzaSend = async stanza => {
+      const xml = stanza.toString()
+      if (stanza.name === 'iq' && xml.includes('type="set"') && xml.includes('jabber:iq:roster')) scope.__rosterWrites.push(xml)
+      return original(stanza)
+    }
+  })
+}
+
+async function openRename(page: Page, jid: string) {
+  await page.locator('[data-nav="contacts"]').click()
+  await page.locator(`[data-contact-jid="${jid}"]`).click({ button: 'right' })
+  await page.getByRole('button', { name: 'Rename', exact: true }).click()
+  return page.locator('#contact-name')
+}
+
+test('review: removing a contact closes rename without a roster write or a later reopened dialog', async ({ page }) => {
+  const jid = 'colleague0001@example.test'
+  await watchRosterWrites(page)
+  const input = await openRename(page, jid)
+  await input.fill('Project coordinator')
+  await page.evaluate(jid => {
+    (window as unknown as { __demoClient: DemoClient }).__demoClient.emitSDK('contacts:contact-removed', { jid })
+  }, jid)
+  await expect(input).toHaveCount(0)
+  expect(await page.evaluate(() => (window as unknown as { __rosterWrites: string[] }).__rosterWrites)).toEqual([])
+  // A later roster addition must not revive the removed contact's editing session.
+  await page.evaluate(jid => {
+    (window as unknown as { __demoClient: DemoClient }).__demoClient.emitSDK('contacts:contact', { contact: {
+      jid, name: 'New roster name', presence: 'online', subscription: 'both',
+    } })
+  }, jid)
+  await page.getByPlaceholder('Search contacts...').fill('New roster name')
+  await expect(page.getByRole('complementary').getByText('New roster name', { exact: true })).toBeVisible()
+  await expect(input).toHaveCount(0)
+})
+
+test('review: rename compares a draft with the live roster name, not the opening snapshot', async ({ page }) => {
+  const jid = 'colleague0001@example.test'
+  const originalName = 'Colleague 0001'
+  await watchRosterWrites(page)
+  const input = await openRename(page, jid)
+  await expect(input).toHaveValue(originalName)
+  await page.evaluate(jid => {
+    (window as unknown as { __demoClient: DemoClient }).__demoClient.emitSDK('contacts:contact-updated', { jid, updates: { name: 'Remote name' } })
+  }, jid)
+  await expect(page.locator(`[data-contact-jid="${jid}"]`)).toHaveCount(0)
+  // Keep the person's draft, but compare it to the new server name on Save.
+  await expect(input).toHaveValue(originalName)
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(input).toHaveCount(0)
+  const writes = await page.evaluate(() => (window as unknown as { __rosterWrites: string[] }).__rosterWrites)
+  expect(writes).toHaveLength(1)
+  expect(writes[0]).toContain(`jid="${jid}"`)
+  expect(writes[0]).toContain(`name="${originalName}"`)
 })
