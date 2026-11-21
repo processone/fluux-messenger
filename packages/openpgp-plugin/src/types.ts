@@ -13,6 +13,12 @@ export interface KeyBundle {
   keychainBacked: boolean
   /** ISO 8601 primary-key creation time. */
   createdAt?: string
+  /**
+   * Primary and every subkey fingerprint of the full certificate, retired ones
+   * included. `publicArmored` may omit retired subkeys (native), so the backup
+   * identity record reads this when the backend reports it.
+   */
+  componentFingerprints?: string[]
 }
 
 /** Explicit consent to recover only this account; never inferred from an error. */

@@ -6,6 +6,7 @@ export interface BackupStatusReads {
   probeSecretKeyBackup?: () => Promise<BackupProbeResult>
   getOwnFingerprint?: () => string | null
   getBackedUpFingerprint?: () => string | null
+  backupRecordHoldsOtherKey?: () => boolean
 }
 
 /**
@@ -25,4 +26,15 @@ export async function readBackupStatus(plugin: BackupStatusReads | null | undefi
   const marker = plugin.getBackedUpFingerprint?.() ?? null
   if (marker === null) return 'unconfirmed'
   return own && marker === own ? 'confirmed' : 'out-of-date'
+}
+
+/**
+ * Whether the backup this device last confirmed belongs to another key. Settings keeps the older
+ * policy for it: the foreign-backup warning, and rotation that leaves that backup alone.
+ */
+export function readBackupHoldsOtherKey(plugin: BackupStatusReads | null | undefined): boolean {
+  if (!plugin) return false
+  if (plugin.backupRecordHoldsOtherKey) return plugin.backupRecordHoldsOtherKey()
+  const marker = plugin.getBackedUpFingerprint?.() ?? null
+  return marker !== null && marker !== (plugin.getOwnFingerprint?.() ?? null)
 }

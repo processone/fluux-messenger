@@ -85,6 +85,10 @@ pub struct KeyBundle {
     pub keychain_backed: bool,
     /// ISO 8601 primary-key creation time.
     pub created_at: String,
+    /// Upper-case hex fingerprints of the primary key and EVERY subkey of the
+    /// full certificate, retired ones included. `public_armored` omits retired
+    /// encryption subkeys, so the backup identity record reads this instead.
+    pub component_fingerprints: Vec<String>,
 }
 
 /// IPC DTO returned to the webview by every Tauri command that previously
@@ -108,6 +112,9 @@ pub struct PublicKeyInfo {
     pub keychain_backed: bool,
     /// ISO 8601 primary-key creation time.
     pub created_at: String,
+    /// Primary and every subkey fingerprint of the full certificate, retired
+    /// subkeys included (the public armor above omits them).
+    pub component_fingerprints: Vec<String>,
 }
 
 impl From<&KeyBundle> for PublicKeyInfo {
@@ -117,6 +124,7 @@ impl From<&KeyBundle> for PublicKeyInfo {
             public_armored: bundle.public_armored.clone(),
             keychain_backed: bundle.keychain_backed,
             created_at: bundle.created_at.clone(),
+            component_fingerprints: bundle.component_fingerprints.clone(),
         }
     }
 }
@@ -646,6 +654,7 @@ impl OpenpgpState {
                     public_armored,
                     keychain_backed: false,
                     created_at,
+                    component_fingerprints: component_fingerprints(&cert),
                 });
             }
             Ok(infos)
@@ -1533,7 +1542,16 @@ fn bundle_from_cert(cert: &Cert, backing: PassphraseBacking) -> Result<KeyBundle
         secret_armored,
         keychain_backed: backing == PassphraseBacking::Keychain,
         created_at: key_creation_time(cert)?,
+        component_fingerprints: component_fingerprints(cert),
     })
+}
+
+/// Primary and every subkey fingerprint of the full certificate, unfiltered by
+/// policy, expiry or retirement.
+fn component_fingerprints(cert: &Cert) -> Vec<String> {
+    std::iter::once(cert.fingerprint().to_hex())
+        .chain(cert.keys().subkeys().map(|ka| ka.key().fingerprint().to_hex()))
+        .collect()
 }
 
 fn key_creation_time(cert: &Cert) -> Result<String> {
@@ -3519,6 +3537,18 @@ mod tests {
             all_encryption_subkey_fingerprints(&published).len(),
             1,
             "published cert must expose only the current [E] (retired stripped)"
+        );
+        // The backup identity record needs the retired subkey too (FLM-411):
+        // the bundle reports every component of the full certificate.
+        let full: std::collections::BTreeSet<String> = std::iter::once(local.fingerprint().to_hex())
+            .chain(local.keys().subkeys().map(|ka| ka.key().fingerprint().to_hex()))
+            .collect();
+        let reported: std::collections::BTreeSet<String> =
+            rotated.component_fingerprints.iter().cloned().collect();
+        assert_eq!(reported, full, "component_fingerprints lists primary and every subkey, retired included");
+        assert!(
+            reported.len() > 1 + all_encryption_subkey_fingerprints(&published).len(),
+            "the retired subkey is part of the reported components"
         );
     }
 

@@ -3,11 +3,12 @@
  * to the server-side XEP-0373 §5 secret-key node.
  *
  * The backup itself is an OpenPGP SKESK-encrypted blob — without the
- * passphrase we can't peek inside to see which key it contains. So to
- * tell the UI "your local key is already on the server" without asking
- * for the passphrase, we record the fingerprint after publishing a backup or
- * installing a key proven to exist in the server backup (matching packet
- * bytes or a decrypted fingerprint), then compare it with the local key.
+ * passphrase we can't peek inside to see which key it contains. This
+ * marker records the fingerprint after publishing a backup or installing
+ * a key proven to exist in the server backup. It no longer decides the
+ * status by itself: the status compares the exact backup file with the
+ * identity record in `backupIdentity.ts`, and this marker only lets a
+ * device that predates that record adopt the current backup once.
  *
  * Stored in localStorage because the SDK's `PluginStorage` backend is
  * currently in-memory; a marker that evaporates on app restart would

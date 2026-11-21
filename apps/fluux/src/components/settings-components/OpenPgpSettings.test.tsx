@@ -448,8 +448,8 @@ describe('OpenPgpSettings PEP support', () => {
       ).toBeInTheDocument()
     })
 
-    it('treats a backup confirmed for another key as out of date, with the warning that claims no ownership', async () => {
-      // The device confirmed a backup for a different key: it is not this key's backup (FLM-411).
+    it('uses the foreign-backup copy when the marker does not match', async () => {
+      // A confirmed different identity is still a mismatch, not uncertainty.
       mockPlugin!.getBackedUpFingerprint = () => BOB_FP
 
       render(<OpenPgpSettings />)
@@ -459,8 +459,7 @@ describe('OpenPgpSettings PEP support', () => {
       })
       fireEvent.click(backupButton)
 
-      expect(screen.getByText('settings.encryption.backupReplaceUnknownTitle')).toBeInTheDocument()
-      expect(screen.getByText('settings.encryption.backupStatusOutOfDate')).toBeInTheDocument()
+      expect(screen.getByText('settings.encryption.backupConflictTitle')).toBeInTheDocument()
       expect(
         screen.queryByText('settings.encryption.backupReplaceOwnTitle'),
       ).not.toBeInTheDocument()
@@ -1167,8 +1166,8 @@ describe('backup identity states', () => {
     expect(screen.getByRole('button', { name: 'settings.encryption.backupAction' })).toBeInTheDocument()
   })
 
-  it('a right code confirms the backup and re-reads the status; the check offer goes away', async () => {
-    inspect.mockResolvedValueOnce('changed').mockResolvedValue('confirmed')
+  it('a right code confirms the backup from the status the check returns; the check offer goes away', async () => {
+    inspect.mockResolvedValue('changed')
     check.mockResolvedValue({ outcome: 'confirmed', status: 'confirmed' })
     render(<OpenPgpSettings />)
     await screen.findByText('settings.encryption.backupStatusChanged')
@@ -1203,6 +1202,52 @@ describe('backup identity states', () => {
     fireEvent.change(await screen.findByRole('textbox'), { target: { value: 'ABCD-EFGH-JKLM-NPQR-STUV-WXYZ' } })
     fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupCheckConfirm' }))
     await screen.findByText('settings.encryption.backupStatusMismatch')
+  })
+
+  it('keeps the foreign copy and leaves that backup alone on rotation when the record names another key', async () => {
+    usePlatform('desktop')
+    const rotate = vi.fn().mockResolvedValue({ fingerprint: FP })
+    inspect.mockResolvedValue('out-of-date')
+    Object.assign(mockPlugin!, { backupRecordHoldsOtherKey: () => true, rotateEncryptionKey: rotate })
+    render(<OpenPgpSettings />)
+    await screen.findByText('settings.encryption.backupStatusMismatch')
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupAction' }))
+    await screen.findByText('settings.encryption.backupConflictTitle')
+    fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }))
+    const disclosure = screen.getByRole('button', { name: 'settings.encryption.keyManagement' })
+    fireEvent.click(disclosure)
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.rotateAction' }))
+    await screen.findByText('settings.encryption.rotateConfirmMessage')
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.rotateConfirmAction' }))
+    await waitFor(() => expect(rotate).toHaveBeenCalledWith(undefined))
+  })
+
+  it('a checked other-key result keeps the mismatch status and the foreign warning', async () => {
+    inspect.mockResolvedValue('changed')
+    check.mockResolvedValue({ outcome: 'other-key', status: 'unconfirmed' })
+    render(<OpenPgpSettings />)
+    await screen.findByText('settings.encryption.backupStatusChanged')
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupCheckAction' }))
+    expect(screen.queryByText('settings.encryption.restoreDialogWarning')).not.toBeInTheDocument()
+    fireEvent.change(await screen.findByRole('textbox'), { target: { value: 'ABCD-EFGH-JKLM-NPQR-STUV-WXYZ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupCheckConfirm' }))
+    await screen.findByText('settings.encryption.backupStatusMismatch')
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupAction' }))
+    await screen.findByText('settings.encryption.backupConflictTitle')
+  })
+
+  it('uses the status returned by the check and toasts success only when confirmed', async () => {
+    useToastStore.setState({ toasts: [] })
+    inspect.mockResolvedValue('changed')
+    check.mockResolvedValue({ outcome: 'confirmed', status: 'out-of-date' })
+    render(<OpenPgpSettings />)
+    await screen.findByText('settings.encryption.backupStatusChanged')
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupCheckAction' }))
+    fireEvent.change(await screen.findByRole('textbox'), { target: { value: 'ABCD-EFGH-JKLM-NPQR-STUV-WXYZ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupCheckConfirm' }))
+    await screen.findByText('settings.encryption.backupStatusOutOfDate')
+    expect(inspect).toHaveBeenCalledOnce()
+    expect(useToastStore.getState().toasts.map(t => t.message)).not.toContain('settings.encryption.backupCheckSuccess')
   })
 
   it('a failed read is never shown as confirmed and offers a retry', async () => {

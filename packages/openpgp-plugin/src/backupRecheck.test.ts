@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPluginStorage, InMemoryStorageBackend, type PEPItem, type PluginContext } from '@fluux/sdk'
 import { unarmor } from 'openpgp'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
-import type { CertValidation } from './types'
+import type { CertValidation, KeyBundle } from './types'
 import { clearSessionPassphrase, readBackupIdentity, sha256Hex, clearBackedUpFingerprint, writeBackedUpFingerprint } from './index'
 
 const fixture = (name: string) => readFileSync(resolve(__dirname, './fixtures', name), 'utf8')
@@ -30,6 +30,21 @@ class RecheckPlugin extends WebOpenPGPPlugin {
   }
   exportBackup(passphrase: string) { return this.buildExportArmor(passphrase) }
 }
+/** Stand-in for the native engine: bundles report every component, retired subkeys included,
+ * while their public armor (and so validateCert) omits them. `extraOnInstall` adds parts a newer file's key has. */
+class NativeLikePlugin extends RecheckPlugin {
+  extraOnInstall: string[] = []
+  readonly retired = 'AAAA00000000000000000000000000000000AAAA'
+  private withComponents(b: KeyBundle, extra: string[] = []): KeyBundle {
+    return { ...b, componentFingerprints: [b.fingerprint.toUpperCase(), this.retired, ...extra] }
+  }
+  protected override async backupImportAll(account: string, message: string, passphrase: string, stage = true) {
+    return (await super.backupImportAll(account, message, passphrase, stage)).map(b => this.withComponents(b))
+  }
+  protected override async backupImportSelected(...args: Parameters<WebOpenPGPPlugin['backupImportSelected']>) {
+    return this.withComponents(await super.backupImportSelected(...args), this.extraOnInstall)
+  }
+}
 const plugins: WebOpenPGPPlugin[] = []
 vi.setConfig({ testTimeout: 30_000 })
 beforeEach(() => { localStorage.clear(); clearSessionPassphrase() })
@@ -38,7 +53,7 @@ afterEach(async () => { vi.restoreAllMocks(); for (const plugin of plugins.splic
 const item = async (armored: string): Promise<PEPItem> => ({ id: 'current', payload: { name: 'secretkey', attrs: { xmlns: 'urn:xmpp:openpgp:0' }, children: [Buffer.from((await unarmor(armored)).data).toString('base64')] } })
 const hashOf = async (armored: string) => sha256Hex((await unarmor(armored)).data)
 
-async function setup() {
+async function setup(Plugin: typeof RecheckPlugin = RecheckPlugin) {
   const nodes = new Map<string, PEPItem[]>([[secretNode, [await item(aliceBackup)]]])
   const publications: string[] = []
   let secretReads = 0
@@ -55,9 +70,9 @@ async function setup() {
       subscribePEP: () => ({ unsubscribe: () => {} }),
     },
   }
-  const plugin = new RecheckPlugin(); plugins.push(plugin)
+  const plugin = new Plugin(); plugins.push(plugin) as unknown
   await plugin.init(ctx)
-  return { plugin, nodes, publications, reads: () => secretReads }
+  return { plugin: plugin as RecheckPlugin, nodes, publications, reads: () => secretReads }
 }
 
 describe('server backup status follows the confirmed file', () => {
@@ -176,5 +191,59 @@ describe('server backup status follows the confirmed file', () => {
     await f.plugin.deleteIdentity()
     expect(readBackupIdentity(jid)).toBeNull()
     clearBackedUpFingerprint(jid)
+  })
+
+  it('records the server file\'s own components when a newer key shares its primary but has other subkeys', async () => {
+    const source = await setup()
+    await source.plugin.restoreSecretKey(meta.backupPassphrase)
+    const exported = await source.plugin.exportBackup(meta.backupPassphrase)
+    localStorage.clear(); clearSessionPassphrase()
+    const device = await setup(NativeLikePlugin)
+    ;(device.plugin as NativeLikePlugin).extraOnInstall = ['BBBB00000000000000000000000000000000BBBB']
+    const preview = await device.plugin.importKeyFromFile(exported, meta.backupPassphrase, { accountJid: jid })
+    if (!('needsPicker' in preview)) throw new Error('Expected confirmation')
+    await device.plugin.installSelectedKey(preview.backupContext.message, preview.backupContext.passphrase, meta.aliceFingerprint.toLowerCase(), { accountJid: jid })
+    const record = readBackupIdentity(jid)!
+    expect(record.fingerprints).toContain('AAAA00000000000000000000000000000000AAAA')
+    expect(record.fingerprints).not.toContain('BBBB00000000000000000000000000000000BBBB')
+    expect(await device.plugin.inspectSecretKeyBackup()).toBe('out-of-date')
+  })
+
+  it('uses the native full component list, retired subkeys included, for the record and the comparison', async () => {
+    const f = await setup(NativeLikePlugin)
+    await f.plugin.restoreSecretKey(meta.backupPassphrase)
+    expect(readBackupIdentity(jid)!.fingerprints).toContain('AAAA00000000000000000000000000000000AAAA')
+    f.nodes.set(secretNode, [await item(await f.plugin.exportBackup(otherCode))])
+    expect(await f.plugin.checkBackupWithCode(otherCode)).toEqual({ outcome: 'confirmed', status: 'confirmed' })
+    expect(readBackupIdentity(jid)!.fingerprints).toContain('AAAA00000000000000000000000000000000AAAA')
+  })
+
+  it('a record that cannot be stored is never used: no adoption, and the old claim is dropped', async () => {
+    const f = await setup()
+    await f.plugin.restoreSecretKey(meta.backupPassphrase)
+    localStorage.clear()
+    writeBackedUpFingerprint(jid, meta.aliceFingerprint.toLowerCase())
+    const real = localStorage.setItem.bind(localStorage)
+    const failing = vi.spyOn(localStorage, 'setItem').mockImplementation((key: string, value: string) => {
+      if (key.includes('backupIdentity')) throw new Error('QuotaExceededError')
+      return real(key, value)
+    })
+    expect(await f.plugin.inspectSecretKeyBackup()).toBe('unconfirmed')
+    f.nodes.set(secretNode, [await item(await f.plugin.exportBackup(otherCode))])
+    expect(await f.plugin.inspectSecretKeyBackup()).toBe('unconfirmed')
+    await f.plugin.backupSecretKey(meta.backupPassphrase) // publish whose record cannot be stored
+    expect(f.plugin.getBackedUpFingerprint()).toBeNull()
+    expect(await f.plugin.inspectSecretKeyBackup()).toBe('unconfirmed')
+    failing.mockRestore()
+    localStorage.setItem = real
+  })
+
+  it('names another key when the confirmed backup holds a different primary', async () => {
+    const f = await setup()
+    await f.plugin.restoreSecretKey(meta.backupPassphrase)
+    expect(f.plugin.backupRecordHoldsOtherKey()).toBe(false)
+    await f.plugin.importKeyFromFile(bobBackup, meta.backupPassphrase)
+    expect(await f.plugin.inspectSecretKeyBackup()).toBe('out-of-date')
+    expect(f.plugin.backupRecordHoldsOtherKey()).toBe(true)
   })
 })

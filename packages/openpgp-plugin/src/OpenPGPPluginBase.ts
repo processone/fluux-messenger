@@ -81,6 +81,7 @@ import {
   sha256Hex,
   writeBackupIdentity,
   type BackupConfirmedBy,
+  type BackupIdentityRecord,
   type BackupStatus,
 } from './backupIdentity'
 import {
@@ -1860,18 +1861,21 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     try {
       const [packetsSha256, fingerprints] = await Promise.all([
         this.backupPacketsHash(armoredBackup),
-        this.componentFingerprints(bundle.publicArmored),
+        this.componentFingerprints(bundle),
       ])
       if (this.ctx?.account.jid !== accountJid) return
-      writeBackupIdentity(accountJid, {
+      if (!writeBackupIdentity(accountJid, {
         version: 1,
         packetsSha256,
         fingerprints,
         confirmedBy,
         confirmedAt: new Date(this.now()).toISOString(),
-      })
+      })) throw new Error('the record could not be stored')
     } catch (err) {
       this.ctx?.logger.debug(`${this.pluginName()}: could not record the backup identity: ${formatError(err)}`)
+      // The older claim must not stand in for the missing record: the next read would adopt
+      // whatever file the server then holds. Dropping it leaves the backup unconfirmed.
+      if (this.ctx?.account.jid === accountJid) clearBackedUpFingerprint(accountJid)
     }
   }
 
@@ -1882,9 +1886,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     return sha256Hex(raw)
   }
 
-  /** Sorted primary and subkey fingerprints of a public certificate. */
-  private async componentFingerprints(publicArmored: string): Promise<string[]> {
-    const cert = await this.validateCert(publicArmored)
+  /**
+   * Sorted primary and subkey fingerprints of a key bundle. The backend's own list covers retired
+   * subkeys that `publicArmored` omits; without it the public certificate's subkeys are read.
+   */
+  private async componentFingerprints(bundle: KeyBundle): Promise<string[]> {
+    if (bundle.componentFingerprints?.length) return normalizeBackupFingerprints(bundle.componentFingerprints)
+    const cert = await this.validateCert(bundle.publicArmored)
     return normalizeBackupFingerprints([cert.fingerprint, ...cert.subkeyFingerprints])
   }
 
@@ -1915,7 +1923,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     let own: string[] | null = null
     try {
       serverHash = await this.backupPacketsHash(armored)
-      if (bundle) own = await this.componentFingerprints(bundle.publicArmored)
+      if (bundle) own = await this.componentFingerprints(bundle)
     } catch (err) {
       ctx.logger.debug(`${this.pluginName()}: backup identity could not be read: ${formatError(err)}`)
     }
@@ -1924,11 +1932,26 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (!record && serverHash && own && bundle) {
       const marker = readBackedUpFingerprint(jid)
       if (marker && fingerprintsEqual(marker, bundle.fingerprint)) {
-        record = { version: 1, packetsSha256: serverHash, fingerprints: own, confirmedBy: 'adopted', confirmedAt: new Date(this.now()).toISOString() }
-        writeBackupIdentity(jid, record)
+        const adopted: BackupIdentityRecord = { version: 1, packetsSha256: serverHash, fingerprints: own, confirmedBy: 'adopted', confirmedAt: new Date(this.now()).toISOString() }
+        // Without a stored record every later read would adopt whatever file the server holds.
+        if (!writeBackupIdentity(jid, adopted)) return 'unconfirmed'
+        record = adopted
       }
     }
     return backupIdentityStatus({ record, serverHash, ownFingerprints: own })
+  }
+
+  /**
+   * Whether the record of the confirmed backup names a primary key other than this device's, as
+   * after a file install of another key. Settings keeps the older policy for that backup: it is
+   * another identity's, so rotation never overwrites it. Reads the local record only.
+   */
+  backupRecordHoldsOtherKey(): boolean {
+    const jid = this.ctx?.account.jid
+    const bundle = this.ownBundle
+    const record = jid ? readBackupIdentity(jid) : null
+    if (!bundle || !record) return false
+    return !record.fingerprints.some((f) => fingerprintsEqual(f, bundle.fingerprint))
   }
 
   /**
@@ -1953,7 +1976,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const held = bundles.find((b) => fingerprintsEqual(b.fingerprint, bundle.fingerprint))
     if (!held) return { outcome: 'other-key', status: 'unconfirmed' }
     await this.recordBackupIdentity(ctx.account.jid, armored, held, 'check')
-    return { outcome: 'confirmed', status: await this.inspectSecretKeyBackup() }
+    // The status of the file just opened, from the record and this key: no further download.
+    const record = readBackupIdentity(ctx.account.jid)
+    const status = record
+      ? backupIdentityStatus({ record, serverHash: await this.backupPacketsHash(armored).catch(() => null), ownFingerprints: await this.componentFingerprints(bundle).catch(() => null) })
+      : 'unknown'
+    return { outcome: 'confirmed', status }
   }
 
   /**
@@ -2253,6 +2281,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       let backedUp = fromServer
       // The file the server holds, whenever this install proves it: it, never the imported file, is what is recorded.
       let provenServerBackup: string | null = fromServer ? backupMessage : null
+      // The server file's own copy of the key: a newer imported key can share its primary yet hold other subkeys.
+      let provenServerKey: KeyBundle = bundle
       if (!fromServer) {
         try {
           const serverBackup = await this.fetchSecretKeyBackup()
@@ -2268,7 +2298,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
                 if (typedPassphrase === passphrase) throw error
                 return this.backupImportAll(ctx.account.jid, serverBackup, typedPassphrase, false)
               })
-              backedUp = bundles.some(key => fingerprintsEqual(key.fingerprint, bundle.fingerprint))
+              const matched = bundles.find(key => fingerprintsEqual(key.fingerprint, bundle.fingerprint))
+              backedUp = matched !== undefined
+              if (matched) provenServerKey = matched
             }
             if (backedUp) provenServerBackup = serverBackup
           }
@@ -2281,7 +2313,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       if (this.ctx !== ctx) throw new E2EEPluginError('permanent', 'recovery-account-changed', 'Backup restore account changed')
       if (backedUp) {
         writeBackedUpFingerprint(ctx.account.jid, bundle.fingerprint)
-        if (provenServerBackup) await this.recordBackupIdentity(ctx.account.jid, provenServerBackup, bundle, fromServer ? 'restore' : 'install')
+        if (provenServerBackup) await this.recordBackupIdentity(ctx.account.jid, provenServerBackup, provenServerKey, fromServer ? 'restore' : 'install')
       }
 
       const current = () => this.ctx === ctx && this.ownBundle === bundle

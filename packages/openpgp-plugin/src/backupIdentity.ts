@@ -87,14 +87,16 @@ export function readBackupIdentity(bareJid: string): BackupIdentityRecord | null
   }
 }
 
-export function writeBackupIdentity(bareJid: string, record: BackupIdentityRecord): void {
-  if (!bareJid) return
+/** Whether the record is durably stored: a caller that needs it must not go on without it. */
+export function writeBackupIdentity(bareJid: string, record: BackupIdentityRecord): boolean {
+  if (!bareJid) return false
   const s = storage()
-  if (!s) return
+  if (!s) return false
   try {
     s.setItem(`${STORAGE_PREFIX}${bareJid}`, JSON.stringify(record))
+    return readBackupIdentity(bareJid)?.packetsSha256 === record.packetsSha256
   } catch {
-    // A missing record only means the backup reads as unconfirmed.
+    return false
   }
 }
 
