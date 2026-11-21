@@ -401,6 +401,37 @@ describe('ContactSelector', () => {
       expect(mockOnSelectionChange).toHaveBeenCalledExactlyOnceWith([picked])
     })
 
+    it.each([
+      {
+        situation: 'deleting the letter that matched nothing',
+        query: 'a',
+        leave: (input: HTMLElement) => fireEvent.change(input, { target: { value: 'a' } }),
+      },
+      {
+        situation: 'clearing the search with Escape',
+        query: '',
+        leave: (input: HTMLElement) => fireEvent.keyDown(input, { key: 'Escape' }),
+      },
+    ])('starts over at the first entry after a search with no matches, by $situation', ({ query, leave }) => {
+      render(
+        <ContactSelector
+          selectedContacts={[]}
+          onSelectionChange={mockOnSelectionChange}
+        />
+      )
+      const input = screen.getByPlaceholderText('Search contacts...')
+      fireEvent.focus(input)
+      if (query) fireEvent.change(input, { target: { value: query } })
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+
+      fireEvent.change(input, { target: { value: `${query}z` } })
+      expect(screen.getByText('contacts.noContactsFound')).toBeInTheDocument()
+      leave(input)
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      expect(mockOnSelectionChange).toHaveBeenCalledExactlyOnceWith(['charlie@example.com'])
+    })
+
     it('should navigate down with ArrowDown', () => {
       render(
         <ContactSelector

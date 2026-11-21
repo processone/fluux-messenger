@@ -84,11 +84,8 @@ export function ContactSelector({
   const [search, setSearch] = useState('')
   // The highlight is kept by address, not by position: the list can gain or lose an
   // entry while open (a first message from someone new, a room you leave), and Enter
-  // must still pick the entry that is highlighted. It also records the search it was
-  // made for, so a new search starts at the first entry in the very render that shows
-  // it: Enter can arrive before any effect has run. `null` means the first entry.
-  const [highlight, setHighlight] = useState<{ jid: string; search: string } | null>(null)
-  const highlightedJid = highlight?.search === search ? highlight.jid : null
+  // must still pick the entry that is highlighted. `null` means the first entry.
+  const [highlightedJid, setHighlightedJid] = useState<string | null>(null)
   const [isFocused, setIsFocused] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -170,6 +167,14 @@ export function ContactSelector({
     : filteredContacts.findIndex(contact => contact.jid === highlightedJid)
   const firstJid = filteredContacts[0]?.jid ?? null
 
+  // A changed search starts over at the first match. The two updates render together
+  // because a key pressed right after typing can arrive before any effect has run.
+  const changeSearch = (next: string) => {
+    if (next === search) return
+    setSearch(next)
+    setHighlightedJid(null)
+  }
+
   const cancelPendingBlur = () => {
     if (blurTimerRef.current === null) return
     clearTimeout(blurTimerRef.current)
@@ -190,8 +195,8 @@ export function ContactSelector({
 
   // Pin the default highlight to the entry shown first, so a later list change keeps it.
   useEffect(() => {
-    if (isPopoverOpen && highlightedJid === null && firstJid !== null) setHighlight({ jid: firstJid, search })
-  }, [isPopoverOpen, highlightedJid, firstJid, search])
+    if (isPopoverOpen && highlightedJid === null && firstJid !== null) setHighlightedJid(firstJid)
+  }, [isPopoverOpen, highlightedJid, firstJid])
 
   // Place the popover against the input, in viewport coordinates.
   //
@@ -287,14 +292,14 @@ export function ContactSelector({
     if (onPick) {
       onPick(jid)
       setSearch('')
-      setHighlight(null)
+      setHighlightedJid(null)
       return
     }
     if (!selectedContacts.includes(jid)) {
       onSelectionChange([...selectedContacts, jid])
     }
     setSearch('')
-    setHighlight(null)
+    setHighlightedJid(null)
     inputRef.current?.focus()
   }
 
@@ -325,7 +330,7 @@ export function ContactSelector({
     // Escape clears search
     if (e.key === 'Escape') {
       e.preventDefault()
-      setSearch('')
+      changeSearch('')
       return
     }
 
@@ -340,7 +345,7 @@ export function ContactSelector({
       const next = highlightedIndex < 0
         ? (step > 0 ? 0 : count - 1)
         : (highlightedIndex + step + count) % count
-      setHighlight({ jid: filteredContacts[next].jid, search })
+      setHighlightedJid(filteredContacts[next].jid)
     }
 
     switch (e.key) {
@@ -399,7 +404,7 @@ export function ContactSelector({
           id={inputId}
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => changeSearch(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => { cancelPendingBlur(); setIsFocused(true) }}
           // Closing is deferred so a click can land on the popover before it goes
