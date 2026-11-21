@@ -8,7 +8,7 @@ import type { Room, RoomOccupant } from '@fluux/sdk'
 const mockInviteMultipleToRoom = vi.fn()
 
 // Track ContactSelector props for testing
-let capturedExcludeJids: string[] = []
+let capturedGetUnavailableNote: ((jid: string) => string | undefined) | undefined
 
 // Mock ContactSelector component
 vi.mock('./ContactSelector', () => ({
@@ -16,16 +16,16 @@ vi.mock('./ContactSelector', () => ({
     selectedContacts,
     onSelectionChange,
     placeholder,
-    excludeJids,
+    getUnavailableNote,
   }: {
     selectedContacts: string[]
     onSelectionChange: (selected: string[]) => void
     placeholder?: string
-    excludeJids?: string[]
+    getUnavailableNote?: (jid: string) => string | undefined
     disabled?: boolean
   }) => {
     // Capture props for assertions
-    capturedExcludeJids = excludeJids || []
+    capturedGetUnavailableNote = getUnavailableNote
 
     return (
       <div data-testid="contact-selector">
@@ -63,7 +63,8 @@ vi.mock('./ContactSelector', () => ({
 }))
 
 // Mock SDK hooks
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  getBareJid: (await importOriginal<typeof import('@fluux/sdk')>()).getBareJid,
   useRoomActions: () => ({
     inviteMultipleToRoom: mockInviteMultipleToRoom,
   }),
@@ -528,7 +529,7 @@ describe('InviteToRoomModal', () => {
   })
 
   describe('occupant filtering', () => {
-    it('should pass occupant JIDs to ContactSelector as excludeJids', () => {
+    it('should mark occupants as already in the room in ContactSelector', () => {
       // Add more occupants to the room
       const roomWithOccupants = createMockRoom()
       roomWithOccupants.occupants.set('alice', {
@@ -546,12 +547,12 @@ describe('InviteToRoomModal', () => {
         />
       )
 
-      // Check that occupant JIDs are passed to ContactSelector
-      expect(capturedExcludeJids).toContain('alice@example.com')
-      expect(capturedExcludeJids).toContain('existing@example.com')
+      expect(capturedGetUnavailableNote?.('alice@example.com')).toBe('rooms.alreadyInRoom')
+      expect(capturedGetUnavailableNote?.('existing@example.com')).toBe('rooms.alreadyInRoom')
+      expect(capturedGetUnavailableNote?.('outside@example.com')).toBeUndefined()
     })
 
-    it('should filter out occupants without JIDs', () => {
+    it('should not mark anyone for an occupant without a JID', () => {
       const roomWithAnonymousOccupant = createMockRoom()
       roomWithAnonymousOccupant.occupants.set('anonymous', {
         nick: 'anonymous',
@@ -568,10 +569,8 @@ describe('InviteToRoomModal', () => {
         />
       )
 
-      // Only existing@example.com should be in excludeJids, not undefined
-      expect(capturedExcludeJids).toContain('existing@example.com')
-      expect(capturedExcludeJids).not.toContain(undefined)
-      expect(capturedExcludeJids.length).toBe(1)
+      expect(capturedGetUnavailableNote?.('existing@example.com')).toBe('rooms.alreadyInRoom')
+      expect(capturedGetUnavailableNote?.('anonymous@example.com')).toBeUndefined()
     })
   })
 

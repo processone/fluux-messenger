@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { ContactSelector } from './ContactSelector'
 import type { Contact, PresenceStatus } from '@fluux/sdk'
 
@@ -65,6 +65,110 @@ describe('ContactSelector', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  describe('contacts who cannot be chosen', () => {
+    const NOTE = 'Already in the room'
+    const noteFor = (jid: string) => (jid.split('/')[0] === 'alice@example.com' ? NOTE : undefined)
+
+    function openSelector(query = '') {
+      render(
+        <ContactSelector
+          selectedContacts={[]}
+          onSelectionChange={mockOnSelectionChange}
+          getUnavailableNote={noteFor}
+        />
+      )
+      const input = screen.getByPlaceholderText('Search contacts...')
+      fireEvent.focus(input)
+      if (query) fireEvent.change(input, { target: { value: query } })
+      return input
+    }
+
+    const rows = () => within(screen.getByTestId('contact-suggestions')).getAllByRole('button')
+
+    it('lists them after everyone else with the note and a disabled state', () => {
+      openSelector()
+
+      const listed = rows()
+      expect(listed).toHaveLength(4)
+      expect(listed[3]).toHaveTextContent('Alice Smith')
+      expect(listed[3]).toHaveTextContent(NOTE)
+      expect(listed[3]).toHaveAttribute('aria-disabled', 'true')
+      expect(listed[0]).not.toHaveAttribute('aria-disabled')
+    })
+
+    it('keeps them in search results', () => {
+      openSelector('ali')
+
+      expect(rows()).toHaveLength(1)
+      expect(rows()[0]).toHaveTextContent(NOTE)
+    })
+
+    it('does not choose them by click or Enter, and keeps the list open', () => {
+      const input = openSelector('ali')
+
+      fireEvent.click(rows()[0])
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      expect(mockOnSelectionChange).not.toHaveBeenCalled()
+      expect(rows()[0]).toHaveTextContent('Alice Smith')
+    })
+
+    it('reaches them by keyboard, says why, and can move on to choose someone else', () => {
+      const input = openSelector()
+      const status = screen.getByRole('status')
+      const first = rows()[0].textContent
+
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(status).toHaveTextContent(`Alice Smith: ${NOTE}`)
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(mockOnSelectionChange).not.toHaveBeenCalled()
+
+      fireEvent.keyDown(input, { key: 'Tab' })
+      expect(status).toBeEmptyDOMElement()
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      expect(mockOnSelectionChange).toHaveBeenCalledTimes(1)
+      const chosen = mockOnSelectionChange.mock.calls[0][0][0] as string
+      expect(first).toContain(chosen)
+    })
+
+    it('keeps the note for a typed address when another contact also matches the search', () => {
+      render(
+        <ContactSelector
+          selectedContacts={[]}
+          onSelectionChange={mockOnSelectionChange}
+          getUnavailableNote={noteFor}
+          extraSuggestions={[{ jid: 'fan@example.org', name: 'alice@example.com fan club' }]}
+        />
+      )
+      const input = screen.getByPlaceholderText('Search contacts...')
+      fireEvent.focus(input)
+      fireEvent.change(input, { target: { value: 'alice@example.com' } })
+
+      const listed = rows()
+      expect(listed).toHaveLength(2)
+      expect(listed[0]).toHaveTextContent('alice@example.com fan club')
+      expect(listed[0]).not.toHaveTextContent(NOTE)
+      expect(listed[1]).toHaveTextContent(NOTE)
+
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      expect(screen.getByRole('status')).toHaveTextContent(`alice@example.com: ${NOTE}`)
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(mockOnSelectionChange).not.toHaveBeenCalled()
+    })
+
+    it('shows the note instead of offering a typed address', () => {
+      const input = openSelector('alice@example.com/tablet')
+
+      expect(screen.getByText(NOTE)).toBeInTheDocument()
+      expect(screen.queryByText('contacts.pressEnterToAdd')).not.toBeInTheDocument()
+      expect(screen.getByRole('status')).toHaveTextContent(`alice@example.com/tablet: ${NOTE}`)
+
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(mockOnSelectionChange).not.toHaveBeenCalled()
+    })
   })
 
   describe('rendering', () => {

@@ -420,6 +420,7 @@
         "invitingTo": "Bjóða tengiliðum í {{room}}",
         "selectContacts": "Veldu tengiliði",
         "searchContactsToInvite": "Leita að tengiliðum til að bjóða...",
+        "alreadyInRoom": "Þegar í herberginu",
         "inviteReason": "Ástæða (valfrjálst)",
         "inviteReasonPlaceholder": "Af hverju ertu að bjóða þeim?",
         "inviteError": "Ekki tókst að senda boð",

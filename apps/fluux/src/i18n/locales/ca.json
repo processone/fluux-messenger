@@ -422,6 +422,7 @@
         "invitingTo": "Convida contactes a {{room}}",
         "selectContacts": "Selecciona contactes",
         "searchContactsToInvite": "Cerca contactes per convidar...",
+        "alreadyInRoom": "Ja és a la sala",
         "inviteReason": "Motiu (opcional)",
         "inviteReasonPlaceholder": "Per què els convides?",
         "inviteError": "No s'han pogut enviar les invitacions",

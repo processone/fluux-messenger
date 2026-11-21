@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
-import { useRoomActions, type Room } from '@fluux/sdk'
+import { getBareJid, useRoomActions, type Room } from '@fluux/sdk'
 import { UserPlus, Send } from 'lucide-react'
 import { ContactSelector } from './ContactSelector'
 import { ModalShell } from './ModalShell'
@@ -38,16 +38,24 @@ function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
   const [reason, setReason] = useState('')
 
-  // Get list of JIDs already in the room (occupants)
-  const occupantJids = Array.from(room.occupants.values())
-    .map(o => o.jid)
-    .filter((jid): jid is string => !!jid)
+  // Occupants' real JIDs usually carry a resource, while the roster holds bare JIDs.
+  const occupantBareJids = new Set(
+    Array.from(room.occupants.values())
+      .flatMap(o => (o.jid ? [getBareJid(o.jid).toLowerCase()] : [])),
+  )
+  const isInRoom = (jid: string) => occupantBareJids.has(getBareJid(jid).toLowerCase())
+  const alreadyInRoom = t('rooms.alreadyInRoom')
+
+  // Someone chosen before they joined the room is cleared for good: if they leave
+  // again, they are invited only after being chosen again.
+  const invitees = selectedContacts.filter(jid => !isInRoom(jid))
+  if (invitees.length !== selectedContacts.length) setSelectedContacts(invitees)
 
   const handleInvite = () => {
-    if (selectedContacts.length === 0) return
+    if (invitees.length === 0) return
 
     try {
-      void inviteMultipleToRoom(room.jid, selectedContacts, reason || undefined)
+      void inviteMultipleToRoom(room.jid, invitees, reason || undefined)
       addToast('success', t('rooms.invitationsSent'))
       onClose()
     } catch (err) {
@@ -79,10 +87,10 @@ function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
             {t('rooms.selectContacts')}
           </label>
           <ContactSelector
-            selectedContacts={selectedContacts}
+            selectedContacts={invitees}
             onSelectionChange={setSelectedContacts}
             placeholder={t('rooms.searchContactsToInvite')}
-            excludeJids={occupantJids}
+            getUnavailableNote={jid => (isInRoom(jid) ? alreadyInRoom : undefined)}
           />
         </div>
 
@@ -116,14 +124,14 @@ function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
         <button
           type="button"
           onClick={handleInvite}
-          disabled={selectedContacts.length === 0}
+          disabled={invitees.length === 0}
           className="px-4 py-2 text-sm bg-fluux-brand text-fluux-text-on-accent rounded
                      hover:bg-fluux-brand-hover transition-colors
                      disabled:opacity-50 disabled:cursor-not-allowed
                      flex items-center gap-2"
         >
           <Send className="rtl-mirror size-4" />
-          {t('rooms.sendInvitations', { count: selectedContacts.length })}
+          {t('rooms.sendInvitations', { count: invitees.length })}
         </button>
       </div>
     </ModalShell>

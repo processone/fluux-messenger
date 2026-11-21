@@ -422,6 +422,7 @@
         "invitingTo": "Kutsu kontakte tuppa {{room}}",
         "selectContacts": "Vali kontaktid",
         "searchContactsToInvite": "Otsi kontakte kutsumiseks...",
+        "alreadyInRoom": "Juba toas",
         "inviteReason": "Põhjus (valikuline)",
         "inviteReasonPlaceholder": "Miks sa neid kutsud?",
         "inviteError": "Kutsete saatmine ebaõnnestus",

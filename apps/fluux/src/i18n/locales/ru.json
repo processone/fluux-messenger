@@ -420,6 +420,7 @@
         "invitingTo": "Пригласить контакты в {{room}}",
         "selectContacts": "Выберите контакты",
         "searchContactsToInvite": "Поиск контактов для приглашения...",
+        "alreadyInRoom": "Уже в конференции",
         "inviteReason": "Причина (опционально)",
         "inviteReasonPlaceholder": "Зачем вы их приглашаете?",
         "inviteError": "Не удалось отправить приглашения",

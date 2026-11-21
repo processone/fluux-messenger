@@ -421,6 +421,7 @@
         "invitingTo": "Πρόσκληση επαφών στο {{room}}",
         "selectContacts": "Επιλογή επαφών",
         "searchContactsToInvite": "Αναζήτηση επαφών για πρόσκληση...",
+        "alreadyInRoom": "Ήδη στο δωμάτιο",
         "inviteReason": "Αιτία (προαιρετικό)",
         "inviteReasonPlaceholder": "Γιατί τους προσκαλείτε;",
         "inviteError": "Αποτυχία αποστολής προσκλήσεων",

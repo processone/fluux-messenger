@@ -420,6 +420,7 @@
         "invitingTo": "邀请联系人加入 {{room}}",
         "selectContacts": "选择联系人",
         "searchContactsToInvite": "搜索要邀请的联系人…",
+        "alreadyInRoom": "已在房间中",
         "inviteReason": "原因（可选）",
         "inviteReasonPlaceholder": "您为什么要邀请他们？",
         "inviteError": "无法发送邀请",

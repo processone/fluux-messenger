@@ -37,6 +37,11 @@ export interface ContactSelectorProps {
   disabled?: boolean
   /** JIDs to exclude from the contact list */
   excludeJids?: string[]
+  /**
+   * Returns a short note for a contact who stays listed but cannot be chosen.
+   * Those contacts come after everyone else, and the note says why.
+   */
+  getUnavailableNote?: (jid: string) => string | undefined
   /** Additional JID suggestions beyond roster contacts (e.g., room occupants, affiliated members) */
   extraSuggestions?: Array<{ jid: string; name?: string }>
   /** Single-pick mode: when set, selecting a contact or typing a JID + Enter calls this once and skips chip selection. */
@@ -53,6 +58,9 @@ interface UnifiedContact {
   name: string
   isExtra?: boolean
   presence?: string
+  unavailableNote?: string
+  /** The row stands for the search text itself, so its name already is the address. */
+  isTypedAddress?: boolean
 }
 
 /**
@@ -72,6 +80,7 @@ export function ContactSelector({
   addMorePlaceholder,
   disabled = false,
   excludeJids = [],
+  getUnavailableNote,
   extraSuggestions = [],
   onPick,
   allowTypedJid = true,
@@ -111,12 +120,20 @@ export function ContactSelector({
   // Build a set of roster JIDs for fast deduplication
   const rosterJids = new Set(contacts.map(c => c.jid))
 
+  // Search text naming someone who cannot be chosen gets its own marked row, so the reason
+  // shows whatever else the search matches and even if the text could not be added as typed.
+  const searchJidNormalized = search.trim().toLowerCase()
+  const typedUnavailableNote = allowTypedJid && searchJidNormalized
+    ? getUnavailableNote?.(searchJidNormalized)
+    : undefined
+
   // Filter and sort contacts, merging extra suggestions
   // - Map roster contacts to unified type
   // - Append extra suggestions not already in roster (dedupe by JID)
   // - Exclude already selected and excluded JIDs
   // - Filter by search if provided (match on name or username, not domain)
   // - Sort: roster contacts by recent activity first, then extra suggestions alphabetically
+  // - Move contacts who cannot be chosen after everyone else, keeping that order
   const filteredContacts = (() => {
     // Map roster contacts to unified type
     const rosterEntries: UnifiedContact[] = contacts
@@ -130,6 +147,7 @@ export function ContactSelector({
         jid: contact.jid,
         name: contact.name,
         presence: contact.presence,
+        unavailableNote: getUnavailableNote?.(contact.jid),
       }))
 
     // Sort roster entries by recent activity
@@ -153,12 +171,27 @@ export function ContactSelector({
         jid: s.jid,
         name: s.name || s.jid,
         isExtra: true,
+        unavailableNote: getUnavailableNote?.(s.jid),
       }))
 
     // Sort extra entries alphabetically by name
     extraEntries.sort((a, b) => a.name.localeCompare(b.name))
 
-    return [...rosterEntries, ...extraEntries]
+    const entries = [...rosterEntries, ...extraEntries]
+    const typedBareJid = searchJidNormalized.split('/')[0]
+    if (typedUnavailableNote && !entries.some(entry => entry.jid.toLowerCase().split('/')[0] === typedBareJid)) {
+      entries.push({
+        jid: searchJidNormalized,
+        name: searchJidNormalized,
+        isExtra: true,
+        isTypedAddress: true,
+        unavailableNote: typedUnavailableNote,
+      })
+    }
+    return [
+      ...entries.filter(entry => !entry.unavailableNote),
+      ...entries.filter(entry => entry.unavailableNote),
+    ]
   })()
 
   // A highlighted address that leaves the list highlights nothing until the user chooses again.
@@ -185,13 +218,19 @@ export function ContactSelector({
 
   // Whether the search text is a JID the user can add outright.
   const searchIsValidJid = isValidJid(search)
-  const searchJidNormalized = search.trim().toLowerCase()
-  const canAddAsJid = allowTypedJid && searchIsValidJid &&
+  const canAddAsJid = allowTypedJid && searchIsValidJid && !typedUnavailableNote &&
     !selectedContacts.includes(searchJidNormalized) &&
     !excludeJids.includes(searchJidNormalized)
 
   // The popover shows suggestions, an add-this-JID row, or a no-match notice.
   const isPopoverOpen = isFocused && (filteredContacts.length > 0 || !!search)
+
+  // Focus stays in the input, so a screen reader hears why the highlighted person
+  // cannot be chosen only through a status message.
+  const highlightedContact = filteredContacts[highlightedIndex]
+  const unavailableAnnouncement = isPopoverOpen && highlightedContact?.unavailableNote
+    ? `${highlightedContact.name}: ${highlightedContact.unavailableNote}`
+    : ''
 
   // Pin the default highlight to the entry shown first, so a later list change keeps it.
   // Done while rendering: an effect's update could be overtaken by the next keystroke.
@@ -287,7 +326,25 @@ export function ContactSelector({
     }
   }, [isPopoverOpen, filteredContacts.length, search, canAddAsJid, selectedContacts.length])
 
+  // Keep the highlighted row visible: the list scrolls, and keyboard users move through it
+  // from the input, so nothing else brings a row past its visible height into view.
+  useLayoutEffect(() => {
+    const list = popoverRef.current
+    const row = list?.querySelector<HTMLElement>('[data-highlighted]')
+    if (!list || !row) return
+    const listRect = list.getBoundingClientRect()
+    const rowRect = row.getBoundingClientRect()
+    if (rowRect.top < listRect.top) list.scrollTop -= listRect.top - rowRect.top
+    else if (rowRect.bottom > listRect.bottom) list.scrollTop += rowRect.bottom - listRect.bottom
+  }, [isPopoverOpen, highlightedIndex])
+
   const selectContact = (jid: string) => {
+    // The row already says why; stay on it with the list open.
+    if (getUnavailableNote?.(jid)) {
+      setHighlightedJid(jid)
+      inputRef.current?.focus()
+      return
+    }
     if (onPick) {
       onPick(jid)
       setSearch('')
@@ -396,6 +453,12 @@ export function ContactSelector({
         </div>
       )}
 
+      {getUnavailableNote && (
+        <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {unavailableAnnouncement}
+        </div>
+      )}
+
       {/* Contact search with keyboard navigation */}
       <div ref={containerRef}>
         <TextInput
@@ -454,18 +517,26 @@ export function ContactSelector({
                       key={contact.jid}
                       role="button"
                       tabIndex={0}
+                      aria-disabled={contact.unavailableNote ? true : undefined}
+                      data-highlighted={index === highlightedIndex ? '' : undefined}
                       onClick={() => selectContact(contact.jid)}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectContact(contact.jid) } }}
-                      className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${
-                        index === highlightedIndex
-                          ? 'bg-fluux-brand/20 text-fluux-text'
-                          : 'hover:bg-fluux-hover text-fluux-text'
+                      className={`flex items-center gap-2 px-3 py-2 ${
+                        contact.unavailableNote
+                          ? `cursor-not-allowed text-fluux-muted ${index === highlightedIndex ? 'bg-fluux-hover' : ''}`
+                          : `cursor-pointer text-fluux-text ${index === highlightedIndex ? 'bg-fluux-brand/20' : 'hover:bg-fluux-hover'}`
                       }`}
                     >
                       <span className={`size-2 rounded-full flex-shrink-0 ${presenceColor}`} />
                       <span className="text-sm truncate flex-1">{contact.name}</span>
-                      <span className="text-xs text-fluux-muted truncate">{contact.jid}</span>
-                      {index === highlightedIndex && (
+                      {!contact.isTypedAddress && (
+                        <span className="text-xs text-fluux-muted truncate">{contact.jid}</span>
+                      )}
+                      {contact.unavailableNote ? (
+                        <span className="flex-shrink-0 rounded border border-fluux-muted/40 px-1.5 py-0.5 text-xs text-fluux-text">
+                          {contact.unavailableNote}
+                        </span>
+                      ) : index === highlightedIndex && (
                         <span className="text-xs text-fluux-muted ms-1">↵</span>
                       )}
                     </div>

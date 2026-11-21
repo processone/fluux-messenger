@@ -419,6 +419,7 @@
         "invitingTo": "Contacten uitnodigen voor {{room}}",
         "selectContacts": "Selecteer contacten",
         "searchContactsToInvite": "Zoek contacten om uit te nodigen...",
+        "alreadyInRoom": "Al in de groep",
         "inviteReason": "Reden (optioneel)",
         "inviteReasonPlaceholder": "Waarom nodig je ze uit?",
         "inviteError": "Uitnodigingen verzenden mislukt",

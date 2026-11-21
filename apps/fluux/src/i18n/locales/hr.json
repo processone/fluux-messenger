@@ -420,6 +420,7 @@
         "invitingTo": "Pozovi kontakte u {{room}}",
         "selectContacts": "Odaberi kontakte",
         "searchContactsToInvite": "Pretraži kontakte za pozivanje...",
+        "alreadyInRoom": "Već u sobi",
         "inviteReason": "Razlog (opcionalno)",
         "inviteReasonPlaceholder": "Zašto ih pozivate?",
         "inviteError": "Slanje pozivnica nije uspjelo",

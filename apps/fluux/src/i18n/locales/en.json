@@ -420,6 +420,7 @@
         "invitingTo": "Invite contacts to {{room}}",
         "selectContacts": "Select contacts",
         "searchContactsToInvite": "Search contacts to invite...",
+        "alreadyInRoom": "Already in the room",
         "inviteReason": "Reason (optional)",
         "inviteReasonPlaceholder": "Why are you inviting them?",
         "inviteError": "Failed to send invitations",

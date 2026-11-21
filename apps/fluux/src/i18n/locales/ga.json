@@ -420,6 +420,7 @@
         "invitingTo": "Cuir cuireadh chuig teagmhálacha chuig {{room}}",
         "selectContacts": "Roghnaigh teagmhálacha",
         "searchContactsToInvite": "Cuardaigh teagmhálacha le cuireadh a chur chucu...",
+        "alreadyInRoom": "Sa seomra cheana",
         "inviteReason": "Cúis (roghnach)",
         "inviteReasonPlaceholder": "Cén fáth a bhfuil tú ag cur cuireadh chucu?",
         "inviteError": "Theip ar sheoladh cuirí",

@@ -421,6 +421,7 @@
         "invitingTo": "Pozvať kontakty do {{room}}",
         "selectContacts": "Vybrať kontakty",
         "searchContactsToInvite": "Hľadať kontakty na pozvanie...",
+        "alreadyInRoom": "Už je v miestnosti",
         "inviteReason": "Dôvod (voliteľné)",
         "inviteReasonPlaceholder": "Prečo ich pozývate?",
         "inviteError": "Nepodarilo sa odoslať pozvánky",

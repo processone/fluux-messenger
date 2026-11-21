@@ -420,6 +420,7 @@
         "invitingTo": "Запросити контакти до {{room}}",
         "selectContacts": "Виберіть контакти",
         "searchContactsToInvite": "Пошук контактів для запрошення...",
+        "alreadyInRoom": "Вже в кімнаті",
         "inviteReason": "Причина (необов'язково)",
         "inviteReasonPlaceholder": "Чому ви їх запрошуєте?",
         "inviteError": "Не вдалося надіслати запрошення",

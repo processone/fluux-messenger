@@ -421,6 +421,7 @@
         "invitingTo": "Uzaicināt kontaktus uz {{room}}",
         "selectContacts": "Izvēlieties kontaktus",
         "searchContactsToInvite": "Meklēt kontaktus uzaicināšanai...",
+        "alreadyInRoom": "Jau istabā",
         "inviteReason": "Iemesls (neobligāts)",
         "inviteReasonPlaceholder": "Kāpēc jūs viņus uzaicināt?",
         "inviteError": "Neizdevās nosūtīt uzaicinājumus",

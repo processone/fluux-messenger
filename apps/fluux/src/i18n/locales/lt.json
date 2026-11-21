@@ -420,6 +420,7 @@
         "invitingTo": "Pakviesti kontaktus į {{room}}",
         "selectContacts": "Pasirinkti kontaktus",
         "searchContactsToInvite": "Ieškoti kontaktų pakviesti...",
+        "alreadyInRoom": "Jau kambaryje",
         "inviteReason": "Priežastis (neprivaloma)",
         "inviteReasonPlaceholder": "Kodėl juos kviečiate?",
         "inviteError": "Nepavyko išsiųsti pakvietimų",

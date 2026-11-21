@@ -422,6 +422,7 @@
         "invitingTo": "Stieden kuntatti għal {{room}}",
         "selectContacts": "Agħżel kuntatti",
         "searchContactsToInvite": "Fittex kuntatti biex tistieden...",
+        "alreadyInRoom": "Diġà fil-kamra",
         "inviteReason": "Raġuni (mhux obbligatorju)",
         "inviteReasonPlaceholder": "Għaliex qed tistiednhom?",
         "inviteError": "Ma rnexxiex jintbagħtu l-istedini",

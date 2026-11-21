@@ -420,6 +420,7 @@
         "invitingTo": "دعوة جهات اتصال إلى {{room}}",
         "selectContacts": "اختيار جهات اتصال",
         "searchContactsToInvite": "البحث عن جهات اتصال لدعوتها...",
+        "alreadyInRoom": "في الغرفة بالفعل",
         "inviteReason": "السبب (اختياري)",
         "inviteReasonPlaceholder": "لماذا تدعوهم؟",
         "inviteError": "فشل إرسال الدعوات",
