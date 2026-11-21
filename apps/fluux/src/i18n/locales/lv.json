@@ -1905,6 +1905,20 @@
         "description": "Šo Fluux daļu neizdevās parādīt. Pārējā lietotne turpina darboties.",
         "panel": "Šo paneli neizdevās parādīt.",
         "message": "Šo ziņojumu neizdevās parādīt.",
-        "retry": "Mēģināt vēlreiz"
+        "retry": "Mēģināt vēlreiz",
+        "appDescription": "Fluux radās neparedzēta kļūda. Parasti palīdz pārlādēšana.",
+        "renderLoopTitle": "Fluux apturēja attēlošanas ciklu",
+        "renderLoopDescription": "Fluux konstatēja attēlošanas ciklu un apturēja to, pirms lietotne sastinga. Tā ir kļūda. Diagnostikas informācija palīdz mums to novērst.",
+        "recentStateChanges": "Nesenās stāvokļa izmaiņas ({{count}})",
+        "technicalDetails": "Tehniskā informācija",
+        "copyDiagnostic": "Kopēt diagnostikas informāciju",
+        "copyFailed": "Kopēšana neizdevās",
+        "reloadApp": "Pārlādēt Fluux",
+        "forceReloadHint": "Ja tas atkārtojas, nospiediet Cmd+Shift+R (Ctrl+Shift+R operētājsistēmā Windows un Linux), lai piespiedu kārtā pārlādētu."
+    },
+    "storageOutdated": {
+        "title": "Fluux tika atjaunināts citā cilnē",
+        "description": "Pārlādējiet šo cilni, lai izmantotu jauno versiju. Līdz tam vēsture un meklēšana var būt lēnāka.",
+        "reload": "Pārlādēt"
     }
 }

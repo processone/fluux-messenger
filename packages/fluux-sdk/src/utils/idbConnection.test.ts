@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { openIndexedDB, StorageBlockedError } from './idbConnection'
+import { onStorageOutdated, openIndexedDB, StorageBlockedError } from './idbConnection'
 
 /** A connection from a client that predates versionchange handling. */
 function openUnguarded(name: string, version: number): Promise<IDBDatabase> {
@@ -123,5 +123,43 @@ describe('openIndexedDB', () => {
     const db = await openIndexedDB('db', 2, { upgrade: (d) => d.createObjectStore('v2'), onClosed: vi.fn() })
     expect(storeNames(db)).toEqual(['v1', 'v2'])
     db.close()
+  })
+
+  describe('outdated storage', () => {
+    it('reports a newer client taking over the database', async () => {
+      const listener = vi.fn()
+      const stop = onStorageOutdated(listener)
+      await openIndexedDB('db', 1, { upgrade: (db) => db.createObjectStore('v1'), onClosed: vi.fn() })
+
+      ;(await openUnguarded('db', 2)).close()
+
+      expect(listener).toHaveBeenCalledExactlyOnceWith('db')
+      stop()
+    })
+
+    it('does not report a deletion, which is not a newer version', async () => {
+      const listener = vi.fn()
+      const stop = onStorageOutdated(listener)
+      await openIndexedDB('db', 1, { upgrade: (db) => db.createObjectStore('v1'), onClosed: vi.fn() })
+
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.deleteDatabase('db')
+        request.onsuccess = () => resolve()
+        request.onerror = () => reject(request.error)
+      })
+
+      expect(listener).not.toHaveBeenCalled()
+      stop()
+    })
+
+    it('stops reporting once unsubscribed', async () => {
+      const listener = vi.fn()
+      onStorageOutdated(listener)()
+      await openIndexedDB('db', 1, { upgrade: (db) => db.createObjectStore('v1'), onClosed: vi.fn() })
+
+      ;(await openUnguarded('db', 2)).close()
+
+      expect(listener).not.toHaveBeenCalled()
+    })
   })
 })

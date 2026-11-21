@@ -1902,6 +1902,20 @@
         "description": "A Fluux ezen része nem jeleníthető meg. Az alkalmazás többi része tovább működik.",
         "panel": "Ez a panel nem jeleníthető meg.",
         "message": "Ez az üzenet nem jeleníthető meg.",
-        "retry": "Újrapróbálás"
+        "retry": "Újrapróbálás",
+        "appDescription": "A Fluux váratlan hibába ütközött. Az újratöltés általában megoldja.",
+        "renderLoopTitle": "A Fluux leállított egy megjelenítési ciklust",
+        "renderLoopDescription": "A Fluux megjelenítési ciklust észlelt, és leállította, mielőtt az alkalmazás lefagyott volna. Ez hiba. A diagnosztikai adatok másolása segít kijavítani.",
+        "recentStateChanges": "Legutóbbi állapotváltozások ({{count}})",
+        "technicalDetails": "Technikai részletek",
+        "copyDiagnostic": "Diagnosztikai adatok másolása",
+        "copyFailed": "A másolás nem sikerült",
+        "reloadApp": "A Fluux újratöltése",
+        "forceReloadHint": "Ha ez ismétlődik, nyomd meg a Cmd+Shift+R (Windowson és Linuxon Ctrl+Shift+R) billentyűket a kényszerített újratöltéshez."
+    },
+    "storageOutdated": {
+        "title": "A Fluux frissült egy másik lapon",
+        "description": "Töltsd újra ezt a lapot az új verzió használatához. Addig az előzmények és a keresés lassabb lehet.",
+        "reload": "Újratöltés"
     }
 }

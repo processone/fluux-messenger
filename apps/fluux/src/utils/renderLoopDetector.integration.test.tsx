@@ -39,7 +39,7 @@ describe('render loop hard break', () => {
     __setClock(() => t)
     if (syncGrace) startSyncGracePeriod()
     render(<RenderLoopBoundary><EffectLoop onRender={() => { t += stepMs }} /></RenderLoopBoundary>)
-    expect(screen.getByText('Render Loop Detected')).toBeInTheDocument()
+    expect(screen.getByText('errorBoundary.renderLoopTitle')).toBeInTheDocument()
     expect(getRenderStats().EffectLoop).toMatchObject({ count, triggered: true })
   })
 
@@ -61,7 +61,7 @@ describe('render loop hard break', () => {
         }} />
       </RenderLoopBoundary>
     )
-    expect(screen.getByText('Render Loop Detected')).toBeInTheDocument()
+    expect(screen.getByText('errorBoundary.renderLoopTitle')).toBeInTheDocument()
     expect(screen.getByText(/sustained .* renders\/sec for 5000ms/)).toBeInTheDocument()
     expect(t - 5_000_000).toBeGreaterThanOrEqual(expectedDuration)
     expect(t - 5_000_000).toBeLessThan(expectedDuration + 100)

@@ -1908,6 +1908,20 @@
         "description": "Nie udało się wyświetlić tej części Fluux. Reszta aplikacji działa dalej.",
         "panel": "Nie udało się wyświetlić tego panelu.",
         "message": "Nie udało się wyświetlić tej wiadomości.",
-        "retry": "Spróbuj ponownie"
+        "retry": "Spróbuj ponownie",
+        "appDescription": "W Fluux wystąpił nieoczekiwany błąd. Odświeżenie zwykle go usuwa.",
+        "renderLoopTitle": "Fluux zatrzymał pętlę renderowania",
+        "renderLoopDescription": "Fluux wykrył pętlę renderowania i zatrzymał ją, zanim aplikacja się zawiesiła. To błąd. Skopiowanie informacji diagnostycznych pomoże nam go naprawić.",
+        "recentStateChanges": "Ostatnie zmiany stanu ({{count}})",
+        "technicalDetails": "Szczegóły techniczne",
+        "copyDiagnostic": "Kopiuj informacje diagnostyczne",
+        "copyFailed": "Nie udało się skopiować",
+        "reloadApp": "Odśwież Fluux",
+        "forceReloadHint": "Jeśli to się powtarza, naciśnij Cmd+Shift+R (Ctrl+Shift+R w systemach Windows i Linux), aby wymusić odświeżenie."
+    },
+    "storageOutdated": {
+        "title": "Fluux został zaktualizowany w innej karcie",
+        "description": "Odśwież tę kartę, aby korzystać z nowej wersji. Do tego czasu historia i wyszukiwanie mogą działać wolniej.",
+        "reload": "Odśwież"
     }
 }

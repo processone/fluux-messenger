@@ -1906,6 +1906,20 @@
         "description": "Não foi possível mostrar esta parte do Fluux. O resto da aplicação continua a funcionar.",
         "panel": "Não foi possível mostrar este painel.",
         "message": "Não foi possível mostrar esta mensagem.",
-        "retry": "Tentar novamente"
+        "retry": "Tentar novamente",
+        "appDescription": "O Fluux encontrou um erro inesperado. Recarregar costuma resolver.",
+        "renderLoopTitle": "O Fluux parou um ciclo de renderização",
+        "renderLoopDescription": "O Fluux detetou um ciclo de renderização e parou-o antes de a aplicação bloquear. Isto é um erro. Copiar as informações de diagnóstico ajuda-nos a corrigi-lo.",
+        "recentStateChanges": "Alterações de estado recentes ({{count}})",
+        "technicalDetails": "Detalhes técnicos",
+        "copyDiagnostic": "Copiar informações de diagnóstico",
+        "copyFailed": "Falha ao copiar",
+        "reloadApp": "Recarregar o Fluux",
+        "forceReloadHint": "Se continuar a acontecer, prima Cmd+Shift+R (Ctrl+Shift+R no Windows e Linux) para forçar o recarregamento."
+    },
+    "storageOutdated": {
+        "title": "O Fluux foi atualizado noutro separador",
+        "description": "Recarregue este separador para usar a nova versão. Até lá, o histórico e a pesquisa podem ficar mais lentos.",
+        "reload": "Recarregar"
     }
 }

@@ -1902,6 +1902,20 @@
         "description": "Fluux의 이 부분을 표시할 수 없습니다. 앱의 나머지 부분은 계속 작동합니다.",
         "panel": "이 패널을 표시할 수 없습니다.",
         "message": "이 메시지를 표시할 수 없습니다.",
-        "retry": "다시 시도"
+        "retry": "다시 시도",
+        "appDescription": "Fluux에서 예기치 않은 오류가 발생했습니다. 대부분 새로고침하면 해결됩니다.",
+        "renderLoopTitle": "Fluux가 렌더링 루프를 중단했습니다",
+        "renderLoopDescription": "Fluux가 렌더링 루프를 감지하여 앱이 멈추기 전에 중단했습니다. 이는 버그입니다. 진단 정보를 복사해 주시면 수정에 도움이 됩니다.",
+        "recentStateChanges": "최근 상태 변경 ({{count}})",
+        "technicalDetails": "기술 세부 정보",
+        "copyDiagnostic": "진단 정보 복사",
+        "copyFailed": "복사하지 못했습니다",
+        "reloadApp": "Fluux 새로고침",
+        "forceReloadHint": "이 문제가 계속되면 Cmd+Shift+R(Windows 및 Linux에서는 Ctrl+Shift+R)을 눌러 강제로 새로고침하세요."
+    },
+    "storageOutdated": {
+        "title": "다른 탭에서 Fluux가 업데이트되었습니다",
+        "description": "새 버전을 사용하려면 이 탭을 새로고침하세요. 그전까지는 기록과 검색이 느릴 수 있습니다.",
+        "reload": "새로고침"
     }
 }

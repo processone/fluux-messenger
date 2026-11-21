@@ -1,4 +1,5 @@
 import { Component, useEffect, useState, type ReactNode } from 'react'
+import i18n from 'i18next'
 import { isRenderLoopError } from '@/utils/renderLoopError'
 import { resetRenderLoopDetector, getRenderStats, getSelectorHistory } from '@/utils/renderLoopDetector'
 
@@ -138,6 +139,8 @@ export class RenderLoopBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (this.state.hasError) {
+      // The global instance, not a hook: this boundary sits above every provider.
+      const t = i18n.t.bind(i18n)
       const isRenderLoop = isRenderLoopError(this.state.error)
       return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-fluux-bg p-8">
@@ -146,12 +149,10 @@ export class RenderLoopBoundary extends Component<Props, State> {
           <div data-tauri-drag-region className="absolute top-0 inset-x-0 h-[var(--fluux-window-titlebar-height)]" />
           <div className="max-w-lg rounded-lg border border-red-500/30 bg-red-500/10 p-6 text-center">
             <h2 className="mb-4 text-xl font-semibold text-red-400">
-              {isRenderLoop ? 'Render Loop Detected' : 'Something Went Wrong'}
+              {isRenderLoop ? t('errorBoundary.renderLoopTitle') : t('errorBoundary.title')}
             </h2>
             <p className="mb-4 text-fluux-text-secondary">
-              {isRenderLoop
-                ? 'The application detected an infinite render loop and stopped it to prevent freezing. This is usually caused by a bug in state management.'
-                : 'The application encountered an unexpected error. Reloading usually fixes this.'}
+              {isRenderLoop ? t('errorBoundary.renderLoopDescription') : t('errorBoundary.appDescription')}
             </p>
             {this.state.renderStats && Object.keys(this.state.renderStats).length > 0 && (
               <div className="mb-4 text-sm text-fluux-text-muted">
@@ -167,7 +168,7 @@ export class RenderLoopBoundary extends Component<Props, State> {
             {isRenderLoop && this.state.selectorHistory && this.state.selectorHistory.length > 0 && (
               <details className="mb-4 text-start" open>
                 <summary className="cursor-pointer text-sm text-fluux-text-secondary hover:text-fluux-text">
-                  Recent selector value changes ({this.state.selectorHistory.length})
+                  {t('errorBoundary.recentStateChanges', { count: this.state.selectorHistory.length })}
                 </summary>
                 <pre className="mt-2 max-h-64 overflow-auto rounded bg-black/20 p-2 text-[10px] leading-tight text-fluux-text-muted">
                   {(() => {
@@ -185,7 +186,7 @@ export class RenderLoopBoundary extends Component<Props, State> {
             {this.state.error && (
               <details className="mb-4 text-start">
                 <summary className="cursor-pointer text-sm text-fluux-text-secondary hover:text-fluux-text">
-                  Technical details
+                  {t('errorBoundary.technicalDetails')}
                 </summary>
                 <pre className="mt-2 overflow-auto rounded bg-black/20 p-2 text-xs text-fluux-text-muted">
                   {this.state.error.message}
@@ -201,17 +202,17 @@ export class RenderLoopBoundary extends Component<Props, State> {
                     className="rounded border border-fluux-border px-4 py-2 text-fluux-text hover:bg-fluux-surface"
                   >
                     {this.state.copyStatus === 'copied'
-                      ? 'Copied ✓'
+                      ? t('common.copied')
                       : this.state.copyStatus === 'failed'
-                        ? 'Copy failed'
-                        : 'Copy diagnostic info'}
+                        ? t('errorBoundary.copyFailed')
+                        : t('errorBoundary.copyDiagnostic')}
                   </button>
                   <button
                     type="button"
                     onClick={this.handleRetry}
                     className="rounded bg-fluux-brand px-4 py-2 text-fluux-text-on-accent hover:bg-fluux-brand/80"
                   >
-                    Try Again
+                    {t('errorBoundary.retry')}
                   </button>
                 </>
               )}
@@ -220,11 +221,11 @@ export class RenderLoopBoundary extends Component<Props, State> {
                 onClick={this.handleReload}
                 className={`rounded px-4 py-2 ${isRenderLoop ? 'border border-fluux-border text-fluux-text hover:bg-fluux-surface' : 'bg-fluux-brand text-fluux-text-on-accent hover:bg-fluux-brand/80'}`}
               >
-                Reload App
+                {t('errorBoundary.reloadApp')}
               </button>
             </div>
             <p className="mt-4 text-xs text-fluux-text-muted">
-              If this keeps happening, try pressing Cmd/Ctrl+Shift+R to force reload
+              {t('errorBoundary.forceReloadHint')}
             </p>
           </div>
         </div>

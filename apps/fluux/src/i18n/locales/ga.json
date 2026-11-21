@@ -1908,6 +1908,20 @@
         "description": "Níorbh fhéidir an chuid seo de Fluux a thaispeáint. Leanann an chuid eile den aip ag obair.",
         "panel": "Níorbh fhéidir an painéal seo a thaispeáint.",
         "message": "Níorbh fhéidir an teachtaireacht seo a thaispeáint.",
-        "retry": "Bain triail eile as"
+        "retry": "Bain triail eile as",
+        "appDescription": "Tharla earráid gan choinne in Fluux. De ghnáth réitíonn athlódáil í.",
+        "renderLoopTitle": "Stop Fluux lúb rindreála",
+        "renderLoopDescription": "Bhraith Fluux lúb rindreála agus stop sé í sular reoigh an aip. Is fabht é seo. Cabhraíonn an fhaisnéis diagnóiseach linn é a cheartú.",
+        "recentStateChanges": "Athruithe staide le déanaí ({{count}})",
+        "technicalDetails": "Sonraí teicniúla",
+        "copyDiagnostic": "Cóipeáil faisnéis diagnóiseach",
+        "copyFailed": "Theip ar an gcóipeáil",
+        "reloadApp": "Athlódáil Fluux",
+        "forceReloadHint": "Má leanann sé seo ar aghaidh, brúigh Cmd+Shift+R (Ctrl+Shift+R ar Windows agus Linux) chun athlódáil a bhrú."
+    },
+    "storageOutdated": {
+        "title": "Nuashonraíodh Fluux i gcluaisín eile",
+        "description": "Athlódáil an cluaisín seo chun an leagan nua a úsáid. Go dtí sin, d’fhéadfadh an stair agus an cuardach a bheith níos moille.",
+        "reload": "Athlódáil"
     }
 }

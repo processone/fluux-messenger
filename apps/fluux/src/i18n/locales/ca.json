@@ -1906,6 +1906,20 @@
         "description": "No s'ha pogut mostrar aquesta part de Fluux. La resta de l'aplicació continua funcionant.",
         "panel": "No s'ha pogut mostrar aquest tauler.",
         "message": "No s'ha pogut mostrar aquest missatge.",
-        "retry": "Torna-ho a provar"
+        "retry": "Torna-ho a provar",
+        "appDescription": "Fluux ha trobat un error inesperat. Tornar a carregar normalment ho soluciona.",
+        "renderLoopTitle": "Fluux ha aturat un bucle de renderització",
+        "renderLoopDescription": "Fluux ha detectat un bucle de renderització i l'ha aturat abans que l'aplicació es bloquegés. És un error. Copiar la informació de diagnòstic ens ajuda a corregir-lo.",
+        "recentStateChanges": "Canvis d'estat recents ({{count}})",
+        "technicalDetails": "Detalls tècnics",
+        "copyDiagnostic": "Copia la informació de diagnòstic",
+        "copyFailed": "No s'ha pogut copiar",
+        "reloadApp": "Torna a carregar Fluux",
+        "forceReloadHint": "Si continua passant, prem Cmd+Maj+R (Ctrl+Maj+R a Windows i Linux) per forçar la recàrrega."
+    },
+    "storageOutdated": {
+        "title": "Fluux s'ha actualitzat en una altra pestanya",
+        "description": "Torna a carregar aquesta pestanya per fer servir la nova versió. Mentrestant, l'historial i la cerca poden anar més lents.",
+        "reload": "Torna a carregar"
     }
 }

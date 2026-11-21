@@ -1908,6 +1908,20 @@
         "description": "Tega dela aplikacije Fluux ni bilo mogoče prikazati. Preostanek aplikacije še naprej deluje.",
         "panel": "Te plošče ni bilo mogoče prikazati.",
         "message": "Tega sporočila ni bilo mogoče prikazati.",
-        "retry": "Poskusi znova"
+        "retry": "Poskusi znova",
+        "appDescription": "V Fluuxu je prišlo do nepričakovane napake. Ponovno nalaganje jo običajno odpravi.",
+        "renderLoopTitle": "Fluux je ustavil zanko upodabljanja",
+        "renderLoopDescription": "Fluux je zaznal zanko upodabljanja in jo ustavil, preden je aplikacija zamrznila. To je napaka. Kopiranje diagnostičnih podatkov nam pomaga, da jo odpravimo.",
+        "recentStateChanges": "Nedavne spremembe stanja ({{count}})",
+        "technicalDetails": "Tehnične podrobnosti",
+        "copyDiagnostic": "Kopiraj diagnostične podatke",
+        "copyFailed": "Kopiranje ni uspelo",
+        "reloadApp": "Znova naloži Fluux",
+        "forceReloadHint": "Če se to ponavlja, pritisnite Cmd+Shift+R (Ctrl+Shift+R v sistemih Windows in Linux), da vsilite ponovno nalaganje."
+    },
+    "storageOutdated": {
+        "title": "Fluux je bil posodobljen v drugem zavihku",
+        "description": "Znova naložite ta zavihek, da boste uporabljali novo različico. Do takrat sta zgodovina in iskanje lahko počasnejša.",
+        "reload": "Znova naloži"
     }
 }

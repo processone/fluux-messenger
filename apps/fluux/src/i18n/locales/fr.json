@@ -1905,6 +1905,20 @@
         "description": "Cette partie de Fluux n'a pas pu s'afficher. Le reste de l'application continue de fonctionner.",
         "panel": "Ce panneau n'a pas pu s'afficher.",
         "message": "Ce message n'a pas pu s'afficher.",
-        "retry": "Réessayer"
+        "retry": "Réessayer",
+        "appDescription": "Fluux a rencontré une erreur inattendue. Un rechargement règle généralement le problème.",
+        "renderLoopTitle": "Fluux a interrompu une boucle de rendu",
+        "renderLoopDescription": "Fluux a détecté une boucle de rendu et l'a interrompue avant que l'application ne se fige. C'est un bug. Copier les informations de diagnostic nous aide à le corriger.",
+        "recentStateChanges": "Changements d'état récents ({{count}})",
+        "technicalDetails": "Détails techniques",
+        "copyDiagnostic": "Copier les informations de diagnostic",
+        "copyFailed": "Échec de la copie",
+        "reloadApp": "Recharger Fluux",
+        "forceReloadHint": "Si le problème persiste, appuyez sur Cmd+Maj+R (Ctrl+Maj+R sous Windows et Linux) pour forcer le rechargement."
+    },
+    "storageOutdated": {
+        "title": "Fluux a été mis à jour dans un autre onglet",
+        "description": "Rechargez cet onglet pour utiliser la nouvelle version. D'ici là, l'historique et la recherche peuvent être plus lents.",
+        "reload": "Recharger"
     }
 }

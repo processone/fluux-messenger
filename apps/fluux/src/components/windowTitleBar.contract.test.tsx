@@ -76,12 +76,12 @@ describe('window controls outside the app error boundary', () => {
     }
     render(<><RenderLoopBoundary><Thrower /></RenderLoopBoundary><WindowControls /></>)
     await waitFor(() => expect(win.onResized).toHaveBeenCalledTimes(1))
-    expect(screen.getByRole('heading', { name: 'Something Went Wrong' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'errorBoundary.title' })).toBeInTheDocument()
 
     pointerClick(screen.getByRole('button', { name: 'Minimize' }))
     await waitFor(() => expect(win.minimize).toHaveBeenCalledTimes(1))
     pointerClick(screen.getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(win.close).toHaveBeenCalledTimes(1))
-    expect(screen.getByRole('heading', { name: 'Something Went Wrong' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'errorBoundary.title' })).toBeInTheDocument()
   })
 })

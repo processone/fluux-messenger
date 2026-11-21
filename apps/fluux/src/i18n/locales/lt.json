@@ -1906,6 +1906,20 @@
         "description": "Šios Fluux dalies nepavyko parodyti. Likusi programėlės dalis veikia toliau.",
         "panel": "Šio skydelio nepavyko parodyti.",
         "message": "Šios žinutės nepavyko parodyti.",
-        "retry": "Bandyti dar kartą"
+        "retry": "Bandyti dar kartą",
+        "appDescription": "Fluux susidūrė su netikėta klaida. Paprastai padeda įkėlimas iš naujo.",
+        "renderLoopTitle": "Fluux sustabdė atvaizdavimo ciklą",
+        "renderLoopDescription": "Fluux aptiko atvaizdavimo ciklą ir jį sustabdė, kol programėlė dar nesustingo. Tai klaida. Diagnostikos informacija padeda mums ją ištaisyti.",
+        "recentStateChanges": "Naujausi būsenos pakeitimai ({{count}})",
+        "technicalDetails": "Techninė informacija",
+        "copyDiagnostic": "Kopijuoti diagnostikos informaciją",
+        "copyFailed": "Nepavyko nukopijuoti",
+        "reloadApp": "Įkelti Fluux iš naujo",
+        "forceReloadHint": "Jei tai kartojasi, paspauskite Cmd+Shift+R (Ctrl+Shift+R sistemose Windows ir Linux), kad priverstinai įkeltumėte iš naujo."
+    },
+    "storageOutdated": {
+        "title": "Fluux buvo atnaujintas kitame skirtuke",
+        "description": "Iš naujo įkelkite šį skirtuką, kad naudotumėte naują versiją. Iki tol istorija ir paieška gali veikti lėčiau.",
+        "reload": "Įkelti iš naujo"
     }
 }

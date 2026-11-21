@@ -1,5 +1,6 @@
 import { AvatarStateOwner, captureOccupantAvatar, registerAvatarStateOwner } from '../utils/avatarState'
 import { raceDeadline } from '../utils/deadline'
+import { onStorageOutdated } from '../utils/idbConnection'
 import { Client, Element, xml } from '@xmpp/client'
 import { createActor, type Subscription, type Snapshot } from 'xstate'
 import type { EventHook } from './EventHook'
@@ -614,6 +615,16 @@ export class XMPPClient {
    * Can be called after {@link destroy} to re-establish bindings
    * (used by XMPPProvider for React StrictMode compatibility).
    */
+  /** Surface a newer client's schema upgrade as `storage:outdated`, once per database. */
+  private forwardOutdatedStorage(): () => void {
+    const reported = new Set<string>()
+    return onStorageOutdated((database) => {
+      if (reported.has(database)) return
+      reported.add(database)
+      this.emitSDK('storage:outdated', { database })
+    })
+  }
+
   setupBindings(): void {
     // Clean up any existing bindings first (idempotent)
     for (const cleanup of this.cleanupFunctions) {
@@ -646,6 +657,8 @@ export class XMPPClient {
     }))
     this.storeBindings = unsubscribeStoreBindings
     this.cleanupFunctions.push(unsubscribeStoreBindings)
+
+    this.cleanupFunctions.push(this.forwardOutdatedStorage())
 
     // Set up store-based side effects (activeConversation -> load cache, MAM fetch)
     const unsubscribeSideEffects = setupStoreSideEffects(this.createSideEffectHost())

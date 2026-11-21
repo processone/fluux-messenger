@@ -1908,6 +1908,20 @@
         "description": "Tuto část aplikace Fluux nelze zobrazit. Zbytek aplikace funguje dál.",
         "panel": "Tento panel nelze zobrazit.",
         "message": "Tuto zprávu nelze zobrazit.",
-        "retry": "Zkusit znovu"
+        "retry": "Zkusit znovu",
+        "appDescription": "Ve Fluuxu došlo k neočekávané chybě. Opětovné načtení ji obvykle vyřeší.",
+        "renderLoopTitle": "Fluux zastavil smyčku vykreslování",
+        "renderLoopDescription": "Fluux zjistil smyčku vykreslování a zastavil ji dřív, než aplikace zamrzla. Jde o chybu. Zkopírování diagnostických informací nám pomůže ji opravit.",
+        "recentStateChanges": "Nedávné změny stavu ({{count}})",
+        "technicalDetails": "Technické podrobnosti",
+        "copyDiagnostic": "Kopírovat diagnostické informace",
+        "copyFailed": "Kopírování se nezdařilo",
+        "reloadApp": "Načíst Fluux znovu",
+        "forceReloadHint": "Pokud se to opakuje, stiskněte Cmd+Shift+R (Ctrl+Shift+R ve Windows a Linuxu) a vynuťte opětovné načtení."
+    },
+    "storageOutdated": {
+        "title": "Fluux byl aktualizován v jiné kartě",
+        "description": "Načtěte tuto kartu znovu, abyste mohli používat novou verzi. Do té doby může být historie a vyhledávání pomalejší.",
+        "reload": "Načíst znovu"
     }
 }

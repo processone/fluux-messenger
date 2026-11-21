@@ -1902,6 +1902,20 @@
         "description": "Denne delen av Fluux kunne ikke vises. Resten av appen fungerer fortsatt.",
         "panel": "Dette panelet kunne ikke vises.",
         "message": "Denne meldingen kunne ikke vises.",
-        "retry": "Prøv igjen"
+        "retry": "Prøv igjen",
+        "appDescription": "Fluux støtte på en uventet feil. Å laste inn på nytt løser det som regel.",
+        "renderLoopTitle": "Fluux stoppet en gjengivelsesløkke",
+        "renderLoopDescription": "Fluux oppdaget en gjengivelsesløkke og stoppet den før appen frøs. Dette er en feil. Diagnoseinformasjonen hjelper oss å rette den.",
+        "recentStateChanges": "Nylige tilstandsendringer ({{count}})",
+        "technicalDetails": "Tekniske detaljer",
+        "copyDiagnostic": "Kopier diagnoseinformasjon",
+        "copyFailed": "Kopiering mislyktes",
+        "reloadApp": "Last inn Fluux på nytt",
+        "forceReloadHint": "Hvis det fortsetter, trykk Cmd+Shift+R (Ctrl+Shift+R på Windows og Linux) for å tvinge frem en ny innlasting."
+    },
+    "storageOutdated": {
+        "title": "Fluux er oppdatert i en annen fane",
+        "description": "Last inn denne fanen på nytt for å bruke den nye versjonen. Inntil da kan historikk og søk være tregere.",
+        "reload": "Last inn på nytt"
     }
 }

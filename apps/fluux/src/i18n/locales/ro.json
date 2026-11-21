@@ -1906,6 +1906,20 @@
         "description": "Această parte din Fluux nu a putut fi afișată. Restul aplicației funcționează în continuare.",
         "panel": "Acest panou nu a putut fi afișat.",
         "message": "Acest mesaj nu a putut fi afișat.",
-        "retry": "Încearcă din nou"
+        "retry": "Încearcă din nou",
+        "appDescription": "Fluux a întâmpinat o eroare neașteptată. De obicei, reîncărcarea o rezolvă.",
+        "renderLoopTitle": "Fluux a oprit o buclă de randare",
+        "renderLoopDescription": "Fluux a detectat o buclă de randare și a oprit-o înainte ca aplicația să se blocheze. Este o eroare. Copierea informațiilor de diagnostic ne ajută să o remediem.",
+        "recentStateChanges": "Modificări recente de stare ({{count}})",
+        "technicalDetails": "Detalii tehnice",
+        "copyDiagnostic": "Copiază informațiile de diagnostic",
+        "copyFailed": "Copierea a eșuat",
+        "reloadApp": "Reîncarcă Fluux",
+        "forceReloadHint": "Dacă se tot întâmplă, apasă Cmd+Shift+R (Ctrl+Shift+R pe Windows și Linux) pentru a forța reîncărcarea."
+    },
+    "storageOutdated": {
+        "title": "Fluux a fost actualizat în altă filă",
+        "description": "Reîncarcă această filă pentru a folosi noua versiune. Până atunci, istoricul și căutarea pot fi mai lente.",
+        "reload": "Reîncarcă"
     }
 }

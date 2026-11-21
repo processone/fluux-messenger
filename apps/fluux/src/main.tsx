@@ -5,6 +5,7 @@ import { HashRouter } from 'react-router'
 import { XMPPProvider } from '@fluux/sdk'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { RenderLoopBoundary, RenderLoopWarningBanner } from './components/RenderLoopBoundary'
+import { StorageOutdatedBanner } from './components/StorageOutdatedBanner'
 import { WindowControls } from './components/WindowControls'
 import { ROUTER_USE_TRANSITIONS } from './config/routerTransitions'
 import App from './App'
@@ -171,6 +172,7 @@ const application = (
     <HashRouter useTransitions={ROUTER_USE_TRANSITIONS}>
       <App />
     </HashRouter>
+    <StorageOutdatedBanner />
   </ThemeProvider>
 )
 

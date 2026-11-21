@@ -1902,6 +1902,20 @@
         "description": "Den här delen av Fluux kunde inte visas. Resten av appen fungerar som vanligt.",
         "panel": "Den här panelen kunde inte visas.",
         "message": "Det här meddelandet kunde inte visas.",
-        "retry": "Försök igen"
+        "retry": "Försök igen",
+        "appDescription": "Fluux stötte på ett oväntat fel. Att läsa in igen brukar lösa det.",
+        "renderLoopTitle": "Fluux stoppade en renderingsloop",
+        "renderLoopDescription": "Fluux upptäckte en renderingsloop och stoppade den innan appen frös. Det är en bugg. Diagnosinformationen hjälper oss att åtgärda den.",
+        "recentStateChanges": "Senaste tillståndsändringar ({{count}})",
+        "technicalDetails": "Tekniska detaljer",
+        "copyDiagnostic": "Kopiera diagnosinformation",
+        "copyFailed": "Kopieringen misslyckades",
+        "reloadApp": "Läs in Fluux igen",
+        "forceReloadHint": "Om det fortsätter att hända, tryck på Cmd+Shift+R (Ctrl+Shift+R i Windows och Linux) för att tvinga fram en omladdning."
+    },
+    "storageOutdated": {
+        "title": "Fluux har uppdaterats i en annan flik",
+        "description": "Läs in fliken igen för att använda den nya versionen. Tills dess kan historik och sökning vara långsammare.",
+        "reload": "Läs in igen"
     }
 }

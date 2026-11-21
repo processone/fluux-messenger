@@ -1902,6 +1902,20 @@
         "description": "Ekki tókst að birta þennan hluta Fluux. Restin af forritinu virkar áfram.",
         "panel": "Ekki tókst að birta þetta spjald.",
         "message": "Ekki tókst að birta þessi skilaboð.",
-        "retry": "Reyna aftur"
+        "retry": "Reyna aftur",
+        "appDescription": "Fluux lenti í óvæntri villu. Endurhleðsla lagar það yfirleitt.",
+        "renderLoopTitle": "Fluux stöðvaði teiknilykkju",
+        "renderLoopDescription": "Fluux greindi teiknilykkju og stöðvaði hana áður en forritið fraus. Þetta er villa. Greiningarupplýsingarnar hjálpa okkur að laga hana.",
+        "recentStateChanges": "Nýlegar stöðubreytingar ({{count}})",
+        "technicalDetails": "Tæknilegar upplýsingar",
+        "copyDiagnostic": "Afrita greiningarupplýsingar",
+        "copyFailed": "Afritun mistókst",
+        "reloadApp": "Endurhlaða Fluux",
+        "forceReloadHint": "Ef þetta heldur áfram, ýttu á Cmd+Shift+R (Ctrl+Shift+R á Windows og Linux) til að þvinga endurhleðslu."
+    },
+    "storageOutdated": {
+        "title": "Fluux var uppfært í öðrum flipa",
+        "description": "Endurhladdu þennan flipa til að nota nýju útgáfuna. Þangað til gætu ferill og leit verið hægari.",
+        "reload": "Endurhlaða"
     }
 }

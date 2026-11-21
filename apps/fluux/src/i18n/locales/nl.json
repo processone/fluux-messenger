@@ -1902,6 +1902,20 @@
         "description": "Dit deel van Fluux kon niet worden weergegeven. De rest van de app blijft werken.",
         "panel": "Dit paneel kon niet worden weergegeven.",
         "message": "Dit bericht kon niet worden weergegeven.",
-        "retry": "Opnieuw proberen"
+        "retry": "Opnieuw proberen",
+        "appDescription": "Fluux is op een onverwachte fout gestuit. Opnieuw laden lost dit meestal op.",
+        "renderLoopTitle": "Fluux heeft een renderlus gestopt",
+        "renderLoopDescription": "Fluux heeft een renderlus gedetecteerd en gestopt voordat de app vastliep. Dit is een bug. De diagnostische gegevens helpen ons die op te lossen.",
+        "recentStateChanges": "Recente statuswijzigingen ({{count}})",
+        "technicalDetails": "Technische details",
+        "copyDiagnostic": "Diagnostische gegevens kopiëren",
+        "copyFailed": "Kopiëren mislukt",
+        "reloadApp": "Fluux opnieuw laden",
+        "forceReloadHint": "Als dit blijft gebeuren, druk dan op Cmd+Shift+R (Ctrl+Shift+R op Windows en Linux) om geforceerd opnieuw te laden."
+    },
+    "storageOutdated": {
+        "title": "Fluux is bijgewerkt in een ander tabblad",
+        "description": "Laad dit tabblad opnieuw om de nieuwe versie te gebruiken. Tot die tijd kunnen geschiedenis en zoeken trager zijn.",
+        "reload": "Opnieuw laden"
     }
 }

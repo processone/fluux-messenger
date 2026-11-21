@@ -450,6 +450,7 @@ export type {
   BlockingEvents,
   AdminEvents,
   ConsoleEvents,
+  StorageEvents,
   StanzaEvents,
 } from './core/types'
 

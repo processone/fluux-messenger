@@ -1906,6 +1906,20 @@
         "description": "Impossibile visualizzare questa parte di Fluux. Il resto dell'app continua a funzionare.",
         "panel": "Impossibile visualizzare questo pannello.",
         "message": "Impossibile visualizzare questo messaggio.",
-        "retry": "Riprova"
+        "retry": "Riprova",
+        "appDescription": "Fluux ha riscontrato un errore imprevisto. Di solito ricaricare risolve il problema.",
+        "renderLoopTitle": "Fluux ha interrotto un ciclo di rendering",
+        "renderLoopDescription": "Fluux ha rilevato un ciclo di rendering e lo ha interrotto prima che l'app si bloccasse. È un bug. Copiare le informazioni diagnostiche ci aiuta a correggerlo.",
+        "recentStateChanges": "Modifiche di stato recenti ({{count}})",
+        "technicalDetails": "Dettagli tecnici",
+        "copyDiagnostic": "Copia informazioni diagnostiche",
+        "copyFailed": "Copia non riuscita",
+        "reloadApp": "Ricarica Fluux",
+        "forceReloadHint": "Se continua a succedere, premi Cmd+Maiusc+R (Ctrl+Maiusc+R su Windows e Linux) per forzare il ricaricamento."
+    },
+    "storageOutdated": {
+        "title": "Fluux è stato aggiornato in un'altra scheda",
+        "description": "Ricarica questa scheda per usare la nuova versione. Fino ad allora cronologia e ricerca potrebbero essere più lente.",
+        "reload": "Ricarica"
     }
 }

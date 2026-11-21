@@ -73,7 +73,7 @@ function getDB(scopeJid: string | null): Promise<IDBPDatabase<RetractionLedgerSc
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'key' })
     },
     blocked: hooks.blocked,
-    blocking: (_currentVersion, _blockedVersion, event) => hooks.release(event.target as IDBDatabase),
+    blocking: (_currentVersion, blockedVersion, event) => hooks.release(event.target as IDBDatabase, blockedVersion),
     terminated: hooks.lost,
   }), { database: targetDbName, onClosed: forget })
   dbPromise = opening

@@ -1902,6 +1902,20 @@
         "description": "无法显示 Fluux 的这一部分。应用的其余部分仍可正常使用。",
         "panel": "无法显示此面板。",
         "message": "无法显示此消息。",
-        "retry": "重试"
+        "retry": "重试",
+        "appDescription": "Fluux 遇到意外错误。重新加载通常可以解决。",
+        "renderLoopTitle": "Fluux 已停止一个渲染循环",
+        "renderLoopDescription": "Fluux 检测到渲染循环，并在应用卡死前将其停止。这是一个错误。复制诊断信息可以帮助我们修复它。",
+        "recentStateChanges": "最近的状态变化（{{count}}）",
+        "technicalDetails": "技术详情",
+        "copyDiagnostic": "复制诊断信息",
+        "copyFailed": "复制失败",
+        "reloadApp": "重新加载 Fluux",
+        "forceReloadHint": "如果问题持续出现，请按 Cmd+Shift+R（Windows 和 Linux 上为 Ctrl+Shift+R）强制重新加载。"
+    },
+    "storageOutdated": {
+        "title": "Fluux 已在另一个标签页中更新",
+        "description": "请重新加载此标签页以使用新版本。在此之前，历史记录和搜索可能会变慢。",
+        "reload": "重新加载"
     }
 }
