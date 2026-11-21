@@ -39,10 +39,11 @@ function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
   const [reason, setReason] = useState('')
 
   // Occupants' real JIDs usually carry a resource, while the roster holds bare JIDs.
-  const occupantJids = Array.from(room.occupants.values())
-    .map(o => o.jid)
-    .filter((jid): jid is string => !!jid)
-    .map(jid => getBareJid(jid))
+  // Exclude both forms: roster rows match the bare JID, a typed address may be the full one.
+  const occupantJids = [...new Set(
+    Array.from(room.occupants.values())
+      .flatMap(o => (o.jid ? [o.jid, getBareJid(o.jid)] : [])),
+  )]
 
   const handleInvite = () => {
     if (selectedContacts.length === 0) return
