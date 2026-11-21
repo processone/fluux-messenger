@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
-import type { BackupProbeResult } from '@fluux/openpgp-plugin'
+import type { BackupStatus } from '@fluux/openpgp-plugin'
+import { readBackupStatus, type BackupStatusReads } from './openPgpBackupStatus'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { platform } from '@/platform'
 import { useWebKeyLocked } from '@/hooks/useWebKeyLocked'
@@ -16,6 +17,8 @@ export type OpenPgpOverviewState =
   | 'on-backed-up'
   | 'on-no-backup'
   | 'on-backup-unconfirmed'
+  | 'on-backup-changed'
+  | 'on-backup-out-of-date'
 
 export interface OpenPgpOverviewInputs {
   enabled: boolean
@@ -27,10 +30,8 @@ export interface OpenPgpOverviewInputs {
   fingerprint: string | null
   /** A warning the OpenPGP screen shows: key needs recovery, generation failed, no PEP, key unprotected at rest. */
   warning: boolean
-  /** Server backup probe; null until it settles. */
-  backupProbe: BackupProbeResult | null
-  /** Fingerprint recorded at the last confirmed backup or restore. */
-  backedUpFingerprint: string | null
+  /** The server backup compared with the file this device confirmed; null until it settles. */
+  backupStatus: BackupStatus | null
 }
 
 /** Same precedence as the OpenPGP screen's own status line, then the backup state of a ready key. */
@@ -43,24 +44,30 @@ export function openPgpOverviewState(i: OpenPgpOverviewInputs): OpenPgpOverviewS
     return i.warning ? 'needs-attention' : 'on'
   }
   if (i.warning) return 'needs-attention'
-  if (i.backupProbe === null) return 'on'
-  if (i.backupProbe === 'absent') return 'on-no-backup'
-  if (i.backupProbe === 'present' && i.backedUpFingerprint === i.fingerprint) return 'on-backed-up'
-  return 'on-backup-unconfirmed'
+  switch (i.backupStatus) {
+    case null:
+      return 'on'
+    case 'absent':
+      return 'on-no-backup'
+    case 'confirmed':
+      return 'on-backed-up'
+    case 'changed':
+      return 'on-backup-changed'
+    case 'out-of-date':
+      return 'on-backup-out-of-date'
+    default:
+      return 'on-backup-unconfirmed'
+  }
 }
 
 interface LocalRead {
   fingerprint: string | null
   keyWarning: boolean
-  backedUpFingerprint: string | null
 }
 
-interface OpenPgpPluginReads {
-  getOwnFingerprint?: () => string | null
+interface OpenPgpPluginReads extends BackupStatusReads {
   isKeyRecoveryNeeded?: () => boolean
   isKeychainBacked?: () => boolean | null
-  getBackedUpFingerprint?: () => string | null
-  probeSecretKeyBackup?: () => Promise<BackupProbeResult>
 }
 
 /** The OpenPGP row's state, read from the registered plugin the way the OpenPGP screen reads it. */
@@ -96,18 +103,17 @@ export function useOpenPgpOverviewState(): OpenPgpOverviewState {
       keyWarning:
         plugin?.isKeyRecoveryNeeded?.() === true ||
         (platform().nativeOpenpgp && !!fingerprint && plugin?.isKeychainBacked?.() === false),
-      backedUpFingerprint: plugin?.getBackedUpFingerprint?.() ?? null,
     })
   }, [enabled, online, registrationError, client, pluginRegisteredAt, unlockCount, webKeyLocked])
 
   // The server answers arrive later and only add to the reading.
-  const [remote, setRemote] = useState<{ pepUnsupported: boolean; backupProbe: BackupProbeResult | null }>({
+  const [remote, setRemote] = useState<{ pepUnsupported: boolean; backupStatus: BackupStatus | null }>({
     pepUnsupported: false,
-    backupProbe: null,
+    backupStatus: null,
   })
   const hasKey = !!local?.fingerprint
   useEffect(() => {
-    setRemote({ pepUnsupported: false, backupProbe: null })
+    setRemote({ pepUnsupported: false, backupStatus: null })
     if (!local) return
     let cancelled = false
     const plugin = client.e2ee?.getPlugin('openpgp') as OpenPgpPluginReads | null | undefined
@@ -118,11 +124,9 @@ export function useOpenPgpOverviewState(): OpenPgpOverviewState {
         if (!cancelled && supported === false) setRemote((r) => ({ ...r, pepUnsupported: true }))
       })
     if (hasKey) {
-      void (plugin?.probeSecretKeyBackup?.() ?? Promise.resolve('absent' as const))
-        .catch(() => 'unknown' as const)
-        .then((backupProbe) => {
-          if (!cancelled) setRemote((r) => ({ ...r, backupProbe }))
-        })
+      void readBackupStatus(plugin).then((backupStatus) => {
+        if (!cancelled) setRemote((r) => ({ ...r, backupStatus }))
+      })
     }
     return () => {
       cancelled = true
@@ -136,7 +140,6 @@ export function useOpenPgpOverviewState(): OpenPgpOverviewState {
     locked: webKeyLocked && enabled && !registrationError,
     fingerprint: local?.fingerprint ?? null,
     warning: !!local?.keyWarning || remote.pepUnsupported || !!ownKeyConflict || trustCompromised,
-    backupProbe: remote.backupProbe,
-    backedUpFingerprint: local?.backedUpFingerprint ?? null,
+    backupStatus: remote.backupStatus,
   })
 }

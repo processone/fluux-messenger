@@ -5,6 +5,12 @@ All notable changes to Fluux Messenger are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- OpenPGP: Fluux now remembers which exact server backup it confirmed and compares it every time Encryption settings read the backup, without asking for your code. The status says "Backup changed" when another device replaced the backup, "Backup out of date" when your key gained a part the backup lacks, such as a rotated subkey, and "not confirmed" when this device has no record. A new "Check with code" action opens the backup in memory only, to confirm it; it never installs, publishes or changes your key, and a wrong code changes nothing. Devices that already showed "backed up" record the current backup the first time they check, so nobody needs a code
+
 ## [0.18.3] - 2026-11-16
 
 ### Added

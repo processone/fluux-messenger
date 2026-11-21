@@ -647,35 +647,43 @@ To replay the migration, quit the app, delete `.identity-migrated` and the
 `net.processone.fluux*` directories (including their per-copy completion files), and
 restore the `com.processone.fluux*` ones.
 
-### Server backup status after key import
+### Server backup status and backup identity
 
-The account-scoped backup marker records a fingerprint after a successful secret-key
-publication, or after an install proven to exist in the server backup. Direct server
-restores explicitly identify their already-verified server source and need no
-second read. File and generic picker installs read the server backup: identical
-encrypted packet bytes prove the source regardless
-of armor headers; otherwise the backend decrypts it with the install passphrase
-(including the established legacy-code fallback) and checks for the installed
-fingerprint. If a legacy file required a normalized working code, its original typed
-code is preserved through every picker and also tried once against a healed server
-copy, without repeating the already-failed normalized candidate.
-This inspection does not replace a pending web picker selection.
-A failed read/decryption or a different identity leaves prior confirmed state alone;
-file import never publishes or heals a secret backup. Settings reads the confirmed
-marker rather than treating an install result as backup evidence.
+XEP-0373 §5 gives a backup no id, hash or signature, and it is encrypted, so Fluux keeps its own
+record of the exact file it confirmed (`backupIdentity.ts`): a versioned per-account entry holding the
+SHA-256 of the decoded backup packets (armor wrapping never changes it), the sorted primary and subkey
+fingerprints the file holds, how it was confirmed (`publish`, `restore`, `install`, `check`, `adopted`)
+and when. Native bundles report every component of the full certificate, retired subkeys included
+(`componentFingerprints`), because their public armor omits retired encryption subkeys.
 
-Markers from the earlier namespace are ignored because file imports could write
-false claims. Only a newly confirmed backup/install establishes the versioned marker.
-This also resets previously correct status until fresh evidence establishes it;
-explicit clearing removes both layouts for that account without touching others.
-Settings treats a present backup without a confirmed marker as unknown identity,
-not a mismatch or proof of another device's ownership. One certainty reading drives
-the neutral status, factual known-presence replacement warning, rotation warning
-and rotation's backup-code acknowledgement. Rotation re-publishes in this state, deliberately
-replacing any existing backup and code, even when another device created them.
-A confirmed different marker remains a mismatch and retains its separate policy.
-Only a failed raw presence probe offers Check again; unconfirmed identity needs
-its code or fresh backup evidence, not another presence probe.
+The record is written only with proof, from the bytes the server holds: after a publish, a direct
+server restore, an install proven against the server backup (identical encrypted packet bytes, or the
+backend decrypts the server file with the install passphrase, including the legacy-code fallback, and
+finds the installed fingerprint; the record then uses the matched server key's components and the
+server file's hash, never the imported file's), or a successful Check with code. A file install never
+publishes or heals a secret backup, and a failed read or decryption leaves prior state alone. A record
+that cannot be stored is never used: the older fingerprint marker is dropped with it so a later read
+cannot adopt whatever file the server then holds.
+
+Each Settings read (`inspectSecretKeyBackup`) hashes the backup `fetchSecretKeyBackup` already downloads
+and reports `confirmed` (same file, every part of this key held), `changed` (another file),
+`out-of-date` (same file, this key has a part the record lacks, as after a rotation whose backup publish
+failed), `unconfirmed` (no record) or `unknown` (a failed read, hash or key read; never confirmed), plus
+`absent`. A device that holds only the older fingerprint marker for its current key records the current
+backup at its first read (`adopted`); a replacement made before then stays undetected. Check with code
+(`checkBackupWithCode`) decrypts in memory only, never installs, publishes or changes the key, and a
+wrong code changes nothing; a backup that opens but holds another key records nothing and Settings keeps
+the existing mismatch status. That ownership evidence is bound to the hash of the file it describes, so
+a replaced or newly checked file never inherits it.
+
+Settings treats every state except `confirmed` (and `absent`, which has nothing to replace and whose rotation publishes no backup) as "a backup may exist" for replacement, rotation and
+deletion: one certainty reading drives the status, the factual known-presence replacement warning, the
+rotation warning and rotation's backup-code acknowledgement. Rotation re-publishes in these states,
+deliberately replacing the existing backup and code, even when another device created them. A backup the
+record (or a check) shows to hold another primary key keeps the older policy: the foreign-backup warning,
+and a rotation that leaves that backup alone. Only a
+failed raw presence probe offers Check again; `unconfirmed`, `changed` and `out-of-date` offer Check with code; `absent` and `confirmed` do not. Deleting the
+backup or the identity clears the record and the marker. Markers from the earliest namespace are ignored.
 
 ### Guided macOS backup recovery
 

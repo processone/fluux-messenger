@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload, RefreshCw, Info, ChevronDown, ChevronRight, FileDown, FileUp } from 'lucide-react'
+import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload, RefreshCw, Info, ChevronDown, ChevronRight, FileDown, FileUp, ShieldCheck } from 'lucide-react'
 import { Toggle } from '@/components/ui/Toggle'
 import { SettingsSection } from '@/components/ui/SettingsSection'
 import { SettingsDisclosure } from '@/components/ui/SettingsDisclosure'
@@ -17,6 +17,7 @@ import { useToastStore } from '@/stores/toastStore'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
+import { readBackupStatus, readBackupHoldsOtherKey, type BackupStatusReads } from './openPgpBackupStatus'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
 import { BackupRecoveryDialog } from '@/components/BackupRecoveryDialog'
 import type { E2EEManager } from '@fluux/sdk'
@@ -26,7 +27,7 @@ import { TrustStateCompromisedBanner } from '@/components/TrustStateCompromisedB
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { KeyPickerDialog } from '@/components/KeyPickerDialog'
 import { KeychainRetryOffer } from '@/components/KeychainRetryPanel'
-import type { KeyBundle, BackupProbeResult, BackupContext, KeyInstallOptions } from '@fluux/openpgp-plugin'
+import type { KeyBundle, BackupProbeResult, BackupStatus, BackupContext, KeyInstallOptions } from '@fluux/openpgp-plugin'
 import {
   probeRemoteIdentityState,
   pepReaderFor,
@@ -57,11 +58,11 @@ const GENERATION_TIMEOUT_MS = 60_000
 /**
  * Copy for the pre-publish confirmation. Publishing always overwrites the
  * server blob AND always mints a fresh passphrase. Every variant names the
- * consequence without claiming facts the probe/marker did not establish.
- *   own         — the marker confirms this key; its saved code stops working.
- *   foreign     — a confirmed different marker; its saved code stops working.
+ * consequence without claiming facts the probe/record did not establish.
+ *   own         — the backup is the confirmed file for this key; its saved code stops working.
+ *   foreign     — the backup is known to hold another key (record or check); its saved code stops working.
  *   unknown     — presence could not be checked; warn about possible replacement.
- *   unconfirmed — presence is known, but the backup's identity is not.
+ *   unconfirmed — presence is known (changed, out of date or no record), but its identity is not.
  */
 const BACKUP_CONFIRM_KEYS = {
   own: {
@@ -97,34 +98,6 @@ type BackupConfirmVariant = keyof typeof BACKUP_CONFIRM_KEYS
  * backup might exist".
  */
 type BackupProbeState = 'checking' | BackupProbeResult
-
-/**
- * Is the server-side backup known to match this device's current key?
- *
- * All three inputs have to line up:
- *   - `backupProbe` — server-probe tri-state (plus `checking`); only
- *     `present` can possibly be in sync (callers show a "Checking…"
- *     state while pending, and `unknown`/`absent` are never in sync).
- *   - `backedUpFingerprint` — local marker recorded after a successful
- *     backup or an install whose identity was proven in the server backup.
- *     `null` means this device has no confirmed identity for that backup;
- *     the backup may still contain this key.
- *   - `fingerprint` — this device's current key. A missing key can
- *     never be in sync, hence the explicit truthiness guard: without
- *     it a null/null pair would compare equal and report in-sync.
- *
- * Deliberately does NOT normalize case. Both fingerprints trace back
- * to the same unnormalized `ownBundle.fingerprint`, so comparing them
- * raw is correct here; normalizing would be a behavior change that
- * needs its own decision rather than riding along with this helper.
- */
-function isBackupInSync(
-  backupProbe: BackupProbeState,
-  backedUpFingerprint: string | null,
-  fingerprint: string | null,
-): boolean {
-  return backupProbe === 'present' && !!fingerprint && backedUpFingerprint === fingerprint
-}
 
 /**
  * Settings → Encryption panel.
@@ -170,15 +143,22 @@ export function OpenPgpSettings() {
   // decides which consequence we spell out. null = no confirmation open.
   const [backupConfirmVariant, setBackupConfirmVariant] =
     useState<BackupConfirmVariant | null>(null)
-  // `checking` until the first probe settles. See BackupProbeState.
-  const [backupProbe, setBackupProbe] = useState<BackupProbeState>('checking')
-  // Fingerprint recorded locally at the moment of the last successful
-  // backup/restore. When this equals the current local fingerprint AND
-  // a remote backup exists, local and server are known to be in sync.
-  const [backedUpFingerprint, setBackedUpFingerprint] = useState<string | null>(null)
-  // A missing confirmed marker says nothing about the backup's identity.
-  // Keep this certainty rule shared by status, replacement and rotation.
-  const backupUnconfirmed = backupProbe === 'present' && backedUpFingerprint === null
+  // `checking` until the first read settles. The plugin compares the downloaded backup
+  // with the file this device confirmed (FLM-411): confirmed, changed, out of date or
+  // unconfirmed when a backup exists; absent or unknown (could not check) otherwise.
+  const [backupStatus, setBackupStatus] = useState<'checking' | BackupStatus>('checking')
+  // The backup opened with its code but holds another key: shown as the existing mismatch.
+  // The file just read holds another primary key: a code check opened it, or the record of that
+  // file names one. Read from the plugin together with each status, so it never outlives the file.
+  const [backupHoldsOtherKey, setBackupHoldsOtherKey] = useState(false)
+  const backupProbe: BackupProbeState = backupStatus === 'checking' || backupStatus === 'absent' || backupStatus === 'unknown'
+    ? backupStatus
+    : 'present'
+  const inSync = backupStatus === 'confirmed'
+  // Anything but a confirmed file leaves the backup's identity unknown: it may be another device's
+  // or an older one. Status, replacement and rotation share this certainty rule.
+  // A backup known to hold another key keeps the older policy: foreign warning, never overwritten by a rotation.
+  const backupUnconfirmed = backupProbe === 'present' && !inSync && !backupHoldsOtherKey
   const backupState = backupUnconfirmed ? 'unknown' : backupProbe
   // Set whenever the toggle (or auto-init) detected an existing server-
   // side OpenPGP identity but this device has no local key. The user must
@@ -588,7 +568,6 @@ export function OpenPgpSettings() {
                   backupContext: BackupContext
                 }
             >
-            getBackedUpFingerprint?: () => string | null
           }
         | null
         | undefined
@@ -609,7 +588,6 @@ export function OpenPgpSettings() {
         return
       }
       setFingerprint(result.fingerprint)
-      setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? null)
       setPendingIdentityChoice(null)
       addToast('success', t('settings.encryption.restoreSuccess'))
     },
@@ -675,52 +653,26 @@ export function OpenPgpSettings() {
   const [backupProbeNonce, setBackupProbeNonce] = useState(0)
   useEffect(() => {
     if (pluginStatus !== 'ready') {
-      setBackupProbe('checking')
-      setBackedUpFingerprint(null)
+      setBackupStatus('checking')
+      setBackupHoldsOtherKey(false)
       return
     }
     let cancelled = false
     void (async () => {
-      const plugin = client.e2ee?.getPlugin('openpgp') as
-        | {
-            probeSecretKeyBackup?: () => Promise<BackupProbeResult>
-            getBackedUpFingerprint?: () => string | null
-          }
-        | null
-        | undefined
-      // Read the local marker synchronously — it's cheap and lets the
-      // in-sync status land in the same render as the server probe
-      // instead of flickering through a "backup needed" frame.
+      const plugin = client.e2ee?.getPlugin('openpgp') as BackupStatusReads | null | undefined
+      // Never rejects: a failed read lands on `unknown`, never `absent`, and never leaves the
+      // status stuck on `checking`, which hides every button (retry included).
+      const result = await readBackupStatus(plugin)
       if (!cancelled) {
-        setBackedUpFingerprint(plugin?.getBackedUpFingerprint?.() ?? null)
+        setBackupStatus(result)
+        setBackupHoldsOtherKey(readBackupHoldsOtherKey(plugin, result))
       }
-      if (!plugin?.probeSecretKeyBackup) {
-        // No plugin method at all is a different thing from a failed probe:
-        // there is nothing to publish to, so `absent` is truthful here.
-        // UnlockEncryptionDialog falls back to `unknown` for this same
-        // missing-method condition instead — its dangerous branch offers to
-        // generate a brand-new key, while the dangerous branch here is
-        // publishing a backup over an existing one, so the two screens
-        // reasonably land on different sides of the same fallback.
-        if (!cancelled) setBackupProbe('absent')
-        return
-      }
-      // The method is documented as non-throwing, but it's reached through
-      // a structural `as` cast, so the compiler can't hold the plugin to
-      // that contract. If it ever rejects anyway, land on `unknown` —
-      // NEVER `absent`, which would resurrect the exact "failed probe
-      // treated as no backup" bug this branch exists to fix — and never
-      // leave `backupProbe` stuck on `checking`, which hides every button
-      // (retry included) behind `{!checking && …}` and strands the user.
-      const result = await plugin
-        .probeSecretKeyBackup()
-        .catch(() => 'unknown' as const)
-      if (!cancelled) setBackupProbe(result)
     })()
     return () => {
       cancelled = true
     }
-  }, [pluginStatus, client, backupProbeNonce])
+  // The own key is part of the reading: a restore or import that changes it re-reads the status.
+  }, [pluginStatus, client, backupProbeNonce, fingerprint])
 
   const handleBackupConfirm = useCallback(
     async (passphrase: string) => {
@@ -748,8 +700,9 @@ export function OpenPgpSettings() {
    * existing backup gets a confirmation first — the user is about to
    * invalidate a code they may have written down or configured in another
    * client. Which copy we show depends on whose backup it is: `own` when
-   * our local marker confirms the current key,
-   * `foreign` only for a confirmed different marker; unconfirmed identity
+   * the backup is the file this device confirmed for the current key,
+   * `foreign` only when the backup is known to hold another key (the device's record names
+   * another primary, or a check found one in it); unconfirmed identity
    * uses factual known-presence copy. With no backup there is nothing to lose; go
    * straight to the passphrase dialog.
    */
@@ -765,9 +718,35 @@ export function OpenPgpSettings() {
       setBackupConfirmVariant(backupUnconfirmed ? 'unconfirmed' : 'unknown')
       return
     }
-    const isOwnBackup = isBackupInSync(backupState, backedUpFingerprint, fingerprint)
-    setBackupConfirmVariant(isOwnBackup ? 'own' : 'foreign')
-  }, [backupState, backupUnconfirmed, backedUpFingerprint, fingerprint])
+    setBackupConfirmVariant(inSync ? 'own' : 'foreign')
+  }, [backupState, backupUnconfirmed, inSync])
+
+  const [showCheckCodeDialog, setShowCheckCodeDialog] = useState(false)
+  // Opens the server backup with its code in memory only (FLM-411): nothing is installed,
+  // published or changed, and a wrong code leaves the status as it was.
+  const handleCheckCodeConfirm = useCallback(
+    async (passphrase: string) => {
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | (BackupStatusReads & { checkBackupWithCode?: (pp: string) => Promise<{ outcome: 'confirmed' | 'other-key'; status: BackupStatus }> })
+        | null
+        | undefined
+      if (!plugin?.checkBackupWithCode) {
+        throw new Error(t('settings.encryption.backupPluginUnavailable'))
+      }
+      const result = await plugin.checkBackupWithCode(passphrase)
+      setShowCheckCodeDialog(false)
+      // The status and the file's ownership come back together; no further download. A file the
+      // check found to hold another key keeps its status and gains the mismatch.
+      if (result.outcome === 'confirmed') {
+        setBackupStatus(result.status)
+        setBackupHoldsOtherKey(readBackupHoldsOtherKey(plugin, result.status))
+      } else {
+        setBackupHoldsOtherKey(true)
+      }
+      if (result.status === 'confirmed') addToast('success', t('settings.encryption.backupCheckSuccess'))
+    },
+    [client, addToast, t],
+  )
 
   const handleRestoreConfirm = useCallback(
     async (passphrase: string) => {
@@ -776,7 +755,6 @@ export function OpenPgpSettings() {
             restoreSecretKey?: (pp: string) => Promise<
               { fingerprint: string } | { needsPicker: true; candidates: KeyBundle[]; backupContext: BackupContext }
             >
-            getBackedUpFingerprint?: () => string | null
           }
         | null
         | undefined
@@ -796,7 +774,6 @@ export function OpenPgpSettings() {
       }
       setFingerprint(result.fingerprint)
       setShowRestoreDialog(false)
-      setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? null)
       // A successful restore is proof the server backup exists — bump the
       // nonce so the effect re-probes instead of leaving a stale
       // `unknown`/`checking` status line telling the user we still can't
@@ -813,7 +790,6 @@ export function OpenPgpSettings() {
       const plugin = client.e2ee?.getPlugin('openpgp') as
         | {
             installSelectedKey?: (msg: string, pp: string, fp: string, options?: KeyInstallOptions) => Promise<{ fingerprint: string }>
-            getBackedUpFingerprint?: () => string | null
           }
         | null
         | undefined
@@ -829,7 +805,6 @@ export function OpenPgpSettings() {
       setFingerprint(info.fingerprint)
       setPendingKeyPicker(null)
       setPendingImportFileArmored(null)
-      setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? null)
       setBackupProbeNonce((n) => n + 1)
       addToast('success', t('settings.encryption.restoreSuccess'))
     },
@@ -894,7 +869,7 @@ export function OpenPgpSettings() {
     setShowRotateConfirm(false)
     // Unknown identity also re-publishes: the user accepted replacing a
     // possibly other-device backup rather than leaving a real one stale.
-    if (backupState === 'unknown' || isBackupInSync(backupState, backedUpFingerprint, fingerprint)) {
+    if (backupState === 'unknown' || inSync) {
       // Generate a new backup passphrase and re-publish atomically.
       // The dialog drives its own loading + error UI from now on.
       setShowRotatePassphraseDialog(true)
@@ -909,7 +884,7 @@ export function OpenPgpSettings() {
         })
         .finally(() => setIsRotating(false))
     }
-  }, [backupState, backedUpFingerprint, fingerprint, doRotate, addToast, t])
+  }, [backupState, inSync, doRotate, addToast, t])
 
   const handleRotatePassphraseConfirm = useCallback(
     async (passphrase: string) => {
@@ -1190,23 +1165,20 @@ export function OpenPgpSettings() {
             {(() => {
               // Visible states:
               //   checking  → pre-probe transient
-              //   inSync    → server has a backup AND it matches this
-              //               device's current fingerprint (by our local
-              //               marker).
-              //   outOfSync → backup is missing, or present but for a
-              //               different fingerprint.
-              //   unknown   → the probe failed or its identity is unconfirmed;
-              //               neutral when presence is known, otherwise treated
-              //               as "a backup might exist" since the
-              //               dangerous assumption is absence.
+              //   inSync    → server has a backup AND it is the exact file this
+              //               device confirmed for its current key (identity record).
+              //   mismatch  → the backup is known to hold another key.
+              //   changed / out of date / unconfirmed → a backup exists but this
+              //               device cannot vouch for it; check it with its code.
+              //   unknown   → the read failed; treated as "a backup might exist"
+              //               since the dangerous assumption is absence.
               // These readings choose the status line; certainty also selects
               // replacement/rotation warnings and backup acknowledgement.
               // Backup remains available after probing, even when in sync:
-              // the marker confirms identity, not compatible encoding (#1021).
+              // the record confirms identity, not compatible encoding (#1021).
               // Retry is only for an unknown presence probe, not unconfirmed
               // identity. Restore keeps its separate presence gate below.
               const checking = backupState === 'checking'
-              const inSync = isBackupInSync(backupState, backedUpFingerprint, fingerprint)
               return (
                 <>
                   <p className="text-xs leading-snug">
@@ -1225,14 +1197,17 @@ export function OpenPgpSettings() {
                         {t('settings.encryption.backupStatusNone')}
                       </span>
                     )}
-                    {!checking && !inSync && backupState === 'present' && (
-                      <span className="text-fluux-yellow">
-                        {t('settings.encryption.backupStatusMismatch')}
+                    {!checking && backupProbe === 'present' && !inSync && (
+                      <span className={backupHoldsOtherKey || backupStatus !== 'unconfirmed' ? 'text-fluux-yellow' : 'text-fluux-muted'}>
+                        {t(backupHoldsOtherKey ? 'settings.encryption.backupStatusMismatch'
+                          : backupStatus === 'changed' ? 'settings.encryption.backupStatusChanged'
+                          : backupStatus === 'out-of-date' ? 'settings.encryption.backupStatusOutOfDate'
+                          : 'settings.encryption.backupStatusUnconfirmed')}
                       </span>
                     )}
-                    {!checking && !inSync && backupState === 'unknown' && (
-                      <span className={backupUnconfirmed ? 'text-fluux-muted' : 'text-fluux-yellow'}>
-                        {t(backupUnconfirmed ? 'settings.encryption.backupStatusUnconfirmed' : 'settings.encryption.backupStatusUnknown')}
+                    {!checking && backupState === 'unknown' && backupProbe === 'unknown' && (
+                      <span className="text-fluux-yellow">
+                        {t('settings.encryption.backupStatusUnknown')}
                       </span>
                     )}
                   </p>
@@ -1261,6 +1236,16 @@ export function OpenPgpSettings() {
                         <CloudUpload className="size-3.5" />
                         {t('settings.encryption.backupAction')}
                       </button>
+                      {(backupStatus === 'unconfirmed' || backupStatus === 'changed' || backupStatus === 'out-of-date') && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCheckCodeDialog(true)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+                        >
+                          <ShieldCheck className="size-3.5" />
+                          {t('settings.encryption.backupCheckAction')}
+                        </button>
+                      )}
                       {(backupState === 'present' || backupState === 'unknown') && (
                         <button
                           type="button"
@@ -1448,6 +1433,17 @@ export function OpenPgpSettings() {
         />
       )}
 
+      {showCheckCodeDialog && (
+        <RestorePassphraseDialog
+          hideReplaceWarning
+          title={t('settings.encryption.backupCheckDialogTitle')}
+          body={t('settings.encryption.backupCheckDialogBody')}
+          confirmLabel={t('settings.encryption.backupCheckConfirm')}
+          onConfirm={handleCheckCodeConfirm}
+          onCancel={() => setShowCheckCodeDialog(false)}
+        />
+      )}
+
       {showRotateConfirm && (
         <ConfirmDialog
           title={t('settings.encryption.rotateConfirmTitle')}
@@ -1459,7 +1455,7 @@ export function OpenPgpSettings() {
             // know a backup might exist — because that is the safe
             // direction: the alternative is a passphrase-invalidating
             // re-publish the copy never warned about.
-            backupState === 'unknown' || isBackupInSync(backupState, backedUpFingerprint, fingerprint)
+            backupState === 'unknown' || inSync
               ? t('settings.encryption.rotateConfirmMessageWithBackup')
               : t('settings.encryption.rotateConfirmMessage')
           }

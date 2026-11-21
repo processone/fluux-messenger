@@ -13,8 +13,7 @@ const ready: OpenPgpOverviewInputs = {
   locked: false,
   fingerprint: FP,
   warning: false,
-  backupProbe: 'present',
-  backedUpFingerprint: FP,
+  backupStatus: 'confirmed',
 }
 const state = (over: Partial<OpenPgpOverviewInputs>) => openPgpOverviewState({ ...ready, ...over })
 
@@ -32,30 +31,34 @@ describe('openPgpOverviewState', () => {
   })
 
   it('is locked when the key waits for the session passphrase', () => {
-    expect(state({ fingerprint: null, locked: true, backupProbe: null })).toBe('locked')
+    expect(state({ fingerprint: null, locked: true, backupStatus: null })).toBe('locked')
   })
 
   it('needs attention for a warning, with or without a ready key', () => {
     expect(state({ warning: true })).toBe('needs-attention')
-    expect(state({ fingerprint: null, warning: true, backupProbe: null })).toBe('needs-attention')
+    expect(state({ fingerprint: null, warning: true, backupStatus: null })).toBe('needs-attention')
   })
 
   it('is plainly on while the key is being made or the backup is still being checked', () => {
-    expect(state({ fingerprint: null, backupProbe: null })).toBe('on')
-    expect(state({ backupProbe: null })).toBe('on')
+    expect(state({ fingerprint: null, backupStatus: null })).toBe('on')
+    expect(state({ backupStatus: null })).toBe('on')
   })
 
-  it('says the backup is in sync only when it holds this device\'s key', () => {
+  it('says the backup is in sync only when it is the file this device confirmed', () => {
     expect(state({})).toBe('on-backed-up')
   })
 
   it('says there is no backup when the server holds none', () => {
-    expect(state({ backupProbe: 'absent', backedUpFingerprint: null })).toBe('on-no-backup')
+    expect(state({ backupStatus: 'absent' })).toBe('on-no-backup')
   })
 
-  it('says the backup is unconfirmed when it exists but is not known to hold this key, or could not be checked', () => {
-    expect(state({ backedUpFingerprint: null })).toBe('on-backup-unconfirmed')
-    expect(state({ backedUpFingerprint: 'cd'.repeat(20) })).toBe('on-backup-unconfirmed')
-    expect(state({ backupProbe: 'unknown' })).toBe('on-backup-unconfirmed')
+  it('says the backup is unconfirmed when no file was confirmed, or it could not be checked', () => {
+    expect(state({ backupStatus: 'unconfirmed' })).toBe('on-backup-unconfirmed')
+    expect(state({ backupStatus: 'unknown' })).toBe('on-backup-unconfirmed')
+  })
+
+  it('says when the backup changed or is out of date (FLM-411)', () => {
+    expect(state({ backupStatus: 'changed' })).toBe('on-backup-changed')
+    expect(state({ backupStatus: 'out-of-date' })).toBe('on-backup-out-of-date')
   })
 })

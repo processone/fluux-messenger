@@ -85,6 +85,10 @@ pub struct KeyBundle {
     pub keychain_backed: bool,
     /// ISO 8601 primary-key creation time.
     pub created_at: String,
+    /// Upper-case hex fingerprints of the primary key and EVERY subkey of the
+    /// full certificate, retired ones included. `public_armored` omits retired
+    /// encryption subkeys, so the backup identity record reads this instead.
+    pub component_fingerprints: Vec<String>,
 }
 
 /// IPC DTO returned to the webview by every Tauri command that previously
@@ -108,6 +112,9 @@ pub struct PublicKeyInfo {
     pub keychain_backed: bool,
     /// ISO 8601 primary-key creation time.
     pub created_at: String,
+    /// Primary and every subkey fingerprint of the full certificate, retired
+    /// subkeys included (the public armor above omits them).
+    pub component_fingerprints: Vec<String>,
 }
 
 impl From<&KeyBundle> for PublicKeyInfo {
@@ -117,6 +124,7 @@ impl From<&KeyBundle> for PublicKeyInfo {
             public_armored: bundle.public_armored.clone(),
             keychain_backed: bundle.keychain_backed,
             created_at: bundle.created_at.clone(),
+            component_fingerprints: bundle.component_fingerprints.clone(),
         }
     }
 }
@@ -646,6 +654,7 @@ impl OpenpgpState {
                     public_armored,
                     keychain_backed: false,
                     created_at,
+                    component_fingerprints: component_fingerprints(&cert),
                 });
             }
             Ok(infos)
@@ -1533,7 +1542,16 @@ fn bundle_from_cert(cert: &Cert, backing: PassphraseBacking) -> Result<KeyBundle
         secret_armored,
         keychain_backed: backing == PassphraseBacking::Keychain,
         created_at: key_creation_time(cert)?,
+        component_fingerprints: component_fingerprints(cert),
     })
+}
+
+/// Primary and every subkey fingerprint of the full certificate, unfiltered by
+/// policy, expiry or retirement.
+fn component_fingerprints(cert: &Cert) -> Vec<String> {
+    std::iter::once(cert.fingerprint().to_hex())
+        .chain(cert.keys().subkeys().map(|ka| ka.key().fingerprint().to_hex()))
+        .collect()
 }
 
 fn key_creation_time(cert: &Cert) -> Result<String> {
@@ -3519,6 +3537,53 @@ mod tests {
             all_encryption_subkey_fingerprints(&published).len(),
             1,
             "published cert must expose only the current [E] (retired stripped)"
+        );
+        // The backup identity record needs the retired subkey too (FLM-411):
+        // the bundle reports every component of the full certificate.
+        let full: std::collections::BTreeSet<String> = std::iter::once(local.fingerprint().to_hex())
+            .chain(local.keys().subkeys().map(|ka| ka.key().fingerprint().to_hex()))
+            .collect();
+        let reported: std::collections::BTreeSet<String> =
+            rotated.component_fingerprints.iter().cloned().collect();
+        assert_eq!(reported, full, "component_fingerprints lists primary and every subkey, retired included");
+        assert!(
+            reported.len() > 1 + all_encryption_subkey_fingerprints(&published).len(),
+            "the retired subkey is part of the reported components"
+        );
+    }
+
+    #[test]
+    fn rotated_backup_round_trip_keeps_retired_subkeys_in_component_fingerprints() {
+        // FLM-411: a sibling device rotates and backs up; this device, which still holds the
+        // earlier subkey, opens that backup. The components the backup reports must keep
+        // the retired subkey, though the public armor omits it.
+        let state = new_state();
+        let _ = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let rotated = runtime
+            .block_on(state.rotate_encryption_subkey("alice@example.com".into()))
+            .unwrap();
+        let tsk = Cert::from_bytes(rotated.secret_armored.as_bytes()).unwrap();
+        let backup = crate::openpgp_backup::encrypt_tsk_with_passphrase(
+            &armored_string(&tsk, KeyExport::Secret).unwrap(),
+            "round-trip-code",
+            true,
+        )
+        .unwrap();
+        let opened = runtime
+            .block_on(state.import_backup_all(backup, "round-trip-code".into()))
+            .unwrap();
+        assert_eq!(opened.len(), 1);
+        assert_eq!(opened[0].component_fingerprints, rotated.component_fingerprints);
+        let published = Cert::from_bytes(opened[0].public_armored.as_bytes()).unwrap();
+        let retired_kept = opened[0].component_fingerprints.len();
+        let published_components = 1 + published.keys().subkeys().count();
+        assert!(
+            retired_kept > published_components,
+            "public armor omits the retired subkey ({published_components}) while the backup components keep it ({retired_kept})"
         );
     }
 

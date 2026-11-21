@@ -61,6 +61,8 @@ interface RestorePassphraseDialogProps {
    * whose passphrase is the user's own saved Fluux backup code.
    */
   mode?: 'restore' | 'import'
+  /** Hide the "replaces the local key" warning for a read-only use, such as checking a backup. */
+  hideReplaceWarning?: boolean
 }
 
 /**
@@ -86,6 +88,7 @@ export function RestorePassphraseDialog({
   confirmLabel,
   isBackupCode = !USE_V6_KEYS,
   mode = 'restore',
+  hideReplaceWarning = false,
 }: RestorePassphraseDialogProps) {
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -198,12 +201,14 @@ export function RestorePassphraseDialog({
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0 px-5">
-          <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-            <AlertTriangle className="size-4 text-fluux-yellow flex-shrink-0 mt-0.5" />
-            <p className="font-medium text-fluux-text">
-              {t('settings.encryption.restoreDialogWarning')}
-            </p>
-          </div>
+          {!hideReplaceWarning && (
+            <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
+              <AlertTriangle className="size-4 text-fluux-yellow flex-shrink-0 mt-0.5" />
+              <p className="font-medium text-fluux-text">
+                {t('settings.encryption.restoreDialogWarning')}
+              </p>
+            </div>
+          )}
 
           <label className="block text-sm text-fluux-text mb-1">
             {t('settings.encryption.restorePassphraseLabel')}
