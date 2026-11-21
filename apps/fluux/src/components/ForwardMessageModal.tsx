@@ -135,7 +135,11 @@ export function ForwardMessageModal({ link, quote, attachment, onClose }: Forwar
           <TextArea ref={commentRef} value={comment} onChange={event => setComment(event.target.value)} disabled={sending} rows={3}
             onKeyDown={event => {
               if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.keyCode === 229) return
-              if (event.metaKey || event.ctrlKey || (!event.shiftKey && !usesMobileEnterKey())) { event.preventDefault(); void send() }
+              if (event.metaKey || event.ctrlKey || (!event.shiftKey && !usesMobileEnterKey())) {
+                event.preventDefault()
+                // A held key repeats here after picking a destination with Enter: that press must not also send.
+                if (!event.repeat) void send()
+              }
             }}
             className="mt-1 w-full p-2 rounded bg-fluux-bg text-fluux-text border border-fluux-hover resize-none" />
         </label>

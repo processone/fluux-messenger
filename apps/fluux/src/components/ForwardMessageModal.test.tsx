@@ -91,7 +91,7 @@ describe('ForwardMessageModal', () => {
 
   // Requested keys: Enter sends and Shift-Enter adds a line, as in the chat composer; Cmd-Enter
   // (Ctrl-Enter off Mac) still sends, and the Send button shows the key that sends.
-  it.each([['Enter', {}], ['Cmd-Enter', { metaKey: true }], ['Ctrl-Enter', { ctrlKey: true }]])('sends once with %s from the comment, never with Shift-Enter, mid-composition or without a destination', async (_, modifier) => {
+  it.each([['Enter', {}], ['Cmd-Enter', { metaKey: true }], ['Ctrl-Enter', { ctrlKey: true }]])('sends once with %s from the comment, never with Shift-Enter, a held key, mid-composition or without a destination', async (_, modifier) => {
     const onClose = vi.fn()
     render(<ForwardMessageModal link={link} onClose={onClose} />)
     const comment = screen.getByLabelText('chat.forwardComment')
@@ -100,6 +100,8 @@ describe('ForwardMessageModal', () => {
     fireEvent.change(comment, { target: { value: 'Please review' } })
     expect(fireEvent.keyDown(comment, { key: 'Enter', shiftKey: true })).toBe(true)
     expect(fireEvent.keyDown(comment, { key: 'Enter', isComposing: true })).toBe(true)
+    // The auto-repeat of the Enter that picked the destination lands here: no send, no stray line.
+    expect(fireEvent.keyDown(comment, { key: 'Enter', repeat: true, ...modifier })).toBe(false)
     expect(fixture.chatSend).not.toHaveBeenCalled()
     const button = screen.getByRole('button', { name: 'chat.forwardSend' })
     expect(button).toHaveTextContent(formatShortcutKey({ key: 'Enter' }))
