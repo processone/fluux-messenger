@@ -382,12 +382,15 @@ export function prependOlderMessages<T extends TimestampedMessage>(
   getMergeCandidates?: (incoming: T, candidates: readonly T[]) => T[]
 ): { merged: T[]; newMessages: T[] } {
   // Build key set from existing messages
-  const keySet = buildMessageKeySet(existing, getKeys)
+  // Index resident identity keys once so each older row looks up its candidates
+  // instead of scanning every resident message.
+  const identityIndex = sameMessage ? buildMessageIdentityIndex(existing, getKeys) : undefined
+  const keySet = sameMessage ? undefined : buildMessageKeySet(existing, getKeys)
 
   // Filter duplicates from older messages
   const newMessages = older.filter((msg) => {
-    if (!sameMessage) return !isMessageDuplicate(msg, keySet, getKeys)
-    const candidates = findMessagesSharingIdentity(existing, msg, getKeys)
+    if (!sameMessage) return !isMessageDuplicate(msg, keySet!, getKeys)
+    const candidates = findMessagesSharingIdentity(existing, msg, getKeys, identityIndex)
     const matches = getMergeCandidates ? getMergeCandidates(msg, candidates) : candidates
     return !matches.some((resident) => sameMessage(resident, msg))
   })
