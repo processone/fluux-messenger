@@ -420,6 +420,7 @@
         "invitingTo": "{{room}}에 연락처 초대",
         "selectContacts": "연락처 선택",
         "searchContactsToInvite": "초대할 연락처 검색...",
+        "alreadyInRoom": "이미 대화방에 있음",
         "inviteReason": "사유 (선택사항)",
         "inviteReasonPlaceholder": "초대하는 이유는?",
         "inviteError": "초대 전송 실패",

@@ -417,6 +417,7 @@
         "invitingTo": "Invitar contactos a {{room}}",
         "selectContacts": "Seleccionar contactos",
         "searchContactsToInvite": "Buscar contactos para invitar...",
+        "alreadyInRoom": "Ya está en la sala",
         "inviteReason": "Razón (opcional)",
         "inviteReasonPlaceholder": "Por que los estas invitando?",
         "inviteError": "Error al enviar invitaciones",

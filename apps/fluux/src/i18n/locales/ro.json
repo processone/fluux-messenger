@@ -422,6 +422,7 @@
         "invitingTo": "Invită contacte în {{room}}",
         "selectContacts": "Selectează contacte",
         "searchContactsToInvite": "Caută contacte de invitat...",
+        "alreadyInRoom": "Deja în cameră",
         "inviteReason": "Motiv (opțional)",
         "inviteReasonPlaceholder": "De ce îi inviți?",
         "inviteError": "Trimiterea invitațiilor a eșuat",

@@ -37,6 +37,11 @@ export interface ContactSelectorProps {
   disabled?: boolean
   /** JIDs to exclude from the contact list */
   excludeJids?: string[]
+  /**
+   * Returns a short note for a contact who stays listed but cannot be chosen.
+   * Those contacts come after everyone else, and the note says why.
+   */
+  getUnavailableNote?: (jid: string) => string | undefined
   /** Additional JID suggestions beyond roster contacts (e.g., room occupants, affiliated members) */
   extraSuggestions?: Array<{ jid: string; name?: string }>
   /** Single-pick mode: when set, selecting a contact or typing a JID + Enter calls this once and skips chip selection. */
@@ -53,6 +58,7 @@ interface UnifiedContact {
   name: string
   isExtra?: boolean
   presence?: string
+  unavailableNote?: string
 }
 
 /**
@@ -72,6 +78,7 @@ export function ContactSelector({
   addMorePlaceholder,
   disabled = false,
   excludeJids = [],
+  getUnavailableNote,
   extraSuggestions = [],
   onPick,
   allowTypedJid = true,
@@ -117,6 +124,7 @@ export function ContactSelector({
   // - Exclude already selected and excluded JIDs
   // - Filter by search if provided (match on name or username, not domain)
   // - Sort: roster contacts by recent activity first, then extra suggestions alphabetically
+  // - Move contacts who cannot be chosen after everyone else, keeping that order
   const filteredContacts = (() => {
     // Map roster contacts to unified type
     const rosterEntries: UnifiedContact[] = contacts
@@ -130,6 +138,7 @@ export function ContactSelector({
         jid: contact.jid,
         name: contact.name,
         presence: contact.presence,
+        unavailableNote: getUnavailableNote?.(contact.jid),
       }))
 
     // Sort roster entries by recent activity
@@ -153,12 +162,17 @@ export function ContactSelector({
         jid: s.jid,
         name: s.name || s.jid,
         isExtra: true,
+        unavailableNote: getUnavailableNote?.(s.jid),
       }))
 
     // Sort extra entries alphabetically by name
     extraEntries.sort((a, b) => a.name.localeCompare(b.name))
 
-    return [...rosterEntries, ...extraEntries]
+    const entries = [...rosterEntries, ...extraEntries]
+    return [
+      ...entries.filter(entry => !entry.unavailableNote),
+      ...entries.filter(entry => entry.unavailableNote),
+    ]
   })()
 
   // A highlighted address that leaves the list highlights nothing until the user chooses again.
@@ -183,12 +197,27 @@ export function ContactSelector({
   // Whether the search text is a JID the user can add outright.
   const searchIsValidJid = isValidJid(search)
   const searchJidNormalized = search.trim().toLowerCase()
-  const canAddAsJid = allowTypedJid && searchIsValidJid &&
+  const typedUnavailableNote = allowTypedJid && searchIsValidJid
+    ? getUnavailableNote?.(searchJidNormalized)
+    : undefined
+  const canAddAsJid = allowTypedJid && searchIsValidJid && !typedUnavailableNote &&
     !selectedContacts.includes(searchJidNormalized) &&
     !excludeJids.includes(searchJidNormalized)
 
   // The popover shows suggestions, an add-this-JID row, or a no-match notice.
   const isPopoverOpen = isFocused && (filteredContacts.length > 0 || !!search)
+  const showTypedUnavailable = filteredContacts.length === 0 && !!typedUnavailableNote
+
+  // Focus stays in the input, so a screen reader hears why the highlighted person
+  // cannot be chosen only through a status message.
+  const highlightedContact = filteredContacts[highlightedIndex]
+  const unavailableAnnouncement = !isPopoverOpen
+    ? ''
+    : highlightedContact?.unavailableNote
+      ? `${highlightedContact.name}: ${highlightedContact.unavailableNote}`
+      : showTypedUnavailable
+        ? `${searchJidNormalized}: ${typedUnavailableNote}`
+        : ''
 
   // Pin the default highlight to the entry shown first, so a later list change keeps it.
   useEffect(() => {
@@ -285,7 +314,25 @@ export function ContactSelector({
     }
   }, [isPopoverOpen, filteredContacts.length, search, canAddAsJid, selectedContacts.length])
 
+  // Keep the highlighted row visible: the list scrolls, and keyboard users move through it
+  // from the input, so nothing else brings a row past its visible height into view.
+  useLayoutEffect(() => {
+    const list = popoverRef.current
+    const row = list?.querySelector<HTMLElement>('[data-highlighted]')
+    if (!list || !row) return
+    const listRect = list.getBoundingClientRect()
+    const rowRect = row.getBoundingClientRect()
+    if (rowRect.top < listRect.top) list.scrollTop -= listRect.top - rowRect.top
+    else if (rowRect.bottom > listRect.bottom) list.scrollTop += rowRect.bottom - listRect.bottom
+  }, [isPopoverOpen, highlightedIndex])
+
   const selectContact = (jid: string) => {
+    // The row already says why; stay on it with the list open.
+    if (getUnavailableNote?.(jid)) {
+      setHighlightedJid(jid)
+      inputRef.current?.focus()
+      return
+    }
     if (onPick) {
       onPick(jid)
       setSearch('')
@@ -394,6 +441,12 @@ export function ContactSelector({
         </div>
       )}
 
+      {getUnavailableNote && (
+        <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {unavailableAnnouncement}
+        </div>
+      )}
+
       {/* Contact search with keyboard navigation */}
       <div ref={containerRef}>
         <TextInput
@@ -452,18 +505,24 @@ export function ContactSelector({
                       key={contact.jid}
                       role="button"
                       tabIndex={0}
+                      aria-disabled={contact.unavailableNote ? true : undefined}
+                      data-highlighted={index === highlightedIndex ? '' : undefined}
                       onClick={() => selectContact(contact.jid)}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectContact(contact.jid) } }}
-                      className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${
-                        index === highlightedIndex
-                          ? 'bg-fluux-brand/20 text-fluux-text'
-                          : 'hover:bg-fluux-hover text-fluux-text'
+                      className={`flex items-center gap-2 px-3 py-2 ${
+                        contact.unavailableNote
+                          ? `cursor-not-allowed text-fluux-muted ${index === highlightedIndex ? 'bg-fluux-hover' : ''}`
+                          : `cursor-pointer text-fluux-text ${index === highlightedIndex ? 'bg-fluux-brand/20' : 'hover:bg-fluux-hover'}`
                       }`}
                     >
                       <span className={`size-2 rounded-full flex-shrink-0 ${presenceColor}`} />
                       <span className="text-sm truncate flex-1">{contact.name}</span>
                       <span className="text-xs text-fluux-muted truncate">{contact.jid}</span>
-                      {index === highlightedIndex && (
+                      {contact.unavailableNote ? (
+                        <span className="flex-shrink-0 rounded border border-fluux-muted/40 px-1.5 py-0.5 text-xs text-fluux-text">
+                          {contact.unavailableNote}
+                        </span>
+                      ) : index === highlightedIndex && (
                         <span className="text-xs text-fluux-muted ms-1">↵</span>
                       )}
                     </div>
@@ -491,8 +550,19 @@ export function ContactSelector({
               </div>
             )}
 
+            {/* A typed address that belongs to someone who cannot be chosen */}
+            {showTypedUnavailable && (
+              <div aria-disabled="true" className="flex items-center gap-2 px-3 py-2 cursor-not-allowed text-fluux-muted">
+                <span className="size-2 rounded-full flex-shrink-0 bg-fluux-muted" />
+                <span className="text-sm truncate flex-1">{searchJidNormalized}</span>
+                <span className="flex-shrink-0 rounded border border-fluux-muted/40 px-1.5 py-0.5 text-xs text-fluux-text">
+                  {typedUnavailableNote}
+                </span>
+              </div>
+            )}
+
             {/* No contacts found hint */}
-            {filteredContacts.length === 0 && !canAddAsJid && search && (
+            {filteredContacts.length === 0 && !canAddAsJid && !showTypedUnavailable && search && (
               <div className="px-3 py-2 text-sm text-fluux-muted">
                 {t('contacts.noContactsFound')}
               </div>

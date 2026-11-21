@@ -420,6 +420,7 @@
         "invitingTo": "הזמנת אנשי קשר ל-{{room}}",
         "selectContacts": "בחר אנשי קשר",
         "searchContactsToInvite": "חיפוש אנשי קשר להזמנה...",
+        "alreadyInRoom": "כבר בחדר",
         "inviteReason": "סיבה (אופציונלי)",
         "inviteReasonPlaceholder": "למה אתה מזמין אותם?",
         "inviteError": "שליחת ההזמנות נכשלה",

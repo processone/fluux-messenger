@@ -420,6 +420,7 @@
         "invitingTo": "Поканване на контакти в {{room}}",
         "selectContacts": "Изберете контакти",
         "searchContactsToInvite": "Търсене на контакти за поканване...",
+        "alreadyInRoom": "Вече е в стаята",
         "inviteReason": "Причина (незадължително)",
         "inviteReasonPlaceholder": "Защо ги каните?",
         "inviteError": "Неуспешно изпращане на покани",

@@ -421,6 +421,7 @@
         "invitingTo": "Kontakte zu {{room}} einladen",
         "selectContacts": "Kontakte auswählen",
         "searchContactsToInvite": "Kontakte zum Einladen suchen...",
+        "alreadyInRoom": "Bereits im Raum",
         "inviteReason": "Grund (optional)",
         "inviteReasonPlaceholder": "Warum laden Sie sie ein?",
         "inviteError": "Einladungen konnten nicht gesendet werden",

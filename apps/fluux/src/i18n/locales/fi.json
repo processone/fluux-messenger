@@ -420,6 +420,7 @@
         "invitingTo": "Kutsu yhteystietoja huoneeseen {{room}}",
         "selectContacts": "Valitse yhteystiedot",
         "searchContactsToInvite": "Hae kutsuttavia yhteystietoja...",
+        "alreadyInRoom": "Jo huoneessa",
         "inviteReason": "Syy (valinnainen)",
         "inviteReasonPlaceholder": "Miksi kutsut heitä?",
         "inviteError": "Kutsujen lähettäminen epäonnistui",

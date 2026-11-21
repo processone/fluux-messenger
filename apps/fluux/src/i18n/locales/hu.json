@@ -420,6 +420,7 @@
         "invitingTo": "Névjegyek meghívása ide: {{room}}",
         "selectContacts": "Névjegyek kiválasztása",
         "searchContactsToInvite": "Meghívandó névjegyek keresése...",
+        "alreadyInRoom": "Már a szobában van",
         "inviteReason": "Indok (nem kötelező)",
         "inviteReasonPlaceholder": "Miért hívja meg őket?",
         "inviteError": "Nem sikerült elküldeni a meghívókat",

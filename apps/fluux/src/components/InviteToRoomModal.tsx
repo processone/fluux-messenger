@@ -39,17 +39,21 @@ function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
   const [reason, setReason] = useState('')
 
   // Occupants' real JIDs usually carry a resource, while the roster holds bare JIDs.
-  // Exclude both forms: roster rows match the bare JID, a typed address may be the full one.
-  const occupantJids = [...new Set(
+  const occupantBareJids = new Set(
     Array.from(room.occupants.values())
-      .flatMap(o => (o.jid ? [o.jid, getBareJid(o.jid)] : [])),
-  )]
+      .flatMap(o => (o.jid ? [getBareJid(o.jid).toLowerCase()] : [])),
+  )
+  const isInRoom = (jid: string) => occupantBareJids.has(getBareJid(jid).toLowerCase())
+  const alreadyInRoom = t('rooms.alreadyInRoom')
+
+  // Someone chosen before they joined the room stops being invited.
+  const invitees = selectedContacts.filter(jid => !isInRoom(jid))
 
   const handleInvite = () => {
-    if (selectedContacts.length === 0) return
+    if (invitees.length === 0) return
 
     try {
-      void inviteMultipleToRoom(room.jid, selectedContacts, reason || undefined)
+      void inviteMultipleToRoom(room.jid, invitees, reason || undefined)
       addToast('success', t('rooms.invitationsSent'))
       onClose()
     } catch (err) {
@@ -81,10 +85,10 @@ function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
             {t('rooms.selectContacts')}
           </label>
           <ContactSelector
-            selectedContacts={selectedContacts}
+            selectedContacts={invitees}
             onSelectionChange={setSelectedContacts}
             placeholder={t('rooms.searchContactsToInvite')}
-            excludeJids={occupantJids}
+            getUnavailableNote={jid => (isInRoom(jid) ? alreadyInRoom : undefined)}
           />
         </div>
 
@@ -118,14 +122,14 @@ function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
         <button
           type="button"
           onClick={handleInvite}
-          disabled={selectedContacts.length === 0}
+          disabled={invitees.length === 0}
           className="px-4 py-2 text-sm bg-fluux-brand text-fluux-text-on-accent rounded
                      hover:bg-fluux-brand-hover transition-colors
                      disabled:opacity-50 disabled:cursor-not-allowed
                      flex items-center gap-2"
         >
           <Send className="rtl-mirror size-4" />
-          {t('rooms.sendInvitations', { count: selectedContacts.length })}
+          {t('rooms.sendInvitations', { count: invitees.length })}
         </button>
       </div>
     </ModalShell>

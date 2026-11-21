@@ -68,7 +68,7 @@ export const changelog: ChangelogEntry[] = [
         'OpenPGP: when another of your devices updates your verified contacts while this device is still saving a verification, the server can no longer later hand this device an older list of verified contacts, which could bring back a verification you had removed',
         'The chat header\'s choices to turn encryption off and back on, its lock and tooltip once encryption is off, and the notice that someone reacted to your message when it has no text to quote now appear in your language instead of English',
         'Replying to someone in a one-to-one chat no longer sends the name you gave them in your contacts. The quote that other apps show above your reply now names them by their address',
-        'Invite to Room no longer offers contacts who are already in the room, whichever device they joined from',
+        'Invite to Room now lists contacts who are already in the room at the end, marked as already there, whichever device they joined from. They can no longer be invited again by mistake',
       ],
     }],
   },

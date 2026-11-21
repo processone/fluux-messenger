@@ -420,6 +420,7 @@
         "invitingTo": "Inviter kontakter til {{room}}",
         "selectContacts": "Velg kontakter",
         "searchContactsToInvite": "Søk kontakter å invitere...",
+        "alreadyInRoom": "Allerede i rommet",
         "inviteReason": "Grunn (valgfritt)",
         "inviteReasonPlaceholder": "Hvorfor inviterer du dem?",
         "inviteError": "Kunne ikke sende invitasjoner",

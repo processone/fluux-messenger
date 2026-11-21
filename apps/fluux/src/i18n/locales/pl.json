@@ -421,6 +421,7 @@
         "invitingTo": "Zaproś kontakty do {{room}}",
         "selectContacts": "Wybierz kontakty",
         "searchContactsToInvite": "Szukaj kontaktów do zaproszenia...",
+        "alreadyInRoom": "Już w pokoju",
         "inviteReason": "Powód (opcjonalnie)",
         "inviteReasonPlaceholder": "Dlaczego ich zapraszasz?",
         "inviteError": "Nie udało się wysłać zaproszeń",
