@@ -13,7 +13,7 @@ import {
   Bookmark, BookmarkPlus, CornerUpLeft, CornerUpRight, ExternalLink, Lock, MonitorSmartphone, MoreHorizontal, ShieldCheck, Smile, Trash2,
 } from 'lucide-react'
 import {
-  connectionStore, findLatestCopy, getBareJid, messageRowRef, useContactIdentities,
+  connectionStore, findLatestCopy, findMessageRowIndex, getBareJid, messageRowRef, useContactIdentities,
   type Message, type RoomMessage, type SavedMessage,
 } from '@fluux/sdk'
 import { getMessagesAround, getRoomMessagesAround } from '@fluux/sdk/cache'
@@ -52,12 +52,13 @@ function useSavedContext(entry: SavedMessage): Context {
       try {
         const target = await findLatestCopy(entry, connectionStore.getState().jid ?? '')
         const options = { before: CONTEXT_SIZE, after: CONTEXT_SIZE }
-        const messages = target
+        const messages: (Message | RoomMessage)[] = target
           ? await (isRoom
             ? getRoomMessagesAround(entry.conversationJid, messageRowRef(target), options)
             : getMessagesAround(entry.conversationJid, messageRowRef(target), options))
           : []
-        const index = target ? messages.findIndex((m) => m.id === target.id) : -1
+        // The exact accepted row: another row may share the client id (different archive id or occupant).
+        const index = target ? findMessageRowIndex(messages, messageRowRef(target)) : -1
         if (!cancelled) setContext({ messages, target: index >= 0 ? messages[index] : undefined, loading: false })
       } catch (error) {
         console.warn('Could not read the context of a saved message', error)

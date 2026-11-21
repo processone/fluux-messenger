@@ -86,28 +86,29 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await page.getByTestId('saved-row').click()
   await expect(page.locator('[data-message-id="saved-chat-1"].message-highlight')).toBeInViewport()
 
-  // Both appear in Saved, newest saved first.
-  await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()
-  await expect(page).toHaveURL(/\/saved/)
-  const rows = page.getByTestId('saved-row')
-  await expect(rows).toHaveCount(2)
-  await expect(rows.first()).toContainText('The door code is on the board')
-  await expect(rows.nth(1)).toContainText(body.slice(0, 20))
+  // Two more entries, older than the others, for the read-only checks below: a chat with unread messages
+  // and its own read pointer, and a room that is not in the room list and has no history on this device.
+  const OTHER_PEER = 'unread-peer@fluux.chat'
+  const GHOST_ROOM = 'ghost-room@conference.fluux.chat'
+  await page.evaluate(({ peer, ghost }) => {
+    const scope = window as unknown as { __demoClient: DemoClient; __savedStore: typeof savedStore; __chatStore: typeof chatStore }
+    scope.__chatStore.getState().addConversation({ id: peer, name: 'Unread Peer', type: 'chat', unreadCount: 3, mentionsCount: 0 } as Parameters<ReturnType<typeof chatStore.getState>['addConversation']>[0])
+    scope.__demoClient.emitSDK('chat:message', { message: {
+      type: 'chat', id: 'unread-1', conversationId: peer, from: peer, body: 'Unread while you read Saved',
+      stanzaId: 'archive-unread-1', originId: undefined, timestamp: new Date(), isOutgoing: false,
+    }, isLiveArrival: true })
+    scope.__savedStore.getState().save({
+      id: 'unread-entry', conversationJid: peer, type: 'chat', from: peer, text: 'Unread while you read Saved',
+      savedAt: 2, sentAt: Date.now(), messageId: 'unread-1', stanzaId: 'archive-unread-1',
+    })
+    scope.__savedStore.getState().save({
+      id: 'ghost-entry', conversationJid: ghost, type: 'groupchat', from: `${ghost}/Al`, text: 'Saved from a room I never joined here',
+      savedAt: 1, sentAt: Date.now() - 86_400_000, stanzaId: 'archive-ghost-1', stanzaIdBy: ghost,
+    })
+  }, { peer: OTHER_PEER, ghost: GHOST_ROOM })
 
   // Browsing is read-only: it must not join, ask the server for history, activate a conversation or move a read pointer.
-  const readState = () => page.evaluate(({ room, peer }) => {
-    const scope = window as unknown as { __roomStore: typeof roomStore; __chatStore: typeof chatStore }
-    const rooms = scope.__roomStore.getState()
-    const chats = scope.__chatStore.getState()
-    return {
-      activeRoom: rooms.activeRoomJid, activeChat: chats.activeConversationId,
-      room: [rooms.rooms.get(room)?.joined, rooms.rooms.get(room)?.unreadCount, rooms.rooms.get(room)?.mentionsCount],
-      chat: chats.conversations.get(peer)?.unreadCount,
-    }
-  }, { room: ROOM, peer: PEER })
-  const before = await readState()
-  expect(before.activeRoom).toBeNull()
-  expect(before.activeChat).toBeNull()
+  // The recorder is installed before Saved is opened, so the initial preview is covered too.
   await page.evaluate(() => {
     const client = (window as unknown as { __demoClient: Record<string, Record<string, unknown>> }).__demoClient
     const calls: string[] = []
@@ -123,6 +124,32 @@ test('save a room message and a chat message, open them from Saved, remove them'
       }
     }
   })
+  const readState = () => page.evaluate(({ room, peer, other, ghost }) => {
+    const scope = window as unknown as { __roomStore: typeof roomStore; __chatStore: typeof chatStore }
+    const rooms = scope.__roomStore.getState()
+    const chats = scope.__chatStore.getState()
+    const roomState = rooms.rooms.get(room)
+    return {
+      activeRoom: rooms.activeRoomJid, activeChat: chats.activeConversationId,
+      room: { joined: roomState?.joined, unread: roomState?.unreadCount, mentions: roomState?.mentionsCount, pointer: JSON.stringify(roomState?.readPointer ?? null) },
+      chat: { unread: chats.conversations.get(peer)?.unreadCount, pointer: JSON.stringify(chats.conversations.get(peer)?.readPointer ?? null) },
+      otherChat: { unread: chats.conversations.get(other)?.unreadCount, pointer: JSON.stringify(chats.conversations.get(other)?.readPointer ?? null) },
+      ghostRoom: rooms.rooms.has(ghost),
+    }
+  }, { room: ROOM, peer: PEER, other: OTHER_PEER, ghost: GHOST_ROOM })
+
+  // Entries appear in Saved, newest saved first.
+  await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()
+  await expect(page).toHaveURL(/\/saved/)
+  const rows = page.getByTestId('saved-row')
+  await expect(rows).toHaveCount(4)
+  await expect(rows.first()).toContainText('The door code is on the board')
+  await expect(rows.nth(1)).toContainText(body.slice(0, 20))
+  const before = await readState()
+  expect(before.activeRoom).toBeNull()
+  expect(before.activeChat).toBeNull()
+  expect(before.otherChat.unread).toBeGreaterThan(0)
+  expect(before.ghostRoom).toBe(false)
 
   // The central pane opens the newest entry inside its conversation, read-only, with the message highlighted.
   const preview = page.getByTestId('saved-preview')
@@ -136,9 +163,23 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await expect(preview.locator(`[data-message-id="${roomId}"].message-highlight-persistent`)).toBeInViewport()
   await expect(rows.nth(1)).toHaveAttribute('aria-current', 'true')
 
-  // Browsing two cache-hit entries left everything as it was and called nothing on the rooms or messages APIs.
+  // An unread chat, and a saved room message with no history here and no room in the list: the pane shows the saved copy.
+  await rows.nth(2).click()
+  await expect(preview).toBeVisible()
+  await rows.nth(3).click()
+  await expect(page.getByTestId('saved-copy-only')).toContainText('Saved from a room I never joined here')
+  await expect(page).toHaveURL(/\/saved/)
+
+  // Browsing cache-hit and saved-copy entries left joins, counters and read pointers as they were, and called nothing on the rooms or messages APIs.
   expect(await readState()).toEqual(before)
   expect(await page.evaluate(() => (window as unknown as { __sdkCalls: string[] }).__sdkCalls)).toEqual([])
+  await page.evaluate(() => {
+    const scope = window as unknown as { __savedStore: typeof savedStore }
+    scope.__savedStore.getState().remove('unread-entry')
+    scope.__savedStore.getState().remove('ghost-entry')
+  })
+  await expect(rows).toHaveCount(2)
+  await rows.nth(1).click()
 
   // A click on the highlighted message opens the room conversation with the original highlighted.
   await preview.locator(`[data-message-id="${roomId}"].message-highlight-persistent`).click()

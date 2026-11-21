@@ -41,8 +41,8 @@ vi.mock('@/hooks', () => ({
 vi.mock('./SearchContextView', () => ({
   chatSearchContextRowId: (m: { id: string }) => m.id,
   useScrollToContextTarget: vi.fn(),
-  SearchContextMessageList: (props: { messages: { id: string; body: string }[]; highlightedMessage: { id: string }; onHighlightedClick: () => void; isHistoryComplete?: boolean }) => (
-    <div data-testid="context-list" data-highlighted={props.highlightedMessage.id} data-history-complete={String(!!props.isHistoryComplete)}>
+  SearchContextMessageList: (props: { messages: { id: string; body: string }[]; highlightedMessage: { id: string; stanzaId?: string }; onHighlightedClick: () => void; isHistoryComplete?: boolean }) => (
+    <div data-testid="context-list" data-highlighted={props.highlightedMessage.id} data-highlighted-stanza={props.highlightedMessage.stanzaId} data-history-complete={String(!!props.isHistoryComplete)}>
       {props.messages.map((m) => <p key={m.id}>{m.body}</p>)}
       <button type="button" onClick={props.onHighlightedClick}>highlighted</button>
     </div>
@@ -113,6 +113,16 @@ describe('SavedPane', () => {
     around.mockResolvedValue([copy])
     render(<SavedPane onOpen={open} />)
     expect(await screen.findByTestId('context-list')).toHaveAttribute('data-highlighted', 'm-a')
+  })
+
+  it.each(['chat', 'groupchat'] as const)('highlights the accepted %s row, not an earlier row that shares its client id', async (type) => {
+    savedStore.setState({ entries: { a: entry('a', { type, stanzaId: 'second', messageId: 'shared' }) } })
+    const first = { ...cached('shared', 'earlier row, other archive id', 400), stanzaId: 'first' }
+    const second = { ...cached('shared', 'accepted row', 500), stanzaId: 'second' }
+    latestCopy.mockResolvedValue(second)
+    around.mockResolvedValue([first, second])
+    render(<SavedPane onOpen={open} />)
+    expect(await screen.findByTestId('context-list')).toHaveAttribute('data-highlighted-stanza', 'second')
   })
 
   it('shows the saved copy alone, joining and reading nothing, when the history is not on this device', async () => {
