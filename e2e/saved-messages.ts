@@ -130,13 +130,20 @@ test('save a room message and a chat message, open them from Saved, remove them'
     const chats = scope.__chatStore.getState()
     const roomState = rooms.rooms.get(room)
     return {
-      activeRoom: rooms.activeRoomJid, activeChat: chats.activeConversationId,
+      active: { room: rooms.activeRoomJid, chat: chats.activeConversationId },
+      read: {
       room: { joined: roomState?.joined, unread: roomState?.unreadCount, mentions: roomState?.mentionsCount, pointer: JSON.stringify(roomState?.readPointer ?? null) },
       chat: { unread: chats.conversations.get(peer)?.unreadCount, pointer: JSON.stringify(chats.conversations.get(peer)?.readPointer ?? null) },
       otherChat: { unread: chats.conversations.get(other)?.unreadCount, pointer: JSON.stringify(chats.conversations.get(other)?.readPointer ?? null) },
       ghostRoom: rooms.rooms.has(ghost),
+      },
     }
   }, { room: ROOM, peer: PEER, other: OTHER_PEER, ghost: GHOST_ROOM })
+
+  // The read-state baseline is taken before Saved is opened, so nothing done on entry is absorbed into it.
+  const before = await readState()
+  expect(before.read.otherChat.unread).toBeGreaterThan(0)
+  expect(before.read.ghostRoom).toBe(false)
 
   // Entries appear in Saved, newest saved first.
   await page.getByRole('link', { name: 'Saved', exact: true }).or(page.getByRole('button', { name: 'Saved', exact: true })).first().click()
@@ -145,11 +152,8 @@ test('save a room message and a chat message, open them from Saved, remove them'
   await expect(rows).toHaveCount(4)
   await expect(rows.first()).toContainText('The door code is on the board')
   await expect(rows.nth(1)).toContainText(body.slice(0, 20))
-  const before = await readState()
-  expect(before.activeRoom).toBeNull()
-  expect(before.activeChat).toBeNull()
-  expect(before.otherChat.unread).toBeGreaterThan(0)
-  expect(before.ghostRoom).toBe(false)
+  // Opening the tab closed the open conversation; browsing opens none.
+  expect((await readState()).active).toEqual({ room: null, chat: null })
 
   // The central pane opens the newest entry inside its conversation, read-only, with the message highlighted.
   const preview = page.getByTestId('saved-preview')
@@ -165,13 +169,15 @@ test('save a room message and a chat message, open them from Saved, remove them'
 
   // An unread chat, and a saved room message with no history here and no room in the list: the pane shows the saved copy.
   await rows.nth(2).click()
-  await expect(preview).toBeVisible()
+  await expect(preview.locator('[data-message-id="unread-1"].message-highlight-persistent')).toBeInViewport()
   await rows.nth(3).click()
   await expect(page.getByTestId('saved-copy-only')).toContainText('Saved from a room I never joined here')
   await expect(page).toHaveURL(/\/saved/)
 
   // Browsing cache-hit and saved-copy entries left joins, counters and read pointers as they were, and called nothing on the rooms or messages APIs.
-  expect(await readState()).toEqual(before)
+  const after = await readState()
+  expect(after.read).toEqual(before.read)
+  expect(after.active).toEqual({ room: null, chat: null })
   expect(await page.evaluate(() => (window as unknown as { __sdkCalls: string[] }).__sdkCalls)).toEqual([])
   await page.evaluate(() => {
     const scope = window as unknown as { __savedStore: typeof savedStore }
