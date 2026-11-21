@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { ContactSelector } from './ContactSelector'
+import { ModalShell } from './ModalShell'
 import type { Contact, PresenceStatus } from '@fluux/sdk'
 
 // Mock contacts data
@@ -644,6 +645,39 @@ describe('ContactSelector', () => {
       fireEvent.keyDown(input, { key: 'Enter' })
 
       expect(mockOnSelectionChange).toHaveBeenCalledWith(['diana@example.com'])
+    })
+
+    describe('inside a modal', () => {
+      function openInModal() {
+        render(
+          <ModalShell title="Invite" onClose={vi.fn()}>
+            <ContactSelector selectedContacts={[]} onSelectionChange={mockOnSelectionChange} />
+            <button type="button">Cancel</button>
+          </ModalShell>
+        )
+        const input = screen.getByPlaceholderText('Search contacts...')
+        expect(input).toHaveFocus()
+        return input
+      }
+
+      it('Shift+Tab moves the highlight back, keeps focus, and Enter picks that contact', () => {
+        const input = openInModal()
+
+        fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })
+        expect(input).toHaveFocus()
+        fireEvent.keyDown(input, { key: 'Enter' })
+
+        expect(mockOnSelectionChange).toHaveBeenCalledWith(['diana@example.com'])
+      })
+
+      it('lets Shift+Tab leave the picker when no contact matches', () => {
+        const input = openInModal()
+        fireEvent.change(input, { target: { value: 'nobody-matches-this' } })
+
+        fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })
+
+        expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+      })
     })
 
     it('should wrap around when navigating past end', () => {

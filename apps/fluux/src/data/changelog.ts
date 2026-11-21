@@ -70,6 +70,7 @@ export const changelog: ChangelogEntry[] = [
         'The chat header\'s choices to turn encryption off and back on, its lock and tooltip once encryption is off, and the notice that someone reacted to your message when it has no text to quote now appear in your language instead of English',
         'Replying to someone in a one-to-one chat no longer sends the name you gave them in your contacts. The quote that other apps show above your reply now names them by their address',
         'Invite to Room now lists contacts who are already in the room at the end, marked as already there, whichever device they joined from. They can no longer be invited again by mistake',
+        'Shift+Tab in a contact list, such as Invite to Room, New Message or Forward, now moves to the previous contact and stays in the list, so Enter picks that contact instead of pressing Cancel',
       ],
     }],
   },

@@ -363,6 +363,24 @@ export function ContactSelector({
     onSelectionChange(selectedContacts.filter(j => j !== jid))
   }
 
+  // Move the highlight, wrapping at both ends; with nothing highlighted, start at an end.
+  const moveHighlight = (step: 1 | -1) => {
+    const count = filteredContacts.length
+    const next = highlightedIndex < 0
+      ? (step > 0 ? 0 : count - 1)
+      : (highlightedIndex + step + count) % count
+    setHighlightedJid(filteredContacts[next].jid)
+  }
+
+  // A modal's focus trap listens on its panel, so it sees Tab before React's bubble handlers
+  // and would move focus out while the highlight moves too. The capture phase runs first and
+  // marks the key as used. With no contacts to move through, Tab stays ordinary navigation.
+  const handleKeyDownCapture = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Tab' || filteredContacts.length === 0) return
+    e.preventDefault()
+    moveHighlight(e.shiftKey ? -1 : 1)
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     // Backspace removes last selected contact when input is empty
     if (e.key === 'Backspace' && !search && selectedContacts.length > 0) {
@@ -395,28 +413,14 @@ export function ContactSelector({
       return
     }
 
-    // Move the highlight, wrapping at both ends; with nothing highlighted, start at an end.
-    const move = (step: 1 | -1) => {
-      const count = filteredContacts.length
-      const next = highlightedIndex < 0
-        ? (step > 0 ? 0 : count - 1)
-        : (highlightedIndex + step + count) % count
-      setHighlightedJid(filteredContacts[next].jid)
-    }
-
     switch (e.key) {
-      case 'Tab':
-        e.preventDefault()
-        // Tab: next, Shift+Tab: previous
-        move(e.shiftKey ? -1 : 1)
-        break
       case 'ArrowDown':
         e.preventDefault()
-        move(1)
+        moveHighlight(1)
         break
       case 'ArrowUp':
         e.preventDefault()
-        move(-1)
+        moveHighlight(-1)
         break
     }
   }
@@ -467,6 +471,7 @@ export function ContactSelector({
           type="text"
           value={search}
           onChange={(e) => changeSearch(e.target.value)}
+          onKeyDownCapture={handleKeyDownCapture}
           onKeyDown={handleKeyDown}
           onFocus={() => { cancelPendingBlur(); setIsFocused(true) }}
           // Closing is deferred so a click can land on the popover before it goes
