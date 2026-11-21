@@ -373,10 +373,27 @@ describe('ContactSelector', () => {
 
     // Real key events reach the picker before React has run the effects of the previous
     // keystroke, so these events are dispatched outside act(), which would flush them.
+    const outsideAct = async (dispatch: () => void) => {
+      const scope = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+      const actEnvironment = scope.IS_REACT_ACT_ENVIRONMENT
+      scope.IS_REACT_ACT_ENVIRONMENT = false
+      try {
+        dispatch()
+        // Let the scheduler finish what those events queued, still outside act().
+        for (let turn = 0; turn < 3; turn++) await new Promise(resolve => setImmediate(resolve))
+      } finally {
+        scope.IS_REACT_ACT_ENVIRONMENT = actEnvironment
+      }
+    }
+    const typeValue = (input: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+
     it.each([
       { situation: 'with the highlight untouched', moves: 0, query: 'bob', picked: 'bob@example.com' },
       { situation: 'after moving the highlight to an entry that still matches', moves: 1, query: 'li', picked: 'charlie@example.com' },
-    ])('picks the first narrowed entry when Enter follows the keystroke at once, $situation', ({ moves, query, picked }) => {
+    ])('picks the first narrowed entry when Enter follows the keystroke at once, $situation', async ({ moves, query, picked }) => {
       render(
         <ContactSelector
           selectedContacts={[]}
@@ -387,18 +404,36 @@ describe('ContactSelector', () => {
       fireEvent.focus(input)
       for (let move = 0; move < moves; move++) fireEvent.keyDown(input, { key: 'ArrowDown' })
 
-      const scope = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-      const actEnvironment = scope.IS_REACT_ACT_ENVIRONMENT
-      scope.IS_REACT_ACT_ENVIRONMENT = false
-      try {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, query)
-        input.dispatchEvent(new Event('input', { bubbles: true }))
+      await outsideAct(() => {
+        typeValue(input, query)
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
-      } finally {
-        scope.IS_REACT_ACT_ENVIRONMENT = actEnvironment
-      }
+      })
 
       expect(mockOnSelectionChange).toHaveBeenCalledExactlyOnceWith([picked])
+    })
+
+    it('keeps the first entry highlighted by address when two keys arrive before it is pinned', async () => {
+      const room = { jid: 'team@conference.example.com', name: 'Team Chat' }
+      const selector = (extraSuggestions: Array<{ jid: string; name: string }>) => (
+        <ContactSelector
+          selectedContacts={[]}
+          onSelectionChange={mockOnSelectionChange}
+          extraSuggestions={extraSuggestions}
+        />
+      )
+      const { rerender } = render(selector([room]))
+      const input = screen.getByPlaceholderText('Search contacts...') as HTMLInputElement
+      fireEvent.focus(input)
+
+      await outsideAct(() => {
+        typeValue(input, 'te')
+        typeValue(input, 'tea')
+      })
+      // A new chat sorts ahead of the entry the person is looking at.
+      rerender(selector([{ jid: 'a-team@example.org', name: 'A team' }, room]))
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      expect(mockOnSelectionChange).toHaveBeenCalledExactlyOnceWith([room.jid])
     })
 
     it.each([

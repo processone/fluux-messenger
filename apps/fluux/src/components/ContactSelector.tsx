@@ -194,9 +194,8 @@ export function ContactSelector({
   const isPopoverOpen = isFocused && (filteredContacts.length > 0 || !!search)
 
   // Pin the default highlight to the entry shown first, so a later list change keeps it.
-  useEffect(() => {
-    if (isPopoverOpen && highlightedJid === null && firstJid !== null) setHighlightedJid(firstJid)
-  }, [isPopoverOpen, highlightedJid, firstJid])
+  // Done while rendering: an effect's update could be overtaken by the next keystroke.
+  if (isPopoverOpen && highlightedJid === null && firstJid !== null) setHighlightedJid(firstJid)
 
   // Place the popover against the input, in viewport coordinates.
   //
