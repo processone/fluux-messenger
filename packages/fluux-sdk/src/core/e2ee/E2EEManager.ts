@@ -423,16 +423,13 @@ export class E2EEManager {
 
   /**
    * True if any registered plugin reports an *established* trust state for
-   * this peer — `verified`, `introduced`, or `tofu`. These all mean "we hold
-   * a pinned key for this peer", so plaintext is an implicit per-peer downgrade
-   * and must be blocked even under the opportunistic global policy. `untrusted`
-   * and `unknown` are excluded: the former is a deliberate not-trusted marker
-   * (forward-looking — the OpenPGP plugin never reports `untrusted` for peer
-   * trust: a contact whose keys all wait for a decision or were all refused
-   * reports `tofu`, and encrypt() throws peer-keys-awaiting-decision,
-   * peer-keys-trust-pending or peer-keys-distrusted), the latter means we
-   * have never seen a key
-   * (legitimate first contact).
+   * this peer: `verified`, `introduced`, `tofu` or `untrusted`. All mean "we
+   * hold a key for this peer", so plaintext is an implicit per-peer downgrade
+   * and must be blocked even under the opportunistic global policy. For OMEMO
+   * a contact with a usable device reads `tofu` from first contact, and one
+   * with a refused or waiting device reads `untrusted`; neither may fall back
+   * to plaintext. Only `unknown` is excluded: we have never seen a usable key
+   * (legitimate first contact, or a device whose bundle cannot be fetched).
    *
    * Plugin trust-check errors are treated as not-established (fail-open) so a
    * transient plugin fault never permanently blocks the send path.
@@ -441,7 +438,7 @@ export class E2EEManager {
     for (const plugin of this.plugins.values()) {
       try {
         const trust = await plugin.getPeerTrust(peer)
-        if (trust === 'verified' || trust === 'introduced' || trust === 'tofu') {
+        if (trust === 'verified' || trust === 'introduced' || trust === 'tofu' || trust === 'untrusted') {
           return true
         }
       } catch {

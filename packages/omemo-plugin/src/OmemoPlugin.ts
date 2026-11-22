@@ -216,6 +216,10 @@ export class OmemoPlugin implements E2EEPlugin {
       identity.usedForEncryption = false
       identity.notUsedReason = 'no-key'
     }
+    // First contact is blind-trusted: a usable device nobody has decided on reads tofu. Done here so
+    // the identity list, getDeviceTrust and getPeerTrust read the same value.
+    if (identity.trust === 'unknown' && fpHex && identity.usedForEncryption) identity.trust = 'tofu'
+    trust = identity.trust
     if (fpHex) {
       identity.allowedDecisions = (['verified', 'tofu', 'untrusted'] as const).filter((d) => {
         if (d === 'untrusted') return trust !== 'untrusted'
@@ -261,12 +265,6 @@ export class OmemoPlugin implements E2EEPlugin {
     const lookup = bundleSource(this.ctx.xmpp, peer)
     for (const [index, id] of ids.entries()) {
       const identity = await this.resolvePeerIdentity(peer, id, lookup)
-      // First contact is blind-trusted: a usable device nobody has decided on reads tofu here.
-      // getDeviceTrust, getPeerTrust and the send checks keep their own reading.
-      if (identity.trust === 'unknown' && identity.fingerprint && identity.usedForEncryption) {
-        identity.trust = 'tofu'
-        identity.allowedDecisions = identity.allowedDecisions.filter((d) => d !== 'tofu')
-      }
       // encrypt and repairSession address only the first DEVICE_CAP devices.
       if (index >= DEVICE_CAP && identity.usedForEncryption) {
         identity.usedForEncryption = false

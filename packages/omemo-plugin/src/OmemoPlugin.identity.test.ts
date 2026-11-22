@@ -86,7 +86,7 @@ describe('OmemoPlugin identity/probe', () => {
     expect(await p.getDeviceTrust('stranger@x', '12345')).toBe('unknown')
   })
 
-  it('getPeerTrust of a peer with no trust records returns unknown', async () => {
+  it('getPeerTrust of a peer with no trust records but a usable device reads tofu, as the identity list does', async () => {
     const a = createMockPluginContext('a@x')
     const b = createMockPluginContext('b@x', a.net)
     const pb2 = new OmemoPlugin()
@@ -95,7 +95,7 @@ describe('OmemoPlugin identity/probe', () => {
     await pa.init(a.ctx)
     await pa.ensureIdentity()
     // b has never processed a bundle from a, so no trust record exists yet.
-    expect(await pb2.getPeerTrust('a@x')).toBe('unknown')
+    expect(await pb2.getPeerTrust('a@x')).toBe('tofu')
   })
 
   it('two plugin instances over a shared network can discover each other after ensureIdentity', async () => {

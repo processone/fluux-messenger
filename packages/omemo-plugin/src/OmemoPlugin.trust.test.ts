@@ -322,9 +322,9 @@ describe('OmemoPlugin identities: first contact, reachability and decisions', ()
       usedForEncryption: true,
       allowedDecisions: ['verified', 'untrusted'],
     })
-    // The aggregate and per-device readings the send checks rely on are unchanged.
-    expect(await pa.getPeerTrust('bob@x')).toBe('unknown')
-    expect(await pa.getDeviceTrust('bob@x', String(bobDeviceId))).toBe('unknown')
+    // The aggregate and per-device readings agree with the list.
+    expect(await pa.getPeerTrust('bob@x')).toBe('tofu')
+    expect(await pa.getDeviceTrust('bob@x', String(bobDeviceId))).toBe('tofu')
   })
 
   it('devices past the 50-device cap are listed not used with the over-limit reason', async () => {

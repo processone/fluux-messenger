@@ -295,3 +295,22 @@ describe('E2EEManager identities, decisions and events', () => {
     expect(seen).toHaveLength(3)
   })
 })
+
+// Intent: FLM-426 — the send rule for OMEMO contacts. A contact the plugin reads as
+// tofu (first contact with a usable device) or untrusted (refused or waiting device)
+// is never downgraded to plaintext; a contact with no usable key still may be.
+describe('E2EEManager.assertPlaintextPermitted for aggregate trust readings', () => {
+  it.each([
+    ['tofu', true],
+    ['untrusted', true],
+    ['unknown', false],
+  ] as const)('a peer reading %s blocks plaintext: %s', async (trust, blocked) => {
+    const dummy = new DummyPlaintextPlugin()
+    vi.spyOn(dummy, 'getPeerTrust').mockResolvedValue(trust as TrustState)
+    const { manager } = await setup(dummy)
+    expect(await manager.hasEstablishedTrust(PEER)).toBe(blocked)
+    const attempt = manager.assertPlaintextPermitted(target)
+    if (blocked) await expect(attempt).rejects.toThrow()
+    else await expect(attempt).resolves.toBeUndefined()
+  })
+})
