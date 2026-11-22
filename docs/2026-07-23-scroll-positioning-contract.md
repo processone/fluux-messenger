@@ -81,6 +81,17 @@ positioning, saved-position restoration deliberately has no fixed geometry-drift
 takeover threshold: legitimate deep-history measurement corrections can exceed 300px while rows
 settle, so user-input cancellation remains its takeover signal.
 
+The seven placement paths (saved position, unread marker, explicit target, resident top, live edge,
+anchor preservation, directional history) run through one `PositionRunner` in `positionRunner.ts`.
+The runner owns what the paths share: the run's state, the lease that says whether it still owns
+the position, adoption and scheduling of the frame loop, drift convergence, held-write waiting,
+and the order a run is torn down in. Each path is a placement strategy in `placementStrategies.ts`
+that states only what makes it that path: how a frame is judged, when the run is done, and what it
+tells its executor. `PositioningController` keeps the public entry points and input handling and
+delegates the lifecycle. Budgets, tolerances and WebKit safeguards live beside their strategy
+(`HELD_WRITE_FRAMES` in the runner, `HELD_INPUT_TIMEOUT_MS` in the controller), and the
+frame-by-frame trace in `positioningController.trace.test.ts` pins every path's observable order.
+
 Viewport observation is owned by one imperative, conversation-scoped `ViewportSession`. It
 holds the latest geometry and bottom anchor, measured-live-edge evidence, input and movement
 evidence, recorded application writes, and independent top/bottom travel latches. It accepts only
