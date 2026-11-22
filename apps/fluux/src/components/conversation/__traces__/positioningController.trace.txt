@@ -1,317 +1,317 @@
 ## live edge: one write, no reassert
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | reconciling live-edge ambient-live-edge/append g2
-live.complete settled | position-applied live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.complete settled | position-applied live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: reasserts until eight frames hold still
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/append g2
-live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 1 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 2 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 3 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 4 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 5 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 6 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 7 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 8 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 9 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 10 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.finish | position-applied live-edge ambient-live-edge/append g2
-live.complete settled | position-applied live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 1 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 2 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 3 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 4 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 5 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 6 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 7 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 8 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 9 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 10 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.finish | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.complete settled | position-applied live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: never settles, ends best effort at the frame budget
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/append g2
-live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 1 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 2 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 3 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 4 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 5 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 6 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 7 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 8 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 9 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 10 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 11 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 12 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 13 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 14 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 15 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 16 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 17 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 18 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 19 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 20 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 21 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 22 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 23 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 24 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 25 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 26 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 27 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 28 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 29 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 30 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 31 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 32 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 33 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 34 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 35 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 36 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 37 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 38 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 39 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 40 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 41 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 42 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 43 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 44 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 45 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 46 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 47 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 48 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 49 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 50 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 51 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 52 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 53 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 54 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 55 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 56 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 57 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 58 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 59 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 60 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 61 | position-applied live-edge ambient-live-edge/append g2
-live.loop.finish | position-applied live-edge ambient-live-edge/append g2
-live.complete best-effort | position-applied live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 1 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 2 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 3 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 4 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 5 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 6 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 7 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 8 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 9 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 10 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 11 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 12 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 13 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 14 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 15 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 16 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 17 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 18 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 19 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 20 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 21 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 22 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 23 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 24 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 25 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 26 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 27 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 28 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 29 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 30 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 31 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 32 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 33 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 34 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 35 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 36 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 37 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 38 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 39 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 40 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 41 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 42 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 43 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 44 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 45 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 46 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 47 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 48 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 49 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 50 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 51 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 52 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 53 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 54 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 55 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 56 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 57 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 58 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 59 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 60 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 61 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.finish | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.complete best-effort | position-applied live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: held iOS write gives frames back, then lands
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 live.reachability global-live-edge | reconciling live-edge user-navigation/live-edge g2
 live.positionFrame current=true -> {"kind":"held"} | reconciling live-edge user-navigation/live-edge g2
 live.beginLoop budget=60 current=true | position-applied live-edge user-navigation/live-edge g2
@@ -365,9 +365,9 @@ pendingNavigation=false | settled live-edge user-navigation/live-edge g2
 end | settled live-edge user-navigation/live-edge g2
 
 ## live edge: held write that never lands still ends
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 live.reachability global-live-edge | reconciling live-edge user-navigation/live-edge g2
 live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge user-navigation/live-edge g2
 live.beginLoop budget=60 current=true | position-applied live-edge user-navigation/live-edge g2
@@ -378,207 +378,207 @@ live.complete best-effort | position-applied live-edge user-navigation/live-edge
 end | settled live-edge user-navigation/live-edge g2
 
 ## live edge: first frame unavailable
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"unavailable"} | reconciling live-edge ambient-live-edge/append g2
-live.complete best-effort | reconciling live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"unavailable"} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.complete best-effort | reconciling live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: later frame unavailable
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/append g2
-live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 1 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"unavailable"} | position-applied live-edge ambient-live-edge/append g2
-live.loop.finish | position-applied live-edge ambient-live-edge/append g2
-live.complete best-effort | position-applied live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 1 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"unavailable"} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.finish | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.complete best-effort | position-applied live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: loop cannot start
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/append g2
-live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/append g2
-live.complete best-effort | position-applied live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.complete best-effort | position-applied live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: frame cannot be scheduled
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/append g2
-live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-live.loop.finish | position-applied live-edge ambient-live-edge/append g2
-live.complete best-effort | position-applied live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.finish | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.complete best-effort | position-applied live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: adapter throws on a frame
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/append g2
-live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 1 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> throw | position-applied live-edge ambient-live-edge/append g2
-live.loop.finish | position-applied live-edge ambient-live-edge/append g2
-live.complete best-effort | position-applied live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 1 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> throw | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.finish | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.complete best-effort | position-applied live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: empty window is not accepted
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability empty-window | settled live-edge ambient-live-edge/append g1
-live.reachability empty-window | pending:empty-window live-edge ambient-live-edge/append g2
-request=accepted | pending:empty-window live-edge ambient-live-edge/append g2
-end | pending:empty-window live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability empty-window | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability empty-window | pending:empty-window live-edge ambient-live-edge/outgoing-message g2
+request=accepted | pending:empty-window live-edge ambient-live-edge/outgoing-message g2
+end | pending:empty-window live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: window must recenter first, then settles on the resident tail
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | recentering-live-edge live-edge ambient-live-edge/append g2
-live.recenter -> requested | recentering-live-edge live-edge ambient-live-edge/append g2
-live.reachability global-live-edge | recentering-live-edge live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | reconciling live-edge ambient-live-edge/append g2
-live.complete settled | position-applied live-edge ambient-live-edge/append g2
-refresh same version -> true | settled live-edge ambient-live-edge/append g2
-refresh new version -> true | settled live-edge ambient-live-edge/append g2
-request=accepted | settled live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | recentering-live-edge live-edge ambient-live-edge/outgoing-message g2
+live.recenter -> requested | recentering-live-edge live-edge ambient-live-edge/outgoing-message g2
+live.reachability global-live-edge | recentering-live-edge live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.complete settled | position-applied live-edge ambient-live-edge/outgoing-message g2
+refresh same version -> true | settled live-edge ambient-live-edge/outgoing-message g2
+refresh new version -> true | settled live-edge ambient-live-edge/outgoing-message g2
+request=accepted | settled live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: recenter unavailable falls back to the best resident edge
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | recentering-live-edge live-edge ambient-live-edge/append g2
-live.recenter -> unavailable | recentering-live-edge live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | recentering-live-edge live-edge ambient-live-edge/append g2
-live.complete settled | position-applied live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | recentering-live-edge live-edge ambient-live-edge/outgoing-message g2
+live.recenter -> unavailable | recentering-live-edge live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | recentering-live-edge live-edge ambient-live-edge/outgoing-message g2
+live.complete settled | position-applied live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: no recenter function falls back to the best resident edge
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | recentering-live-edge live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | recentering-live-edge live-edge ambient-live-edge/append g2
-live.complete settled | position-applied live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | recentering-live-edge live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | recentering-live-edge live-edge ambient-live-edge/outgoing-message g2
+live.complete settled | position-applied live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: unavailable window still tries the resident edge
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | unavailable:warn-and-stop live-edge ambient-live-edge/append g2
-live.complete settled | position-applied live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | unavailable:warn-and-stop live-edge ambient-live-edge/outgoing-message g2
+live.complete settled | position-applied live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: content change restarts the loop under the same generation
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/append g2
-live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-live.loop.finish | position-applied live-edge ambient-live-edge/append g2
-live.complete restarted | position-applied live-edge ambient-live-edge/append g2
-live.reachability global-live-edge | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/append g2
-live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-reconcile -> true | position-applied live-edge ambient-live-edge/append g2
-frame 1 | position-applied live-edge ambient-live-edge/append g2
-frame 2 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 3 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 4 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 5 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 6 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 7 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 8 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame 9 | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=false | position-applied live-edge ambient-live-edge/append g2
-live.loop.finish | position-applied live-edge ambient-live-edge/append g2
-live.complete settled | position-applied live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.finish | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.complete restarted | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.reachability global-live-edge | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+reconcile -> true | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 1 | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 2 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 3 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 4 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 5 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 6 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 7 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 8 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame 9 | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":false,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=false | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.finish | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.complete settled | position-applied live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: reconcile after settling re-pins
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | reconciling live-edge ambient-live-edge/append g2
-live.complete settled | position-applied live-edge ambient-live-edge/append g2
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | reconciling live-edge ambient-live-edge/append g2
-live.complete settled | position-applied live-edge ambient-live-edge/append g2
-reconcile -> true | settled live-edge ambient-live-edge/append g2
-end | settled live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.complete settled | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.complete settled | position-applied live-edge ambient-live-edge/outgoing-message g2
+reconcile -> true | settled live-edge ambient-live-edge/outgoing-message g2
+end | settled live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: the reader taking over ends the loop
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/append g2
-live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-live.loop.finish | paused-user-input live-edge ambient-live-edge/append g2
-live.complete user-takeover | paused-user-input live-edge ambient-live-edge/append g2
-onUserTakeover room@example.test | paused-user-input live-edge ambient-live-edge/append g2
-observeUserInput -> 54 | paused-user-input live-edge ambient-live-edge/append g2
-frame 1 | paused-user-input live-edge ambient-live-edge/append g2
-end | paused-user-input live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.finish | paused-user-input live-edge ambient-live-edge/outgoing-message g2
+live.complete user-takeover | paused-user-input live-edge ambient-live-edge/outgoing-message g2
+onUserTakeover room@example.test | paused-user-input live-edge ambient-live-edge/outgoing-message g2
+observeUserInput -> 54 | paused-user-input live-edge ambient-live-edge/outgoing-message g2
+frame 1 | paused-user-input live-edge ambient-live-edge/outgoing-message g2
+end | paused-user-input live-edge ambient-live-edge/outgoing-message g2
 
 ## live edge: a newer live request supersedes a running one
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/append g2
-live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-live.reachability global-live-edge | position-applied live-edge ambient-live-edge/append g2
-onUserNavigation room@example.test | position-applied live-edge ambient-live-edge/append g2
-live.loop.finish | position-applied live-edge ambient-live-edge/append g2
-live.complete superseded | position-applied live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.reachability global-live-edge | position-applied live-edge ambient-live-edge/outgoing-message g2
+onUserNavigation room@example.test | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.finish | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.complete superseded | position-applied live-edge ambient-live-edge/outgoing-message g2
 live.reachability global-live-edge | reconciling live-edge user-navigation/live-edge g3
 live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | reconciling live-edge user-navigation/live-edge g3
 live.complete settled | position-applied live-edge user-navigation/live-edge g3
@@ -586,8 +586,8 @@ frame 1 | settled live-edge user-navigation/live-edge g3
 end | settled live-edge user-navigation/live-edge g3
 
 ## live edge: entry selects live edge
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
 live.reachability global-live-edge | reconciling live-edge entry/synced-live-edge g2
 live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge entry/synced-live-edge g2
 live.beginLoop budget=60 current=true | position-applied live-edge entry/synced-live-edge g2
@@ -628,16 +628,16 @@ live.complete settled | position-applied live-edge entry/synced-live-edge g2
 end | settled live-edge entry/synced-live-edge g2
 
 ## live edge: deactivating the conversation drops the run
-entered conversation | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | settled live-edge ambient-live-edge/append g1
-live.reachability global-live-edge | reconciling live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/append g2
-live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
-frame | position-applied live-edge ambient-live-edge/append g2
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/append g2
-live.loop.record wrote=true | position-applied live-edge ambient-live-edge/append g2
-live.loop.schedule | position-applied live-edge ambient-live-edge/append g2
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | settled live-edge ambient-live-edge/outgoing-message g1
+live.reachability global-live-edge | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | reconciling live-edge ambient-live-edge/outgoing-message g2
+live.beginLoop budget=60 current=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
+frame | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":true} | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.record wrote=true | position-applied live-edge ambient-live-edge/outgoing-message g2
+live.loop.schedule | position-applied live-edge ambient-live-edge/outgoing-message g2
 live.loop.finish | idle
 live.complete superseded | idle
 deactivated | idle
@@ -645,8 +645,8 @@ frame 1 | idle
 end | idle
 
 ## saved position: one write that needs no reassert
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> available | reconciling anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"positioned","scrollTop":400,"reassert":false} | reconciling anchor entry/saved-position g2
 saved.complete applied | position-applied anchor entry/saved-position g2
@@ -654,8 +654,8 @@ pending=false | settled anchor entry/saved-position g2
 end | settled anchor entry/saved-position g2
 
 ## saved position: reasserts until eight frames agree within drift
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> available | reconciling anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"positioned","scrollTop":400,"reassert":true} | reconciling anchor entry/saved-position g2
 saved.complete applied | position-applied anchor entry/saved-position g2
@@ -707,8 +707,8 @@ pending=false | settled anchor entry/saved-position g2
 end | settled anchor entry/saved-position g2
 
 ## saved position: keeps drifting, ends best effort at the budget
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> available | reconciling anchor entry/saved-position g2
 saved.positionFrame current=true -> 50 | reconciling anchor entry/saved-position g2
 saved.complete applied | position-applied anchor entry/saved-position g2
@@ -1080,8 +1080,8 @@ saved.complete best-effort | position-applied anchor entry/saved-position g2
 end | settled anchor entry/saved-position g2
 
 ## saved position: the row is lost after the first write
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> available | reconciling anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"positioned","scrollTop":400,"reassert":true} | reconciling anchor entry/saved-position g2
 saved.complete applied | position-applied anchor entry/saved-position g2
@@ -1094,8 +1094,8 @@ saved.complete best-effort | position-applied anchor entry/saved-position g2
 end | settled anchor entry/saved-position g2
 
 ## saved position: first frame unavailable promotes the live-edge fallback
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> available | reconciling anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"unavailable"} | reconciling anchor entry/saved-position g2
 saved.reachability legacy-offset loadAround=exhausted -> available | resolving legacy-offset fallback/saved-position-unavailable g3
@@ -1107,8 +1107,8 @@ live.complete settled | position-applied live-edge fallback/saved-position-unava
 end | settled live-edge fallback/saved-position-unavailable g4
 
 ## saved position: loop cannot start
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> available | reconciling anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"positioned","scrollTop":400,"reassert":true} | reconciling anchor entry/saved-position g2
 saved.complete applied | position-applied anchor entry/saved-position g2
@@ -1117,8 +1117,8 @@ saved.complete best-effort | position-applied anchor entry/saved-position g2
 end | settled anchor entry/saved-position g2
 
 ## saved position: frame cannot be scheduled
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> available | reconciling anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"positioned","scrollTop":400,"reassert":true} | reconciling anchor entry/saved-position g2
 saved.complete applied | position-applied anchor entry/saved-position g2
@@ -1129,8 +1129,8 @@ saved.complete best-effort | position-applied anchor entry/saved-position g2
 end | settled anchor entry/saved-position g2
 
 ## saved position: adapter throws on a frame
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> available | reconciling anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"positioned","scrollTop":400,"reassert":true} | reconciling anchor entry/saved-position g2
 saved.complete applied | position-applied anchor entry/saved-position g2
@@ -1143,16 +1143,16 @@ saved.complete best-effort | position-applied anchor entry/saved-position g2
 end | settled anchor entry/saved-position g2
 
 ## saved position: row not mounted yet
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> available | mounting:4 anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"positioned","scrollTop":400,"reassert":false} | mounting:4 anchor entry/saved-position g2
 saved.complete applied | position-applied anchor entry/saved-position g2
 end | settled anchor entry/saved-position g2
 
 ## saved position: empty window is pending, then refreshed
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> empty-window | reconciling anchor entry/saved-position g2
 saved.reachability anchor loadAround=available -> available | pending:empty-window anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"positioned","scrollTop":400,"reassert":false} | reconciling anchor entry/saved-position g2
@@ -1161,8 +1161,8 @@ refresh -> true | settled anchor entry/saved-position g2
 end | settled anchor entry/saved-position g2
 
 ## saved position: anchor outside the window loads around once, then positions
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> target-absent | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> target-absent | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> target-absent | loading-around:saved-message anchor entry/saved-position g2
 pending=true | pending:around-load anchor entry/saved-position g2
 microtasks flushed | pending:around-load anchor entry/saved-position g2
@@ -1173,8 +1173,8 @@ refresh -> true | settled anchor entry/saved-position g2
 end | settled anchor entry/saved-position g2
 
 ## saved position: load around returns nothing and is exhausted
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> target-absent | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> target-absent | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> target-absent | loading-around:saved-message anchor entry/saved-position g2
 saved.reachability legacy-offset loadAround=exhausted -> target-absent | resolving legacy-offset fallback/saved-position-unavailable g3
 saved.positionFrame legacy-offset current=true -> {"kind":"positioned","scrollTop":400,"reassert":false} | reconciling legacy-offset fallback/saved-position-unavailable g3
@@ -1182,8 +1182,8 @@ saved.complete applied | position-applied legacy-offset fallback/saved-position-
 end | settled legacy-offset fallback/saved-position-unavailable g3
 
 ## saved position: load around fails, anchor stays absent, falls back
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> target-absent | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> target-absent | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> target-absent | loading-around:saved-message anchor entry/saved-position g2
 saved.reachability legacy-offset loadAround=exhausted -> target-absent | resolving legacy-offset fallback/saved-position-unavailable g3
 saved.positionFrame legacy-offset current=true -> {"kind":"positioned","scrollTop":400,"reassert":false} | reconciling legacy-offset fallback/saved-position-unavailable g3
@@ -1193,8 +1193,8 @@ request=accepted | settled legacy-offset fallback/saved-position-unavailable g3
 end | settled legacy-offset fallback/saved-position-unavailable g3
 
 ## saved position: no load around available, anchor absent, falls back
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=unavailable -> target-absent | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=unavailable -> target-absent | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=unavailable -> target-absent | unavailable:legacy-offset anchor entry/saved-position g2
 saved.reachability legacy-offset loadAround=exhausted -> target-absent | resolving legacy-offset fallback/saved-position-unavailable g3
 saved.positionFrame legacy-offset current=true -> {"kind":"positioned","scrollTop":400,"reassert":false} | reconciling legacy-offset fallback/saved-position-unavailable g3
@@ -1202,8 +1202,8 @@ saved.complete applied | position-applied legacy-offset fallback/saved-position-
 end | settled legacy-offset fallback/saved-position-unavailable g3
 
 ## saved position: live-edge fallback needs a recenter, which is requested
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> available | reconciling anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"unavailable"} | reconciling anchor entry/saved-position g2
 saved.reachability legacy-offset loadAround=exhausted -> available | resolving legacy-offset fallback/saved-position-unavailable g3
@@ -1215,8 +1215,8 @@ live.complete settled | position-applied live-edge fallback/saved-position-unava
 end | settled live-edge fallback/saved-position-unavailable g4
 
 ## saved position: fallback live edge that cannot position cancels quietly
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> available | reconciling anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"unavailable"} | reconciling anchor entry/saved-position g2
 saved.reachability legacy-offset loadAround=exhausted -> available | resolving legacy-offset fallback/saved-position-unavailable g3
@@ -1228,8 +1228,8 @@ live.complete best-effort | unavailable:warn-and-stop live-edge fallback/saved-p
 end | settled live-edge fallback/saved-position-unavailable g4
 
 ## saved position: the reader taking over ends the loop
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> available | reconciling anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"positioned","scrollTop":400,"reassert":true} | reconciling anchor entry/saved-position g2
 saved.complete applied | position-applied anchor entry/saved-position g2
@@ -1246,8 +1246,8 @@ frame 1 | idle
 end | idle
 
 ## saved position: a newer request supersedes it
-entered conversation | settled live-edge ambient-live-edge/append g1
-saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+saved.reachability anchor loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
 saved.reachability anchor loadAround=available -> available | reconciling anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"positioned","scrollTop":400,"reassert":true} | reconciling anchor entry/saved-position g2
 saved.complete applied | position-applied anchor entry/saved-position g2
@@ -1268,8 +1268,8 @@ status=null | settled live-edge user-navigation/live-edge g3
 end | settled live-edge user-navigation/live-edge g3
 
 ## unread marker: lands and holds for eight frames, then settles
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame 1 | reconciling message entry/unread-marker g2
@@ -1329,8 +1329,8 @@ unread.loop.finish | settled message entry/unread-marker g2
 end | settled message entry/unread-marker g2
 
 ## unread marker: waits for the divider, then lands
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame 1 | reconciling message entry/unread-marker g2
@@ -1398,8 +1398,8 @@ unread.loop.finish | settled message entry/unread-marker g2
 end | settled message entry/unread-marker g2
 
 ## unread marker: divider never appears, promotes the live-edge fallback
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame 1 | reconciling message entry/unread-marker g2
@@ -1892,8 +1892,8 @@ live.complete settled | position-applied live-edge fallback/unread-marker-unavai
 end | settled live-edge fallback/unread-marker-unavailable g3
 
 ## unread marker: landed but never held still, settles at the budget
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame 1 | reconciling message entry/unread-marker g2
@@ -2621,8 +2621,8 @@ unread.loop.finish | settled message entry/unread-marker g2
 end | settled message entry/unread-marker g2
 
 ## unread marker: resolves at the live edge, hands over to the live edge
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame 1 | reconciling message entry/unread-marker g2
@@ -2686,8 +2686,8 @@ live.complete settled | position-applied live-edge fallback/unread-marker-resolv
 end | settled live-edge fallback/unread-marker-resolved-at-live-edge g3
 
 ## unread marker: resolves at the live edge once, then budget runs out
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame 1 | reconciling message entry/unread-marker g2
@@ -3419,8 +3419,8 @@ live.complete settled | position-applied live-edge fallback/unread-marker-resolv
 end | settled live-edge fallback/unread-marker-resolved-at-live-edge g3
 
 ## unread marker: held iOS write waits without settling
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame 1 | reconciling message entry/unread-marker g2
@@ -3492,8 +3492,8 @@ unread.loop.finish | settled message entry/unread-marker g2
 end | settled message entry/unread-marker g2
 
 ## unread marker: frame unavailable promotes the fallback
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame 1 | reconciling message entry/unread-marker g2
@@ -3513,8 +3513,8 @@ live.complete settled | position-applied live-edge fallback/unread-marker-unavai
 end | settled live-edge fallback/unread-marker-unavailable g3
 
 ## unread marker: reader moved the viewport without input, takeover
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame 1 | reconciling message entry/unread-marker g2
@@ -3535,8 +3535,8 @@ unread.loop.finish | idle
 end | idle
 
 ## unread marker: content height changed, not a takeover
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame 1 | reconciling message entry/unread-marker g2
@@ -3596,8 +3596,8 @@ unread.loop.finish | settled message entry/unread-marker g2
 end | settled message entry/unread-marker g2
 
 ## unread marker: no geometry available is never a takeover
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame 1 | reconciling message entry/unread-marker g2
@@ -3649,8 +3649,8 @@ unread.loop.finish | settled message entry/unread-marker g2
 end | settled message entry/unread-marker g2
 
 ## unread marker: target not indexed yet, the loop waits for hydration
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> target-absent | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> target-absent | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | pending:target-not-indexed message entry/unread-marker g2
 unread.loop.schedule | pending:target-not-indexed message entry/unread-marker g2
 frame 1 | pending:target-not-indexed message entry/unread-marker g2
@@ -3710,8 +3710,8 @@ unread.loop.finish | settled message entry/unread-marker g2
 end | settled message entry/unread-marker g2
 
 ## unread marker: empty window waits for hydration
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> empty-window | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> empty-window | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | pending:empty-window message entry/unread-marker g2
 unread.loop.schedule | pending:empty-window message entry/unread-marker g2
 frame 1 | pending:empty-window message entry/unread-marker g2
@@ -3771,8 +3771,8 @@ unread.loop.finish | settled message entry/unread-marker g2
 end | settled message entry/unread-marker g2
 
 ## unread marker: loop cannot start
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.complete unread-marker-unavailable | reconciling message entry/unread-marker g2
 live.reachability global-live-edge | reconciling message entry/unread-marker g2
@@ -3782,8 +3782,8 @@ live.complete settled | position-applied live-edge fallback/unread-marker-unavai
 end | settled live-edge fallback/unread-marker-unavailable g3
 
 ## unread marker: frame cannot be scheduled
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 unread.loop.finish | reconciling message entry/unread-marker g2
@@ -3795,8 +3795,8 @@ live.complete settled | position-applied live-edge fallback/unread-marker-unavai
 end | settled live-edge fallback/unread-marker-unavailable g3
 
 ## unread marker: adapter throws on a frame
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame 1 | reconciling message entry/unread-marker g2
@@ -3810,8 +3810,8 @@ live.complete settled | position-applied live-edge fallback/unread-marker-unavai
 end | settled live-edge fallback/unread-marker-unavailable g3
 
 ## unread marker: no completion callback is fine
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame 1 | reconciling message entry/unread-marker g2
@@ -3870,8 +3870,8 @@ unread.loop.finish | settled message entry/unread-marker g2
 end | settled message entry/unread-marker g2
 
 ## unread marker: reassert drives one frame without scheduling another
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 unread.positionFrame current=true -> {"kind":"positioned","scrollTop":400,"atLiveEdge":false} | reconciling message entry/unread-marker g2
@@ -3929,8 +3929,8 @@ unread.loop.finish | settled message entry/unread-marker g2
 end | settled message entry/unread-marker g2
 
 ## unread marker: the reader taking over ends the visit
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message entry/unread-marker g2
 unread.loop.schedule | reconciling message entry/unread-marker g2
 frame | reconciling message entry/unread-marker g2
@@ -3946,9 +3946,9 @@ frame 1 | idle
 end | idle
 
 ## unread marker: return to latest visits the divider, then hands over
-entered conversation | settled live-edge ambient-live-edge/append g1
-unread.reachability message -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+unread.reachability message -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 unread.beginLoop budget=120 current=true | reconciling message user-navigation/unread-marker g2
 unread.loop.schedule | reconciling message user-navigation/unread-marker g2
 pendingNavigation=true | reconciling message user-navigation/unread-marker g2
@@ -4018,9 +4018,9 @@ pendingNavigation=false | settled live-edge fallback/unread-marker-resolved-at-l
 end | settled live-edge fallback/unread-marker-resolved-at-live-edge g3
 
 ## message target: positions and settles after four steady frames
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4056,9 +4056,9 @@ ownsTarget=true pending=false | settled message user-navigation/message-target g
 end | settled message user-navigation/message-target g2
 
 ## message target: row not ready, then waits and lands
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4107,9 +4107,9 @@ target.complete settled applied=true | settled message user-navigation/message-t
 end | settled message user-navigation/message-target g2
 
 ## message target: held iOS write counts as applied but does not settle
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4153,9 +4153,9 @@ target.complete settled applied=true | settled message user-navigation/message-t
 end | settled message user-navigation/message-target g2
 
 ## message target: held write that never lands ends best effort
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4166,9 +4166,9 @@ target.complete best-effort applied=true | settled message user-navigation/messa
 end | settled message user-navigation/message-target g2
 
 ## message target: frame unavailable before anything applied waits for the index
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4180,9 +4180,9 @@ target.loop.finish | reconciling message user-navigation/message-target g2
 end | pending:target-not-indexed message user-navigation/message-target g2
 
 ## message target: frame unavailable after it applied
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4199,9 +4199,9 @@ target.loop.finish | position-applied message user-navigation/message-target g2
 end | pending:target-not-indexed message user-navigation/message-target g2
 
 ## message target: never converges, applied, ends best effort at the budget
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4362,9 +4362,9 @@ target.complete best-effort applied=true | settled message user-navigation/messa
 end | settled message user-navigation/message-target g2
 
 ## message target: never applied, ends pending at the budget
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4524,18 +4524,18 @@ target.loop.finish | reconciling message user-navigation/message-target g2
 end | pending:target-not-indexed message user-navigation/message-target g2
 
 ## message target: loop cannot start
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
 end | pending:target-not-indexed message user-navigation/message-target g2
 
 ## message target: frame cannot be scheduled
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4544,9 +4544,9 @@ target.loop.finish | reconciling message user-navigation/message-target g2
 end | pending:target-not-indexed message user-navigation/message-target g2
 
 ## message target: adapter throws on a frame
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4558,9 +4558,9 @@ target.loop.finish | reconciling message user-navigation/message-target g2
 end | pending:target-not-indexed message user-navigation/message-target g2
 
 ## message target: not mounted yet
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | mounting:4 message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | mounting:4 message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | mounting:4 message user-navigation/message-target g2
@@ -4594,9 +4594,9 @@ target.complete settled applied=true | settled message user-navigation/message-t
 end | settled message user-navigation/message-target g2
 
 ## message target: outside the window loads around, then positions
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> target-absent | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> target-absent | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | loading-around:target-a message user-navigation/message-target g2
 target.reachability message loadAround=available -> target-absent | loading-around:target-a message user-navigation/message-target g2
 microtasks flushed | pending:around-load message user-navigation/message-target g2
@@ -4633,17 +4633,17 @@ target.complete settled applied=true | settled message user-navigation/message-t
 end | settled message user-navigation/message-target g2
 
 ## message target: load around returns nothing, target not indexed
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> target-absent | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> target-absent | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | loading-around:target-a message user-navigation/message-target g2
 target.reachability message loadAround=available -> target-absent | loading-around:target-a message user-navigation/message-target g2
 end | pending:target-not-indexed message user-navigation/message-target g2
 
 ## message target: no load around, target not indexed, waits
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=unavailable -> target-absent | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=unavailable -> target-absent | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | pending:target-not-indexed message user-navigation/message-target g2
 target.reachability message loadAround=unavailable -> available | pending:target-not-indexed message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4679,9 +4679,9 @@ target.complete settled applied=true | settled message user-navigation/message-t
 end | settled message user-navigation/message-target g2
 
 ## message target: asking for the same target again reuses the run
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4699,9 +4699,9 @@ frame | reconciling message user-navigation/message-target g3
 end | reconciling message user-navigation/message-target g3
 
 ## message target: resize maintenance of a settled target
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4766,9 +4766,9 @@ target.loop.finish | settled message user-navigation/message-target g2
 end | settled message user-navigation/message-target g2
 
 ## message target: the reader taking over a running jump
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4787,9 +4787,9 @@ frame 1 | idle
 end | idle
 
 ## message target: the reader scrolling down over a settled target pauses it
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4837,9 +4837,9 @@ frame 1 | settled message user-navigation/message-target g2
 end | settled message user-navigation/message-target g2
 
 ## message target: cancelled by its owner
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4856,9 +4856,9 @@ frame 1 | settled message user-navigation/message-target g2
 end | settled message user-navigation/message-target g2
 
 ## message target: a newer request supersedes the jump
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -4889,9 +4889,9 @@ top.complete settled | settled resident-top user-navigation/resident-top g3
 end | settled resident-top user-navigation/resident-top g3
 
 ## resident top: reaches the top and settles after two frames
-entered conversation | settled live-edge ambient-live-edge/append g1
-top.reachability -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+top.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 top.beginLoop budget=120 current=true | reconciling resident-top user-navigation/resident-top g2
 top.start current=true -> started | reconciling resident-top user-navigation/resident-top g2
 top.loop.record wrote=true | reconciling resident-top user-navigation/resident-top g2
@@ -4918,9 +4918,9 @@ pendingNavigation=false | settled resident-top user-navigation/resident-top g2
 end | settled resident-top user-navigation/resident-top g2
 
 ## resident top: tolerance of one pixel counts as the top
-entered conversation | settled live-edge ambient-live-edge/append g1
-top.reachability -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+top.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 top.beginLoop budget=120 current=true | reconciling resident-top user-navigation/resident-top g2
 top.start current=true -> started | reconciling resident-top user-navigation/resident-top g2
 top.loop.record wrote=true | reconciling resident-top user-navigation/resident-top g2
@@ -4937,9 +4937,9 @@ top.complete settled | settled resident-top user-navigation/resident-top g2
 end | settled resident-top user-navigation/resident-top g2
 
 ## resident top: never arrives, ends best effort at 120 frames
-entered conversation | settled live-edge ambient-live-edge/append g1
-top.reachability -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+top.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 top.beginLoop budget=120 current=true | reconciling resident-top user-navigation/resident-top g2
 top.start current=true -> started | reconciling resident-top user-navigation/resident-top g2
 top.loop.record wrote=true | reconciling resident-top user-navigation/resident-top g2
@@ -5428,9 +5428,9 @@ top.complete best-effort | settled resident-top user-navigation/resident-top g2
 end | settled resident-top user-navigation/resident-top g2
 
 ## resident top: frame gives no position
-entered conversation | settled live-edge ambient-live-edge/append g1
-top.reachability -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+top.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 top.beginLoop budget=120 current=true | reconciling resident-top user-navigation/resident-top g2
 top.start current=true -> started | reconciling resident-top user-navigation/resident-top g2
 top.loop.record wrote=true | reconciling resident-top user-navigation/resident-top g2
@@ -5446,9 +5446,9 @@ top.complete best-effort | settled resident-top user-navigation/resident-top g2
 end | settled resident-top user-navigation/resident-top g2
 
 ## resident top: start unavailable
-entered conversation | settled live-edge ambient-live-edge/append g1
-top.reachability -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+top.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 top.beginLoop budget=120 current=true | reconciling resident-top user-navigation/resident-top g2
 top.start current=true -> unavailable | reconciling resident-top user-navigation/resident-top g2
 top.loop.finish | settled resident-top user-navigation/resident-top g2
@@ -5456,17 +5456,17 @@ top.complete best-effort | settled resident-top user-navigation/resident-top g2
 end | settled resident-top user-navigation/resident-top g2
 
 ## resident top: loop cannot start
-entered conversation | settled live-edge ambient-live-edge/append g1
-top.reachability -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+top.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 top.beginLoop budget=120 current=true | reconciling resident-top user-navigation/resident-top g2
 top.complete best-effort | settled resident-top user-navigation/resident-top g2
 end | settled resident-top user-navigation/resident-top g2
 
 ## resident top: frame cannot be scheduled
-entered conversation | settled live-edge ambient-live-edge/append g1
-top.reachability -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+top.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 top.beginLoop budget=120 current=true | reconciling resident-top user-navigation/resident-top g2
 top.start current=true -> started | reconciling resident-top user-navigation/resident-top g2
 top.loop.record wrote=true | reconciling resident-top user-navigation/resident-top g2
@@ -5476,9 +5476,9 @@ top.complete best-effort | settled resident-top user-navigation/resident-top g2
 end | settled resident-top user-navigation/resident-top g2
 
 ## resident top: adapter throws on a frame
-entered conversation | settled live-edge ambient-live-edge/append g1
-top.reachability -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+top.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 top.beginLoop budget=120 current=true | reconciling resident-top user-navigation/resident-top g2
 top.start current=true -> started | reconciling resident-top user-navigation/resident-top g2
 top.loop.record wrote=true | reconciling resident-top user-navigation/resident-top g2
@@ -5494,15 +5494,15 @@ top.complete best-effort | settled resident-top user-navigation/resident-top g2
 end | settled resident-top user-navigation/resident-top g2
 
 ## resident top: empty window is refused
-entered conversation | settled live-edge ambient-live-edge/append g1
-top.reachability -> empty-window | settled live-edge ambient-live-edge/append g1
-request=null | settled live-edge ambient-live-edge/append g1
-end | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+top.reachability -> empty-window | settled live-edge ambient-live-edge/outgoing-message g1
+request=null | settled live-edge ambient-live-edge/outgoing-message g1
+end | settled live-edge ambient-live-edge/outgoing-message g1
 
 ## resident top: the reader taking over ends the run
-entered conversation | settled live-edge ambient-live-edge/append g1
-top.reachability -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+top.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 top.beginLoop budget=120 current=true | reconciling resident-top user-navigation/resident-top g2
 top.start current=true -> started | reconciling resident-top user-navigation/resident-top g2
 top.loop.record wrote=true | reconciling resident-top user-navigation/resident-top g2
@@ -5519,9 +5519,9 @@ frame 1 | idle
 end | idle
 
 ## resident top: a newer request supersedes the run
-entered conversation | settled live-edge ambient-live-edge/append g1
-top.reachability -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+top.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 top.beginLoop budget=120 current=true | reconciling resident-top user-navigation/resident-top g2
 top.start current=true -> started | reconciling resident-top user-navigation/resident-top g2
 top.loop.record wrote=true | reconciling resident-top user-navigation/resident-top g2
@@ -5541,16 +5541,16 @@ frame 1 | settled live-edge user-navigation/live-edge g3
 end | settled live-edge user-navigation/live-edge g3
 
 ## media preservation: one write, no reassert
-entered conversation | settled live-edge ambient-live-edge/append g1
-media.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+media.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 media.observeGeometry | reconciling anchor media-preservation/remeasure g2
 media.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"reassert":false} | reconciling anchor media-preservation/remeasure g2
 media.complete settled | position-applied anchor media-preservation/remeasure g2
 end | settled anchor media-preservation/remeasure g2
 
 ## media preservation: reasserts until eight frames agree within drift
-entered conversation | settled live-edge ambient-live-edge/append g1
-media.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+media.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 media.observeGeometry | reconciling anchor media-preservation/remeasure g2
 media.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"reassert":true} | reconciling anchor media-preservation/remeasure g2
 media.beginLoop budget=90 current=true | position-applied anchor media-preservation/remeasure g2
@@ -5609,8 +5609,8 @@ media.complete settled | position-applied anchor media-preservation/remeasure g2
 end | settled anchor media-preservation/remeasure g2
 
 ## media preservation: keeps drifting, ends best effort at the budget
-entered conversation | settled live-edge ambient-live-edge/append g1
-media.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+media.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 media.observeGeometry | reconciling anchor media-preservation/remeasure g2
 media.positionFrame current=true -> 30 | reconciling anchor media-preservation/remeasure g2
 media.beginLoop budget=90 current=true | position-applied anchor media-preservation/remeasure g2
@@ -6071,16 +6071,16 @@ media.complete best-effort | position-applied anchor media-preservation/remeasur
 end | settled anchor media-preservation/remeasure g2
 
 ## media preservation: first frame unavailable
-entered conversation | settled live-edge ambient-live-edge/append g1
-media.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+media.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 media.observeGeometry | reconciling anchor media-preservation/remeasure g2
 media.positionFrame current=true -> {"kind":"unavailable"} | reconciling anchor media-preservation/remeasure g2
 media.complete best-effort | reconciling anchor media-preservation/remeasure g2
 end | settled anchor media-preservation/remeasure g2
 
 ## media preservation: later frame unavailable
-entered conversation | settled live-edge ambient-live-edge/append g1
-media.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+media.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 media.observeGeometry | reconciling anchor media-preservation/remeasure g2
 media.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"reassert":true} | reconciling anchor media-preservation/remeasure g2
 media.beginLoop budget=90 current=true | position-applied anchor media-preservation/remeasure g2
@@ -6093,8 +6093,8 @@ media.complete best-effort | position-applied anchor media-preservation/remeasur
 end | settled anchor media-preservation/remeasure g2
 
 ## media preservation: loop cannot start
-entered conversation | settled live-edge ambient-live-edge/append g1
-media.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+media.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 media.observeGeometry | reconciling anchor media-preservation/remeasure g2
 media.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"reassert":true} | reconciling anchor media-preservation/remeasure g2
 media.beginLoop budget=90 current=true | position-applied anchor media-preservation/remeasure g2
@@ -6102,8 +6102,8 @@ media.complete best-effort | position-applied anchor media-preservation/remeasur
 end | settled anchor media-preservation/remeasure g2
 
 ## media preservation: frame cannot be scheduled
-entered conversation | settled live-edge ambient-live-edge/append g1
-media.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+media.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 media.observeGeometry | reconciling anchor media-preservation/remeasure g2
 media.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"reassert":true} | reconciling anchor media-preservation/remeasure g2
 media.beginLoop budget=90 current=true | position-applied anchor media-preservation/remeasure g2
@@ -6113,8 +6113,8 @@ media.complete best-effort | position-applied anchor media-preservation/remeasur
 end | settled anchor media-preservation/remeasure g2
 
 ## media preservation: adapter throws on a frame
-entered conversation | settled live-edge ambient-live-edge/append g1
-media.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+media.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 media.observeGeometry | reconciling anchor media-preservation/remeasure g2
 media.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"reassert":true} | reconciling anchor media-preservation/remeasure g2
 media.beginLoop budget=90 current=true | position-applied anchor media-preservation/remeasure g2
@@ -6127,23 +6127,23 @@ media.complete best-effort | position-applied anchor media-preservation/remeasur
 end | settled anchor media-preservation/remeasure g2
 
 ## media preservation: anchor not in the window stops with a warning
-entered conversation | settled live-edge ambient-live-edge/append g1
-media.reachability -> target-absent | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+media.reachability -> target-absent | settled live-edge ambient-live-edge/outgoing-message g1
 media.complete best-effort | unavailable:warn-and-stop anchor media-preservation/remeasure g2
 request=accepted | settled anchor media-preservation/remeasure g2
 end | settled anchor media-preservation/remeasure g2
 
 ## media preservation: row not mounted yet
-entered conversation | settled live-edge ambient-live-edge/append g1
-media.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+media.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 media.observeGeometry | mounting:4 anchor media-preservation/remeasure g2
 media.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"reassert":false} | mounting:4 anchor media-preservation/remeasure g2
 media.complete settled | position-applied anchor media-preservation/remeasure g2
 end | settled anchor media-preservation/remeasure g2
 
 ## media preservation: rebased onto a new anchor while looping
-entered conversation | settled live-edge ambient-live-edge/append g1
-media.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+media.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 media.observeGeometry | reconciling anchor media-preservation/remeasure g2
 media.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"reassert":true} | reconciling anchor media-preservation/remeasure g2
 media.beginLoop budget=90 current=true | position-applied anchor media-preservation/remeasure g2
@@ -6204,8 +6204,8 @@ media.complete settled | position-applied anchor media-preservation/remeasure g2
 end | settled anchor media-preservation/remeasure g2
 
 ## media preservation: the reader taking over ends the loop
-entered conversation | settled live-edge ambient-live-edge/append g1
-media.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+media.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 media.observeGeometry | reconciling anchor media-preservation/remeasure g2
 media.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"reassert":true} | reconciling anchor media-preservation/remeasure g2
 media.beginLoop budget=90 current=true | position-applied anchor media-preservation/remeasure g2
@@ -6223,8 +6223,8 @@ frame 1 | idle
 end | idle
 
 ## media preservation: a newer request supersedes the loop
-entered conversation | settled live-edge ambient-live-edge/append g1
-media.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+media.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 media.observeGeometry | reconciling anchor media-preservation/remeasure g2
 media.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"reassert":true} | reconciling anchor media-preservation/remeasure g2
 media.beginLoop budget=90 current=true | position-applied anchor media-preservation/remeasure g2
@@ -6245,8 +6245,8 @@ frame 1 | settled live-edge user-navigation/live-edge g3
 end | settled live-edge user-navigation/live-edge g3
 
 ## layout preservation: divider mutation keeps the reading point
-entered conversation | settled live-edge ambient-live-edge/append g1
-layout.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+layout.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 layout.observeGeometry | reconciling anchor layout-preservation/divider-mutation g2
 layout.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"reassert":true} | reconciling anchor layout-preservation/divider-mutation g2
 layout.beginLoop budget=90 current=true | position-applied anchor layout-preservation/divider-mutation g2
@@ -6300,9 +6300,9 @@ layout.complete settled | position-applied anchor layout-preservation/divider-mu
 end | settled anchor layout-preservation/divider-mutation g2
 
 ## layout preservation: refused while a message target owns the position
-entered conversation | settled live-edge ambient-live-edge/append g1
-target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/append g1
-onUserNavigation room@example.test | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+target.reachability message loadAround=available -> available | settled live-edge ambient-live-edge/outgoing-message g1
+onUserNavigation room@example.test | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling message user-navigation/message-target g2
 target.reachability message loadAround=available -> available | reconciling message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
@@ -6311,8 +6311,8 @@ request=null | reconciling message user-navigation/message-target g2
 end | reconciling message user-navigation/message-target g2
 
 ## interaction hold: holds, reconciles a new layout, releases and resumes the live edge
-entered conversation | settled live-edge ambient-live-edge/append g1
-hold.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+hold.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling anchor interaction/hold g2
 hold.observeGeometry | reconciling anchor interaction/hold g2
 hold.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"reassert":true} | reconciling anchor interaction/hold g2
@@ -6344,8 +6344,8 @@ frame 1 | settled live-edge ambient-live-edge/interaction-release g3
 end | settled live-edge ambient-live-edge/interaction-release g3
 
 ## interaction hold: release without resuming
-entered conversation | settled live-edge ambient-live-edge/append g1
-hold.reachability -> available | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+hold.reachability -> available | settled live-edge ambient-live-edge/outgoing-message g1
 onMessageTargetOwnership true | reconciling anchor interaction/hold g2
 hold.observeGeometry | reconciling anchor interaction/hold g2
 hold.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"reassert":false} | reconciling anchor interaction/hold g2
@@ -6355,12 +6355,12 @@ onMessageTargetOwnership false | settled anchor interaction/released g2
 end | settled anchor interaction/released g2
 
 ## interaction hold: held input refuses a new hold
-entered conversation | settled live-edge ambient-live-edge/append g1
-request=null | settled live-edge ambient-live-edge/append g1
-end | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
+request=null | settled live-edge ambient-live-edge/outgoing-message g1
+end | settled live-edge ambient-live-edge/outgoing-message g1
 
 ## directional history: captured, then one write on the shifted window
-entered conversation | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
 pending=true holds=true | pending:window-shift anchor history-preservation/window-shift g2
 history.reachability -> available | pending:window-shift anchor history-preservation/window-shift g2
 history.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"wrote":true,"reassert":false} | reconciling anchor history-preservation/window-shift g2
@@ -6371,7 +6371,7 @@ pending=false | settled anchor history-preservation/window-shift g2
 end | settled anchor history-preservation/window-shift g2
 
 ## directional history: reasserts for the whole budget, no early exit
-entered conversation | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
 history.reachability -> available | pending:window-shift anchor history-preservation/window-shift g2
 history.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"wrote":true,"reassert":true} | reconciling anchor history-preservation/window-shift g2
 history.complete applied | position-applied anchor history-preservation/window-shift g2
@@ -6624,7 +6624,7 @@ history.complete best-effort | position-applied anchor history-preservation/wind
 end | settled anchor history-preservation/window-shift g2
 
 ## directional history: reasserts, then a frame says it is done
-entered conversation | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
 history.reachability -> available | pending:window-shift anchor history-preservation/window-shift g2
 history.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"wrote":true,"reassert":true} | reconciling anchor history-preservation/window-shift g2
 history.complete applied | position-applied anchor history-preservation/window-shift g2
@@ -6642,7 +6642,7 @@ history.complete settled | position-applied anchor history-preservation/window-s
 end | settled anchor history-preservation/window-shift g2
 
 ## directional history: first frame unavailable
-entered conversation | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
 history.reachability -> available | pending:window-shift anchor history-preservation/window-shift g2
 history.positionFrame current=true -> {"kind":"unavailable"} | reconciling anchor history-preservation/window-shift g2
 history.complete best-effort | reconciling anchor history-preservation/window-shift g2
@@ -6650,7 +6650,7 @@ reconcile -> false | settled anchor history-preservation/window-shift g2
 end | settled anchor history-preservation/window-shift g2
 
 ## directional history: later frame unavailable
-entered conversation | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
 history.reachability -> available | pending:window-shift anchor history-preservation/window-shift g2
 history.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"wrote":true,"reassert":true} | reconciling anchor history-preservation/window-shift g2
 history.complete applied | position-applied anchor history-preservation/window-shift g2
@@ -6663,7 +6663,7 @@ history.complete best-effort | position-applied anchor history-preservation/wind
 end | settled anchor history-preservation/window-shift g2
 
 ## directional history: loop cannot start
-entered conversation | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
 history.reachability -> available | pending:window-shift anchor history-preservation/window-shift g2
 history.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"wrote":true,"reassert":true} | reconciling anchor history-preservation/window-shift g2
 history.complete applied | position-applied anchor history-preservation/window-shift g2
@@ -6672,7 +6672,7 @@ history.complete best-effort | position-applied anchor history-preservation/wind
 end | settled anchor history-preservation/window-shift g2
 
 ## directional history: frame cannot be scheduled
-entered conversation | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
 history.reachability -> available | pending:window-shift anchor history-preservation/window-shift g2
 history.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"wrote":true,"reassert":true} | reconciling anchor history-preservation/window-shift g2
 history.complete applied | position-applied anchor history-preservation/window-shift g2
@@ -6683,7 +6683,7 @@ history.complete best-effort | position-applied anchor history-preservation/wind
 end | settled anchor history-preservation/window-shift g2
 
 ## directional history: adapter throws on a frame
-entered conversation | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
 history.reachability -> available | pending:window-shift anchor history-preservation/window-shift g2
 history.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"wrote":true,"reassert":true} | reconciling anchor history-preservation/window-shift g2
 history.complete applied | position-applied anchor history-preservation/window-shift g2
@@ -6696,7 +6696,7 @@ history.complete best-effort | position-applied anchor history-preservation/wind
 end | settled anchor history-preservation/window-shift g2
 
 ## directional history: window did not shift
-entered conversation | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
 cancel wrong generation -> false | pending:window-shift anchor history-preservation/window-shift g2
 history.complete no-window-shift | pending:window-shift anchor history-preservation/window-shift g2
 cancel -> true | idle
@@ -6704,14 +6704,14 @@ pending=false | idle
 end | idle
 
 ## directional history: anchor no longer reachable drops the request
-entered conversation | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
 history.reachability -> global-live-edge | pending:window-shift anchor history-preservation/window-shift g2
 history.complete superseded | pending:window-shift anchor history-preservation/window-shift g2
 reconcile -> false | pending:window-shift anchor history-preservation/window-shift g2
 end | pending:window-shift anchor history-preservation/window-shift g2
 
 ## directional history: anchor not mounted yet
-entered conversation | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
 history.reachability -> available | pending:window-shift anchor history-preservation/window-shift g2
 history.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"wrote":true,"reassert":false} | mounting:4 anchor history-preservation/window-shift g2
 history.complete applied | position-applied anchor history-preservation/window-shift g2
@@ -6720,7 +6720,7 @@ reconcile -> true | settled anchor history-preservation/window-shift g2
 end | settled anchor history-preservation/window-shift g2
 
 ## directional history: reader input before the first write is ignored, after it takes over
-entered conversation | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
 input before write -> null | pending:window-shift anchor history-preservation/window-shift g2
 history.reachability -> available | pending:window-shift anchor history-preservation/window-shift g2
 history.positionFrame current=true -> {"kind":"positioned","scrollTop":500,"wrote":true,"reassert":true} | reconciling anchor history-preservation/window-shift g2
@@ -6740,7 +6740,7 @@ frame 1 | idle
 end | idle
 
 ## directional history: a newer request supersedes the pending shift
-entered conversation | settled live-edge ambient-live-edge/append g1
+entered conversation | settled live-edge ambient-live-edge/outgoing-message g1
 live.reachability global-live-edge | pending:window-shift anchor history-preservation/window-shift g2
 onUserNavigation room@example.test | pending:window-shift anchor history-preservation/window-shift g2
 history.complete superseded | pending:window-shift anchor history-preservation/window-shift g2

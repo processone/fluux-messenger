@@ -464,7 +464,7 @@ function enterLive(t: Trace): void {
   // The reader has been at the live edge for a while: a settled position, written without a trace.
   t.controller.beginLiveEdgeRequest({
     conversationId: room,
-    source: { kind: 'ambient-live-edge', reason: 'append' },
+    source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
     executor: {
       reachability: () => liveTail,
       beginLoop: () => null,
@@ -481,7 +481,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: one write, no reassert', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, false)]),
     })
     t.drain()
@@ -489,7 +489,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: reasserts until eight frames hold still', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, true), liveFrame(true, true), liveFrame(true, true), liveFrame(false, true)]),
     })
     t.drain()
@@ -497,7 +497,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: never settles, ends best effort at the frame budget', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, true)]),
     })
     t.drain()
@@ -524,7 +524,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: first frame unavailable', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [{ kind: 'unavailable' }]),
     })
     t.drain()
@@ -532,7 +532,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: later frame unavailable', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, true), { kind: 'unavailable' }]),
     })
     t.drain()
@@ -540,7 +540,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: loop cannot start', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, true)], { loop: { nullLoop: true } }),
     })
     t.drain()
@@ -548,7 +548,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: frame cannot be scheduled', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, true)], { loop: { failSchedule: true } }),
     })
     t.drain()
@@ -556,7 +556,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: adapter throws on a frame', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, true), 'throw']),
     })
     t.drain()
@@ -564,7 +564,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: empty window is not accepted', (t) => {
     const request = t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, false)], { reachability: [{ kind: 'empty-window' }] }),
     })
     t.note(`request=${request === null ? 'null' : 'accepted'}`)
@@ -578,7 +578,7 @@ const liveScenarios: Scenario[] = [
     })
     const request = t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor,
     })
     t.note(`refresh same version -> ${t.controller.refreshLiveEdge({ conversationId: room, executor })}`)
@@ -590,7 +590,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: recenter unavailable falls back to the best resident edge', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, false)], {
         reachability: [liveRecenter],
         recenter: ['unavailable'],
@@ -602,7 +602,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: no recenter function falls back to the best resident edge', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, false)], { reachability: [liveRecenter] }),
     })
     t.drain()
@@ -610,7 +610,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: unavailable window still tries the resident edge', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, false)], { reachability: [liveTail, liveUnavailable] }),
     })
     t.drain()
@@ -619,7 +619,7 @@ const liveScenarios: Scenario[] = [
     const first = liveExecutor(t, [liveFrame(true, true)])
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: first,
     })
     t.step()
@@ -634,7 +634,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: reconcile after settling re-pins', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, false)]),
     })
     t.note(`reconcile -> ${t.controller.reconcileLiveEdge({
@@ -647,7 +647,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: the reader taking over ends the loop', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, true)]),
     })
     t.step()
@@ -657,7 +657,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: a newer live request supersedes a running one', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, true)]),
     })
     t.step()
@@ -679,7 +679,7 @@ const liveScenarios: Scenario[] = [
   ['live edge: deactivating the conversation drops the run', (t) => {
     t.controller.beginLiveEdgeRequest({
       conversationId: room,
-      source: { kind: 'ambient-live-edge', reason: 'append' },
+      source: { kind: 'ambient-live-edge', reason: 'outgoing-message' },
       executor: liveExecutor(t, [liveFrame(true, true)]),
     })
     t.step()
@@ -1435,7 +1435,7 @@ const anchorScenarios: Scenario[] = [
   ['interaction hold: holds, reconciles a new layout, releases and resumes the live edge', (t) => {
     t.controller.beginInteractionHold({
       conversationId: room,
-      desired: anchorDesired,
+      desired: historyDesired,
       executor: anchorExecutor(t, [anchored(true, 500), anchored(true, 520)], { name: 'hold' }),
     })
     t.step()
@@ -1454,7 +1454,7 @@ const anchorScenarios: Scenario[] = [
   }],
   ['interaction hold: release without resuming', (t) => {
     t.controller.beginInteractionHold({
-      conversationId: room, desired: anchorDesired, executor: anchorExecutor(t, [anchored(false)], { name: 'hold' }),
+      conversationId: room, desired: historyDesired, executor: anchorExecutor(t, [anchored(false)], { name: 'hold' }),
     })
     t.controller.releaseInteractionHold({ conversationId: room, resume: false, liveEdge: liveExecutor(t, [liveFrame(true, false)]) })
     t.drain()
@@ -1462,7 +1462,7 @@ const anchorScenarios: Scenario[] = [
   ['interaction hold: held input refuses a new hold', (t) => {
     t.controller.holdInput(room)
     const request = t.controller.beginInteractionHold({
-      conversationId: room, desired: anchorDesired, executor: anchorExecutor(t, [anchored(false)], { name: 'hold' }),
+      conversationId: room, desired: historyDesired, executor: anchorExecutor(t, [anchored(false)], { name: 'hold' }),
     })
     t.note(`request=${request ? 'accepted' : 'null'}`)
   }],
