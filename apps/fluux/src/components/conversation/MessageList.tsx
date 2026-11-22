@@ -620,10 +620,12 @@ export function MessageList<T extends BaseMessage>({
     requestMessageTarget, scrollToBottom, observeKeyboardNavigation, isAtBottom,
     assumeAwayFromBottomForKeyboard, conversationId,
   })
-  handleLatestRef.current = {
-    requestMessageTarget, scrollToBottom, observeKeyboardNavigation, isAtBottom,
-    assumeAwayFromBottomForKeyboard, conversationId,
-  }
+  useLayoutEffect(() => {
+    handleLatestRef.current = {
+      requestMessageTarget, scrollToBottom, observeKeyboardNavigation, isAtBottom,
+      assumeAwayFromBottomForKeyboard, conversationId,
+    }
+  })
   const handle = useMemo((): MessageListHandle => ({
     requestMessageTarget: id => handleLatestRef.current.requestMessageTarget(id),
     scrollToBottom: () => handleLatestRef.current.scrollToBottom(),
