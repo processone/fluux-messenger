@@ -1,5 +1,4 @@
 import type { ViewportGeometry, ViewportInput } from './viewportSession'
-import type { ScrollWriteOwner } from './messageVirtualizer'
 import {
   acceptPositionRequest,
   advancePhaseIfCurrent,
@@ -13,7 +12,6 @@ import {
   settleUserPosition,
   shouldRearmLiveEdgeFromGeometry,
   shouldReconcileAfterAppend,
-  type AnchorPreservationRequest,
   type DirectionalHistoryRequest,
   type EntryPositionFacts,
   type ExplicitTargetRequest,
@@ -23,6 +21,7 @@ import {
   type LiveEdgeRequest,
   type LiveEdgeNavigationFacts,
   type MediaPreservationRequest,
+  type AnchorPreservationRequest,
   type PositionRequest,
   type PositioningModel,
   type PositioningPhase,
@@ -30,633 +29,63 @@ import {
   type ResidentTopRequest,
   type SavedPositionRequest,
   type UnreadMarkerRequest,
-  type UnavailablePolicy,
 } from './scrollPositionModel'
 import {
   compareShadowDecision,
   phaseCategory,
-  recordShadowGeneration,
   runScrollShadowSafely,
   type ShadowActualDecision,
 } from './scrollPositionShadow'
+import {
+  PositionRunner,
+  mintPositionGeneration,
+  reachabilityMatchesRequest,
+  withIdentity,
+  type PositionRequestDraft,
+} from './positionRunner'
+import {
+  acceptLiveEdge,
+  beginAnchorRun,
+  beginDirectionalRun,
+  beginExplicitTargetRun,
+  beginResidentTop,
+  beginSavedPositionRun,
+  beginUnreadMarkerRun,
+  driveAnchor,
+  driveExplicitTarget,
+  driveSavedPosition,
+  finishExplicitTarget,
+  installAnchorRun,
+  reassertUnreadMarker,
+  reconcileDirectional,
+  refreshLiveEdge,
+  restartLiveEdge,
+  startExplicitTargetRun,
+  startLiveEdgeRun,
+} from './placementStrategies'
+import type {
+  AnchorPreservationExecutor,
+  DirectionalHistoryExecutor,
+  ExplicitTargetExecutor,
+  LiveEdgeExecutor,
+  ResidentTopExecutor,
+  SavedPositionExecutor,
+  UnreadMarkerExecutor,
+} from './positionExecutors'
 
-type PositionRequestDraft = PositionRequest extends infer Request
-  ? Request extends PositionRequest
-    ? Omit<Request, 'generation' | 'conversationId'>
-    : never
-  : never
+// The executors the browser adapters implement, and the lease and loop they are handed, live in
+// `positionExecutors`; they stay importable from here, where every adapter already looks.
+export * from './positionExecutors'
+export { reachabilityMatchesRequest }
+export type { PositionRequestDraft }
 
-export type SavedPositionLoadAroundStatus =
-  | 'available'
-  | 'loading'
-  | 'exhausted'
-  | 'unavailable'
-
-export interface PositionExecutionLease {
-  conversationId: string
-  generation: number
-  operation: number
-  /**
-   * Frames this run may take before it gives up. The loop monitor derives its non-converging
-   * threshold from it, so a run must report the budget it was actually given: understating it
-   * calls a healthy loop non-converging, overstating it never calls anything.
-   */
-  frameBudget: number
-  signal: AbortSignal
-  isCurrent: () => boolean
-  /** Owns the navigation writes this run makes: current while the request is, loop or not. */
-  owner: ScrollWriteOwner
-  markApplied: () => boolean
-  settle: () => boolean
-}
-
-export type SavedPositionExecutionLease = PositionExecutionLease
-
-export interface PositionFrameLoop {
-  schedule: (callback: () => void) => void
-  recordFrame: (wrote: boolean) => void
-  finish: () => void
-}
-
-export type SavedPositionFrameResult =
-  | { kind: 'unavailable' }
-  | {
-      kind: 'positioned'
-      scrollTop: number
-      /** Whether measured geometry must be re-applied until it stabilises. */
-      reassert: boolean
-    }
-
-export type SavedPositionCompletion =
-  | 'applied'
-  | 'settled'
-  | 'best-effort'
-
-export interface SavedPositionExecutor {
-  reachability: (
-    desired: SavedPositionRequest['desired'],
-    loadAround: SavedPositionLoadAroundStatus,
-  ) => ReachabilityFacts
-  loadAround?: (
-    messageId: string,
-    signal: AbortSignal,
-  ) => Promise<unknown> | unknown
-  /** Changes whenever another forward-window request may be issued safely. */
-  recenterVersion?: string
-  recenterLiveEdge?: (
-    signal: AbortSignal,
-  ) => 'requested' | 'waiting' | 'unavailable'
-  liveEdge: LiveEdgeExecutor
-  beginLoop: (lease: SavedPositionExecutionLease) => PositionFrameLoop | null
-  positionFrame: (
-    request: SavedPositionRequest,
-    lease: SavedPositionExecutionLease,
-  ) => SavedPositionFrameResult
-  complete: (
-    request: SavedPositionRequest,
-    outcome: SavedPositionCompletion,
-  ) => void
-}
-
-export type UnreadMarkerFrameLoop = PositionFrameLoop
-
-export type UnreadMarkerFrameResult =
-  | { kind: 'waiting' }
-  | { kind: 'unavailable' }
-  /**
-   * The frame wrote, and a released iOS fling holds that write until the fling ends: the list is
-   * still where the fling carries it, so nothing landed.
-   */
-  | { kind: 'held' }
-  | {
-      kind: 'positioned'
-      scrollTop: number
-      atLiveEdge: boolean
-    }
-
-export interface UnreadMarkerGeometry {
-  scrollTop: number
-  /** The scroller's full content height (`scrollHeight`). */
-  contentHeight: number
-  /** A released iOS fling is still moving the list; the virtualizer holds absolute writes until it ends. */
-  pendingFling?: boolean
-}
-
-/** How an unread-marker loop ended. A fallback hands the entry to a live-edge request instead. */
-export type UnreadMarkerCompletion =
-  | 'settled'
-  | 'user-takeover'
-  | 'unread-marker-unavailable'
-  | 'unread-marker-resolved-at-live-edge'
-
-export interface UnreadMarkerExecutor {
-  reachability: (desired: UnreadMarkerRequest['desired']) => ReachabilityFacts
-  beginLoop: (lease: PositionExecutionLease) => UnreadMarkerFrameLoop | null
-  readGeometry: () => UnreadMarkerGeometry | null
-  positionFrame: (
-    request: UnreadMarkerRequest,
-    lease: PositionExecutionLease,
-  ) => UnreadMarkerFrameResult
-  complete?: (request: UnreadMarkerRequest, outcome: UnreadMarkerCompletion) => void
-  liveEdge: LiveEdgeExecutor
-}
-
-export type LiveEdgeCompletion =
-  | 'settled'
-  | 'best-effort'
-  | 'restarted'
-  | 'user-takeover'
-  | 'superseded'
-
-export type LiveEdgeFrameResult =
-  | { kind: 'unavailable' }
-  /**
-   * The frame wrote, and a released iOS fling holds that write until the fling ends: the list is
-   * still where the fling carries it, so nothing landed.
-   */
-  | { kind: 'held' }
-  | {
-      kind: 'positioned'
-      scrollTop: number
-      atLiveEdge: boolean
-      /** True when geometry required another bottom write/check this frame. */
-      wrote: boolean
-      /** Virtualized rows still need the bounded measurement-settle loop. */
-      reassert: boolean
-    }
-
-export interface LiveEdgeExecutor {
-  reachability: () => ReachabilityFacts
-  /** Changes whenever another forward-window request may be issued safely. */
-  recenterVersion?: string
-  recenter?: (
-    signal: AbortSignal,
-  ) => 'requested' | 'waiting' | 'unavailable'
-  beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
-  positionFrame: (
-    request: LiveEdgeRequest,
-    lease: PositionExecutionLease,
-  ) => LiveEdgeFrameResult
-  complete: (
-    request: LiveEdgeRequest,
-    outcome: LiveEdgeCompletion,
-  ) => void
-}
-
-export type AnchorPreservationCompletion =
-  | 'settled'
-  | 'best-effort'
-  | 'user-takeover'
-  | 'superseded'
-
-export type AnchorPreservationFrameResult =
-  | { kind: 'unavailable' }
-  | {
-      kind: 'positioned'
-      scrollTop: number
-      reassert: boolean
-    }
-
-export interface AnchorPreservationExecutor {
-  observeGeometry: () => void
-  reachability: (
-    desired: AnchorPreservationRequest['desired'],
-  ) => ReachabilityFacts
-  beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
-  positionFrame: (
-    request: AnchorPreservationRequest,
-    lease: PositionExecutionLease,
-  ) => AnchorPreservationFrameResult
-  complete: (
-    request: AnchorPreservationRequest,
-    outcome: AnchorPreservationCompletion,
-  ) => void
-}
-
-export type DirectionalHistoryCompletion =
-  | 'applied'
-  | 'settled'
-  | 'best-effort'
-  | 'user-takeover'
-  | 'superseded'
-  | 'no-window-shift'
-
-export type DirectionalHistoryFrameResult =
-  | { kind: 'unavailable' }
-  | {
-      kind: 'positioned'
-      scrollTop: number
-      wrote: boolean
-      /** False for a one-shot distance-from-bottom fallback or non-virtualized placement. */
-      reassert: boolean
-    }
-
-export interface DirectionalHistoryExecutor {
-  reachability: (
-    desired: DirectionalHistoryRequest['desired'],
-  ) => ReachabilityFacts
-  beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
-  positionFrame: (
-    request: DirectionalHistoryRequest,
-    lease: PositionExecutionLease,
-  ) => DirectionalHistoryFrameResult
-  complete: (
-    request: DirectionalHistoryRequest,
-    outcome: DirectionalHistoryCompletion,
-  ) => void
-}
-
-export type ExplicitTargetCompletion =
-  | 'settled'
-  | 'best-effort'
-  | 'user-takeover'
-
-export type ExplicitTargetFrameResult =
-  | { kind: 'waiting' }
-  | { kind: 'unavailable' }
-  /**
-   * The frame wrote, and a released iOS fling holds that write until the fling ends: the list is
-   * still where the fling carries it, so nothing landed.
-   */
-  | { kind: 'held' }
-  | {
-      kind: 'positioned'
-      scrollTop: number
-      wrote: boolean
-    }
-
-export interface ExplicitTargetExecutor {
-  reachability: (
-    desired: ExplicitTargetRequest['desired'],
-    loadAround: SavedPositionLoadAroundStatus,
-  ) => ReachabilityFacts
-  loadAround?: (
-    messageId: string,
-    signal: AbortSignal,
-  ) => Promise<unknown> | unknown
-  beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
-  observeGeometry: (resetInput?: boolean) => void
-  positionFrame: (
-    request: ExplicitTargetRequest,
-    lease: PositionExecutionLease,
-    placement?: 'center' | 'keep-visible',
-  ) => ExplicitTargetFrameResult
-  complete: (
-    request: ExplicitTargetRequest,
-    outcome: ExplicitTargetCompletion,
-    applied: boolean,
-  ) => void
-}
-
-export type ResidentTopCompletion =
-  | 'settled'
-  | 'best-effort'
-  | 'user-takeover'
-  | 'superseded'
-
-export type ResidentTopStartResult =
-  | { kind: 'started' }
-  | { kind: 'unavailable' }
-
-export interface ResidentTopExecutor {
-  reachability: () => ReachabilityFacts
-  beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
-  start: (
-    request: ResidentTopRequest,
-    lease: PositionExecutionLease,
-  ) => ResidentTopStartResult
-  positionFrame: (lease: PositionExecutionLease) => number | null
-  complete: (
-    request: ResidentTopRequest,
-    outcome: ResidentTopCompletion,
-  ) => void
-}
-
-/**
- * The part of an execution its ownership guard reads. Every executor's state satisfies it, which is
- * what lets {@link PositioningController.isExecutionCurrent} be written once instead of seven times.
- */
-interface TrackedExecution {
-  request: { conversationId: string; generation: number }
-}
-
-interface SavedPositionExecutionState {
-  request: SavedPositionRequest
-  executor: SavedPositionExecutor
-  operation: number
-  abortController: AbortController | null
-  aroundAttempted: boolean
-  loadingAround: boolean
-  lastRecenterVersion: string | null
-  loop: PositionFrameLoop | null
-  framesLeft: number
-  stableFrames: number
-  landedTarget: number | null
-}
-
-interface UnreadMarkerExecutionState {
-  lease: PositionExecutionLease | null
-  request: UnreadMarkerRequest
-  executor: UnreadMarkerExecutor
-  operation: number
-  abortController: AbortController | null
-  loop: UnreadMarkerFrameLoop | null
-  framesLeft: number
-  stableFrames: number
-  landedTarget: number | null
-  /** Content height read just after the last positioned frame; null before the first. */
-  landedContentHeight: number | null
-  resolved: boolean
-  resolvedAtLiveEdge: boolean
-  /** Held frames that may still give their frame back to {@link framesLeft}. */
-  heldFramesLeft: number
-}
-
-interface ExplicitTargetExecutionState {
-  purpose: 'navigation' | 'maintenance'
-  request: ExplicitTargetRequest
-  executor: ExplicitTargetExecutor
-  operation: number
-  abortController: AbortController | null
-  aroundAttempted: boolean
-  loadingAround: boolean
-  loop: PositionFrameLoop | null
-  framesLeft: number
-  stableFrames: number
-  landedTarget: number | null
-  applied: boolean
-  /** Held frames that may still give their frame back to {@link framesLeft}. */
-  heldFramesLeft: number
-}
-
-interface ResidentTopExecutionState {
-  request: ResidentTopRequest
-  executor: ResidentTopExecutor
-  operation: number
-  abortController: AbortController | null
-  loop: PositionFrameLoop | null
-  framesLeft: number
-  stableFrames: number
-}
-
-interface LiveEdgeExecutionState {
-  /**
-   * `navigation` from the reader's return-to-latest until it first settles; `maintenance` for every
-   * other live-edge execution, follow-live re-pins included. The request source cannot tell them
-   * apart: a follow re-armed by the reader's own movement shares the navigation's source.
-   */
-  purpose: 'navigation' | 'maintenance'
-  request: LiveEdgeRequest
-  executor: LiveEdgeExecutor
-  operation: number
-  abortController: AbortController | null
-  lastRecenterVersion: string | null
-  loop: PositionFrameLoop | null
-  framesLeft: number
-  stableFrames: number
-  completed: boolean
-  /** Held frames that may still give their frame back to {@link framesLeft}. */
-  heldFramesLeft: number
-}
-
-interface AnchorPreservationExecutionState {
-  request: AnchorPreservationRequest
-  executor: AnchorPreservationExecutor
-  operation: number
-  abortController: AbortController | null
-  loop: PositionFrameLoop | null
-  framesLeft: number
-  stableFrames: number
-  landedTarget: number | null
-}
-
-interface DirectionalHistoryExecutionState {
-  request: DirectionalHistoryRequest
-  executor: DirectionalHistoryExecutor
-  operation: number
-  abortController: AbortController | null
-  loop: PositionFrameLoop | null
-  framesLeft: number
-  applied: boolean
-}
-
-/**
- * Whether a frame landed close enough to the previous one to count as still. A run's first frame has
- * no previous landing and is never still, which is what the null check says: without it, a fresh
- * execution would count its opening write as one stable frame it never measured.
- */
-function heldWithinDrift(
-  landedTarget: number | null,
-  scrollTop: number,
-  driftPx: number,
-): boolean {
-  return landedTarget !== null && Math.abs(scrollTop - landedTarget) <= driftPx
-}
-
-/** The two fields the drift-convergence step owns; nothing else may write them. */
-interface DriftConvergenceState {
-  landedTarget: number | null
-  stableFrames: number
-}
-
-interface DriftConvergenceStep {
-  /**
-   * Whether the position moved beyond tolerance since the previous frame. NOT the same question as
-   * "did the adapter write to scrollTop": an adapter can write the value already there, and layout
-   * can move the position with no write at all. Both are legitimate things to report to the loop
-   * monitor, so the step answers its own and lets each loop choose.
-   */
-  moved: boolean
-  /** Whether this frame is the one that reaches the settling threshold. */
-  settles: boolean
-}
-
-/**
- * One frame of drift-based convergence, for the loops that settle when the position stops moving.
- * Advances the stability count, remembers where this frame landed, and reports whether the loop has
- * now held still long enough. Which terminal state that leads to belongs to the loop.
- */
-function advanceDriftConvergence(
-  execution: DriftConvergenceState,
-  scrollTop: number,
-  driftPx: number,
-  stableFramesToSettle: number,
-): DriftConvergenceStep {
-  const moved = !heldWithinDrift(execution.landedTarget, scrollTop, driftPx)
-  execution.stableFrames = moved ? 0 : execution.stableFrames + 1
-  execution.landedTarget = scrollTop
-  return { moved, settles: execution.stableFrames >= stableFramesToSettle }
-}
-
-/** The two fields a navigation loop's wait for a held write owns. */
-interface HeldWriteWaitState {
-  framesLeft: number
-  heldFramesLeft: number
-}
-
-/**
- * One frame whose write a released iOS fling holds. The list is where the fling carries it, not
- * where the frame wrote, so the frame lands nothing. The fling, not the loop, decides when the write
- * lands: the frame gives itself back to the reassert budget while {@link HELD_WRITE_FRAMES} lasts,
- * so a fling that outlasts the loop's own frames does not end the navigation before it lands.
- */
-function waitForHeldWrite(execution: HeldWriteWaitState): void {
-  if (execution.heldFramesLeft-- > 0) execution.framesLeft++
-}
-
-/** What a run exposes to the step that mints its lease. */
-interface ExecutionOperationState {
-  request: { conversationId: string; generation: number }
-  abortController: AbortController | null
-  operation: number
-  framesLeft: number
-}
-
-/**
- * What every positioning run exposes to the shadow-wrapped frame steps below.
- *
- * The seven runs hold different executors, requests and terminal states, but each drives its frames
- * the same way: through a loop it owns, on behalf of one conversation.
- */
-interface ShadowedRun {
-  request: { conversationId: string }
-  loop: PositionFrameLoop | null
-}
-
-/**
- * Report one frame to the loop monitor from inside the scroll shadow.
- *
- * The diagnostic event name stays with the run that owns it rather than being derived from a
- * prefix: these names surface in the shadow snapshot a developer greps for, so they must exist in
- * the source as whole literals.
- */
-function recordFrameInShadow(
-  run: ShadowedRun,
-  event: string,
-  wrote: boolean,
-): void {
-  runScrollShadowSafely({
-    event,
-    conversationId: run.request.conversationId,
-    fallback: undefined,
-    observe: () => run.loop?.recordFrame(wrote),
-  })
-}
-
-/**
- * Ask the loop for the next frame, inside the scroll shadow.
- *
- * A loop that cannot schedule is not recoverable: nothing will drive the run again, so it must end
- * now rather than hang holding the position. What "end now" means differs per run — each settles
- * into its own terminal state, and one of them also has a model phase to advance — so the failure
- * action stays with the caller.
- */
-function scheduleFrameInShadow(
-  run: ShadowedRun,
-  event: string,
-  lease: PositionExecutionLease,
-  drive: () => void,
-  onScheduleFailed: () => void,
-): void {
-  if (!lease.isCurrent() || !run.loop) return
-  const scheduled = runScrollShadowSafely({
-    event,
-    conversationId: run.request.conversationId,
-    fallback: false,
-    observe: () => {
-      run.loop?.schedule(drive)
-      return true
-    },
-  })
-  if (!scheduled && lease.isCurrent()) onScheduleFailed()
-}
-
-/**
- * Ask the executor to position one frame, inside the scroll shadow.
- *
- * An adapter that throws degrades this frame to the caller's fallback — always the result union's
- * `unavailable` arm, which every loop already handles — instead of tearing the run down through a
- * React effect or a rAF callback where nothing would catch it.
- */
-function positionFrameInShadow<Request extends { conversationId: string }, Result>(
-  run: {
-    request: Request
-    executor: {
-      positionFrame: (request: Request, lease: PositionExecutionLease) => Result
-    }
-  },
-  event: string,
-  lease: PositionExecutionLease,
-  fallback: Result,
-): Result {
-  return runScrollShadowSafely<Result>({
-    event,
-    conversationId: run.request.conversationId,
-    fallback,
-    observe: () => run.executor.positionFrame(run.request, lease),
-  })
-}
-
-/**
- * Discard a loop whose lease went stale while it was being built.
- *
- * `beginLoop` can outlive the ownership that authorised it, and the orphaned loop is nobody else's
- * to end. Ending it is an adapter call like any other, so it runs inside the shadow — the seven runs
- * reach this point by different paths and must not differ in whether a failing adapter throws out of
- * one of them. No public entry point is known to reach this branch; it is depth, kept uniform so a
- * reader does not have to work out which runs have it.
- */
-function finishStaleLoopInShadow(
-  run: { request: { conversationId: string } },
-  event: string,
-  loop: PositionFrameLoop | null,
-): void {
-  if (!loop) return
-  runScrollShadowSafely({
-    event,
-    conversationId: run.request.conversationId,
-    fallback: undefined,
-    observe: () => loop.finish(),
-  })
-}
-
-const EXPLICIT_TARGET_REASSERT_FRAMES = 30
-const EXPLICIT_TARGET_STABLE_FRAMES = 4
-const EXPLICIT_TARGET_DRIFT_PX = 16
-const RESIDENT_TOP_OBSERVE_FRAMES = 120
-const RESIDENT_TOP_STABLE_FRAMES = 2
-const RESIDENT_TOP_TOLERANCE_PX = 1
-// Preserved from the former hook-local restore-anchor loop.
-const SAVED_POSITION_REASSERT_FRAMES = 90
-const SAVED_POSITION_STABLE_FRAMES = 8
-const SAVED_POSITION_DRIFT_PX = 8
-const UNREAD_MARKER_REASSERT_FRAMES = 120
-const UNREAD_MARKER_STABLE_FRAMES = 8
-const UNREAD_MARKER_DRIFT_PX = 16
-const UNREAD_MARKER_TAKEOVER_DRIFT_PX = 300
-/**
- * How long a navigation loop (live edge, message jump, unread divider) waits for a released fling to
- * let its held write land without spending its reassert frames: about ten seconds at 60 Hz, well
- * past a fling's momentum. Past it, held frames spend the reassert budget again, so the loop still
- * ends.
- */
-const HELD_WRITE_FRAMES = 600
-// Preserved from the former hook-local pinVirtualizedBottom loop.
-const LIVE_EDGE_REASSERT_FRAMES = 60
-const LIVE_EDGE_STABLE_FRAMES = 8
 /**
  * How long held input outlives the last input or scroll the reader produced. iOS dispatches
  * `touchend` to the element the touch started on, so a row virtualised away mid-drag swallows it;
  * without this bound a lost release would disable following the live edge until the next touch.
  */
 const HELD_INPUT_TIMEOUT_MS = 1500
-// Preserved from the former standalone media-anchor loop.
-const ANCHOR_PRESERVATION_REASSERT_FRAMES = 90
-const ANCHOR_PRESERVATION_STABLE_FRAMES = 8
-const ANCHOR_PRESERVATION_DRIFT_PX = 8
-// Preserved from the former hook-local prepend/window-shift loop. It intentionally has no
-// early-stable exit because virtualizer measurements can arrive late after several quiet frames.
-const DIRECTIONAL_HISTORY_REASSERT_FRAMES = 60
+
 /**
  * Ambient corrections that keep the reader's current reading point rather than move it. Accepting
  * one does not mean the reader moved on, so a directional restore whose load is still in flight may
@@ -668,44 +97,6 @@ const HOLDS_READING_POINT: ReadonlySet<PositionRequest['source']['kind']> = new 
   'history-preservation',
 ])
 
-let nextPositionGeneration = 1
-
-function mintPositionGeneration(): number {
-  const generation = nextPositionGeneration
-  if (!Number.isSafeInteger(generation)) {
-    throw new RangeError('scroll position generation exhausted')
-  }
-  nextPositionGeneration += 1
-  recordShadowGeneration(generation)
-  return generation
-}
-
-function withIdentity(
-  conversationId: string,
-  generation: number,
-  draft: PositionRequestDraft,
-): PositionRequest {
-  return { ...draft, conversationId, generation } as PositionRequest
-}
-
-export function reachabilityMatchesRequest(
-  request: PositionRequest,
-  facts: ReachabilityFacts,
-): boolean {
-  if (facts.kind === 'empty-window') return true
-  switch (request.desired.kind) {
-    case 'live-edge':
-      return facts.kind === 'global-live-edge'
-    case 'anchor':
-    case 'message':
-      return facts.kind === 'target-absent' || facts.kind === 'available'
-    case 'resident-top':
-      return facts.kind === 'available'
-    case 'legacy-offset':
-      return facts.kind === 'available'
-  }
-}
-
 export interface UserScrollInput extends ViewportInput {
   geometry: ViewportGeometry
 }
@@ -715,6 +106,13 @@ export class PositioningController {
   private interactionWasFollowing = false
   // Input can end before its layout compensation; keep eligibility with this position generation.
   private interactionCanSettleBottom = false
+
+  private readonly runner = new PositionRunner({
+    getModel: () => this.model,
+    setModel: (model) => { this.model = model },
+    accept: (request) => this.acceptRequest(request),
+    hasPendingNavigation: (conversationId) => this.hasPendingNavigation(conversationId),
+  })
 
   constructor(
     private readonly onMessageTargetOwnership?: (owned: boolean) => void,
@@ -777,18 +175,12 @@ export class PositioningController {
    * entering a conversation are not navigation.
    */
   hasPendingNavigation(conversationId: string): boolean {
-    const target = this.explicitTargetExecution
-    if (target !== null && target.purpose === 'navigation' &&
-      target.request.conversationId === conversationId && this.isExplicitTargetExecutionCurrent(target)) return true
-    const unread = this.unreadExecution
-    if (unread !== null && unread.request.source.kind === 'user-navigation' &&
-      unread.request.conversationId === conversationId && this.isUnreadExecutionCurrent(unread)) return true
-    const liveEdge = this.liveEdgeExecution
-    if (liveEdge !== null && liveEdge.purpose === 'navigation' &&
-      liveEdge.request.conversationId === conversationId && this.isLiveEdgeExecutionCurrent(liveEdge)) return true
-    const residentTop = this.residentTopExecution
-    return residentTop !== null && residentTop.request.conversationId === conversationId &&
-      this.isResidentTopExecutionCurrent(residentTop)
+    const { runner } = this
+    if (runner.currentRun('explicit-target', conversationId)?.purpose === 'navigation') return true
+    const unread = runner.currentRun('unread-marker', conversationId)
+    if (unread !== null && unread.request.source.kind === 'user-navigation') return true
+    if (runner.currentRun('live-edge', conversationId)?.purpose === 'navigation') return true
+    return runner.currentRun('resident-top', conversationId) !== null
   }
 
   hasInteractionHold(): boolean {
@@ -829,14 +221,11 @@ export class PositioningController {
     if (!this.hasInteractionHold() || !active || active.request.conversationId !== input.conversationId) return false
     // A new layout must land before paint even while a prior settle loop is still running.
     // Keep the generation, but replace its leased operation rather than waiting another frame.
-    this.cancelAnchorPreservationExecution('superseded')
+    this.runner.cancel('anchor-preservation', 'superseded')
     const request = active.request as InteractionPositionRequest
-    this.anchorPreservationExecution = {
-      request, executor: input.executor, operation: 0, abortController: null, loop: null,
-      framesLeft: ANCHOR_PRESERVATION_REASSERT_FRAMES, stableFrames: 0, landedTarget: null,
-    }
+    const run = installAnchorRun(this.runner, request, input.executor)
     this.model = advancePhaseIfCurrent(this.model, input.conversationId, request.generation, { kind: 'reconciling' })
-    this.driveAnchorPreservation(this.anchorPreservationExecution)
+    driveAnchor(this.runner, run)
     return true
   }
 
@@ -848,7 +237,7 @@ export class PositioningController {
     const active = this.model.active
     if (!this.hasInteractionHold() || !active || active.request.conversationId !== input.conversationId) return
     const resume = input.resume && this.interactionWasFollowing
-    this.cancelAnchorPreservationExecution('superseded')
+    this.runner.cancel('anchor-preservation', 'superseded')
     this.model = {
       ...this.model,
       active: {
@@ -911,14 +300,6 @@ export class PositioningController {
   } | null = null
   /** A re-pin refused under held input, owed once that input ends. */
   private deferredLiveEdge: { conversationId: string; rearmEligibleFromGeometry: boolean } | null = null
-  private savedExecution: SavedPositionExecutionState | null = null
-  private unreadExecution: UnreadMarkerExecutionState | null = null
-  private explicitTargetExecution: ExplicitTargetExecutionState | null = null
-  private residentTopExecution: ResidentTopExecutionState | null = null
-  private liveEdgeExecution: LiveEdgeExecutionState | null = null
-  private anchorPreservationExecution: AnchorPreservationExecutionState | null = null
-  private directionalHistoryExecution: DirectionalHistoryExecutionState | null = null
-
   snapshot(): PositioningModel {
     return this.model
   }
@@ -935,49 +316,12 @@ export class PositioningController {
     ) {
       return null
     }
-
-    const generation = mintPositionGeneration()
-    const request = withIdentity(
+    return beginSavedPositionRun(
+      this.runner,
       input.conversationId,
-      generation,
       selection as PositionRequestDraft,
-    ) as SavedPositionRequest
-    const initialReachability = runScrollShadowSafely<ReachabilityFacts | null>({
-      event: 'saved-position-entry-reachability',
-      conversationId: input.conversationId,
-      fallback: null,
-      observe: () => input.executor.reachability(
-        request.desired,
-        input.executor.loadAround ? 'available' : 'unavailable',
-      ),
-    })
-    if (!initialReachability) return null
-    if (!reachabilityMatchesRequest(request, initialReachability)) return null
-
-    const accepted = this.acceptRequest(request)
-    if (accepted === this.model) return null
-    this.cancelAllExecutions('superseded')
-    this.model = advancePhaseIfCurrent(
-      accepted,
-      input.conversationId,
-      generation,
-      resolveReachability(request, initialReachability),
+      input.executor,
     )
-    this.savedExecution = {
-      request,
-      executor: input.executor,
-      operation: 0,
-      abortController: null,
-      aroundAttempted: false,
-      loadingAround: false,
-      lastRecenterVersion: null,
-      loop: null,
-      framesLeft: SAVED_POSITION_REASSERT_FRAMES,
-      stableFrames: 0,
-      landedTarget: null,
-    }
-    this.driveSavedPosition()
-    return request
   }
 
   refreshSavedPosition(input: {
@@ -985,17 +329,17 @@ export class PositioningController {
     generation: number
     executor: SavedPositionExecutor
   }): boolean {
-    const execution = this.savedExecution
+    const run = this.runner.slot('saved-position')
     if (
-      !execution ||
-      execution.request.conversationId !== input.conversationId ||
-      execution.request.generation !== input.generation ||
+      !run ||
+      run.request.conversationId !== input.conversationId ||
+      run.request.generation !== input.generation ||
       !isCurrentGeneration(this.model, input.conversationId, input.generation)
     ) {
       return false
     }
-    execution.executor = input.executor
-    this.driveSavedPosition()
+    run.executor = input.executor
+    driveSavedPosition(this.runner, run)
     return true
   }
 
@@ -1003,18 +347,18 @@ export class PositioningController {
     request: SavedPositionRequest
     phase: PositioningPhase
   } | null {
-    const execution = this.savedExecution
+    const run = this.runner.slot('saved-position')
     const active = this.model.active
     if (
-      !execution ||
+      !run ||
       !active ||
-      active.request !== execution.request ||
+      active.request !== run.request ||
       active.request.conversationId !== conversationId
     ) {
       return null
     }
     return {
-      request: execution.request,
+      request: run.request,
       phase: active.phase,
     }
   }
@@ -1038,7 +382,8 @@ export class PositioningController {
       observe: () => {
         const selection = selectEntryPosition(input.entryFacts)
         if (selection.desired.kind !== 'live-edge') return null
-        return this.acceptLiveEdgeRequest(
+        return acceptLiveEdge(
+          this.runner,
           input.conversationId,
           (selection as Omit<
             LiveEdgeRequest,
@@ -1062,7 +407,8 @@ export class PositioningController {
       observe: () => {
         const selection = selectLiveEdgeNavigation(input.navigationFacts)
         if (selection.desired.kind !== 'live-edge') return null
-        return this.acceptLiveEdgeRequest(
+        return acceptLiveEdge(
+          this.runner,
           input.conversationId,
           (selection as Omit<
             LiveEdgeRequest,
@@ -1084,7 +430,8 @@ export class PositioningController {
       event: 'live-edge-request',
       conversationId: input.conversationId,
       fallback: null,
-      observe: () => this.acceptLiveEdgeRequest(
+      observe: () => acceptLiveEdge(
+        this.runner,
         input.conversationId,
         input.source,
         input.executor,
@@ -1115,32 +462,13 @@ export class PositioningController {
         }
         const active = this.model.active
         if (!active || active.request.desired.kind !== 'live-edge') return false
-        let execution = this.liveEdgeExecution
-        if (
-          !execution ||
-          execution.request !== active.request ||
-          !this.isLiveEdgeExecutionCurrent(execution)
-        ) {
-          this.cancelLiveEdgeExecution('superseded')
-          execution = this.createLiveEdgeExecution(
-            active.request as LiveEdgeRequest,
-            input.executor,
-          )
-          this.liveEdgeExecution = execution
+        const run = this.runner.slot('live-edge')
+        if (!run || run.request !== active.request || !this.runner.isCurrent(run)) {
+          this.runner.cancel('live-edge', 'superseded')
+          startLiveEdgeRun(this.runner, active.request as LiveEdgeRequest, input.executor)
         } else {
-          this.finishLiveEdgeLoop(execution)
-          execution.abortController?.abort()
-          this.completeLiveEdge(execution, 'restarted')
-          execution.executor = input.executor
-          execution.operation += 1
-          execution.abortController = null
-          execution.lastRecenterVersion = null
-          execution.framesLeft = LIVE_EDGE_REASSERT_FRAMES
-          execution.heldFramesLeft = HELD_WRITE_FRAMES
-          execution.stableFrames = 0
-          execution.completed = false
+          restartLiveEdge(this.runner, run, input.executor)
         }
-        this.driveLiveEdge(execution)
         return true
       },
     })
@@ -1154,7 +482,8 @@ export class PositioningController {
     if (!shouldRearmLiveEdgeFromGeometry(this.model, conversationId)) return false
     if (this.hasUnreadMarkerHold(conversationId)) return false
     if (!rearmEligibleFromGeometry || !this.canRearmAfterTargetTakeover(conversationId)) return false
-    return this.acceptLiveEdgeRequest(
+    return acceptLiveEdge(
+      this.runner,
       conversationId,
       { kind: 'ambient-live-edge', reason: 'geometry-rearm' },
       executor,
@@ -1165,28 +494,9 @@ export class PositioningController {
     conversationId: string
     executor: LiveEdgeExecutor
   }): boolean {
-    const execution = this.liveEdgeExecution
-    if (
-      !execution ||
-      execution.request.conversationId !== input.conversationId ||
-      !this.isLiveEdgeExecutionCurrent(execution)
-    ) {
-      return false
-    }
-    if (!execution.loop) {
-      execution.executor = input.executor
-      const phase = this.model.active?.phase.kind
-      if (
-        phase === 'resolving' ||
-        phase === 'pending' ||
-        phase === 'recentering-live-edge' ||
-        phase === 'mounting' ||
-        phase === 'reconciling' ||
-        phase === 'unavailable'
-      ) {
-        this.driveLiveEdge(execution)
-      }
-    }
+    const run = this.runner.currentRun('live-edge', input.conversationId)
+    if (!run) return false
+    refreshLiveEdge(this.runner, run, input.executor)
     return true
   }
 
@@ -1215,15 +525,13 @@ export class PositioningController {
   }
 
   rebaseMediaPreservation(conversationId: string, desired: MediaPreservationRequest['desired']): boolean {
-    const execution = this.anchorPreservationExecution
+    const run = this.runner.currentRun('anchor-preservation', conversationId)
     const active = this.model.active
-    if (!execution || !active || execution.request.conversationId !== conversationId ||
-      execution.request.source.kind !== 'media-preservation' ||
-      !this.isAnchorPreservationExecutionCurrent(execution)) return false
-    execution.request = { ...execution.request, desired } as MediaPreservationRequest
-    execution.stableFrames = 0
-    execution.landedTarget = null
-    this.model = { ...this.model, active: { ...active, request: execution.request } }
+    if (!run || !active || run.request.source.kind !== 'media-preservation') return false
+    run.request = { ...run.request, desired } as MediaPreservationRequest
+    run.stableFrames = 0
+    run.landedTarget = null
+    this.model = { ...this.model, active: { ...active, request: run.request } }
     return true
   }
 
@@ -1238,49 +546,7 @@ export class PositioningController {
       event: `${input.source.kind}-begin`,
       conversationId: input.conversationId,
       fallback: null,
-      observe: () => {
-        const generation = mintPositionGeneration()
-        const request = withIdentity(
-          input.conversationId,
-          generation,
-          ({
-            source: input.source,
-            desired: input.desired,
-            onUnavailable: { kind: 'warn-and-stop' },
-          }) as PositionRequestDraft,
-        ) as AnchorPreservationRequest
-        const reachability = runScrollShadowSafely<ReachabilityFacts | null>({
-          event: `${input.source.kind}-reachability`,
-          conversationId: input.conversationId,
-          fallback: null,
-          observe: () => input.executor.reachability(request.desired),
-        })
-        if (!reachability) return null
-        if (!reachabilityMatchesRequest(request, reachability)) return null
-        const accepted = this.acceptRequest(request)
-        if (accepted === this.model) return null
-
-        this.cancelAllExecutions('superseded')
-        this.model = advancePhaseIfCurrent(
-          accepted,
-          input.conversationId,
-          generation,
-          resolveReachability(request, reachability),
-        )
-        const execution: AnchorPreservationExecutionState = {
-          request,
-          executor: input.executor,
-          operation: 0,
-          abortController: null,
-          loop: null,
-          framesLeft: ANCHOR_PRESERVATION_REASSERT_FRAMES,
-          stableFrames: 0,
-          landedTarget: null,
-        }
-        this.anchorPreservationExecution = execution
-        this.driveAnchorPreservation(execution)
-        return request
-      },
+      observe: () => beginAnchorRun(this.runner, input),
     })
   }
 
@@ -1297,41 +563,7 @@ export class PositioningController {
       event: 'directional-history-begin',
       conversationId: input.conversationId,
       fallback: null,
-      observe: () => {
-        const generation = mintPositionGeneration()
-        const request = withIdentity(
-          input.conversationId,
-          generation,
-          {
-            source: { kind: 'history-preservation', reason: 'window-shift' },
-            desired: input.desired,
-            onUnavailable: {
-              kind: 'distance-from-bottom',
-              distancePx: input.distanceFromBottom,
-            },
-          },
-        ) as DirectionalHistoryRequest
-        const accepted = this.acceptRequest(request)
-        if (accepted === this.model) return null
-
-        this.cancelAllExecutions('superseded')
-        this.model = advancePhaseIfCurrent(
-          accepted,
-          input.conversationId,
-          generation,
-          { kind: 'pending', reason: 'window-shift' },
-        )
-        this.directionalHistoryExecution = {
-          request,
-          executor: input.executor,
-          operation: 0,
-          abortController: null,
-          loop: null,
-          framesLeft: DIRECTIONAL_HISTORY_REASSERT_FRAMES,
-          applied: false,
-        }
-        return request
-      },
+      observe: () => beginDirectionalRun(this.runner, input),
     })
   }
 
@@ -1345,39 +577,8 @@ export class PositioningController {
       conversationId: input.conversationId,
       fallback: false,
       observe: () => {
-        const execution = this.directionalHistoryExecution
-        if (
-          !execution ||
-          execution.request.conversationId !== input.conversationId ||
-          execution.request.generation !== input.generation ||
-          !this.isDirectionalHistoryExecutionCurrent(execution)
-        ) {
-          return false
-        }
-        execution.executor = input.executor
-        const reachability = execution.executor.reachability(
-          execution.request.desired,
-        )
-        if (!reachabilityMatchesRequest(execution.request, reachability)) {
-          this.cancelDirectionalHistoryExecution('superseded')
-          return false
-        }
-        const phase = resolveReachability(execution.request, reachability)
-        this.model = advancePhaseIfCurrent(
-          this.model,
-          input.conversationId,
-          input.generation,
-          phase,
-        )
-        if (
-          phase.kind !== 'mounting' &&
-          phase.kind !== 'reconciling' &&
-          phase.kind !== 'unavailable'
-        ) {
-          return false
-        }
-        this.startDirectionalHistoryLoop(execution)
-        return execution.applied
+        const run = this.currentDirectionalRun(input.conversationId, input.generation)
+        return run !== null && reconcileDirectional(this.runner, run, input.executor)
       },
     })
   }
@@ -1386,16 +587,8 @@ export class PositioningController {
     conversationId: string
     generation: number
   }): boolean {
-    const execution = this.directionalHistoryExecution
-    if (
-      !execution ||
-      execution.request.conversationId !== input.conversationId ||
-      execution.request.generation !== input.generation ||
-      !this.isDirectionalHistoryExecutionCurrent(execution)
-    ) {
-      return false
-    }
-    this.cancelDirectionalHistoryExecution('no-window-shift')
+    if (!this.currentDirectionalRun(input.conversationId, input.generation)) return false
+    this.runner.cancel('directional-history', 'no-window-shift')
     if (
       this.model.active?.request.conversationId === input.conversationId &&
       this.model.active.request.generation === input.generation
@@ -1423,14 +616,8 @@ export class PositioningController {
    * current and not yet applied.
    */
   isDirectionalHistoryPending(conversationId: string, generation?: number): boolean {
-    const execution = this.directionalHistoryExecution
-    return Boolean(
-      execution &&
-      execution.request.conversationId === conversationId &&
-      (generation === undefined || execution.request.generation === generation) &&
-      this.isDirectionalHistoryExecutionCurrent(execution) &&
-      !execution.applied,
-    )
+    const run = this.runner.currentRun('directional-history', conversationId)
+    return run !== null && (generation === undefined || run.request.generation === generation) && !run.applied
   }
 
   beginUnreadMarkerEntry(input: {
@@ -1450,7 +637,8 @@ export class PositioningController {
         ) {
           return null
         }
-        return this.beginUnreadMarkerRequest(
+        return beginUnreadMarkerRun(
+          this.runner,
           input.conversationId,
           selection as PositionRequestDraft,
           input.executor,
@@ -1476,7 +664,8 @@ export class PositioningController {
         ) {
           return null
         }
-        return this.beginUnreadMarkerRequest(
+        return beginUnreadMarkerRun(
+          this.runner,
           input.conversationId,
           selection as PositionRequestDraft,
           input.executor,
@@ -1493,52 +682,7 @@ export class PositioningController {
       event: 'resident-top-begin',
       conversationId: input.conversationId,
       fallback: null,
-      observe: () => {
-        const generation = mintPositionGeneration()
-        const request = withIdentity(
-          input.conversationId,
-          generation,
-          {
-            source: { kind: 'user-navigation', reason: 'resident-top' },
-            desired: { kind: 'resident-top' },
-          },
-        ) as ResidentTopRequest
-        const reachability = runScrollShadowSafely<ReachabilityFacts | null>({
-          event: 'resident-top-reachability',
-          conversationId: input.conversationId,
-          fallback: null,
-          observe: () => input.executor.reachability(),
-        })
-        if (
-          !reachability ||
-          reachability.kind === 'empty-window' ||
-          !reachabilityMatchesRequest(request, reachability)
-        ) {
-          return null
-        }
-        const accepted = this.acceptRequest(request)
-        if (accepted === this.model) return null
-
-        this.cancelAllExecutions('superseded')
-        this.model = advancePhaseIfCurrent(
-          accepted,
-          input.conversationId,
-          generation,
-          resolveReachability(request, reachability),
-        )
-        const execution: ResidentTopExecutionState = {
-          request,
-          executor: input.executor,
-          operation: 0,
-          abortController: null,
-          loop: null,
-          framesLeft: RESIDENT_TOP_OBSERVE_FRAMES,
-          stableFrames: 0,
-        }
-        this.residentTopExecution = execution
-        this.startResidentTopLoop(execution)
-        return request
-      },
+      observe: () => beginResidentTop(this.runner, input.conversationId, input.executor),
     })
   }
 
@@ -1551,54 +695,7 @@ export class PositioningController {
       event: 'explicit-target-begin',
       conversationId: input.conversationId,
       fallback: null,
-      observe: () => {
-        const current = this.explicitTargetExecution
-        if (
-          current &&
-          current.purpose === 'navigation' &&
-          this.isExplicitTargetExecutionCurrent(current) &&
-          current.request.conversationId === input.conversationId &&
-          current.request.desired.messageId === input.messageId
-        ) {
-          current.executor = input.executor
-          this.driveExplicitTarget(current)
-          return current.request
-        }
-
-        const generation = mintPositionGeneration()
-        const request = withIdentity(
-          input.conversationId,
-          generation,
-          {
-            source: { kind: 'user-navigation', reason: 'message-target' },
-            desired: {
-              kind: 'message',
-              messageId: input.messageId,
-              align: 'center',
-            },
-            onUnavailable: { kind: 'wait' },
-          },
-        ) as ExplicitTargetRequest
-        const reachability = input.executor.reachability(
-          request.desired,
-          input.executor.loadAround ? 'available' : 'unavailable',
-        )
-        if (!reachabilityMatchesRequest(request, reachability)) return null
-
-        const accepted = this.acceptRequest(request)
-        if (accepted === this.model) return null
-        this.cancelAllExecutions('superseded')
-        this.model = advancePhaseIfCurrent(
-          accepted,
-          input.conversationId,
-          generation,
-          resolveReachability(request, reachability),
-        )
-        const execution = this.createExplicitTargetExecution(request, input.executor)
-        this.explicitTargetExecution = execution
-        this.driveExplicitTarget(execution)
-        return request
-      },
+      observe: () => beginExplicitTargetRun(this.runner, input),
     })
   }
 
@@ -1607,18 +704,18 @@ export class PositioningController {
     generation: number
     executor: ExplicitTargetExecutor
   }): boolean {
-    const execution = this.explicitTargetExecution
+    const run = this.runner.slot('explicit-target')
     if (
-      !execution ||
-      execution.purpose !== 'navigation' ||
-      execution.request.conversationId !== input.conversationId ||
-      execution.request.generation !== input.generation ||
-      !this.isExplicitTargetExecutionCurrent(execution)
+      !run ||
+      run.purpose !== 'navigation' ||
+      run.request.conversationId !== input.conversationId ||
+      run.request.generation !== input.generation ||
+      !this.runner.isCurrent(run)
     ) {
       return false
     }
-    execution.executor = input.executor
-    this.driveExplicitTarget(execution)
+    run.executor = input.executor
+    driveExplicitTarget(this.runner, run)
     return true
   }
 
@@ -1645,7 +742,7 @@ export class PositioningController {
         const reachability = input.executor.reachability(request.desired, 'unavailable')
         // Layout maintenance only applies to a mounted target; it must not load history.
         if (reachability.kind !== 'available' || !reachability.mounted) return false
-        const execution = this.createExplicitTargetExecution(request, {
+        startExplicitTargetRun(this.runner, request, {
           ...input.executor,
           loadAround: undefined,
           positionFrame: (request, lease) =>
@@ -1653,20 +750,18 @@ export class PositioningController {
           // Resizing is not another navigation: do not consume a target or repeat its highlight.
           complete: () => {},
         }, 'maintenance')
-        this.explicitTargetExecution = execution
-        this.driveExplicitTarget(execution)
         return true
       },
     })
   }
 
   cancelExplicitTarget(conversationId: string, generation: number): boolean {
-    const execution = this.explicitTargetExecution
+    const run = this.runner.slot('explicit-target')
     if (
-      !execution ||
-      execution.request.conversationId !== conversationId ||
-      execution.request.generation !== generation ||
-      !this.isExplicitTargetExecutionCurrent(execution)
+      !run ||
+      run.request.conversationId !== conversationId ||
+      run.request.generation !== generation ||
+      !this.runner.isCurrent(run)
     ) {
       return false
     }
@@ -1676,7 +771,7 @@ export class PositioningController {
       generation,
       { kind: 'settled' },
     )
-    this.cancelExplicitTargetExecution()
+    this.runner.cancel('explicit-target', undefined)
     return true
   }
 
@@ -1805,7 +900,7 @@ export class PositioningController {
           active.request.source.kind === 'user-navigation' &&
           active.request.source.reason === 'message-target'
         ) {
-          const execution = this.explicitTargetExecution
+          const execution = this.runner.slot('explicit-target')
           const maintainingTarget = execution?.purpose === 'maintenance' || (
             execution === null &&
             (active.phase.kind === 'settled' || active.phase.kind === 'paused-user-input')
@@ -1829,7 +924,7 @@ export class PositioningController {
               active.request.generation,
               { kind: 'paused-user-input' },
             )
-            this.cancelExplicitTargetExecution()
+            this.runner.cancel('explicit-target', undefined)
             this.onUserTakeover?.(conversationId)
             return active.request.generation
           }
@@ -1841,38 +936,19 @@ export class PositioningController {
           this.readerMovedAt = this.model.watermark
           return null
         }
-        const targetExecution = this.explicitTargetExecution
-        const targetWasCurrent =
-          targetExecution !== null &&
-          targetExecution.request.conversationId === conversationId &&
-          this.isExplicitTargetExecutionCurrent(targetExecution)
-        const liveEdgeExecution = this.liveEdgeExecution
-        const liveEdgeWasCurrent =
-          liveEdgeExecution !== null &&
-          liveEdgeExecution.request.conversationId === conversationId &&
-          this.isLiveEdgeExecutionCurrent(liveEdgeExecution)
-        const mediaExecution = this.anchorPreservationExecution
-        const mediaWasCurrent =
-          mediaExecution !== null &&
-          mediaExecution.request.conversationId === conversationId &&
-          this.isAnchorPreservationExecutionCurrent(mediaExecution)
-        const directionalExecution = this.directionalHistoryExecution
-        const directionalWasCurrent =
-          directionalExecution !== null &&
-          directionalExecution.request.conversationId === conversationId &&
-          this.isDirectionalHistoryExecutionCurrent(directionalExecution)
-        const residentTopExecution = this.residentTopExecution
-        const residentTopWasCurrent =
-          residentTopExecution !== null &&
-          residentTopExecution.request.conversationId === conversationId &&
-          this.isResidentTopExecutionCurrent(residentTopExecution)
+        const { runner } = this
+        const targetExecution = runner.currentRun('explicit-target', conversationId)
+        const liveEdgeWasCurrent = runner.currentRun('live-edge', conversationId) !== null
+        const mediaWasCurrent = runner.currentRun('anchor-preservation', conversationId) !== null
+        const directionalExecution = runner.currentRun('directional-history', conversationId)
+        const residentTopWasCurrent = runner.currentRun('resident-top', conversationId) !== null
         // A boundary wheel can start a directional load and be followed by more wheel events while
         // the network request is still pending. The former prepend loop armed user takeover only
         // after the batch landed and reconciliation began, so those pre-load events could not
         // discard the saved anchor. Preserve that contract: there is no pixel owner to take over
         // until the synchronous initial write has run. Explicit competing position requests still
         // supersede this pending generation through normal request arbitration.
-        if (directionalWasCurrent && directionalExecution && !directionalExecution.applied) {
+        if (directionalExecution && !directionalExecution.applied) {
           return null
         }
         this.readerMovedAt = this.model.watermark
@@ -1881,25 +957,13 @@ export class PositioningController {
           conversationId,
           generation,
         )
-        if (targetWasCurrent && targetExecution) {
-          this.finishExplicitTargetExecution(
-            targetExecution,
-            false,
-            'user-takeover',
-          )
+        if (targetExecution) {
+          finishExplicitTarget(runner, targetExecution, false, 'user-takeover')
         }
-        if (liveEdgeWasCurrent) {
-          this.cancelLiveEdgeExecution('user-takeover')
-        }
-        if (mediaWasCurrent) {
-          this.cancelAnchorPreservationExecution('user-takeover')
-        }
-        if (directionalWasCurrent) {
-          this.cancelDirectionalHistoryExecution('user-takeover')
-        }
-        if (residentTopWasCurrent) {
-          this.cancelResidentTopExecution('user-takeover')
-        }
+        if (liveEdgeWasCurrent) runner.cancel('live-edge', 'user-takeover')
+        if (mediaWasCurrent) runner.cancel('anchor-preservation', 'user-takeover')
+        if (directionalExecution) runner.cancel('directional-history', 'user-takeover')
+        if (residentTopWasCurrent) runner.cancel('resident-top', 'user-takeover')
         this.cancelExecutionsIfSuperseded()
         if (this.model.active === null || (
           this.model.active.request.generation === generation &&
@@ -2069,2040 +1133,16 @@ export class PositioningController {
     })
   }
 
-  private beginUnreadMarkerRequest(
-    conversationId: string,
-    draft: PositionRequestDraft,
-    executor: UnreadMarkerExecutor,
-  ): UnreadMarkerRequest | null {
-    const generation = mintPositionGeneration()
-    const request = withIdentity(
-      conversationId,
-      generation,
-      draft,
-    ) as UnreadMarkerRequest
-    const reachability = executor.reachability(request.desired)
-    if (!reachabilityMatchesRequest(request, reachability)) return null
-
-    const accepted = this.acceptRequest(request)
-    if (accepted === this.model) return null
-    this.cancelAllExecutions('superseded')
-    this.model = advancePhaseIfCurrent(
-      accepted,
-      conversationId,
-      generation,
-      this.resolveUnreadMarkerReachability(request, reachability),
-    )
-    const execution: UnreadMarkerExecutionState = {
-      lease: null,
-      request,
-      executor,
-      operation: 0,
-      abortController: null,
-      loop: null,
-      framesLeft: UNREAD_MARKER_REASSERT_FRAMES,
-      stableFrames: 0,
-      landedTarget: null,
-      landedContentHeight: null,
-      resolved: false,
-      resolvedAtLiveEdge: false,
-      heldFramesLeft: HELD_WRITE_FRAMES,
-    }
-    this.unreadExecution = execution
-
-    if (this.model.active?.phase.kind === 'unavailable') {
-      this.promoteUnreadFallback(execution, 'unread-marker-unavailable')
-    } else {
-      this.startUnreadMarkerLoop(execution)
-    }
-    return request
-  }
-
-  private acceptLiveEdgeRequest(
-    conversationId: string,
-    source: LiveEdgeRequest['source'],
-    executor: LiveEdgeExecutor,
-    purpose: LiveEdgeExecutionState['purpose'] = 'maintenance',
-  ): LiveEdgeRequest | null {
-    const generation = mintPositionGeneration()
-    const request = {
-      generation,
-      conversationId,
-      source,
-      desired: { kind: 'live-edge', follow: true },
-    } as LiveEdgeRequest
-    const reachability = runScrollShadowSafely<ReachabilityFacts | null>({
-      event: 'live-edge-reachability',
-      conversationId,
-      fallback: null,
-      observe: () => executor.reachability(),
-    })
-    if (!reachability || !reachabilityMatchesRequest(request, reachability)) {
-      return null
-    }
-    const accepted = this.acceptRequest(request)
-    if (accepted === this.model) return null
-
-    this.cancelAllExecutions('superseded')
-    this.model = advancePhaseIfCurrent(
-      accepted,
-      conversationId,
-      generation,
-      resolveReachability(request, reachability),
-    )
-    const execution = this.createLiveEdgeExecution(request, executor, purpose)
-    this.liveEdgeExecution = execution
-    this.driveLiveEdge(execution)
-    return request
-  }
-
-  private createLiveEdgeExecution(
-    request: LiveEdgeRequest,
-    executor: LiveEdgeExecutor,
-    purpose: LiveEdgeExecutionState['purpose'] = 'maintenance',
-  ): LiveEdgeExecutionState {
-    return {
-      purpose,
-      request,
-      executor,
-      operation: 0,
-      abortController: null,
-      lastRecenterVersion: null,
-      loop: null,
-      framesLeft: LIVE_EDGE_REASSERT_FRAMES,
-      stableFrames: 0,
-      completed: false,
-      heldFramesLeft: HELD_WRITE_FRAMES,
-    }
-  }
-
-  private driveLiveEdge(execution: LiveEdgeExecutionState): void {
-    if (!this.isLiveEdgeExecutionCurrent(execution)) return
-    if (execution.loop) return
-
-    const reachability = runScrollShadowSafely<ReachabilityFacts | null>({
-      event: 'live-edge-drive-reachability',
-      conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.reachability(),
-    })
-    if (
-      !reachability ||
-      !reachabilityMatchesRequest(execution.request, reachability)
-    ) {
-      this.settleLiveEdgeBestEffort(execution)
-      return
-    }
-    const phase = resolveReachability(execution.request, reachability)
-    this.model = advancePhaseIfCurrent(
-      this.model,
-      execution.request.conversationId,
-      execution.request.generation,
-      phase,
-    )
-    if (!this.isLiveEdgeExecutionCurrent(execution)) return
-
-    switch (phase.kind) {
-      case 'recentering-live-edge':
-        this.recenterLiveEdge(execution)
-        return
-      case 'mounting':
-      case 'reconciling':
-        this.startLiveEdgeLoop(execution)
-        return
-      case 'unavailable':
-        // Preserve the legacy best-resident-edge fallback when the sliding window cannot recenter.
-        this.startLiveEdgeLoop(execution)
-        return
-      case 'resolving':
-      case 'pending':
-      case 'loading-around':
-      case 'position-applied':
-      case 'settled':
-      case 'paused-user-input':
-        return
-    }
-  }
-
-  private recenterLiveEdge(execution: LiveEdgeExecutionState): void {
-    const recenter = execution.executor.recenter
-    const version = execution.executor.recenterVersion
-    if (!recenter || !version) {
-      this.startLiveEdgeLoop(execution)
-      return
-    }
-    if (execution.lastRecenterVersion === version) return
-    execution.lastRecenterVersion = version
-    const lease = this.beginLiveEdgeOperation(execution)
-    const result = runScrollShadowSafely({
-      event: 'live-edge-recenter',
-      conversationId: execution.request.conversationId,
-      fallback: 'unavailable' as const,
-      observe: () => recenter(lease.signal),
-    })
-    if (!lease.isCurrent()) return
-    if (result === 'unavailable') this.startLiveEdgeLoop(execution)
-  }
-
-  private startLiveEdgeLoop(execution: LiveEdgeExecutionState): void {
-    if (!this.isLiveEdgeExecutionCurrent(execution) || execution.loop) return
-    execution.framesLeft = LIVE_EDGE_REASSERT_FRAMES
-    execution.heldFramesLeft = HELD_WRITE_FRAMES
-    execution.stableFrames = 0
-    execution.completed = false
-    const lease = this.beginLiveEdgeOperation(execution)
-
-    // Preserve the immediate write used by entry, FAB, outgoing send, and layout stimuli. Only
-    // virtualized measurement settling moves to scheduled controller frames.
-    const initial = this.positionLiveEdgeFrame(execution, lease)
-    if (!lease.isCurrent()) return
-    if (initial.kind === 'unavailable') {
-      this.settleLiveEdgeBestEffort(execution, lease)
-      return
-    }
-    lease.markApplied()
-    if (!lease.isCurrent()) return
-    // A held first write lands once the fling ends: the frame loop waits for it.
-    if (initial.kind === 'positioned' && !initial.reassert) {
-      this.settleLiveEdge(execution, lease, 'settled')
-      return
-    }
-
-    if (!this.adoptFrameLoop({
-      execution,
-      lease,
-      startEvent: 'live-edge-loop-start',
-      staleFinishEvent: 'live-edge-loop-stale-finish',
-      beginLoop: () => execution.executor.beginLoop(lease),
-      onCannotStart: () => this.settleLiveEdge(execution, lease, 'best-effort'),
-    })) return
-    this.scheduleLiveEdgeFrame(execution, lease)
-  }
-
-  private driveLiveEdgeFrame(
-    execution: LiveEdgeExecutionState,
-    lease: PositionExecutionLease,
-  ): void {
-    if (!lease.isCurrent()) return
-    if (execution.framesLeft-- <= 0) {
-      this.settleLiveEdge(execution, lease, 'best-effort')
-      return
-    }
-    const result = this.positionLiveEdgeFrame(execution, lease)
-    if (!lease.isCurrent()) return
-    if (result.kind === 'unavailable') {
-      this.settleLiveEdge(execution, lease, 'best-effort')
-      return
-    }
-    // The list is not at the edge yet, so the frame is not stable either.
-    if (result.kind === 'held') {
-      waitForHeldWrite(execution)
-      execution.stableFrames = 0
-      this.recordLiveEdgeFrame(execution, false)
-      this.scheduleLiveEdgeFrame(execution, lease)
-      return
-    }
-    if (!result.reassert) {
-      this.recordLiveEdgeFrame(execution, result.wrote)
-      this.settleLiveEdge(execution, lease, 'settled')
-      return
-    }
-
-    execution.stableFrames = result.wrote
-      ? 0
-      : execution.stableFrames + 1
-    this.recordLiveEdgeFrame(execution, result.wrote)
-    if (execution.stableFrames >= LIVE_EDGE_STABLE_FRAMES) {
-      this.settleLiveEdge(execution, lease, 'settled')
-      return
-    }
-    this.scheduleLiveEdgeFrame(execution, lease)
-  }
-
-  private positionLiveEdgeFrame(
-    execution: LiveEdgeExecutionState,
-    lease: PositionExecutionLease,
-  ): LiveEdgeFrameResult {
-    return positionFrameInShadow(execution, 'live-edge-frame', lease, { kind: 'unavailable' })
-  }
-
-  private scheduleLiveEdgeFrame(
-    execution: LiveEdgeExecutionState,
-    lease: PositionExecutionLease,
-  ): void {
-    scheduleFrameInShadow(
-      execution,
-      'live-edge-frame-schedule',
-      lease,
-      () => this.driveLiveEdgeFrame(execution, lease),
-      () => this.settleLiveEdge(execution, lease, 'best-effort'),
-    )
-  }
-
-  private recordLiveEdgeFrame(
-    execution: LiveEdgeExecutionState,
-    wrote: boolean,
-  ): void {
-    recordFrameInShadow(execution, 'live-edge-frame-monitor', wrote)
-  }
-
-  private settleLiveEdgeBestEffort(
-    execution: LiveEdgeExecutionState,
-    existingLease?: PositionExecutionLease,
-  ): void {
-    if (!this.isLiveEdgeExecutionCurrent(execution)) return
-    const lease = existingLease ?? this.beginLiveEdgeOperation(execution)
-    this.settleLiveEdge(execution, lease, 'best-effort')
-  }
-
-  private settleLiveEdge(
-    execution: LiveEdgeExecutionState,
-    lease: PositionExecutionLease,
-    outcome: Extract<LiveEdgeCompletion, 'settled' | 'best-effort'>,
-  ): void {
-    if (!lease.isCurrent()) return
-    // From here on the edge is only maintained: a later re-pin does not own the reader's fling.
-    execution.purpose = 'maintenance'
-    this.finishLiveEdgeLoop(execution)
-    this.completeLiveEdge(execution, outcome)
-    lease.settle()
-  }
-
-  private completeLiveEdge(
-    execution: LiveEdgeExecutionState,
-    outcome: LiveEdgeCompletion,
-  ): void {
-    if (execution.completed) return
-    execution.completed = true
-    runScrollShadowSafely({
-      event: 'live-edge-complete',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.executor.complete(
-        execution.request,
-        outcome,
-      ),
-    })
-  }
-
-  private finishLiveEdgeLoop(execution: LiveEdgeExecutionState): void {
-    const loop = execution.loop
-    execution.loop = null
-    if (!loop) return
-    runScrollShadowSafely({
-      event: 'live-edge-loop-finish',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => loop.finish(),
-    })
-  }
-
-  /**
-   * Mint the lease that authorises one operation of a run, superseding whatever it was doing.
-   *
-   * A lease answers one question — does this run still own the position — and ownership can be lost
-   * three ways, minted at three different moments: the abort signal fires, the controller's slot
-   * stops pointing at this execution, or a newer operation supersedes this one. A newer generation
-   * of the conversation is the fourth, and lives in the model rather than on the execution.
-   *
-   * `ownsSlot` is the only part a run states for itself, because the slot is a named field per run.
-   * `alreadySatisfied` lets a run treat a phase as reached without touching the model.
-   */
-  /**
-   * Adopt the frame loop a run just asked its executor to build.
-   *
-   * The order here is the point, and it is the same for all seven runs: the loop is stored before
-   * the first frame is scheduled, so a frame that runs immediately finds it; and a lease that went
-   * stale while the loop was being built still ends that loop, because nobody else holds it.
-   *
-   * What a run does when its executor cannot build one is its own — settling, promoting a fallback,
-   * or reporting the target as not indexed. Returns whether the run may now drive frames; the loop
-   * is already stored by then, so a caller cannot schedule one before it is reachable.
-   */
-  private adoptFrameLoop(step: {
-    execution: ShadowedRun
-    lease: PositionExecutionLease
-    startEvent: string
-    staleFinishEvent: string
-    beginLoop: () => PositionFrameLoop | null
-    onCannotStart: () => void
-  }): boolean {
-    const loop = runScrollShadowSafely<PositionFrameLoop | null>({
-      event: step.startEvent,
-      conversationId: step.execution.request.conversationId,
-      fallback: null,
-      observe: step.beginLoop,
-    })
-    if (!step.lease.isCurrent()) {
-      finishStaleLoopInShadow(step.execution, step.staleFinishEvent, loop)
-      return false
-    }
-    if (!loop) {
-      step.onCannotStart()
-      return false
-    }
-    step.execution.loop = loop
-    return true
-  }
-
-  private beginExecutionOperation(
-    execution: ExecutionOperationState,
-    ownsSlot: () => boolean,
-    alreadySatisfied?: (phase: PositioningPhase) => boolean,
-  ): PositionExecutionLease {
-    execution.abortController?.abort()
-    const abortController = new AbortController()
-    execution.abortController = abortController
-    const operation = ++execution.operation
-    const { conversationId, generation } = execution.request
-    const isCurrent = () =>
-      !abortController.signal.aborted &&
-      ownsSlot() &&
-      execution.operation === operation &&
-      isCurrentGeneration(this.model, conversationId, generation)
-    const advance = (phase: PositioningPhase) => {
-      if (!isCurrent()) return false
-      if (alreadySatisfied?.(phase)) return true
-      this.model = advancePhaseIfCurrent(
-        this.model,
-        conversationId,
-        generation,
-        phase,
-      )
-      return isCurrent()
-    }
-    return {
-      conversationId,
-      generation,
-      operation,
-      owner: {
-        conversationId,
-        generation,
-        isCurrent: () => isCurrentGeneration(this.model, conversationId, generation),
-      },
-      frameBudget: execution.framesLeft,
-      signal: abortController.signal,
-      isCurrent,
-      markApplied: () => advance({ kind: 'position-applied' }),
-      settle: () => advance({ kind: 'settled' }),
-    }
-  }
-
-  private beginLiveEdgeOperation(
-    execution: LiveEdgeExecutionState,
-  ): PositionExecutionLease {
-    return this.beginExecutionOperation(
-      execution,
-      () => this.liveEdgeExecution === execution,
-    )
-  }
-
-  /**
-   * Whether an execution still owns the position: it is the one its slot holds, and the model still
-   * points at its request. The seven executors each wrap this under their own name; the wrappers are
-   * what the call sites read, and this is the single definition they agree on.
-   */
-  private isExecutionCurrent<T extends TrackedExecution>(
-    slot: T | null,
-    execution: T,
-  ): boolean {
-    return (
-      slot === execution &&
-      isCurrentGeneration(
-        this.model,
-        execution.request.conversationId,
-        execution.request.generation,
-      )
-    )
-  }
-
-  private isLiveEdgeExecutionCurrent(execution: LiveEdgeExecutionState): boolean {
-    return this.isExecutionCurrent(this.liveEdgeExecution, execution)
-  }
-
-  private driveAnchorPreservation(
-    execution: AnchorPreservationExecutionState,
-  ): void {
-    if (!this.isAnchorPreservationExecutionCurrent(execution)) return
-    const phase = this.model.active?.phase
-    if (!phase) return
-    if (phase.kind === 'mounting' || phase.kind === 'reconciling') {
-      this.startAnchorPreservationLoop(execution)
-      return
-    }
-    if (
-      phase.kind === 'unavailable' ||
-      phase.kind === 'pending'
-    ) {
-      const lease = this.beginAnchorPreservationOperation(execution)
-      this.settleAnchorPreservation(execution, lease, 'best-effort')
-    }
-  }
-
-  private startAnchorPreservationLoop(
-    execution: AnchorPreservationExecutionState,
-  ): void {
-    if (
-      !this.isAnchorPreservationExecutionCurrent(execution) ||
-      execution.loop
-    ) {
-      return
-    }
-    execution.framesLeft = ANCHOR_PRESERVATION_REASSERT_FRAMES
-    execution.stableFrames = 0
-    execution.landedTarget = null
-    const lease = this.beginAnchorPreservationOperation(execution)
-    const initial = this.positionAnchorPreservationFrame(execution, lease)
-    if (!lease.isCurrent()) return
-    if (initial.kind === 'unavailable') {
-      this.settleAnchorPreservation(execution, lease, 'best-effort')
-      return
-    }
-    lease.markApplied()
-    if (!lease.isCurrent()) return
-    if (!initial.reassert) {
-      this.settleAnchorPreservation(execution, lease, 'settled')
-      return
-    }
-    if (!this.adoptFrameLoop({
-      execution,
-      lease,
-      startEvent: 'anchor-preservation-loop-start',
-      staleFinishEvent: 'anchor-preservation-loop-stale-finish',
-      beginLoop: () => execution.executor.beginLoop(lease),
-      onCannotStart: () => this.settleAnchorPreservation(execution, lease, 'best-effort'),
-    })) return
-    this.scheduleAnchorPreservationFrame(execution, lease)
-  }
-
-  private driveAnchorPreservationFrame(
-    execution: AnchorPreservationExecutionState,
-    lease: PositionExecutionLease,
-  ): void {
-    if (!lease.isCurrent()) return
-    if (execution.framesLeft-- <= 0) {
-      this.settleAnchorPreservation(execution, lease, 'best-effort')
-      return
-    }
-    const result = this.positionAnchorPreservationFrame(execution, lease)
-    if (!lease.isCurrent()) return
-    if (result.kind === 'unavailable') {
-      this.settleAnchorPreservation(execution, lease, 'best-effort')
-      return
-    }
-    if (!result.reassert) {
-      this.settleAnchorPreservation(execution, lease, 'settled')
-      return
-    }
-    const step = advanceDriftConvergence(
-      execution,
-      result.scrollTop,
-      ANCHOR_PRESERVATION_DRIFT_PX,
-      ANCHOR_PRESERVATION_STABLE_FRAMES,
-    )
-    this.recordAnchorPreservationFrame(execution, step.moved)
-    if (step.settles) {
-      this.settleAnchorPreservation(execution, lease, 'settled')
-      return
-    }
-    this.scheduleAnchorPreservationFrame(execution, lease)
-  }
-
-  private positionAnchorPreservationFrame(
-    execution: AnchorPreservationExecutionState,
-    lease: PositionExecutionLease,
-  ): AnchorPreservationFrameResult {
-    runScrollShadowSafely({
-      event: 'anchor-preservation-observe-geometry',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.executor.observeGeometry(),
-    })
-    if (!lease.isCurrent()) return { kind: 'unavailable' }
-    return positionFrameInShadow(execution, 'anchor-preservation-frame', lease, { kind: 'unavailable' })
-  }
-
-  private scheduleAnchorPreservationFrame(
-    execution: AnchorPreservationExecutionState,
-    lease: PositionExecutionLease,
-  ): void {
-    scheduleFrameInShadow(
-      execution,
-      'anchor-preservation-frame-schedule',
-      lease,
-      () => this.driveAnchorPreservationFrame(execution, lease),
-      () => this.settleAnchorPreservation(execution, lease, 'best-effort'),
-    )
-  }
-
-  private recordAnchorPreservationFrame(
-    execution: AnchorPreservationExecutionState,
-    wrote: boolean,
-  ): void {
-    recordFrameInShadow(execution, 'anchor-preservation-frame-monitor', wrote)
-  }
-
-  private settleAnchorPreservation(
-    execution: AnchorPreservationExecutionState,
-    lease: PositionExecutionLease,
-    outcome: Extract<
-      AnchorPreservationCompletion,
-      'settled' | 'best-effort'
-    >,
-  ): void {
-    if (!lease.isCurrent()) return
-    this.finishAnchorPreservationLoop(execution)
-    this.completeAnchorPreservation(execution, outcome)
-    lease.settle()
-    execution.abortController?.abort()
-    if (this.anchorPreservationExecution === execution) {
-      this.anchorPreservationExecution = null
-    }
-  }
-
-  private completeAnchorPreservation(
-    execution: AnchorPreservationExecutionState,
-    outcome: AnchorPreservationCompletion,
-  ): void {
-    runScrollShadowSafely({
-      event: 'anchor-preservation-complete',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.executor.complete(
-        execution.request,
-        outcome,
-      ),
-    })
-  }
-
-  private finishAnchorPreservationLoop(
-    execution: AnchorPreservationExecutionState,
-  ): void {
-    const loop = execution.loop
-    execution.loop = null
-    if (!loop) return
-    runScrollShadowSafely({
-      event: 'anchor-preservation-loop-finish',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => loop.finish(),
-    })
-  }
-
-  private beginAnchorPreservationOperation(
-    execution: AnchorPreservationExecutionState,
-  ): PositionExecutionLease {
-    return this.beginExecutionOperation(
-      execution,
-      () => this.anchorPreservationExecution === execution,
-    )
-  }
-
-  private isAnchorPreservationExecutionCurrent(execution: AnchorPreservationExecutionState): boolean {
-    return this.isExecutionCurrent(this.anchorPreservationExecution, execution)
-  }
-
-  private startDirectionalHistoryLoop(
-    execution: DirectionalHistoryExecutionState,
-  ): void {
-    if (
-      !this.isDirectionalHistoryExecutionCurrent(execution) ||
-      execution.loop ||
-      execution.applied
-    ) {
-      return
-    }
-    execution.framesLeft = DIRECTIONAL_HISTORY_REASSERT_FRAMES
-    const lease = this.beginDirectionalHistoryOperation(execution)
-    const initial = this.positionDirectionalHistoryFrame(execution, lease)
-    if (!lease.isCurrent()) return
-    if (initial.kind === 'unavailable') {
-      this.settleDirectionalHistory(execution, lease, 'best-effort')
-      return
-    }
-
-    execution.applied = true
-    lease.markApplied()
-    if (!lease.isCurrent()) return
-    this.completeDirectionalHistory(execution, 'applied')
-    if (!initial.reassert) {
-      this.settleDirectionalHistory(execution, lease, 'settled')
-      return
-    }
-
-    if (!this.adoptFrameLoop({
-      execution,
-      lease,
-      startEvent: 'directional-history-loop-start',
-      staleFinishEvent: 'directional-history-loop-stale-finish',
-      beginLoop: () => execution.executor.beginLoop(lease),
-      onCannotStart: () => this.settleDirectionalHistory(execution, lease, 'best-effort'),
-    })) return
-    this.scheduleDirectionalHistoryFrame(execution, lease)
-  }
-
-  private driveDirectionalHistoryFrame(
-    execution: DirectionalHistoryExecutionState,
-    lease: PositionExecutionLease,
-  ): void {
-    if (!lease.isCurrent()) return
-    if (execution.framesLeft-- <= 0) {
-      this.settleDirectionalHistory(execution, lease, 'best-effort')
-      return
-    }
-    const result = this.positionDirectionalHistoryFrame(execution, lease)
-    if (!lease.isCurrent()) return
-    if (result.kind === 'unavailable') {
-      this.settleDirectionalHistory(execution, lease, 'best-effort')
-      return
-    }
-    this.recordDirectionalHistoryFrame(execution, result.wrote)
-    if (!result.reassert) {
-      this.settleDirectionalHistory(execution, lease, 'settled')
-      return
-    }
-    this.scheduleDirectionalHistoryFrame(execution, lease)
-  }
-
-  private positionDirectionalHistoryFrame(
-    execution: DirectionalHistoryExecutionState,
-    lease: PositionExecutionLease,
-  ): DirectionalHistoryFrameResult {
-    return positionFrameInShadow(execution, 'directional-history-frame', lease, { kind: 'unavailable' })
-  }
-
-  private scheduleDirectionalHistoryFrame(
-    execution: DirectionalHistoryExecutionState,
-    lease: PositionExecutionLease,
-  ): void {
-    scheduleFrameInShadow(
-      execution,
-      'directional-history-frame-schedule',
-      lease,
-      () => this.driveDirectionalHistoryFrame(execution, lease),
-      () => this.settleDirectionalHistory(execution, lease, 'best-effort'),
-    )
-  }
-
-  private recordDirectionalHistoryFrame(
-    execution: DirectionalHistoryExecutionState,
-    wrote: boolean,
-  ): void {
-    recordFrameInShadow(execution, 'directional-history-frame-monitor', wrote)
-  }
-
-  private settleDirectionalHistory(
-    execution: DirectionalHistoryExecutionState,
-    lease: PositionExecutionLease,
-    outcome: Extract<
-      DirectionalHistoryCompletion,
-      'settled' | 'best-effort'
-    >,
-  ): void {
-    if (!lease.isCurrent()) return
-    this.finishDirectionalHistoryLoop(execution)
-    this.completeDirectionalHistory(execution, outcome)
-    lease.settle()
-    execution.abortController?.abort()
-    if (this.directionalHistoryExecution === execution) {
-      this.directionalHistoryExecution = null
-    }
-  }
-
-  private completeDirectionalHistory(
-    execution: DirectionalHistoryExecutionState,
-    outcome: DirectionalHistoryCompletion,
-  ): void {
-    runScrollShadowSafely({
-      event: 'directional-history-complete',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.executor.complete(
-        execution.request,
-        outcome,
-      ),
-    })
-  }
-
-  private finishDirectionalHistoryLoop(
-    execution: DirectionalHistoryExecutionState,
-  ): void {
-    const loop = execution.loop
-    execution.loop = null
-    if (!loop) return
-    runScrollShadowSafely({
-      event: 'directional-history-loop-finish',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => loop.finish(),
-    })
-  }
-
-  private beginDirectionalHistoryOperation(
-    execution: DirectionalHistoryExecutionState,
-  ): PositionExecutionLease {
-    return this.beginExecutionOperation(
-      execution,
-      () => this.directionalHistoryExecution === execution,
-    )
-  }
-
-  private isDirectionalHistoryExecutionCurrent(execution: DirectionalHistoryExecutionState): boolean {
-    return this.isExecutionCurrent(this.directionalHistoryExecution, execution)
-  }
-
-  private startResidentTopLoop(
-    execution: ResidentTopExecutionState,
-  ): void {
-    if (!this.isResidentTopExecutionCurrent(execution) || execution.loop) {
-      return
-    }
-    execution.framesLeft = RESIDENT_TOP_OBSERVE_FRAMES
-    execution.stableFrames = 0
-    const lease = this.beginResidentTopOperation(execution)
-    if (!this.adoptFrameLoop({
-      execution,
-      lease,
-      startEvent: 'resident-top-loop-start',
-      staleFinishEvent: 'resident-top-loop-stale-finish',
-      beginLoop: () => execution.executor.beginLoop(lease),
-      onCannotStart: () => {
-        lease.settle()
-        this.completeResidentTopExecution(execution, 'best-effort')
-      },
-    })) return
-
-    const started = runScrollShadowSafely<ResidentTopStartResult>({
-      event: 'resident-top-start',
-      conversationId: execution.request.conversationId,
-      fallback: { kind: 'unavailable' },
-      observe: () => execution.executor.start(execution.request, lease),
-    })
-    if (!lease.isCurrent()) return
-    if (started.kind === 'unavailable') {
-      lease.settle()
-      this.completeResidentTopExecution(execution, 'best-effort')
-      return
-    }
-    this.recordResidentTopFrame(execution, true)
-    if (!lease.markApplied()) return
-    this.scheduleResidentTopFrame(execution, lease)
-  }
-
-  private driveResidentTopFrame(
-    execution: ResidentTopExecutionState,
-    lease: PositionExecutionLease,
-  ): void {
-    if (!lease.isCurrent()) return
-    execution.framesLeft -= 1
-
-    const scrollTop = runScrollShadowSafely<number | null>({
-      event: 'resident-top-position-frame',
-      conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.positionFrame(lease),
-    })
-    if (!lease.isCurrent()) return
-    if (scrollTop === null) {
-      lease.settle()
-      this.completeResidentTopExecution(execution, 'best-effort')
-      return
-    }
-
-    execution.stableFrames =
-      scrollTop <= RESIDENT_TOP_TOLERANCE_PX
-        ? execution.stableFrames + 1
-        : 0
-    this.recordResidentTopFrame(execution, false)
-    if (execution.stableFrames >= RESIDENT_TOP_STABLE_FRAMES) {
-      lease.settle()
-      this.completeResidentTopExecution(execution, 'settled')
-      return
-    }
-    if (execution.framesLeft <= 0) {
-      lease.settle()
-      this.completeResidentTopExecution(execution, 'best-effort')
-      return
-    }
-    this.scheduleResidentTopFrame(execution, lease)
-  }
-
-  private scheduleResidentTopFrame(
-    execution: ResidentTopExecutionState,
-    lease: PositionExecutionLease,
-  ): void {
-    scheduleFrameInShadow(
-      execution,
-      'resident-top-frame-schedule',
-      lease,
-      () => this.driveResidentTopFrame(execution, lease),
-      () => {
-        lease.settle()
-        this.completeResidentTopExecution(execution, 'best-effort')
-      },
-    )
-  }
-
-  private recordResidentTopFrame(
-    execution: ResidentTopExecutionState,
-    wrote: boolean,
-  ): void {
-    recordFrameInShadow(execution, 'resident-top-frame-monitor', wrote)
-  }
-
-  private finishResidentTopLoop(
-    execution: ResidentTopExecutionState,
-  ): void {
-    if (!execution.loop) return
-    runScrollShadowSafely({
-      event: 'resident-top-loop-finish',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.loop?.finish(),
-    })
-    execution.loop = null
-  }
-
-  private completeResidentTopExecution(
-    execution: ResidentTopExecutionState,
-    outcome: ResidentTopCompletion,
-  ): void {
-    this.teardownExecution(
-      execution,
-      (torn) => this.finishResidentTopLoop(torn),
-      (torn) => runScrollShadowSafely({
-        event: 'resident-top-complete',
-        conversationId: torn.request.conversationId,
-        fallback: undefined,
-        observe: () => torn.executor.complete(torn.request, outcome),
-      }),
-    )
-    if (this.residentTopExecution === execution) {
-      this.residentTopExecution = null
-    }
-  }
-
-  private beginResidentTopOperation(
-    execution: ResidentTopExecutionState,
-  ): PositionExecutionLease {
-    return this.beginExecutionOperation(
-      execution,
-      () => this.residentTopExecution === execution,
-    )
-  }
-
-  private isResidentTopExecutionCurrent(execution: ResidentTopExecutionState): boolean {
-    return this.isExecutionCurrent(this.residentTopExecution, execution)
-  }
-
-  private createExplicitTargetExecution(
-    request: ExplicitTargetRequest,
-    executor: ExplicitTargetExecutor,
-    purpose: ExplicitTargetExecutionState['purpose'] = 'navigation',
-  ): ExplicitTargetExecutionState {
-    return {
-      purpose,
-      request,
-      executor,
-      operation: 0,
-      abortController: null,
-      aroundAttempted: false,
-      loadingAround: false,
-      loop: null,
-      framesLeft: EXPLICIT_TARGET_REASSERT_FRAMES,
-      stableFrames: 0,
-      landedTarget: null,
-      applied: false,
-      heldFramesLeft: HELD_WRITE_FRAMES,
-    }
-  }
-
-  private driveExplicitTarget(
-    execution: ExplicitTargetExecutionState,
-  ): void {
-    if (
-      !this.isExplicitTargetExecutionCurrent(execution) ||
-      execution.loop
-    ) {
-      return
-    }
-
-    const loadAround: SavedPositionLoadAroundStatus = execution.loadingAround
-      ? 'loading'
-      : execution.aroundAttempted
-        ? 'exhausted'
-        : execution.executor.loadAround
-          ? 'available'
-          : 'unavailable'
-    const reachability = runScrollShadowSafely<ReachabilityFacts | null>({
-      event: 'explicit-target-reachability',
-      conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.reachability(
-        execution.request.desired,
-        loadAround,
-      ),
-    })
-    if (!reachability) return
-
-    const phase = resolveReachability(execution.request, reachability)
-    this.model = advancePhaseIfCurrent(
-      this.model,
-      execution.request.conversationId,
-      execution.request.generation,
-      phase,
-    )
-    if (!this.isExplicitTargetExecutionCurrent(execution)) return
-
-    switch (phase.kind) {
-      case 'loading-around':
-        this.startExplicitTargetAroundLoad(execution, phase.messageId)
-        return
-      case 'mounting':
-      case 'reconciling':
-        execution.loadingAround = false
-        this.startExplicitTargetLoop(execution)
-        return
-      case 'unavailable':
-        // Explicit navigation has `onUnavailable: wait`; retain the request so a later resident
-        // window refresh can make it reachable.
-        this.model = advancePhaseIfCurrent(
-          this.model,
-          execution.request.conversationId,
-          execution.request.generation,
-          { kind: 'pending', reason: 'target-not-indexed' },
-        )
-        return
-      case 'resolving':
-      case 'pending':
-      case 'recentering-live-edge':
-      case 'position-applied':
-      case 'settled':
-      case 'paused-user-input':
-        return
-    }
-  }
-
-  private startExplicitTargetAroundLoad(
-    execution: ExplicitTargetExecutionState,
-    messageId: string,
-  ): void {
-    if (execution.loadingAround || execution.aroundAttempted) return
-    execution.aroundAttempted = true
-    execution.loadingAround = true
-    const lease = this.beginExplicitTargetOperation(execution)
-    const load = execution.executor.loadAround
-      ? runScrollShadowSafely<Promise<unknown> | unknown | null>({
-          event: 'explicit-target-load-around',
-          conversationId: execution.request.conversationId,
-          fallback: null,
-          observe: () =>
-            execution.executor.loadAround?.(messageId, lease.signal) ?? null,
-        })
-      : null
-    if (load === null) {
-      if (lease.isCurrent()) {
-        execution.loadingAround = false
-        this.driveExplicitTarget(execution)
-      }
-      return
-    }
-    void Promise.resolve(load)
-      .catch(() => undefined)
-      .finally(() => {
-        if (!lease.isCurrent()) return
-        execution.loadingAround = false
-        this.driveExplicitTarget(execution)
-      })
-  }
-
-  private startExplicitTargetLoop(
-    execution: ExplicitTargetExecutionState,
-  ): void {
-    if (
-      !this.isExplicitTargetExecutionCurrent(execution) ||
-      execution.loop
-    ) {
-      return
-    }
-    execution.framesLeft = EXPLICIT_TARGET_REASSERT_FRAMES
-    execution.heldFramesLeft = HELD_WRITE_FRAMES
-    execution.stableFrames = 0
-    execution.landedTarget = null
-    execution.applied = false
-    const lease = this.beginExplicitTargetOperation(execution)
-    if (!this.adoptFrameLoop({
-      execution,
-      lease,
-      startEvent: 'explicit-target-loop-start',
-      staleFinishEvent: 'explicit-target-loop-stale-finish',
-      beginLoop: () => execution.executor.beginLoop(lease),
-      onCannotStart: () => {
-        this.model = advancePhaseIfCurrent(
-          this.model,
-          execution.request.conversationId,
-          execution.request.generation,
-          { kind: 'pending', reason: 'target-not-indexed' },
-        )
-      },
-    })) return
-    this.scheduleExplicitTargetFrame(execution, lease)
-  }
-
-  private driveExplicitTargetFrame(
-    execution: ExplicitTargetExecutionState,
-    lease: PositionExecutionLease,
-  ): void {
-    if (!lease.isCurrent()) return
-    if (execution.framesLeft-- <= 0) {
-      if (execution.applied) {
-        this.finishExplicitTargetExecution(
-          execution,
-          true,
-          'best-effort',
-        )
-      } else {
-        this.finishExplicitTargetLoop(execution)
-        this.model = advancePhaseIfCurrent(
-          this.model,
-          execution.request.conversationId,
-          execution.request.generation,
-          { kind: 'pending', reason: 'target-not-indexed' },
-        )
-      }
-      return
-    }
-
-    runScrollShadowSafely({
-      event: 'explicit-target-observe-geometry',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.executor.observeGeometry(),
-    })
-    if (!lease.isCurrent()) return
-
-    const result = positionFrameInShadow<ExplicitTargetRequest, ExplicitTargetFrameResult>(
-      execution,
-      'explicit-target-frame',
-      lease,
-      { kind: 'unavailable' },
-    )
-    if (!lease.isCurrent()) return
-
-    if (result.kind === 'waiting') {
-      this.recordExplicitTargetFrame(execution, false)
-      this.scheduleExplicitTargetFrame(execution, lease)
-      return
-    }
-    // The jump wrote, so it is applied as far as its completion goes, but nothing landed: near its
-    // end a fling moves less than the settling drift on each frame, and counting those frames would
-    // settle the jump on the fling's position before its write lands.
-    if (result.kind === 'held') {
-      execution.applied = true
-      waitForHeldWrite(execution)
-      this.recordExplicitTargetFrame(execution, false)
-      this.scheduleExplicitTargetFrame(execution, lease)
-      return
-    }
-    if (result.kind === 'unavailable') {
-      this.finishExplicitTargetLoop(execution)
-      this.model = advancePhaseIfCurrent(
-        this.model,
-        execution.request.conversationId,
-        execution.request.generation,
-        { kind: 'pending', reason: 'target-not-indexed' },
-      )
-      return
-    }
-
-    execution.applied = true
-    lease.markApplied()
-    if (!lease.isCurrent()) return
-
-    const step = advanceDriftConvergence(
-      execution,
-      result.scrollTop,
-      EXPLICIT_TARGET_DRIFT_PX,
-      EXPLICIT_TARGET_STABLE_FRAMES,
-    )
-    // Reports the adapter's own write, not `step.moved`. A jump to a named message is judged by
-    // whether it acted this frame; the drift question only decides when it has arrived.
-    this.recordExplicitTargetFrame(execution, result.wrote)
-    if (step.settles) {
-      this.finishExplicitTargetExecution(execution, true, 'settled')
-      return
-    }
-    this.scheduleExplicitTargetFrame(execution, lease)
-  }
-
-  private scheduleExplicitTargetFrame(
-    execution: ExplicitTargetExecutionState,
-    lease: PositionExecutionLease,
-  ): void {
-    scheduleFrameInShadow(
-      execution,
-      'explicit-target-frame-schedule',
-      lease,
-      () => this.driveExplicitTargetFrame(execution, lease),
-      () => {
-        this.finishExplicitTargetLoop(execution)
-        this.model = advancePhaseIfCurrent(
-          this.model,
-          execution.request.conversationId,
-          execution.request.generation,
-          { kind: 'pending', reason: 'target-not-indexed' },
-        )
-      },
-    )
-  }
-
-  private recordExplicitTargetFrame(
-    execution: ExplicitTargetExecutionState,
-    wrote: boolean,
-  ): void {
-    recordFrameInShadow(execution, 'explicit-target-frame-monitor', wrote)
-  }
-
-  private beginExplicitTargetOperation(
-    execution: ExplicitTargetExecutionState,
-  ): PositionExecutionLease {
-    return this.beginExecutionOperation(
-      execution,
-      () => this.explicitTargetExecution === execution,
-    )
-  }
-
-  private isExplicitTargetExecutionCurrent(execution: ExplicitTargetExecutionState): boolean {
-    return this.isExecutionCurrent(this.explicitTargetExecution, execution)
-  }
-
-  private finishExplicitTargetExecution(
-    execution: ExplicitTargetExecutionState,
-    settle: boolean,
-    outcome?: ExplicitTargetCompletion,
-  ): void {
-    if (settle && this.isExplicitTargetExecutionCurrent(execution)) {
-      this.model = advancePhaseIfCurrent(
-        this.model,
-        execution.request.conversationId,
-        execution.request.generation,
-        { kind: 'settled' },
-      )
-    }
-    this.finishExplicitTargetLoop(execution)
-    execution.abortController?.abort()
-    if (this.explicitTargetExecution === execution) {
-      this.explicitTargetExecution = null
-    }
-    if (outcome) {
-      runScrollShadowSafely({
-        event: 'explicit-target-complete',
-        conversationId: execution.request.conversationId,
-        fallback: undefined,
-        observe: () => execution.executor.complete(
-          execution.request,
-          outcome,
-          execution.applied,
-        ),
-      })
-    }
-  }
-
-  private finishExplicitTargetLoop(
-    execution: ExplicitTargetExecutionState,
-  ): void {
-    const loop = execution.loop
-    execution.loop = null
-    if (!loop) return
-    runScrollShadowSafely({
-      event: 'explicit-target-loop-finish',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => loop.finish(),
-    })
-  }
-
-  private resolveUnreadMarkerReachability(
-    request: UnreadMarkerRequest,
-    facts: ReachabilityFacts,
-  ): PositioningPhase {
-    // Unread hydration intentionally waits for the ordinary resident window instead of issuing a
-    // deep load-around. The bounded frame budget below eventually promotes an honest live-edge
-    // fallback if cache hydration never makes the marker reachable.
-    if (facts.kind === 'empty-window') {
-      return { kind: 'pending', reason: 'empty-window' }
-    }
-    if (facts.kind === 'target-absent') {
-      return { kind: 'pending', reason: 'target-not-indexed' }
-    }
-    // A reachable unread row still has to pass the executor's live geometry check. In
-    // particular, `placement: use-unavailable-policy` is only a preflight hint that the row may
-    // sit in the top third; row measurement can change that answer before the first frame. Let the
-    // owned reconciler observe the frame and promote the fallback itself instead of bottom-pinning
-    // synchronously during the entry layout effect.
-    if (facts.kind === 'available') return { kind: 'reconciling' }
-    return resolveReachability(request, facts)
-  }
-
-  private startUnreadMarkerLoop(
-    execution: UnreadMarkerExecutionState,
-  ): void {
-    if (!this.isUnreadExecutionCurrent(execution)) return
-    const lease = this.beginUnreadOperation(execution)
-    execution.lease = lease
-    if (!this.adoptFrameLoop({
-      execution,
-      lease,
-      startEvent: 'unread-marker-loop-start',
-      staleFinishEvent: 'unread-marker-loop-stale-finish',
-      beginLoop: () => execution.executor.beginLoop(lease),
-      onCannotStart: () => this.promoteUnreadFallback(execution, 'unread-marker-unavailable'),
-    })) return
-    this.scheduleUnreadMarkerFrame(execution, lease)
-  }
-
   reassertUnreadMarker(conversationId: string): void {
-    const execution = this.unreadExecution
-    if (!execution?.lease || execution.request.conversationId !== conversationId) return
-    this.driveUnreadMarkerFrame(execution, execution.lease, false)
+    reassertUnreadMarker(this.runner, conversationId)
   }
 
-  private driveUnreadMarkerFrame(
-    execution: UnreadMarkerExecutionState,
-    lease: PositionExecutionLease,
-    scheduleNextFrame = true,
-  ): void {
-    if (!lease.isCurrent()) return
-    if (execution.framesLeft-- <= 0) {
-      if (execution.resolvedAtLiveEdge) {
-        this.promoteUnreadFallback(
-          execution,
-          'unread-marker-resolved-at-live-edge',
-        )
-      } else if (execution.resolved) {
-        this.finishUnreadExecution(execution, 'settled')
-      } else {
-        this.promoteUnreadFallback(execution, 'unread-marker-unavailable')
-      }
-      return
-    }
-
-    if (this.isUnreadMarkerTakenOver(execution)) {
-      const { conversationId, generation } = execution.request
-      this.model = cancelReconciliationForUserInput(
-        this.model,
-        conversationId,
-        generation,
-      )
-      this.finishUnreadExecution(execution, 'user-takeover')
-      return
-    }
-
-    const result = positionFrameInShadow<UnreadMarkerRequest, UnreadMarkerFrameResult>(
-      execution,
-      'unread-marker-frame',
-      lease,
-      { kind: 'unavailable' },
-    )
-    if (!lease.isCurrent()) return
-
-    // A held frame waits like one whose divider is not ready. Near its end a fling moves less than
-    // the settling drift on each frame, and counting those frames would settle the visit there
-    // before its write lands.
-    if (result.kind === 'waiting' || result.kind === 'held') {
-      if (result.kind === 'held') waitForHeldWrite(execution)
-      this.recordUnreadMarkerFrame(execution, false)
-      if (scheduleNextFrame) this.scheduleUnreadMarkerFrame(execution, lease)
-      return
-    }
-    if (result.kind === 'unavailable') {
-      this.promoteUnreadFallback(execution, 'unread-marker-unavailable')
-      return
-    }
-
-    execution.resolved = true
-    lease.markApplied()
-    if (!lease.isCurrent()) return
-    execution.resolvedAtLiveEdge = result.atLiveEdge
-    execution.landedContentHeight = this.readUnreadMarkerGeometry(execution)?.contentHeight ?? null
-
-    const step = advanceDriftConvergence(
-      execution,
-      result.scrollTop,
-      UNREAD_MARKER_DRIFT_PX,
-      UNREAD_MARKER_STABLE_FRAMES,
-    )
-    this.recordUnreadMarkerFrame(execution, step.moved)
-    if (step.settles) {
-      if (execution.resolvedAtLiveEdge) {
-        this.promoteUnreadFallback(
-          execution,
-          'unread-marker-resolved-at-live-edge',
-        )
-      } else {
-        this.finishUnreadExecution(execution, 'settled')
-      }
-      return
-    }
-    if (scheduleNextFrame) this.scheduleUnreadMarkerFrame(execution, lease)
-  }
-
-  private readUnreadMarkerGeometry(
-    execution: UnreadMarkerExecutionState,
-  ): UnreadMarkerGeometry | null {
-    return runScrollShadowSafely<UnreadMarkerGeometry | null>({
-      event: 'unread-marker-read-geometry',
-      conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.readGeometry(),
-    })
-  }
-
-  /**
-   * Whether the reader moved the viewport away from the last landing. Wheel, touch and keys cancel
-   * through {@link observeUserInput}; this catches movement that delivers no input event, such as a
-   * scrollbar drag. A jump that comes with a content-height change is not that: the first
-   * measurement of rows positioned on estimates recalibrates every estimate, and the browser clamps
-   * scrollTop into the shrunken content. The loop re-asserts the marker over such a correction.
-   * Nor is the leftover movement of a released fling while the reader's own divider visit is
-   * pending: the viewport observer attributes it to that navigation, whose write the fling holds.
-   */
-  private isUnreadMarkerTakenOver(execution: UnreadMarkerExecutionState): boolean {
-    if (execution.landedTarget === null || execution.landedContentHeight === null) return false
-    const geometry = this.readUnreadMarkerGeometry(execution)
-    if (!geometry) return false
-    if (geometry.contentHeight !== execution.landedContentHeight) return false
-    if (geometry.pendingFling === true && this.hasPendingNavigation(execution.request.conversationId)) return false
-    return Math.abs(geometry.scrollTop - execution.landedTarget) > UNREAD_MARKER_TAKEOVER_DRIFT_PX
-  }
-
-  private scheduleUnreadMarkerFrame(
-    execution: UnreadMarkerExecutionState,
-    lease: PositionExecutionLease,
-  ): void {
-    scheduleFrameInShadow(
-      execution,
-      'unread-marker-frame-schedule',
-      lease,
-      () => this.driveUnreadMarkerFrame(execution, lease),
-      () => this.promoteUnreadFallback(execution, 'unread-marker-unavailable'),
-    )
-  }
-
-  private recordUnreadMarkerFrame(
-    execution: UnreadMarkerExecutionState,
-    wrote: boolean,
-  ): void {
-    recordFrameInShadow(execution, 'unread-marker-frame-monitor', wrote)
-  }
-
-  private promoteUnreadFallback(
-    execution: UnreadMarkerExecutionState,
-    reason:
-      | 'unread-marker-unavailable'
-      | 'unread-marker-resolved-at-live-edge',
-  ): void {
-    if (!this.isUnreadExecutionCurrent(execution)) return
-    this.finishUnreadLoop(execution)
-    execution.abortController?.abort()
-    this.reportUnreadCompletion(execution, reason)
-
-    // Return-to-latest's divider visit hands its navigation over: the live edge is still the place
-    // the reader asked for.
-    if (!this.acceptLiveEdgeRequest(
-      execution.request.conversationId,
-      { kind: 'fallback', reason },
-      execution.executor.liveEdge,
-      execution.request.source.kind === 'user-navigation' ? 'navigation' : 'maintenance',
-    )) this.cancelUnreadExecution()
-  }
-
-  private beginUnreadOperation(
-    execution: UnreadMarkerExecutionState,
-  ): PositionExecutionLease {
-    return this.beginExecutionOperation(
-      execution,
-      () => this.unreadExecution === execution,
-    )
-  }
-
-  private isUnreadExecutionCurrent(execution: UnreadMarkerExecutionState): boolean {
-    return this.isExecutionCurrent(this.unreadExecution, execution)
-  }
-
-  private finishUnreadExecution(
-    execution: UnreadMarkerExecutionState,
-    outcome: 'settled' | 'user-takeover',
-  ): void {
-    this.reportUnreadCompletion(execution, outcome)
-    if (outcome === 'settled' && this.isUnreadExecutionCurrent(execution)) {
-      const active = this.model.active
-      if (active) {
-        this.model = advancePhaseIfCurrent(
-          this.model,
-          active.request.conversationId,
-          active.request.generation,
-          { kind: 'settled' },
-        )
-      }
-    }
-    this.finishUnreadLoop(execution)
-    execution.abortController?.abort()
-    if (this.unreadExecution === execution) this.unreadExecution = null
-  }
-
-  private reportUnreadCompletion(
-    execution: UnreadMarkerExecutionState,
-    outcome: UnreadMarkerCompletion,
-  ): void {
-    const complete = execution.executor.complete
-    if (!complete) return
-    runScrollShadowSafely({
-      event: 'unread-marker-complete',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => complete(execution.request, outcome),
-    })
-  }
-
-  private finishUnreadLoop(execution: UnreadMarkerExecutionState): void {
-    const loop = execution.loop
-    execution.loop = null
-    if (!loop) return
-    runScrollShadowSafely({
-      event: 'unread-marker-loop-finish',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => loop.finish(),
-    })
-  }
-
-  private driveSavedPosition(): void {
-    const execution = this.savedExecution
-    if (
-      !execution ||
-      !this.isSavedExecutionCurrent(execution) ||
-      execution.loop
-    ) {
-      return
-    }
-
-    const loadAround: SavedPositionLoadAroundStatus = execution.loadingAround
-      ? 'loading'
-      : execution.aroundAttempted
-        ? 'exhausted'
-        : execution.executor.loadAround
-          ? 'available'
-          : 'unavailable'
-    const reachability = runScrollShadowSafely<ReachabilityFacts | null>({
-      event: 'saved-position-reachability',
-      conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.reachability(
-        execution.request.desired,
-        loadAround,
-      ),
-    })
-    if (!reachability) {
-      this.promoteSavedFallback(execution, { kind: 'live-edge' })
-      return
-    }
-
-    const phase = resolveReachability(execution.request, reachability)
-    this.model = advancePhaseIfCurrent(
-      this.model,
-      execution.request.conversationId,
-      execution.request.generation,
-      phase,
-    )
-    if (!this.isSavedExecutionCurrent(execution)) return
-
-    switch (phase.kind) {
-      case 'resolving':
-      case 'pending':
-      case 'position-applied':
-      case 'settled':
-      case 'paused-user-input':
-        return
-      case 'recentering-live-edge':
-        this.recenterSavedLiveEdge(execution)
-        return
-      case 'loading-around':
-        this.startSavedAroundLoad(execution, phase.messageId)
-        return
-      case 'unavailable':
-        this.promoteSavedFallback(execution, phase.policy)
-        return
-      case 'mounting':
-      case 'reconciling': {
-        execution.loadingAround = false
-        this.startSavedPositionLoop(execution)
-      }
-    }
-  }
-
-  private startSavedPositionLoop(
-    execution: SavedPositionExecutionState,
-  ): void {
-    if (
-      !this.isSavedExecutionCurrent(execution) ||
-      execution.loop
-    ) {
-      return
-    }
-
-    execution.framesLeft = SAVED_POSITION_REASSERT_FRAMES
-    execution.stableFrames = 0
-    execution.landedTarget = null
-    const lease = this.beginSavedOperation(execution)
-
-    // Preserve the pre-paint entry write: the first measured application happens synchronously
-    // from the conversation-entry layout effect. Only the subsequent measurement settle is
-    // scheduled through the shared frame-loop owner.
-    const initial = this.positionSavedFrame(execution, lease)
-    if (!lease.isCurrent()) return
-    if (initial.kind === 'unavailable') {
-      if (
-        execution.request.source.kind === 'fallback' &&
-        execution.request.desired.kind === 'live-edge'
-      ) {
-        this.cancelSavedExecution()
-        return
-      }
-      this.promoteSavedFallback(
-        execution,
-        execution.request.onUnavailable ?? { kind: 'live-edge' },
-      )
-      return
-    }
-
-    lease.markApplied()
-    if (!lease.isCurrent()) return
-    this.completeSavedPosition(execution, 'applied')
-    if (!initial.reassert) {
-      lease.settle()
-      return
-    }
-
-    if (!this.adoptFrameLoop({
-      execution,
-      lease,
-      startEvent: 'saved-position-loop-start',
-      staleFinishEvent: 'saved-position-loop-stale-finish',
-      beginLoop: () => execution.executor.beginLoop(lease),
-      onCannotStart: () => this.settleSavedPosition(execution, lease, 'best-effort'),
-    })) return
-    this.scheduleSavedPositionFrame(execution, lease)
-  }
-
-  private driveSavedPositionFrame(
-    execution: SavedPositionExecutionState,
-    lease: SavedPositionExecutionLease,
-  ): void {
-    if (!lease.isCurrent()) return
-    if (execution.framesLeft-- <= 0) {
-      this.settleSavedPosition(execution, lease, 'best-effort')
-      return
-    }
-
-    const result = this.positionSavedFrame(execution, lease)
-    if (!lease.isCurrent()) return
-    if (result.kind === 'unavailable') {
-      // Once the initial anchor write landed, losing the row during re-windowing was historically
-      // a best-effort stop, not a new fallback request. Preserve that release seam.
-      this.settleSavedPosition(execution, lease, 'best-effort')
-      return
-    }
-    if (!result.reassert) {
-      this.settleSavedPosition(execution, lease, 'settled')
-      return
-    }
-
-    const step = advanceDriftConvergence(
-      execution,
-      result.scrollTop,
-      SAVED_POSITION_DRIFT_PX,
-      SAVED_POSITION_STABLE_FRAMES,
-    )
-    this.recordSavedPositionFrame(execution, step.moved)
-    if (step.settles) {
-      this.settleSavedPosition(execution, lease, 'settled')
-      return
-    }
-    this.scheduleSavedPositionFrame(execution, lease)
-  }
-
-  private positionSavedFrame(
-    execution: SavedPositionExecutionState,
-    lease: SavedPositionExecutionLease,
-  ): SavedPositionFrameResult {
-    return positionFrameInShadow(execution, 'saved-position-frame', lease, { kind: 'unavailable' })
-  }
-
-  private scheduleSavedPositionFrame(
-    execution: SavedPositionExecutionState,
-    lease: SavedPositionExecutionLease,
-  ): void {
-    scheduleFrameInShadow(
-      execution,
-      'saved-position-frame-schedule',
-      lease,
-      () => this.driveSavedPositionFrame(execution, lease),
-      () => this.settleSavedPosition(execution, lease, 'best-effort'),
-    )
-  }
-
-  private recordSavedPositionFrame(
-    execution: SavedPositionExecutionState,
-    wrote: boolean,
-  ): void {
-    recordFrameInShadow(execution, 'saved-position-frame-monitor', wrote)
-  }
-
-  private settleSavedPosition(
-    execution: SavedPositionExecutionState,
-    lease: SavedPositionExecutionLease,
-    outcome: Extract<SavedPositionCompletion, 'settled' | 'best-effort'>,
-  ): void {
-    if (!lease.isCurrent()) return
-    this.finishSavedLoop(execution)
-    this.completeSavedPosition(execution, outcome)
-    lease.settle()
-  }
-
-  private completeSavedPosition(
-    execution: SavedPositionExecutionState,
-    outcome: SavedPositionCompletion,
-  ): void {
-    runScrollShadowSafely({
-      event: 'saved-position-complete',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.executor.complete(
-        execution.request,
-        outcome,
-      ),
-    })
-  }
-
-  private finishSavedLoop(execution: SavedPositionExecutionState): void {
-    const loop = execution.loop
-    execution.loop = null
-    if (!loop) return
-    runScrollShadowSafely({
-      event: 'saved-position-loop-finish',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => loop.finish(),
-    })
-  }
-
-  private startSavedAroundLoad(
-    execution: SavedPositionExecutionState,
-    messageId: string,
-  ): void {
-    if (execution.loadingAround || execution.aroundAttempted) return
-    execution.aroundAttempted = true
-    execution.loadingAround = true
-    const lease = this.beginSavedOperation(execution)
-    const load = execution.executor.loadAround
-      ? runScrollShadowSafely<Promise<unknown> | unknown | null>({
-          event: 'saved-position-load-around',
-          conversationId: execution.request.conversationId,
-          fallback: null,
-          observe: () => execution.executor.loadAround?.(messageId, lease.signal) ?? null,
-        })
-      : null
-    if (load === null) {
-      if (lease.isCurrent()) {
-        execution.loadingAround = false
-        this.driveSavedPosition()
-      }
-      return
-    }
-    void Promise.resolve(load)
-      .catch(() => undefined)
-      .finally(() => {
-        if (!lease.isCurrent()) return
-        execution.loadingAround = false
-        this.driveSavedPosition()
-      })
-  }
-
-  private recenterSavedLiveEdge(
-    execution: SavedPositionExecutionState,
-  ): void {
-    const recenter = execution.executor.recenterLiveEdge
-    const version = execution.executor.recenterVersion
-    if (!recenter || !version) {
-      this.finishAtBestAvailableLiveEdge(execution)
-      return
-    }
-    if (execution.lastRecenterVersion === version) return
-    execution.lastRecenterVersion = version
-    const lease = this.beginSavedOperation(execution)
-    const result = runScrollShadowSafely({
-      event: 'saved-position-recenter-live-edge',
-      conversationId: execution.request.conversationId,
-      fallback: 'unavailable' as const,
-      observe: () => recenter(lease.signal),
-    })
-    if (!lease.isCurrent()) return
-    if (result === 'unavailable') {
-      this.finishAtBestAvailableLiveEdge(execution)
-    }
-  }
-
-  private finishAtBestAvailableLiveEdge(
-    execution: SavedPositionExecutionState,
-  ): void {
-    if (!this.isSavedExecutionCurrent(execution)) return
-    this.startSavedPositionLoop(execution)
-  }
-
-  private promoteSavedFallback(
-    execution: SavedPositionExecutionState,
-    policy: UnavailablePolicy,
-  ): void {
-    if (!this.isSavedExecutionCurrent(execution)) return
-    const desired =
-      policy.kind === 'legacy-offset'
-        ? { kind: 'legacy-offset' as const, offsetPx: policy.offsetPx }
-        : { kind: 'live-edge' as const, follow: true as const }
-    if (
-      execution.request.source.kind === 'fallback' &&
-      execution.request.desired.kind === 'live-edge'
-    ) {
-      const request = execution.request as LiveEdgeRequest
-      const liveExecutor = execution.executor.liveEdge
-      this.cancelSavedExecution()
-      this.model = advancePhaseIfCurrent(
-        this.model,
-        request.conversationId,
-        request.generation,
-        { kind: 'reconciling' },
-      )
-      const liveExecution = this.createLiveEdgeExecution(
-        request,
-        liveExecutor,
-      )
-      this.liveEdgeExecution = liveExecution
-      this.driveLiveEdge(liveExecution)
-      return
-    }
-
-    const generation = mintPositionGeneration()
-    const request: SavedPositionRequest = {
-      generation,
-      conversationId: execution.request.conversationId,
-      source: { kind: 'fallback', reason: 'saved-position-unavailable' },
-      desired,
-    } as SavedPositionRequest
-    const accepted = this.acceptRequest(request)
-    if (accepted === this.model) {
-      this.cancelSavedExecution()
-      return
-    }
-    if (request.desired.kind === 'live-edge') {
-      const liveRequest = request as LiveEdgeRequest
-      const liveExecutor = execution.executor.liveEdge
-      const reachability = runScrollShadowSafely<ReachabilityFacts | null>({
-        event: 'saved-position-live-edge-fallback',
-        conversationId: liveRequest.conversationId,
-        fallback: null,
-        observe: () => liveExecutor.reachability(),
-      })
-      if (
-        !reachability ||
-        !reachabilityMatchesRequest(liveRequest, reachability)
-      ) {
-        this.cancelSavedExecution()
-        return
-      }
-      this.cancelSavedExecution()
-      this.model = advancePhaseIfCurrent(
-        accepted,
-        liveRequest.conversationId,
-        liveRequest.generation,
-        resolveReachability(liveRequest, reachability),
-      )
-      const liveExecution = this.createLiveEdgeExecution(
-        liveRequest,
-        liveExecutor,
-      )
-      this.liveEdgeExecution = liveExecution
-      this.driveLiveEdge(liveExecution)
-      return
-    }
-    this.finishSavedLoop(execution)
-    execution.abortController?.abort()
-    execution.request = request
-    execution.operation += 1
-    execution.abortController = null
-    execution.loadingAround = false
-    execution.aroundAttempted = true
-    execution.lastRecenterVersion = null
-    execution.framesLeft = SAVED_POSITION_REASSERT_FRAMES
-    execution.stableFrames = 0
-    execution.landedTarget = null
-    this.model = accepted
-    this.driveSavedPosition()
-  }
-
-  private beginSavedOperation(
-    execution: SavedPositionExecutionState,
-  ): SavedPositionExecutionLease {
-    return this.beginExecutionOperation(
-      execution,
-      () => this.savedExecution === execution,
-      // A saved-position run that has already settled treats a late "applied" as reached rather
-      // than walking the phase backwards: the entry has finished, and the frame reporting it is
-      // just the loop draining.
-      (phase) =>
-        phase.kind === 'position-applied' &&
-        this.model.active?.phase.kind === 'settled',
-    )
-  }
-
-  private isSavedExecutionCurrent(execution: SavedPositionExecutionState): boolean {
-    return this.isExecutionCurrent(this.savedExecution, execution)
+  private currentDirectionalRun(conversationId: string, generation: number) {
+    const run = this.runner.currentRun('directional-history', conversationId)
+    return run !== null && run.request.generation === generation ? run : null
   }
 
   private cancelExecutionsIfSuperseded(): void {
-    const execution = this.savedExecution
-    if (execution && !this.isSavedExecutionCurrent(execution)) {
-      this.cancelSavedExecution()
-    }
-    const unreadExecution = this.unreadExecution
-    if (
-      unreadExecution &&
-      !this.isUnreadExecutionCurrent(unreadExecution)
-    ) {
-      this.cancelUnreadExecution()
-    }
-    const targetExecution = this.explicitTargetExecution
-    if (
-      targetExecution &&
-      !this.isExplicitTargetExecutionCurrent(targetExecution)
-    ) {
-      this.cancelExplicitTargetExecution()
-    }
-    const residentTopExecution = this.residentTopExecution
-    if (
-      residentTopExecution &&
-      !this.isResidentTopExecutionCurrent(residentTopExecution)
-    ) {
-      this.cancelResidentTopExecution('superseded')
-    }
-    const liveEdgeExecution = this.liveEdgeExecution
-    if (
-      liveEdgeExecution &&
-      !this.isLiveEdgeExecutionCurrent(liveEdgeExecution)
-    ) {
-      this.cancelLiveEdgeExecution('superseded')
-    }
-    const mediaExecution = this.anchorPreservationExecution
-    if (
-      mediaExecution &&
-      !this.isAnchorPreservationExecutionCurrent(mediaExecution)
-    ) {
-      this.cancelAnchorPreservationExecution('superseded')
-    }
-    const directionalExecution = this.directionalHistoryExecution
-    if (
-      directionalExecution &&
-      !this.isDirectionalHistoryExecutionCurrent(directionalExecution)
-    ) {
-      this.cancelDirectionalHistoryExecution('superseded')
-    }
-  }
-
-  private cancelAllExecutions(outcome: 'superseded'): void {
-    this.cancelSavedExecution()
-    this.cancelUnreadExecution()
-    this.cancelExplicitTargetExecution()
-    this.cancelResidentTopExecution(outcome)
-    this.cancelLiveEdgeExecution(outcome)
-    this.cancelAnchorPreservationExecution(outcome)
-    this.cancelDirectionalHistoryExecution(outcome)
-  }
-
-  /**
-   * Tear an execution down in the order every executor depends on: stop its frame loop, abort the
-   * work its lease authorised, then report the outcome to the executor that asked for it.
-   *
-   * The order is the point. Aborting before the loop is finished leaves a scheduled frame to run
-   * against a dead execution, and reporting before the abort hands the executor a completion whose
-   * signal is still live. Clearing the slot stays with each caller: most drop it unconditionally,
-   * resident top only when it still holds the execution being torn down.
-   */
-  private teardownExecution<T extends { abortController: AbortController | null }>(
-    execution: T | null,
-    finishLoop: (execution: T) => void,
-    reportOutcome?: (execution: T) => void,
-  ): void {
-    if (!execution) return
-    finishLoop(execution)
-    execution.abortController?.abort()
-    reportOutcome?.(execution)
-  }
-
-  private cancelSavedExecution(): void {
-    this.teardownExecution(this.savedExecution, (execution) => this.finishSavedLoop(execution))
-    this.savedExecution = null
-  }
-
-  private cancelUnreadExecution(): void {
-    this.teardownExecution(this.unreadExecution, (execution) => this.finishUnreadLoop(execution))
-    this.unreadExecution = null
-  }
-
-  private cancelExplicitTargetExecution(): void {
-    this.teardownExecution(
-      this.explicitTargetExecution,
-      (execution) => this.finishExplicitTargetLoop(execution),
-    )
-    this.explicitTargetExecution = null
-  }
-
-  private cancelResidentTopExecution(
-    outcome: ResidentTopCompletion,
-  ): void {
-    const execution = this.residentTopExecution
-    if (execution) {
-      this.completeResidentTopExecution(execution, outcome)
-    }
-  }
-
-  private cancelLiveEdgeExecution(outcome: LiveEdgeCompletion): void {
-    this.teardownExecution(
-      this.liveEdgeExecution,
-      (execution) => this.finishLiveEdgeLoop(execution),
-      (execution) => this.completeLiveEdge(execution, outcome),
-    )
-    this.liveEdgeExecution = null
-  }
-
-  private cancelAnchorPreservationExecution(
-    outcome: AnchorPreservationCompletion,
-  ): void {
-    this.teardownExecution(
-      this.anchorPreservationExecution,
-      (execution) => this.finishAnchorPreservationLoop(execution),
-      (execution) => this.completeAnchorPreservation(execution, outcome),
-    )
-    this.anchorPreservationExecution = null
-  }
-
-  private cancelDirectionalHistoryExecution(
-    outcome: DirectionalHistoryCompletion,
-  ): void {
-    this.teardownExecution(
-      this.directionalHistoryExecution,
-      (execution) => this.finishDirectionalHistoryLoop(execution),
-      (execution) => this.completeDirectionalHistory(execution, outcome),
-    )
-    this.directionalHistoryExecution = null
+    this.runner.cancelSuperseded()
   }
 }
-
-export type { PositionRequestDraft }
