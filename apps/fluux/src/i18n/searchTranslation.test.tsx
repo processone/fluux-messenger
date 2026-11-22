@@ -65,8 +65,7 @@ vi.mock('@/components/settings-components', () => ({ SettingsSidebar: () => null
 vi.mock('@/components/Avatar', () => ({ Avatar: () => null }))
 vi.mock('@/utils/performLogout', () => ({ performLogout: vi.fn() }))
 vi.mock('@/components/conversation', () => ({
-  MessageList: ({ isLoading, loadingState }: { isLoading?: boolean; loadingState?: ReactNode }) =>
-    isLoading ? <>{loadingState}</> : null,
+  MessageList: ({ loading }: { loading?: ReactNode }) => <>{loading}</>,
   MessageBubble: () => null,
   shouldShowAvatar: vi.fn(),
   buildReplyContext: vi.fn(),
