@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { ContactSelector } from './ContactSelector'
@@ -81,6 +82,61 @@ describe('ContactSelector', () => {
       fireEvent.click(screen.getByRole('button', { name: removeName('Alice Smith') }))
 
       expect(mockOnSelectionChange).toHaveBeenCalledExactlyOnceWith([typedAddress])
+    })
+
+    describe('focus after a removal', () => {
+      const removeButton = (name: string) =>
+        screen.getByRole('button', { name: en.contacts.removeFromSelection.replace('{{name}}', name) })
+
+      function ChosenContacts({ initial }: { initial: string[] }) {
+        const [selected, setSelected] = useState(initial)
+        return <ContactSelector selectedContacts={selected} onSelectionChange={setSelected} addMorePlaceholder="Add more" placeholder="Add more" />
+      }
+
+      it('moves a keyboard user to the next button, the previous one, then the field', () => {
+        render(<ChosenContacts initial={['alice@example.com', 'bob@example.com', 'charlie@example.com']} />)
+
+        removeButton('Bob Jones').focus()
+        fireEvent.click(removeButton('Bob Jones'))
+        expect(removeButton('Charlie Brown')).toHaveFocus()
+
+        fireEvent.click(removeButton('Charlie Brown'))
+        expect(removeButton('Alice Smith')).toHaveFocus()
+
+        fireEvent.click(removeButton('Alice Smith'))
+        expect(screen.getByPlaceholderText('Add more')).toHaveFocus()
+      })
+
+      it('leaves focus alone and the list closed after a pointer press', () => {
+        render(<ChosenContacts initial={['alice@example.com']} />)
+
+        removeButton('Alice Smith').focus()
+        fireEvent.click(removeButton('Alice Smith'), { detail: 1 })
+
+        expect(screen.getByPlaceholderText('Add more')).not.toHaveFocus()
+        expect(screen.queryByTestId('contact-suggestions')).not.toBeInTheDocument()
+      })
+
+      it('ignores the repeats of a held key until a new press', () => {
+        render(<ChosenContacts initial={['alice@example.com', 'bob@example.com']} />)
+
+        removeButton('Alice Smith').focus()
+        fireEvent.click(removeButton('Alice Smith'))
+        // A prevented key-down is what stops the browser from pressing the focused button.
+        expect(fireEvent.keyDown(removeButton('Bob Jones'), { key: 'Enter', repeat: true })).toBe(false)
+        fireEvent.keyUp(removeButton('Bob Jones'), { key: 'Enter' })
+        expect(fireEvent.keyDown(removeButton('Bob Jones'), { key: 'Enter' })).toBe(true)
+
+        fireEvent.click(removeButton('Bob Jones'))
+        const field = screen.getByPlaceholderText('Add more')
+        expect(field).toHaveFocus()
+        fireEvent.keyDown(field, { key: 'Enter', repeat: true })
+        expect(screen.queryByRole('button', { name: /from selection/ })).not.toBeInTheDocument()
+
+        fireEvent.keyUp(field, { key: 'Enter' })
+        fireEvent.keyDown(field, { key: 'Enter' })
+        expect(screen.getAllByRole('button', { name: /from selection/ })).toHaveLength(1)
+      })
     })
   })
 
