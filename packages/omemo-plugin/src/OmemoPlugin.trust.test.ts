@@ -5,6 +5,7 @@ import { PluginStorageOmemoStore } from './store'
 import { fetchBundle, publishBundle, publishDeviceList } from './pep'
 import { fingerprint, OmemoAccount } from '@fluux/omemo'
 import { setVerified } from './verifiedDevices'
+import { E2EEManager, E2EEEncryptionRequiredError, InMemoryStorageBackend } from '@fluux/sdk'
 import type { PluginStorage } from '@fluux/sdk'
 
 const hex = (u: Uint8Array) => [...u].map((b) => b.toString(16).padStart(2, '0')).join('')
@@ -322,9 +323,9 @@ describe('OmemoPlugin identities: first contact, reachability and decisions', ()
       usedForEncryption: true,
       allowedDecisions: ['verified', 'untrusted'],
     })
-    // The aggregate and per-device readings the send checks rely on are unchanged.
-    expect(await pa.getPeerTrust('bob@x')).toBe('unknown')
-    expect(await pa.getDeviceTrust('bob@x', String(bobDeviceId))).toBe('unknown')
+    // The aggregate and per-device readings agree with the list.
+    expect(await pa.getPeerTrust('bob@x')).toBe('tofu')
+    expect(await pa.getDeviceTrust('bob@x', String(bobDeviceId))).toBe('tofu')
   })
 
   it('devices past the 50-device cap are listed not used with the over-limit reason', async () => {
@@ -384,5 +385,55 @@ describe('OmemoPlugin identities: first contact, reachability and decisions', ()
     expect((await pa.listPeerIdentities('bob@x'))[0]).toMatchObject({ trust: 'tofu', usedForEncryption: true })
     await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'tofu')
     expect((await pa.listPeerIdentities('bob@x'))[0]).toMatchObject({ trust: 'tofu', usedForEncryption: true })
+  })
+})
+
+// Intent: FLM-426 — the send rule, composed. The real manager reads the real OMEMO plugin's
+// aggregate trust to decide whether opportunistic plaintext is allowed to a contact.
+describe('plaintext to an OMEMO contact, through the manager and the real plugin', () => {
+  async function managed() {
+    const { alice, bob, pb, bobDeviceId } = await twoParty()
+    const manager = new E2EEManager({ storage: new InMemoryStorageBackend(), xmpp: alice.ctx.xmpp, account: { jid: 'alice@x' } })
+    const plugin = new OmemoPlugin()
+    await manager.register(plugin)
+    return { manager, plugin, bob, pb, bobDeviceId }
+  }
+  const target = { kind: 'direct' as const, peer: 'bob@x' }
+
+  it('blocks plaintext to a contact with a usable never-verified device (tofu)', async () => {
+    const { manager } = await managed()
+    expect(await manager.hasEstablishedTrust('bob@x')).toBe(true)
+    await expect(manager.assertPlaintextPermitted(target)).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+  })
+
+  it('blocks plaintext to a contact whose only device was refused', async () => {
+    const { manager, plugin, bobDeviceId } = await managed()
+    await plugin.setIdentityTrust('bob@x', String(bobDeviceId), 'untrusted')
+    await expect(manager.assertPlaintextPermitted(target)).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+  })
+
+  it('blocks plaintext to a contact with a new device waiting behind a verified one', async () => {
+    const { manager, plugin, bob, bobDeviceId } = await managed()
+    const acc2 = await OmemoAccount.create(new PluginStorageOmemoStore(memStorage()), (n) => crypto.getRandomValues(new Uint8Array(n)))
+    const device2 = acc2.publishableDeviceId()
+    await publishBundle(bob.ctx.xmpp, device2, await acc2.publishableBundleAsync())
+    await publishDeviceList(bob.ctx.xmpp, [bobDeviceId, device2])
+    await plugin.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    expect(await plugin.getDeviceTrust('bob@x', String(device2))).toBe('unknown')
+    await expect(manager.assertPlaintextPermitted(target)).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+  })
+
+  it('still permits plaintext to a contact with no usable key, and when plaintext is forced', async () => {
+    const { manager, bob } = await managed()
+    await publishDeviceList(bob.ctx.xmpp, [777]) // advertised device with no bundle
+    expect(await manager.hasEstablishedTrust('bob@x')).toBe(false)
+    await expect(manager.assertPlaintextPermitted(target)).resolves.toBeUndefined()
+    await publishDeviceList(bob.ctx.xmpp, [])
+  })
+
+  it('permits plaintext once the user forces it for a tofu contact', async () => {
+    const { manager } = await managed()
+    manager.setForcedPlaintext(target, true)
+    await expect(manager.assertPlaintextPermitted(target)).resolves.toBeUndefined()
   })
 })
