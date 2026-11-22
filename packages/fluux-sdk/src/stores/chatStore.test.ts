@@ -5456,8 +5456,8 @@ describe('chatStore', () => {
   })
 })
 
-// Regression tests for chat/room parity drifts: each of these behaviors already
-// exists in roomStore and had silently diverged in chatStore (or vice versa).
+// Chat-only regressions that were filed with the chat/room parity drifts. The scenarios both
+// stores share live in timeline.shared.test.ts.
 describe('chatStore parity drift regressions', () => {
   const convId = 'peer@example.com'
 
@@ -5484,80 +5484,6 @@ describe('chatStore parity drift regressions', () => {
     setResidentWindowSize(5000)
   })
 
-  function messageAt(id: string, body: string, iso: string): Message {
-    return {
-      type: 'chat',
-      id,
-      stanzaId: undefined, originId: undefined,
-      conversationId: convId,
-      from: convId,
-      body,
-      timestamp: new Date(iso),
-      isOutgoing: false,
-    }
-  }
-
-  describe('addMessage sliding-window trim (parity with roomStore)', () => {
-    it('trims the resident array to the window bound on live append', () => {
-      setResidentWindowSize(3)
-      for (let i = 1; i <= 4; i++) {
-        chatStore.getState().addMessage(messageAt(`m-${i}`, `m${i}`, `2024-01-15T10:0${i}:00Z`))
-      }
-      const resident = chatStore.getState().messages.get(convId) || []
-      expect(resident.map((m) => m.id)).toEqual(['m-2', 'm-3', 'm-4'])
-    })
-  })
-
-  describe('updateReactions cache fallback (parity with roomStore)', () => {
-    it('updates the durable cache when the conversation is resident but the message is not', () => {
-      chatStore.getState().addMessage(messageAt('resident-1', 'still here', '2024-01-15T10:00:00Z'))
-      vi.mocked(messageCache.updateMessageReactions).mockClear()
-      const residentBefore = chatStore.getState().messages.get(convId)
-
-      chatStore.getState().updateReactions(convId, 'evicted-1', 'bob@example.com', ['👍'])
-
-      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith('chat', convId, 'evicted-1', 'bob@example.com', ['👍'], undefined, expect.any(Number))
-      // The resident array is untouched — only the durable copy is patched.
-      expect(chatStore.getState().messages.get(convId)).toBe(residentBefore)
-    })
-  })
-
-  describe('cache pagination dedupe (parity with roomStore)', () => {
-    it('loadOlderMessagesFromCache dedupes and sorts an overlapping, out-of-order batch', async () => {
-      const current = messageAt('cur-1', 'current', '2024-01-15T11:00:00Z')
-      chatStore.setState((state) => ({ messages: new Map(state.messages).set(convId, [current]) }))
-
-      // Batch overlaps the resident window (cur-1 again) and arrives out of order.
-      vi.mocked(messageCache.getMessages).mockReset()
-      vi.mocked(messageCache.getMessages).mockResolvedValue([
-        { ...current },
-        messageAt('old-2', 'older 2', '2024-01-15T10:30:00Z'),
-        messageAt('old-1', 'older 1', '2024-01-15T10:00:00Z'),
-      ])
-
-      await chatStore.getState().loadOlderMessagesFromCache(convId)
-
-      const resident = chatStore.getState().messages.get(convId) || []
-      expect(resident.map((m) => m.id)).toEqual(['old-1', 'old-2', 'cur-1'])
-    })
-
-    it('loadNewerMessagesFromCache dedupes and sorts an overlapping, out-of-order batch', async () => {
-      const current = messageAt('cur-1', 'current', '2024-01-15T11:00:00Z')
-      chatStore.setState((state) => ({ messages: new Map(state.messages).set(convId, [current]) }))
-
-      vi.mocked(messageCache.getMessages).mockReset()
-      vi.mocked(messageCache.getMessages).mockResolvedValue([
-        messageAt('new-2', 'newer 2', '2024-01-15T13:00:00Z'),
-        { ...current },
-        messageAt('new-1', 'newer 1', '2024-01-15T12:00:00Z'),
-      ])
-
-      await chatStore.getState().loadNewerMessagesFromCache(convId)
-
-      const resident = chatStore.getState().messages.get(convId) || []
-      expect(resident.map((m) => m.id)).toEqual(['cur-1', 'new-1', 'new-2'])
-    })
-  })
   // ---------------------------------------------------------------------------
   // historyFloor: when a conversation entered our world (#1081). NOT a read
   // position — the floor unread derivation counts from when there is no pointer
