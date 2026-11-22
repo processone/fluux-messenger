@@ -7,6 +7,8 @@ import { localStorageMock } from '../core/sideEffects.testHelpers'
 import * as cache from '../utils/messageCache'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { UNCONFIRMED_DELIVERY_ERROR } from '../utils/xmppError'
+import { createMockClientWithSDKEvents, createMockStoreRefs } from '../core/test-utils'
+import { createStoreBindings, type StoreRefs } from '../bindings/storeBindings'
 
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
 
@@ -228,6 +230,57 @@ describe('marking a message the server never confirmed', () => {
 
     await vi.waitFor(async () => expect((await saved())?.deliveryError).toBeUndefined())
     expect(shown()?.deliveryError).toBeUndefined()
+  })
+
+  describe('through the SDK error binding', () => {
+    let unbind: () => void
+    let client: ReturnType<typeof createMockClientWithSDKEvents>
+    beforeEach(() => {
+      client = createMockClientWithSDKEvents()
+      unbind = createStoreBindings(client, () => ({
+        ...createMockStoreRefs(), chat: chatStore.getState(),
+      }) as unknown as StoreRefs)
+    })
+    afterEach(() => unbind())
+    const report = (onSettled: (settled: boolean) => void) =>
+      client.emit('chat:message-unconfirmed', { conversationId: CHAT, messageId: 'lost-1', onSettled })
+    const serverRejects = () =>
+      client.emit('chat:message-error', { conversationId: CHAT, messageId: 'lost-1', error: serverError })
+
+    it('keeps a queued mark when the error cannot reach a row that is only in saved history', async () => {
+      await cache.saveMessages('chat', [lost()])
+      const { reached, release } = pauseHydration()
+      const loading = chatStore.getState().loadMessagesFromCache(CHAT)
+      await reached
+      const onSettled = vi.fn()
+
+      report(onSettled)
+      serverRejects()
+      release()
+      await loading
+
+      await vi.waitFor(() => expect(onSettled).toHaveBeenCalledWith(true))
+      expect((await saved())?.deliveryError).toEqual(UNCONFIRMED_DELIVERY_ERROR)
+      expect(shown()?.deliveryError).toEqual(UNCONFIRMED_DELIVERY_ERROR)
+    })
+
+    it('lets the error replace a queued mark when it reaches the displayed row', async () => {
+      await cache.saveMessages('chat', [lost()])
+      await chatStore.getState().loadMessagesFromCache(CHAT)
+      const { reached, release } = pauseHydration()
+      const loading = chatStore.getState().loadMessagesFromCache(CHAT)
+      await reached
+      const onSettled = vi.fn()
+
+      report(onSettled)
+      serverRejects()
+      release()
+      await loading
+
+      await vi.waitFor(() => expect(onSettled).toHaveBeenCalledWith(true))
+      await vi.waitFor(async () => expect((await saved())?.deliveryError).toEqual(serverError))
+      expect(shown()?.deliveryError).toEqual(serverError)
+    })
   })
 
   it('a Retry cancels a mark queued behind a history load', async () => {

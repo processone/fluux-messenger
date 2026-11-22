@@ -139,6 +139,8 @@ export class SmPersistence {
   private unconfirmed: SmUnconfirmedMessage[] = []
   /** Records handed over by `takeUnconfirmed` whose result has not come back yet. */
   private reportingUnconfirmed = new Set<SmUnconfirmedMessage>()
+  /** Ids of messages a Retry is sending, until the stream holds the new attempt. */
+  private retrying = new Set<string>()
   private deps: SmPersistenceDeps
 
   constructor(deps: SmPersistenceDeps) {
@@ -204,7 +206,9 @@ export class SmPersistence {
     const kept = this.unacknowledged
       ? unconfirmedMessagesIn(this.unacknowledged.id, this.unacknowledged.items, this.unacknowledged.acked)
       : []
-    this.writeUnconfirmed(jid, latestById([...this.unconfirmed, ...kept, ...live]))
+    // An attempt still queued from before a Retry says nothing about the Retry, which has not gone out.
+    const tracked = [...kept, ...live].filter((message) => !this.retrying.has(message.id))
+    this.writeUnconfirmed(jid, latestById([...this.unconfirmed, ...tracked]))
   }
 
   /** Read back what the previous page load saved. */
@@ -252,7 +256,9 @@ export class SmPersistence {
    */
   takeUnconfirmed(jid: string): SmUnconfirmedMessage[] {
     const taken = this.unconfirmed.filter(
-      (message) => message.session === undefined && !this.reportingUnconfirmed.has(message),
+      (message) => message.session === undefined
+        && !this.reportingUnconfirmed.has(message)
+        && !this.retrying.has(message.id),
     )
     for (const message of taken) this.reportingUnconfirmed.add(message)
     this.writeUnconfirmed(jid, this.unconfirmed)
@@ -266,9 +272,20 @@ export class SmPersistence {
     this.writeUnconfirmed(jid, this.unconfirmed)
   }
 
-  /** A Retry sends the message again: the stream tracks that attempt, so earlier records of it no longer hold. */
-  forgetUnconfirmed(jid: string, id: string): void {
-    if (!this.unconfirmed.some((message) => message.id === id)) return
+  /**
+   * A Retry has cleared the visible error and is preparing the message. Until the
+   * stream holds it, this record is what shows it was not delivered if the page
+   * reloads, so it is saved now and not reported on this page meanwhile.
+   */
+  beginRetry(jid: string, id: string, to: string): void {
+    this.retrying.add(id)
+    this.unconfirmed = [...this.unconfirmed.filter((message) => message.id !== id), { id, to }]
+    this.writeUnconfirmed(jid, this.unconfirmed)
+  }
+
+  /** Sent: the stream tracks this attempt now. Not sent: the record stays and is reported again. */
+  endRetry(jid: string, id: string, sent: boolean): void {
+    if (!this.retrying.delete(id) || !sent) return
     this.unconfirmed = this.unconfirmed.filter((message) => message.id !== id)
     this.writeUnconfirmed(jid, this.unconfirmed)
   }
@@ -359,6 +376,7 @@ export class SmPersistence {
     this.unacknowledged = null
     this.unconfirmed = []
     this.reportingUnconfirmed.clear()
+    this.retrying.clear()
   }
 
   /**

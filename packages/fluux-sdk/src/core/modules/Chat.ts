@@ -1165,9 +1165,27 @@ export class Chat extends BaseModule {
     /** The row first went out encrypted: a retry never sends its file unencrypted. */
     wasEncrypted?: boolean,
   ): Promise<void> {
+    // Before the first await: the caller has just cleared the error, so this record now stands for it.
+    const finishRetry = this.deps.beginMessageRetry?.(getBareJid(to), messageId)
+    let sent = false
+    try {
+      await this.sendRetry(to, body, messageId, attachment, storedReferences, storedForwarded, wasEncrypted)
+      sent = true
+    } finally {
+      finishRetry?.(sent)
+    }
+  }
+
+  private async sendRetry(
+    to: string,
+    body: string,
+    messageId: string,
+    attachment?: FileAttachment,
+    storedReferences?: MessageReference[],
+    storedForwarded?: ForwardedCopy,
+    wasEncrypted?: boolean,
+  ): Promise<void> {
     const recipient = getBareJid(to)
-    // Before the first await, so no reconnect between the caller's error clear and this send can mark it again.
-    this.deps.forgetUnconfirmedMessage?.(messageId)
 
     let fullBody = body
     // Reconstruct OOB fallback if attachment present

@@ -2233,9 +2233,12 @@ export class Connection extends BaseModule {
     }
   }
 
-  /** A Retry is sending this message again, so what an earlier connection recorded about it no longer holds. */
-  forgetUnconfirmedMessage(messageId: string): void {
-    if (this.credentials?.jid) this.smPersistence.forgetUnconfirmed(this.credentials.jid, messageId)
+  /** A Retry is sending this message. Call the result once the attempt is in the stream, or could not be sent. */
+  beginMessageRetry(to: string, messageId: string): (sent: boolean) => void {
+    const jid = this.credentials?.jid
+    if (!jid) return () => {}
+    this.smPersistence.beginRetry(jid, messageId, to)
+    return sent => this.smPersistence.endRetry(jid, messageId, sent)
   }
 
   /** Give the state machine the window of the session in the cache. */

@@ -553,6 +553,54 @@ describe('stream management resumption against a controlled XMPP server', { time
       expect(held.has(SAVED_KEY)).toBe(false)
     })
 
+    /** A message marked after a refused resumption, with the connection back and the server receiving again. */
+    const markedAfterRefusal = async (storage: StorageAdapter) => {
+      await openPage(storage)
+      server.losingMessages = true
+      const id = await client.messages.sendMessage('bob@example.com', 'lost words')
+      server.resumable = false
+      server.drop()
+      await until(() => notDelivered.length === 1)
+      await until(() => !held.has(SAVED_KEY))
+      await until(() => client.getStreamManagementState() !== null)
+      server.losingMessages = false
+      server.resumable = true
+      return id
+    }
+    const encryption = () => vi.spyOn(
+      client.messages as unknown as { applyE2EEToOutboundChat: () => Promise<undefined> },
+      'applyE2EEToOutboundChat',
+    )
+
+    it('is marked again when the page reloads while its Retry is still being encrypted', async () => {
+      const storage = memoryStorage()
+      const id = await markedAfterRefusal(storage)
+      encryption().mockReturnValue(new Promise(() => {}))
+
+      void client.messages.resendMessage('bob@example.com', 'lost words', id)
+      await reload()
+      await openPage(storage)
+      await until(() => notDelivered.length === 2)
+
+      expect(notDelivered[1]).toEqual(expected(id)[0])
+      expect(server.messages).not.toContain(id)
+    })
+
+    it('is marked again after a reload when its Retry is refused before sending', async () => {
+      const storage = memoryStorage()
+      const id = await markedAfterRefusal(storage)
+      encryption().mockRejectedValue(new Error('encryption required'))
+
+      await expect(client.messages.resendMessage('bob@example.com', 'lost words', id)).rejects.toThrow('encryption required')
+      expect(held.get(SAVED_KEY)).toContain(id)
+      await reload()
+      await openPage(storage)
+      await until(() => notDelivered.length === 2)
+
+      expect(notDelivered[1]).toEqual(expected(id)[0])
+      expect(server.messages).not.toContain(id)
+    })
+
     it('is resent, and not marked, when the same session comes back', async () => {
       await openPage(memoryStorage())
       server.losingMessages = true

@@ -754,7 +754,7 @@ export class XMPPClient {
       getCurrentJid: () => this.currentJid,
       emit: <K extends keyof ClientEvents>(event: K, ...args: Parameters<ClientEvents[K]>) => this.emit(event, ...args),
       emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => this.emitSDK(event, payload),
-      forgetUnconfirmedMessage: (messageId: string) => this.connection.forgetUnconfirmedMessage(messageId),
+      beginMessageRetry: (to: string, messageId: string) => this.connection.beginMessageRetry(to, messageId),
       getXmpp: () => this.getXmpp(),
       storageAdapter: this.storageAdapter,
       fastTokenStorage: this.fastTokenStorage,

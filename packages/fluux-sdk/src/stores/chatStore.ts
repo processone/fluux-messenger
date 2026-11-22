@@ -262,7 +262,7 @@ function withResidentMessageUpdate(
 
 type DeliveryFacts = Pick<Message, 'stanzaId' | 'deliveryError' | 'isRetracted'>
 
-/** Marks in progress. A newer delivery fact about the message, such as Retry or a server's error, cancels its mark. */
+/** Marks in progress. A newer delivery update that reaches the row, such as Retry or a server's error, cancels its mark. */
 const queuedDeliveryMarks = new Map<string, object>()
 const deliveryMarkKey = (scope: string | null, conversationId: string, messageId: string) =>
   JSON.stringify([scope, conversationId, messageId])
@@ -2317,10 +2317,6 @@ export const chatStore = createStore<ChatState>()(
       },
 
       updateMessage: (conversationId, selectedTarget, updates, retractionReference, correctionActor, onCorrectionMissing, onCorrectionResolved) => {
-        if ('deliveryError' in updates) {
-          const id = typeof selectedTarget === 'string' ? selectedTarget : selectedTarget.id
-          queuedDeliveryMarks.delete(deliveryMarkKey(getStorageScopeJid(), conversationId, id))
-        }
         const applyResidentUpdate = (target: StoredMessage, patch: Partial<StoredMessage>, accountScope: string | null) =>
           set(state => withResidentMessageUpdate(state, conversationId, target, patch, accountScope))
         if (!correctionActor && Object.keys(updates).length === 1 && 'linkPreview' in updates) {
@@ -2417,6 +2413,7 @@ export const chatStore = createStore<ChatState>()(
               const isCurrent = captureChatCacheRead(conversationId)
               void messageCache.getMessage('chat', conversationId, selectedTarget.id, selectedTarget).then(async target => {
                 if (!target || !isCurrent()) return
+                if ('deliveryError' in updates) queuedDeliveryMarks.delete(deliveryMarkKey(scope.jid, conversationId, target.id))
                 if (updates.isRetracted) await retractChatMessageInStorage(conversationId, target, updates, scope.jid)
                 else await messageCache.updateMessage('chat', conversationId, target.id, updates, target.from, scope.jid, target)
                 if (!isCurrent()) return
@@ -2434,6 +2431,8 @@ export const chatStore = createStore<ChatState>()(
             ...(updates.isEdited && { originalBody: target.originalBody ?? target.body }),
           }, getStorageScopeJid())
           if (!applicable) return state
+          // Only an update that reached a row replaces a queued mark.
+          if ('deliveryError' in updates) queuedDeliveryMarks.delete(deliveryMarkKey(getStorageScopeJid(), conversationId, target.id))
           updates = applicable
 
           const updatedConvMessages = [...convMessages]

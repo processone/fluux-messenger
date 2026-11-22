@@ -127,8 +127,10 @@ session are kept, in session storage: when the session resumes, the server's
 and an archived copy of a message that did arrive removes the mark. A message
 whose saved copy already has an archive id or a server's own error keeps it. Each
 record stays in session storage until the mark is saved in the history, so another
-reload or a failed write reports it again, and a Retry replaces it and cancels a
-mark still waiting. A manual disconnect marks nothing.
+reload or a failed write reports it again. A Retry cancels a mark still waiting
+and keeps the record until the stream holds the new attempt, so a reload while it
+is being prepared still shows the message as not delivered. A manual disconnect
+marks nothing.
 
 ### Stream Management resumption window
 

@@ -429,26 +429,69 @@ describe('SmPersistence', () => {
       ])
     })
 
-    it('forgets a message when a Retry sends it again', () => {
+    it('forgets a message once its Retry is in the stream', () => {
       const sm = reloaded(4, [chat('retried')])
       sm.settleNewSession()
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
 
-      sm.forgetUnconfirmed(JID, 'retried')
+      sm.endRetry(JID, 'retried', true)
 
       expect(taken(sm)).toEqual([])
       expect(sessionStorage.getItem(KEY)).toBeNull()
     })
 
-    it('a mark that finishes after a Retry does not settle the newer attempt', () => {
+    it('saves a record for a Retry of a message that had none, so a reload before it is sent still reports it', () => {
+      const sm = new SmPersistence(createDeps())
+
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+      sm.saveUnconfirmed(JID, null)
+
+      const next = new SmPersistence(createDeps())
+      next.restoreUnconfirmed(JID)
+      next.settleNewSession()
+      expect(taken(next)).toEqual(['retried'])
+    })
+
+    it('does not report a message on this page while its Retry is being prepared', () => {
+      const sm = reloaded(4, [chat('retried')])
+      sm.settleNewSession()
+
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+
+      expect(taken(sm)).toEqual([])
+    })
+
+    it('keeps the record when a Retry could not be sent, and reports it again', () => {
+      const sm = new SmPersistence(createDeps())
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+
+      sm.endRetry(JID, 'retried', false)
+
+      expect(JSON.parse(sessionStorage.getItem(KEY)!)).toEqual([{ id: 'retried', to: 'bob@example.com' }])
+      expect(taken(sm)).toEqual(['retried'])
+    })
+
+    it('an attempt still queued from before a Retry does not replace its record', () => {
+      const sm = new SmPersistence(createDeps())
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+
+      sm.saveUnconfirmed(JID, client('session-1', 4, [chat('retried')]))
+
+      const next = new SmPersistence(createDeps())
+      next.restoreUnconfirmed(JID)
+      next.settleResumed('session-1', 5)
+      expect(taken(next)).toEqual(['retried'])
+    })
+
+    it('a mark that finishes during a Retry does not remove the record', () => {
       const sm = reloaded(4, [chat('retried')])
       sm.settleNewSession()
       const [stale] = sm.takeUnconfirmed(JID)
-      sm.forgetUnconfirmed(JID, 'retried')
-      sm.keepUnacknowledged(client('session-2', 0, [chat('retried')]) as never)
-      sm.settleNewSession()
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
 
       sm.settleUnconfirmed(JID, stale, true)
 
+      sm.endRetry(JID, 'retried', false)
       expect(taken(sm)).toEqual(['retried'])
     })
 
