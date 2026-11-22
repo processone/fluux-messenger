@@ -185,7 +185,8 @@ export class ScriptedScroller {
     define(Element.prototype, 'scrollTop', {
       get(this: Element) { return isScroller(this) ? self.top : scrollTopOriginal?.get?.call(this) },
       set(this: Element, value: number) {
-        if (isScroller(this)) self.setTop(value)
+        // A programmatic assignment is a write like scrollTo; reader and momentum movement bypass this setter.
+        if (isScroller(this)) self.setTop(value, 'instant', true)
         else scrollTopOriginal?.set?.call(this, value)
       },
     })
@@ -214,7 +215,7 @@ export class ScriptedScroller {
     define(Element.prototype, 'scrollBy', {
       value(this: Element, first?: ScrollToOptions | number, second?: number) {
         const delta = typeof first === 'number' ? second ?? 0 : first?.top ?? 0
-        scrollToScripted.call(this, typeof first === 'object' ? { ...first, top: self.top + delta } : self.top + delta)
+        scrollToScripted.call(this, { ...(typeof first === 'object' ? first : {}), top: self.top + delta })
       },
     })
 
