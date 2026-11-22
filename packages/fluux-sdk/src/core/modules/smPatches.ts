@@ -2,7 +2,7 @@
  * Stream Management monkey-patches for xmpp.js
  *
  * These patches are applied at runtime to the xmpp.js client instance created
- * in Connection.createXmppClient(). They address four issues:
+ * in Connection.createXmppClient(). They address five issues:
  *
  * 1. **SM ack debouncing** (patchSmAckDebounce):
  *    xmpp.js sends an immediate <a h='N'/> for every <r/> from the server.
@@ -67,6 +67,15 @@
  *    counts it (ejabberd 26.09 does for iq, message and presence), so its
  *    acknowledgement would release the next queued stanza instead.
  *
+ * 5. **SM resend after a resumption** (patchSmResumeQueue):
+ *    Connection builds a new xmpp.js client for every reconnect and hands it
+ *    the unacknowledged stanzas of the previous one. The server's `h` in
+ *    `<resumed/>` says which of them it never received. This patch applies it
+ *    before xmpp.js resends its queue, for two reasons: the saved count can be
+ *    ahead of `h` after a page reload, and would hold back later acks; and only
+ *    messages are resent. A request's caller is gone with the old client, and a
+ *    presence may be out of date, so those stay unsent as they did before.
+ *
  * @module
  */
 
@@ -75,6 +84,8 @@ import { jid, xml } from '@xmpp/client'
 import { parse as parseXml } from 'ltx'
 
 const NS_SM = 'urn:xmpp:sm:3'
+const NS_SASL2 = 'urn:xmpp:sasl:2'
+const NS_BIND2 = 'urn:xmpp:bind:0'
 const DEBOUNCE_MS = 250
 
 /** State for SM ack debounce — stored per Connection instance */
@@ -315,6 +326,39 @@ export function reportRawStanzasSent(xmppClient: Client, rawXml: string): void {
       }
     }
   }
+}
+
+/** The `<resumed/>` of a stream-feature resumption or of an inline SASL2 one. */
+function findResumed(element: Element): Element | undefined {
+  if (element.is('resumed', NS_SM)) return element
+  if (!element.is('success', NS_SASL2)) return undefined
+  return element.getChild('resumed', NS_SM) ?? element.getChild('bound', NS_BIND2)?.getChild('resumed', NS_SM)
+}
+
+/**
+ * When the server resumes the session, leave in the queue only the messages it
+ * never received, and set the sent count to its `h`. xmpp.js then finds nothing
+ * to acknowledge and resends exactly that queue. See the module documentation
+ * (patch 5).
+ *
+ * Runs ahead of xmpp.js, which handles `<resumed/>` after this 'element' event.
+ *
+ * Guard: only patches real xmpp.js clients — test mocks (which lack outbound_q)
+ * are left untouched.
+ */
+export function patchSmResumeQueue(xmppClient: Client): void {
+  const sm = xmppClient.streamManagement
+  if (!Array.isArray(sm?.outbound_q) || typeof xmppClient.prependListener !== 'function') return
+
+  xmppClient.prependListener('element', (element: Element) => {
+    const resumed = findResumed(element)
+    if (!resumed) return
+    const h = Number(resumed.attrs.h)
+    if (!Number.isSafeInteger(h) || h < 0) return
+    const notReceived = sm.outbound_q.slice(Math.max(0, h - sm.outbound))
+    sm.outbound = h
+    sm.outbound_q = notReceived.filter(item => item.stanza?.name === 'message')
+  })
 }
 
 /**

@@ -6,6 +6,7 @@
  * Connection.ts for independent testing and clearer boundaries.
  */
 
+import type { Client, SmOutboundQueueItem } from '@xmpp/client'
 import type { StorageAdapter, JoinedRoomInfo, SmResumptionState } from '../types'
 import type { ResolutionLogger } from './serverResolution'
 import { DEFAULT_SM_MAX_SECONDS, isWithinSmWindow, resolveSmWindowMs } from './smResumptionPolicy'
@@ -51,6 +52,15 @@ export interface SmStateCache {
   interruptedAt?: number
 }
 
+/** What a discarded client had sent without an acknowledgement. */
+export interface SmUnacknowledged {
+  id: string
+  /** The client's acknowledged stanza count when it was discarded. */
+  acked: number
+  /** Its stanzas after `acked`, in sending order. */
+  items: SmOutboundQueueItem[]
+}
+
 /** Dependencies injected by Connection. */
 export interface SmPersistenceDeps {
   storageAdapter?: StorageAdapter
@@ -75,6 +85,7 @@ export interface SmLoadResult {
  */
 export class SmPersistence {
   private cache: SmStateCache | null = null
+  private unacknowledged: SmUnacknowledged | null = null
   private deps: SmPersistenceDeps
 
   constructor(deps: SmPersistenceDeps) {
@@ -101,7 +112,27 @@ export class SmPersistence {
   beginSession(id: string, inbound: number, advertisedMax: unknown): number {
     const windowMs = resolveSmWindowMs(this.requestSeconds, advertisedMax)
     this.cache = { id, inbound, outbound: 0, timestamp: Date.now(), windowMs }
+    this.unacknowledged = null
     return windowMs
+  }
+
+  /**
+   * Keep what a client about to be discarded has sent without an acknowledgement,
+   * so the next client can resend it if the server resumes this session. A client
+   * without a session id has nothing to add, and leaves what was kept in place.
+   *
+   * Memory only: these stanzas can hold message text, so they are never written
+   * to storage, and a page reload cannot resend them.
+   */
+  keepUnacknowledged(xmpp: Client | null): void {
+    const sm = xmpp?.streamManagement
+    if (!sm?.id || !Array.isArray(sm.outbound_q)) return
+    this.unacknowledged = { id: sm.id, acked: sm.outbound || 0, items: [...sm.outbound_q] }
+  }
+
+  /** What was kept for session `id`, if anything. */
+  getUnacknowledged(id: string): SmUnacknowledged | null {
+    return this.unacknowledged?.id === id ? this.unacknowledged : null
   }
 
   /**
@@ -137,6 +168,8 @@ export class SmPersistence {
       ? this.cache.windowMs
       : resolveSmWindowMs(this.requestSeconds, undefined)
     this.cache = { id, inbound, outbound, timestamp: Date.now(), windowMs }
+    // The resumed client holds whatever is still unacknowledged from here on.
+    this.unacknowledged = null
   }
 
   /** The window (ms) of the current session, if any. */
@@ -168,6 +201,7 @@ export class SmPersistence {
   /** Clear cache (manual disconnect → fresh session next time). */
   clearCache(): void {
     this.cache = null
+    this.unacknowledged = null
   }
 
   /**
