@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { ContactSelector } from './ContactSelector'
+import { ModalOverlay } from './ModalOverlay'
 import { ModalShell } from './ModalShell'
 import type { Contact, PresenceStatus } from '@fluux/sdk'
 import en from '@/i18n/locales/en.json'
@@ -107,14 +108,24 @@ describe('ContactSelector', () => {
         expect(screen.getByPlaceholderText('Add more')).toHaveFocus()
       })
 
-      it('leaves focus alone and the list closed after a pointer press', () => {
-        render(<ChosenContacts initial={['alice@example.com']} />)
+      it('hands focus to the window, with the list closed, after a pointer press', () => {
+        render(
+          <ModalOverlay onClose={vi.fn()} panelProps={{ role: 'dialog' }}>
+            <ChosenContacts initial={['alice@example.com']} />
+          </ModalOverlay>,
+        )
 
+        // Chromium focuses a clicked button, so removing it would otherwise leave focus on the page.
         removeButton('Alice Smith').focus()
         fireEvent.click(removeButton('Alice Smith'), { detail: 1 })
 
-        expect(screen.getByPlaceholderText('Add more')).not.toHaveFocus()
+        const field = screen.getByPlaceholderText('Add more')
+        expect(screen.getByRole('dialog')).toHaveFocus()
+        expect(field).not.toHaveFocus()
         expect(screen.queryByTestId('contact-suggestions')).not.toBeInTheDocument()
+
+        fireEvent.keyDown(document.activeElement!, { key: 'Tab' })
+        expect(field).toHaveFocus()
       })
 
       it('ignores the repeats of a held key until a new press', () => {

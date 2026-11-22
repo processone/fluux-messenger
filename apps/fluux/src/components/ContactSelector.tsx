@@ -403,15 +403,21 @@ export function ContactSelector({
   }
 
   // The focused button is about to leave the page, which would drop focus outside a modal
-  // and its focus trap. A key press reports a click count of 0; a pointer press keeps its
-  // behavior, so clicking a chip away does not open the suggestions.
+  // and its focus trap. A key press reports a click count of 0 and moves to a neighboring
+  // control. A pointer press hands focus to the surrounding window, where WebKit already
+  // leaves it, because focusing the field would open the suggestions.
   const removeChosenContact = (e: React.MouseEvent<HTMLButtonElement>, jid: string) => {
     const button = e.currentTarget
-    const movesFocus = e.detail === 0 && document.activeElement === button
+    const hadFocus = document.activeElement === button
+    const byKeyboard = e.detail === 0
     const position = selectedContacts.indexOf(jid)
     // Commit now, so the control that receives focus is the one left after the removal.
     flushSync(() => removeContact(jid))
-    if (!movesFocus || button.isConnected) return
+    if (!hadFocus || button.isConnected) return
+    if (!byKeyboard) {
+      containerRef.current?.closest<HTMLElement>('[tabindex]')?.focus({ preventScroll: true })
+      return
+    }
     const remaining = chipRowRef.current?.querySelectorAll<HTMLButtonElement>('button')
     const next = remaining?.[Math.min(position, remaining.length - 1)] ?? inputRef.current
     removalKeyHeldRef.current = true
