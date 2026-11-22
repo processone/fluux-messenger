@@ -2,51 +2,41 @@ import { iosHaptic } from '@/platform/ios/haptics'
 import { editableForward } from '../utils/forwardMessage'
 import type { ChatMessageTarget, GapInterval } from '@fluux/sdk'
 import type { MessageRowRef } from '@fluux/sdk'
-import { messageRowId, readMessageRowId, messageRowRefFromRowId } from './conversation/messageRowIdentity'
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, useImperativeHandle, memo, type RefObject } from 'react'
+import { messageRowId } from './conversation/messageRowIdentity'
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { deriveCopyBody } from '@/utils/copyMessageBody'
-import { useChatActive, useContactIdentities, useRosterActions, useBlocking, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, chatStore, getStorageScopeJid, currentViewportGeneration, reportViewport, type Message, type ContactIdentity, type ViewportEvidenceKey } from '@fluux/sdk'
+import { useChatActive, useContactIdentities, useRosterActions, useBlocking, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, chatStore, getStorageScopeJid, type Message, type ContactIdentity } from '@fluux/sdk'
 import { useToastStore } from '@/stores/toastStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
 import { useChatStore, useConnectionStore, useBlockingStore } from '@fluux/sdk/react'
-import { useFileUpload, useLinkPreview, useTypeToFocus, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
-import { Upload, Loader2 } from 'lucide-react'
+import { useMessageHoverState, useConversationDraft, useTimeFormat } from '@/hooks'
+import { useConversationThread } from '@/hooks/useConversationThread'
+import { Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, groupHeaderIndex, buildReplyContext } from './conversation'
-import { FindOnPageBar } from './conversation/FindOnPageBar'
-import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
-import { usePendingAttachment } from '@/hooks/usePendingAttachment'
+import type { FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { useConversationEncryptionState, encryptionSendBlock, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { HeldKeysBanner } from './HeldKeysBanner'
 import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
 import { useConversationFileDropStore } from '@/stores/conversationFileDropStore'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
-import { EasterEggAnimation } from './easter-eggs/EasterEggAnimation'
-import { ConversationColumn, ConversationTail } from './conversation/ConversationColumn'
+import { ConversationThread } from './conversation/ConversationThread'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
 import { useSlashCommands } from '@/hooks/useSlashCommands'
 import { visibleCommands } from '@/commands/registry'
 import { CommandHelpPanel } from './composer/CommandHelpPanel'
 import type { CommandContext } from '@/commands/types'
-import { findLastEditableMessage } from '@/utils/messageUtils'
 import { isEncryptedSource } from '@/utils/replyEncryption'
-import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
-import { MediaAutoloadProvider } from '@/contexts'
 import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { auroraSenderColor } from '@/utils/senderColor'
-import { useMessageListHandle } from '@/hooks/useMessageListHandle'
 import type { MessageListHandle } from './conversation/messageListBoundary'
-import { ReactionMentions } from './conversation/ReactionMentions'
-import { reactionMentionStore } from '@/stores/reactionMentionStore'
-import { EasterEggMentions } from './conversation/EasterEggMentions'
-import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
 import { donateIOSConversation } from '@/platform/ios/shareSuggestions'
 import { trackSend } from '@/utils/pendingSends'
 import { encryptionSendErrorKey } from '@/e2ee/encryptionSendError'
@@ -64,6 +54,11 @@ interface ChatViewProps {
   /** Ref for find-on-page handle (toggle, navigate from parent shortcuts) */
   findOnPageRef?: RefObject<FindOnPageHandle | null>
 }
+
+
+// Stable identities: the thread reads them in effects keyed on the conversation
+const setChatTargetMessageId = (messageId: string) => chatStore.getState().setTargetMessageId(messageId)
+const triggerChatAnimation = (id: string, animation: string, senderName: string) => chatStore.getState().triggerAnimation(id, animation, senderName)
 
 export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, onShowSavedInConversation, onShowProfile, mainContentRef, composerRef, findOnPageRef }: ChatViewProps) {
   const { t } = useTranslation()
@@ -87,273 +82,58 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const jid = useConnectionStore((s) => s.jid)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownNickname = useConnectionStore((s) => s.ownNickname)
-  const status = useConnectionStore((s) => s.status)
-  const isConnected = status === 'online'
-  const { uploadFile, isUploading, progress, isSupported, error: uploadError, clearError: clearUploadError, maxFileSize } = useFileUpload()
-  const { processMessageForLinkPreview } = useLinkPreview()
-  const { resolvedMode } = useMode()
   const myBareJid = jid ? getBareJid(jid) : undefined
 
-  // Reply state - which message are we replying to
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
-
-  // Edit state - which message are we editing
-  const [editingMessage, setEditingMessage] = useState<Message | null>(null)
-
-  // Pending attachment state - staged file ready to send with next message
-  const { pendingAttachment, stage: stageAttachment, clear: clearPendingAttachment, choosePhoto } = usePendingAttachment(maxFileSize)
-
-  // Track last sent message ID for send animation
-  const [lastSentMessageId, setLastSentMessageId] = useState<string | null>(null)
-  const lastSentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-
-  // Find the last outgoing message ID for edit button visibility (skip retracted)
-  const lastEditableMessage = findLastEditableMessage(activeMessages)
-  const lastOutgoingMessageId = lastEditableMessage ? messageRowId(lastEditableMessage) ?? null : null
-
-  // Last message ID - reply button is disabled for last message (context is already clear)
-  const lastMessageId = activeMessages.length > 0 ? messageRowId(activeMessages[activeMessages.length - 1]) ?? null : null
-
-  // Handler to open search scoped to this conversation
-  const handleSearchInConversation = activeConversation && onSearchInConversation
-    ? () => onSearchInConversation(activeConversation.id)
-    : undefined
-
-  const handleShowSaved = activeConversation && onShowSavedInConversation
-    ? () => onShowSavedInConversation(activeConversation.id)
-    : undefined
-
-  // Latest messages in a ref so the stable callbacks below don't close over
-  // `activeMessages` (which changes on every incoming message). This keeps the
-  // props passed to the memoized MessageInput referentially stable, so the
-  // composer does not re-render once per message (RenderLoopDetector warning).
+  // Latest messages in a ref so the composer's edit-last callback doesn't close over
+  // `activeMessages` (which changes on every incoming message). This keeps the props passed
+  // to the memoized MessageInput referentially stable, so the composer does not re-render
+  // once per message (RenderLoopDetector warning).
   const activeMessagesRef = useRef(activeMessages)
   useLayoutEffect(() => { activeMessagesRef.current = activeMessages }, [activeMessages])
+  const readActiveMessages = useCallback(() => activeMessagesRef.current, [])
 
-  // Handler to edit the last outgoing message (triggered by Up arrow in empty composer)
-  const handleEditLastMessage = useCallback(() => {
-    const msg = findLastEditableMessage(activeMessagesRef.current)
-    if (msg) {
-      setEditingMessage(msg)
-    }
-  }, [])
-
-  // Composing state - hides message toolbars when user is typing
-  const [isComposing, setIsComposing] = useState(false)
-
-  // Track which message has reaction picker open (hides other toolbars)
-  const [activeReactionPickerMessageId, setActiveReactionPickerMessageId] = useState<string | null>(null)
-
-  // Callbacks for child components (stable identities for the memoized MessageInput)
-  const handleCancelReply = useCallback(() => setReplyingTo(null), [])
-  const handleCancelEdit = useCallback(() => setEditingMessage(null), [])
-  // Stable identity so it does not break the memo bailout of every message row.
-  const handleReactionPickerChange = useCallback((messageId: string, isOpen: boolean) => {
-    setActiveReactionPickerMessageId(isOpen ? messageId : null)
-  }, [])
-
-  // Upload state object — memoized so it stays referentially stable between
-  // renders when no upload is in progress, preventing the memoized MessageInput
-  // from re-rendering on every ChatView render.
-  const uploadStateObj = useMemo(
-    () => ({ isUploading, progress, error: uploadError, clearError: clearUploadError }),
-    [isUploading, progress, uploadError, clearUploadError],
-  )
-
-  // Composer handle ref for type-to-focus (separate from focus zone ref)
-  const composerHandleRef = useRef<MessageComposerHandle>(null)
-
-  // Type-to-focus: auto-focus composer when user starts typing anywhere
-  useTypeToFocus(composerHandleRef)
-
-  // Find on page: browser-style search within this conversation
-  const find = useFindOnPage(activeMessages, activeConversation?.id)
-
-  // Expose find-on-page handle to parent for keyboard shortcuts
-  useImperativeHandle(findOnPageRef, () => ({
-    open: find.open,
-    close: find.close,
-    isOpen: find.isOpen,
-    goToNext: find.goToNext,
-    goToPrev: find.goToPrev,
-  }), [find.open, find.close, find.isOpen, find.goToNext, find.goToPrev])
-
-  // The command handle to the message list (keyboard navigation, hover scoping). The hook also
-  // publishes whether the viewport shows the newest message, so the global focus handler can tell
-  // a reader who is genuinely looking at it from a view merely parked at the live edge (#1076).
-  const listHandleRef = useMessageListHandle('conversation', activeConversation?.id)
-
-  // Stable handler for the send-animation: clears the highlight after 400 ms.
-  const handleMessageIdSent = useCallback((id: string) => {
-    if (lastSentTimerRef.current) clearTimeout(lastSentTimerRef.current)
-    setLastSentMessageId(id)
-    lastSentTimerRef.current = setTimeout(() => setLastSentMessageId(null), 400)
-  }, [])
-
-  // Drop the pending send-animation timer on unmount: it is the only timer here
-  // that sets React state, so left armed it fires into a torn-down tree.
-  useEffect(() => () => {
-    if (lastSentTimerRef.current) {
-      clearTimeout(lastSentTimerRef.current)
-      lastSentTimerRef.current = null
-    }
-  }, [])
-
-  // Note: Media load scroll handling is now managed by useMessageListScroll hook
-  // via the handleMediaLoad callback passed through renderMessage. This provides
-  // batched scroll correction to avoid jitter when multiple images load.
-
-  // Keyboard navigation for message selection
-  const {
-    selectedMessageId,
-    hasKeyboardSelection,
-    showToolbarForSelection,
-    handleKeyDown: handleMessageListKeyDown,
-    clearSelection,
-    handleMouseMove,
-    handleMouseLeave,
-  } = useMessageSelection(activeMessages, listHandleRef, {
-    getRowId: messageRowId,
-    onReachedFirstMessage: fetchOlderHistory,
+  const thread = useConversationThread<Message>({
+    kind: 'chat',
+    id: activeConversation?.id,
+    displayMessages: activeMessages,
+    allMessages: activeMessages,
+    readAllMessages: readActiveMessages,
+    fetchOlderHistory,
     isLoadingOlder: activeHistoryState?.isLoading,
     isHistoryComplete: activeHistoryState?.isHistoryComplete,
-    onEnterPressed: (id: string) => useExpandedMessagesStore.getState().toggle(id),
+    clearFirstNewMessageId,
+    advanceReadPointer,
+    setTargetMessageId: setChatTargetMessageId,
+    triggerAnimation: triggerChatAnimation,
+    activeAnimation: activeAnimation && activeAnimation.conversationId === activeConversation?.id ? activeAnimation : null,
+    clearAnimation,
+    onSearchInConversation,
+    onShowSavedInConversation,
+    findOnPageRef,
   })
+  const { setReplyingTo, focusComposer, stageAttachment, composerHandleRef } = thread
 
-  // Reply targets are resolved reactively per-row via useReferencedMessage (in
-  // ChatMessageBubble), so this view holds no render-time lookup map: a value
-  // derived from one would freeze inside the memoized row when the quoted
-  // message only loads later. Store subscription = reactive, no freeze.
+  // Reply: stage the message, then focus the composer so the user can start typing immediately.
+  // Stable identity so it does not break the memo bailout of every message row.
+  const handleReply = useCallback((message: Message) => {
+    setReplyingTo(message)
+    focusComposer()
+  }, [setReplyingTo, focusComposer])
 
-  // Clear reply/edit/pending attachment state when conversation changes
-  // Note: scroll position is managed by MessageList component
-  useEffect(() => {
-    return () => {
-      // Clear stale reaction mentions when leaving a conversation
-      if (activeConversation?.id) {
-        reactionMentionStore.getState().clearConversation(activeConversation.id)
-      }
-    }
-  }, [activeConversation?.id])
-
-  // Auto-play a pending easter egg once when its conversation opens. The chip
-  // stays (via EasterEggMentions) as a Replay control until dismissed.
-  useEffect(() => {
-    const id = activeConversation?.id
-    if (!id) return
-    const egg = easterEggMentionStore.getState().mentions.get(id)
-    if (egg && !egg.played) {
-      chatStore.getState().triggerAnimation(id, egg.animation, egg.senderName)
-      easterEggMentionStore.getState().markPlayed(id)
-    }
-  }, [activeConversation?.id])
-
-  useEffect(() => {
-    setReplyingTo(null)
-    setEditingMessage(null)
-    // Releases the preview URL and any photo preparation of the previous conversation
-    clearPendingAttachment()
-    clearSelection()
-  }, [activeConversation?.id, clearSelection, clearPendingAttachment])
-
-  // A file dropped on this conversation's sidebar row. It is staged here, after
-  // the clear above, because switching conversations clears the attachment.
-  // Declared after that effect so a switch and its drop settle in order.
+  // A file dropped on this conversation's sidebar row. It is staged here, after the thread's
+  // reset on a conversation switch, because switching conversations clears the attachment.
+  const isUploadSupported = thread.composerProps.isUploadSupported
   const droppedOnConversation = useConversationFileDropStore((s) => s.pending)
   useEffect(() => {
     if (!droppedOnConversation || droppedOnConversation.conversationId !== activeConversation?.id) return
     useConversationFileDropStore.getState().take(droppedOnConversation)
     // A file dropped under another account is discarded, never staged for this one
-    if (!isSupported || droppedOnConversation.account !== getStorageScopeJid()) return
+    if (!isUploadSupported || droppedOnConversation.account !== getStorageScopeJid()) return
     // The same staging as a drop on the chat: previews only, uploads on Send
     stageAttachment(droppedOnConversation.file)
     setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }, [droppedOnConversation, activeConversation?.id, isSupported, stageAttachment])
+  }, [droppedOnConversation, activeConversation?.id, isUploadSupported, stageAttachment, composerHandleRef])
 
-  // XEP-0313: Message history is now auto-fetched by the SDK (useChat hook)
-  // - Cache is loaded immediately when conversation becomes active
-  // - MAM query runs in background when connected
-  // - No manual orchestration needed here
-
-  // File drop handler - stages file for preview only (no upload yet - privacy protection)
-  // Upload happens when user clicks Send, not on drop (prevents accidental data leaks)
-  const handleFileDrop = useCallback((file: File) => {
-    if (!activeConversation || !isSupported) return
-    // Previews images/videos; on iOS a large photo is reduced locally first
-    stageAttachment(file)
-    // Focus composer so user can add a message
-    setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }, [activeConversation, isSupported, stageAttachment])
-
-  // Clear pending attachment and revoke preview URL
-  const handleRemovePendingAttachment = clearPendingAttachment
-
-  // Drag-and-drop for file upload (handles both HTML5 and Tauri native)
-  const { isDragging, dragHandlers } = useDragAndDrop({
-    onFileDrop: handleFileDrop,
-    isUploadSupported: isSupported,
-  })
-
-  // Handle reply button click - set reply state and focus composer.
-  // Stable identity so it does not break the memo bailout of every message row.
-  const handleReply = useCallback((message: Message) => {
-    setReplyingTo(message)
-    // Focus composer so user can start typing immediately
-    setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }, [])
-
-  const conversationId = activeConversation?.id
-  const handleClearFirstNewMessageId = useCallback(() => {
-    if (conversationId) {
-      clearFirstNewMessageId(conversationId)
-    }
-  }, [conversationId, clearFirstNewMessageId])
-
-  // Gate the on-arrival read-pointer advance on a
-  // REAL viewport-at-live-edge signal instead of `isActive && windowVisible`
-  // alone (which wrongly treated a scrolled-up-but-focused conversation as
-  // "seen"). The SDK's `setActiveConversation` is the SOLE caller of
-  // `beginViewportGeneration` — this view only ever READS the current
-  // generation and reports measured geometry, or conservatively revokes follow-edge
-  // evidence while an interaction owns the view.
-  //
-  // The generation is an ACTIVATION value, so it is read on EVERY render (not
-  // memoized on conversationId alone): a same-entity reactivation bumps the
-  // generation without changing conversationId, and a stale useMemo would
-  // keep echoing the OLD token, causing every later report to be rejected as
-  // stale forever. Reactivity comes for free here: `activeConversation`
-  // itself is what changes when the SDK activates, so this component already
-  // re-renders exactly when the generation moves.
-  // Memoized on conversationId only — the KEY itself (kind/entityId/accountScope)
-  // has no time-varying data, so it is safe (and desirable, for the memoized
-  // ChatMessageList below) to keep its identity stable across renders. This is
-  // NOT the value the brief warns against memoizing: `viewportGeneration`
-  // (below) is read fresh every render, never folded into this useMemo.
-  const viewportEvidenceKey: ViewportEvidenceKey | null = useMemo(
-    () => (conversationId ? { kind: 'chat', entityId: conversationId, accountScope: getStorageScopeJid() ?? '' } : null),
-    [conversationId],
-  )
-  const viewportGeneration = viewportEvidenceKey ? currentViewportGeneration(viewportEvidenceKey) : 0
-  // Never call `currentViewportGeneration` INSIDE this callback — closing over
-  // the token captured for THIS render is what makes a delayed callback from a
-  // previous activation carry the OLD (and thus correctly-rejected) token.
-  const reportLiveEdge = useCallback(
-    (atEdge: boolean) => {
-      if (!viewportEvidenceKey) return
-      reportViewport(viewportEvidenceKey, viewportGeneration, atEdge ? 'at-edge' : 'away')
-    },
-    [viewportEvidenceKey, viewportGeneration],
-  )
-
-  // Viewport observer callback: advance the read pointer as the user scrolls.
-  // The observer reports a ROW HANDLE; decoding it keeps the occupant attached
-  // across the SDK boundary instead of collapsing to a client id.
-  const handleMessageSeen = useCallback((rowId: string) => {
-    if (conversationId) {
-      advanceReadPointer(conversationId, messageRowRefFromRowId(rowId))
-    }
-  }, [conversationId, advanceReadPointer])
 
   // E2EE: encryption status displayed as an icon in the chat header.
   // Hooks must run before the early return below.
@@ -454,30 +234,20 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   )
 
   return (
-    <div
-      className="flex flex-col h-full min-h-0 relative"
-      {...dragHandlers}
-    >
-      {/* Drop zone overlay */}
-      {isDragging && (
-        <div className="absolute inset-0 z-50 bg-fluux-bg/95 backdrop-blur-sm flex items-center justify-center pointer-events-none">
-          <div className="flex flex-col items-center gap-4 p-8 border-2 border-dashed border-fluux-brand rounded-xl bg-fluux-bg/50">
-            <Upload className="size-12 text-fluux-brand" />
-            <p className="text-lg font-medium text-fluux-text">{t('upload.dropToUpload')}</p>
-          </div>
-        </div>
-      )}
-
-      <ConversationColumn>
-        {/* Header */}
+    <ConversationThread
+      thread={thread.layout}
+      mainContentRef={mainContentRef}
+      mediaAutoLoad={mediaAutoLoad}
+      rootClassName="flex flex-col h-full min-h-0 relative"
+      header={
         <ChatHeader
           name={activeConversation.name}
           type={activeConversation.type}
           contact={contact}
           jid={activeConversation.id}
           onBack={onBack}
-          onSearchInConversation={handleSearchInConversation}
-          onShowSavedInConversation={handleShowSaved}
+          onSearchInConversation={thread.handleSearchInConversation}
+          onShowSavedInConversation={thread.handleShowSaved}
           encryptionState={encryptionState}
           onEncryptionClick={canDecideTrust ? handleEncryptionClick : undefined}
           onDisableEncryptionClick={encryptionState.kind === 'encrypted' ? handleDisableEncryption : undefined}
@@ -510,174 +280,101 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
               : undefined
           }
         />
-
-        {/* Why some or all of the contact's keys receive no messages: a verified
-            contact's new key waits for the user's decision, or every key was refused. */}
-        {activeConversation.type === 'chat' && (
-          <HeldKeysBanner
-            state={encryptionState}
-            peerName={activeConversation.name}
-            onReview={onShowProfile ? () => handleReviewKeys(activeConversation.id) : undefined}
-          />
-        )}
-
-        {/* Verify-peer dialog — opened from the encryption icon in the header */}
-        {verifyDialogState.open && jid && (
-          <VerifyPeerDialog
-            peerName={activeConversation.name}
-            peerJid={verifyDialogState.peerJid}
-            peerFingerprint={verifyDialogState.peerFingerprint}
-            ownJid={jid}
-            ownFingerprint={verifyDialogState.ownFingerprint}
-            alreadyVerified={encryptionState.kind === 'encrypted' && encryptionState.trust === 'verified'}
-            onConfirm={() => void handleVerifyConfirm()}
-            onCancel={() => setVerifyDialogState({ open: false })}
-            onRevoke={() => void decideTrust('tofu', 'contacts.encryption.removeVerificationSuccess')}
-          />
-        )}
-
-        {/* Messages - focusable zone for Tab cycling */}
-        <div
-          ref={mainContentRef as React.RefObject<HTMLDivElement>}
-          tabIndex={0}
-          // `composer-active` hides the per-message hover toolbars while typing via
-          // CSS (index.css), instead of threading `isComposing` into every row's
-          // `hideToolbar` prop — which re-rendered (and relayouted) the whole
-          // non-virtualized list on each typing burst.
-          // pt-px and pb-px leave room only for the 1px inset focus outline, so the list and its
-          // fades run from the header's bottom line to the composer card.
-          className={`focus-zone flex-1 flex flex-col min-h-0 px-1 pb-px pt-px relative${isComposing ? ' composer-active' : ''}`}
-          onKeyDown={handleMessageListKeyDown}
-          onMouseMove={(e) => {
-            // Find which message is being hovered (for keyboard nav starting point)
-            const target = e.target as HTMLElement
-            const messageEl = target.closest<HTMLElement>('[data-message-row-id]') ?? target.closest<HTMLElement>('[data-message-id]')
-            const messageId = messageEl ? readMessageRowId(messageEl) : undefined
-            handleMouseMove(e, messageId)
-          }}
-          onMouseLeave={handleMouseLeave}
-        >
-          {find.isOpen && (
-            <FindOnPageBar
-              searchText={find.searchText}
-              onSearchTextChange={find.setSearchText}
-              currentMatchIndex={find.currentMatchIndex}
-              totalMatches={find.matchIds.length}
-              onNext={find.goToNext}
-              onPrev={find.goToPrev}
-              onClose={find.close}
+      }
+      aboveList={
+        <>
+          {/* Why some or all of the contact's keys receive no messages: a verified
+              contact's new key waits for the user's decision, or every key was refused. */}
+          {activeConversation.type === 'chat' && (
+            <HeldKeysBanner
+              state={encryptionState}
+              peerName={activeConversation.name}
+              onReview={onShowProfile ? () => handleReviewKeys(activeConversation.id) : undefined}
             />
           )}
-          <MediaAutoloadProvider autoLoad={mediaAutoLoad}>
-            <ChatMessageList
-              messages={activeMessages}
-              messageIngressVersion={activeMessageIngressVersion}
-              interiorPlacementVersion={interiorPlacementVersion}
-              contactsByJid={contactsByJid}
-              typingUsers={activeTypingUsers}
-              listHandleRef={listHandleRef}
-              onLiveEdgeMeasured={reportLiveEdge}
-              conversationId={activeConversation.id}
-              conversationType={activeConversation.type}
-              sendReaction={sendReaction}
-              myBareJid={myBareJid}
-              ownAvatar={ownAvatar}
-              ownNickname={ownNickname}
-              onReply={handleReply}
-              onEdit={setEditingMessage}
-              lastOutgoingMessageId={lastOutgoingMessageId}
-              lastMessageId={lastMessageId}
-              activeReactionPickerMessageId={activeReactionPickerMessageId}
-              onReactionPickerChange={handleReactionPickerChange}
-              retractMessage={retractMessage}
-              retryMessage={retryMessage}
-              selectedMessageId={selectedMessageId}
-              hasKeyboardSelection={hasKeyboardSelection}
-              showToolbarForSelection={showToolbarForSelection}
-              firstNewMessageRow={firstNewMessageRow}
-              firstNewMessageIsProvisional={firstNewMessageIsProvisional}
-              firstNewMessageCount={firstNewMessageCount}
-              readPointerRow={readPointerRow}
-              unreadCount={activeConversation.unreadCount}
-              targetMessageId={targetMessageId}
-              clearTargetMessageId={clearTargetMessageId}
-              clearFirstNewMessageId={handleClearFirstNewMessageId}
-              onMessageSeen={handleMessageSeen}
-              isDarkMode={resolvedMode === 'dark'}
-            onScrollToTop={fetchOlderHistory}
-            onLoadAround={loadMessagesAround}
-            isLoadingOlder={activeHistoryState?.isLoading ?? false}
-            onLoadNewer={loadNewer}
-            windowAtLiveEdge={windowAtLiveEdge}
-            onJumpToLatest={recenterToLatest}
-            isHistoryComplete={activeHistoryState?.isHistoryComplete ?? false}
-            historyUnavailable={Boolean(activeHistoryState?.error)}
-            gaps={activeHistoryState?.gaps}
-            onCatchUpHistory={continueChatCatchUp}
-            isCatchingUp={activeHistoryState?.isLoading ?? false}
-            // SDK auto-fetches cache + MAM in background, no blocking spinner needed
-            isInitialLoading={false}
-            highlightTerms={find.highlightTerms}
-            currentMatchId={find.currentMatchId}
-            lastSentMessageId={lastSentMessageId}
+
+          {/* Verify-peer dialog — opened from the encryption icon in the header */}
+          {verifyDialogState.open && jid && (
+            <VerifyPeerDialog
+              peerName={activeConversation.name}
+              peerJid={verifyDialogState.peerJid}
+              peerFingerprint={verifyDialogState.peerFingerprint}
+              ownJid={jid}
+              ownFingerprint={verifyDialogState.ownFingerprint}
+              alreadyVerified={encryptionState.kind === 'encrypted' && encryptionState.trust === 'verified'}
+              onConfirm={() => void handleVerifyConfirm()}
+              onCancel={() => setVerifyDialogState({ open: false })}
+              onRevoke={() => void decideTrust('tofu', 'contacts.encryption.removeVerificationSuccess')}
             />
-          </MediaAutoloadProvider>
-        </div>
-
-        <ConversationTail>
-          {/* Reaction mention pills — pinned above the composer */}
-          <ReactionMentions conversationId={activeConversation.id} onSee={(id) => chatStore.getState().setTargetMessageId(id)} />
-          <EasterEggMentions conversationId={activeConversation.id} onReplay={(animation, senderName) => chatStore.getState().triggerAnimation(activeConversation.id, animation, senderName)} />
-
-          {/* Input */}
-          <MessageInput
-            composerRef={composerHandleRef}
-            textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
-            conversationId={activeConversation.id}
-            conversationName={activeConversation.name}
-            type={activeConversation.type}
-            onMessageIdSent={handleMessageIdSent}
-            replyingTo={replyingTo}
-            onCancelReply={handleCancelReply}
-            editingMessage={editingMessage}
-            onCancelEdit={handleCancelEdit}
-            onEditLastMessage={handleEditLastMessage}
-            sendMessage={sendMessage}
-            sendCorrection={sendCorrection}
-            retractMessage={retractMessage}
-            sendChatState={sendChatState}
-            isArchived={isArchived}
-            unarchiveConversation={unarchiveConversation}
-            setDraft={setDraft}
-            getDraft={getDraft}
-            clearDraft={clearDraft}
-            clearFirstNewMessageId={clearFirstNewMessageId}
-            contactsByJid={contactsByJid}
-            onComposingChange={setIsComposing}
-            sendEasterEgg={sendEasterEgg}
-            uploadState={uploadStateObj}
-            isUploadSupported={isSupported}
-            onFileSelect={handleFileDrop}
-            uploadFile={uploadFile}
-            pendingAttachment={pendingAttachment}
-            onRemovePendingAttachment={handleRemovePendingAttachment}
-            onChoosePhoto={choosePhoto}
-            processLinkPreview={processMessageForLinkPreview}
-            isConnected={isConnected}
-            onSwitchToMessages={onSwitchToMessages}
-            encryptionState={encryptionState}
-            onEncryptionClick={canDecideTrust ? handleEncryptionClick : undefined}
-            isDarkMode={resolvedMode === 'dark'}
-          />
-        </ConversationTail>
-
-      </ConversationColumn>
-
-      {/* Easter egg animation */}
-      {activeAnimation?.conversationId === activeConversation.id && (
-        <EasterEggAnimation animation={activeAnimation.animation} onComplete={clearAnimation} senderName={activeAnimation.senderName} />
-      )}
-    </div>
+          )}
+        </>
+      }
+      list={
+        <ChatMessageList
+          {...thread.listProps}
+          messages={activeMessages}
+          messageIngressVersion={activeMessageIngressVersion}
+          interiorPlacementVersion={interiorPlacementVersion}
+          contactsByJid={contactsByJid}
+          typingUsers={activeTypingUsers}
+          conversationId={activeConversation.id}
+          conversationType={activeConversation.type}
+          sendReaction={sendReaction}
+          myBareJid={myBareJid}
+          ownAvatar={ownAvatar}
+          ownNickname={ownNickname}
+          onReply={handleReply}
+          retractMessage={retractMessage}
+          retryMessage={retryMessage}
+          firstNewMessageRow={firstNewMessageRow}
+          firstNewMessageIsProvisional={firstNewMessageIsProvisional}
+          firstNewMessageCount={firstNewMessageCount}
+          readPointerRow={readPointerRow}
+          unreadCount={activeConversation.unreadCount}
+          targetMessageId={targetMessageId}
+          clearTargetMessageId={clearTargetMessageId}
+          isDarkMode={thread.isDarkMode}
+          onScrollToTop={fetchOlderHistory}
+          onLoadAround={loadMessagesAround}
+          isLoadingOlder={activeHistoryState?.isLoading ?? false}
+          onLoadNewer={loadNewer}
+          windowAtLiveEdge={windowAtLiveEdge}
+          onJumpToLatest={recenterToLatest}
+          isHistoryComplete={activeHistoryState?.isHistoryComplete ?? false}
+          historyUnavailable={Boolean(activeHistoryState?.error)}
+          gaps={activeHistoryState?.gaps}
+          onCatchUpHistory={continueChatCatchUp}
+          isCatchingUp={activeHistoryState?.isLoading ?? false}
+          // SDK auto-fetches cache + MAM in background, no blocking spinner needed
+          isInitialLoading={false}
+        />
+      }
+      composer={
+        <MessageInput
+          {...thread.composerProps}
+          composerRef={composerHandleRef}
+          textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
+          conversationId={activeConversation.id}
+          conversationName={activeConversation.name}
+          type={activeConversation.type}
+          sendMessage={sendMessage}
+          sendCorrection={sendCorrection}
+          retractMessage={retractMessage}
+          sendChatState={sendChatState}
+          isArchived={isArchived}
+          unarchiveConversation={unarchiveConversation}
+          setDraft={setDraft}
+          getDraft={getDraft}
+          clearDraft={clearDraft}
+          clearFirstNewMessageId={clearFirstNewMessageId}
+          contactsByJid={contactsByJid}
+          sendEasterEgg={sendEasterEgg}
+          onSwitchToMessages={onSwitchToMessages}
+          encryptionState={encryptionState}
+          onEncryptionClick={canDecideTrust ? handleEncryptionClick : undefined}
+        />
+      }
+    />
   )
 }
 
