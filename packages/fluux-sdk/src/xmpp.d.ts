@@ -21,6 +21,8 @@ declare module '@xmpp/client' {
    */
   export interface SmOutboundQueueItem {
     stanza: Element | null
+    /** When the stanza was queued; a resend uses it as the message's delay. */
+    stamp?: string
   }
 
   // XEP-0198 Stream Management
@@ -29,6 +31,8 @@ declare module '@xmpp/client' {
     inbound: number
     outbound: number
     enabled: boolean
+    /** `<enable/>` is on its way: the server already counts what follows it. */
+    enableSent?: boolean
     /** Resume window requested from the server, in seconds (XEP-0198 §3). */
     preferredMaximum: number
     /** Interval (ms) between xmpp.js's built-in `<r/>` keepalives. */
@@ -163,6 +167,8 @@ declare module '@xmpp/client' {
 
   export function client(options: ClientOptions): Client
   export function xml(name: string, attrs?: Record<string, string>, ...children: unknown[]): Element
+  /** Parse an XMPP address. Throws on one with no domain, such as `@`. */
+  export function jid(address: string): unknown
 }
 
 declare module '@xmpp/client/lib/createOnAuthenticate.js' {

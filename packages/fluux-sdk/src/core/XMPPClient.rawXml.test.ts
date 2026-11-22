@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { client, xml, type Client, type Element } from '@xmpp/client'
 import { XMPPClient } from './XMPPClient'
+import { patchSmOutboundCount } from './modules/smPatches'
 
 const NS_SM = 'urn:xmpp:sm:3'
 const DISCO_ITEMS = `<iq type='get' id='omemo-check-1'><query xmlns='http://jabber.org/protocol/disco#items'/></iq>`
@@ -35,6 +36,7 @@ function startClient(): Harness {
     },
   }
   xmppClient.streamManagement.enabled = true
+  patchSmOutboundCount(xmppClient)
   // connect() picks the transport that send() delegates to; this test never connects.
   const connection = xmppClient as unknown as { Transport: unknown; _findTransport: (service: string) => unknown }
   connection.Transport = connection._findTransport('wss://example.invalid/ws')
@@ -79,6 +81,41 @@ describe('sendRawXml and Stream Management', () => {
     acknowledge(2)
     expect(acknowledged).toEqual(['omemo-check-1', 'chat-1'])
     expect(queued()).toEqual([])
+  })
+
+  // ejabberd 26.09 counts each of these, although it refuses their address.
+  it.each([
+    ['iq to', `<iq type='get' id='bad-address' to='@'><ping xmlns='urn:xmpp:ping'/></iq>`],
+    ['iq from', `<iq type='get' id='bad-address' from='@'><ping xmlns='urn:xmpp:ping'/></iq>`],
+    ['message to', `<message id='bad-address' to='@'><body>Hello</body></message>`],
+    ['message from', `<message id='bad-address' from='@' to='bob@localhost'><body>Hello</body></message>`],
+    ['presence to', `<presence id='bad-address' to='/resource'/>`],
+    ['presence from', `<presence id='bad-address' from='@'/>`],
+  ])('keeps a chat message queued behind a console stanza with an unparsable %s', async (_shape, raw) => {
+    const { console: consoleClient, xmppClient, wire, acknowledge, queued } = startClient()
+    const logged: string[] = []
+    xmppClient.on('send', element => logged.push(element.attrs.id))
+
+    await expect(consoleClient.sendRawXml(raw)).resolves.toBeUndefined()
+    await xmppClient.send(xml('message', { to: 'bob@localhost', type: 'chat', id: 'chat-1' }, xml('body', {}, 'Hello')))
+
+    expect(wire[0]).toBe(raw)
+    expect(logged).toEqual(['bad-address', 'chat-1'])
+    acknowledge(1)
+    expect(queued()).toEqual(['chat-1'])
+    acknowledge(2)
+    expect(queued()).toEqual([])
+  })
+
+  it('keeps an ordinary send with an unparsable address in the count, and still rejects it', async () => {
+    const { xmppClient, acknowledge, queued } = startClient()
+
+    await expect(xmppClient.send(xml('message', { to: '@', type: 'chat', id: 'bad-address' }, xml('body', {}, 'Hi'))))
+      .rejects.toThrow('Invalid domain')
+    await xmppClient.send(xml('message', { to: 'bob@localhost', type: 'chat', id: 'chat-1' }, xml('body', {}, 'Hello')))
+
+    acknowledge(1)
+    expect(queued()).toEqual(['chat-1'])
   })
 
   it('writes the typed text unchanged and leaves a non-stanza out of the count', async () => {
