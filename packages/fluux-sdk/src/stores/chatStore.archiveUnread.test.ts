@@ -191,7 +191,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   })
 
   it('backgrounded deep pointer with proven coverage derives an exact count from the archive', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       archiveMsg('u1', 1001),
@@ -211,7 +211,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   })
 
   it('a migrated pointer with no tiebreak over-counts same-millisecond rows rather than reporting zero', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       // Same millisecond as the pointer's own message — an unresolved pointer
@@ -284,7 +284,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // ---------------------------------------------------------------------
 
   it('a forward MAM merge into a non-active conversation with new messages triggers a recount', async () => {
-    await messageCache.saveMessages([archiveMsg('anchor', 500, { stanzaId: 's-anchor' }), archiveMsg('p0', 1000)])
+    await messageCache.saveMessages('chat', [archiveMsg('anchor', 500, { stanzaId: 's-anchor' }), archiveMsg('p0', 1000)])
     setMeta({ unreadCount: 0, readPointer: { order: { role: 'exact', timestamp: 1000, tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } } })
     seedCoverage('s-anchor')
 
@@ -348,7 +348,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // drives a REAL archive derivation (fake-indexeddb) end to end and asserts
   // the committed number, not just that a call happened.
   it('a remote marker advancing the ACTIVE conversation re-derives its unread count', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000, { stanzaId: 's-p0' }),
       archiveMsg('u1', 1001, { stanzaId: 's-u1' }),
@@ -448,7 +448,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // XEP-0490) has since written a REAL pointer. Overwritten right before the
     // controlled call so earlier background churn can't be mistaken for this
     // assertion.
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       archiveMsg('u1', 1001),
@@ -480,7 +480,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   it('un-migrated legacy read state with a zero persisted count now raises the badge from the archive', async () => {
     await rehydrateWithStuckLegacyReadState(0)
 
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 400, { stanzaId: 'anchor-stanza' }),
       archiveMsg('m1', 1000),
       archiveMsg('m2', 1001),
@@ -505,7 +505,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   it('un-migrated legacy read state with a NONZERO persisted count still defers via pointerlessDefers', async () => {
     await rehydrateWithStuckLegacyReadState(6)
 
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 400, { stanzaId: 'anchor-stanza' }),
       archiveMsg('m1', 1000),
       archiveMsg('m2', 1001),
@@ -545,7 +545,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // reaches the same guard through the stuck-legacy-migration path rather than
   // a plain pointerless conversation.
   it('a pointerless conversation with a nonzero persisted count defers at pointerlessDefers, not at the coverage gate', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 400, { stanzaId: 'anchor-stanza' }),
       archiveMsg('m1', 1000),
       archiveMsg('m2', 1001),
@@ -581,7 +581,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // message sitting in the counted range must NOT drag the read position onto
   // itself any more.
   it('CRITICAL: not caught up defers, the persisted count survives, and the recount never moves the pointer onto an outgoing message', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       archiveMsg('out1', 1001, { isOutgoing: true }), // the user replied from another device
@@ -608,7 +608,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   })
 
   it('a missing coverage record defers (not-yet-covered is not the same as nothing to worry about)', async () => {
-    await messageCache.saveMessages([archiveMsg('p0', 1000), archiveMsg('u1', 1001)])
+    await messageCache.saveMessages('chat', [archiveMsg('p0', 1000), archiveMsg('u1', 1001)])
     setMeta({
       unreadCount: 7,
       readPointer: { order: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
@@ -626,7 +626,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   })
 
   it('an unresolvable coverage bottom defers AND invalidates the stale record', async () => {
-    await messageCache.saveMessages([archiveMsg('p0', 1000), archiveMsg('u1', 1001)])
+    await messageCache.saveMessages('chat', [archiveMsg('p0', 1000), archiveMsg('u1', 1001)])
     setMeta({
       unreadCount: 6,
       readPointer: { order: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
@@ -650,7 +650,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // count is a distinguishing 8, not 0, so a broken gate that proceeds to
   // derive+commit the real (different) archive count is caught.
   it('a resolved coverage bottom sitting above the floor defers (coverage does not reach the floor)', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('p0', 1000),
       archiveMsg('u1', 1001),
       // The coverage record's bottom — proven contiguous from here to the
@@ -688,7 +688,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // cache-sorts AFTER 'a-msg' (id tie-break) — arrival order deliberately
   // disagrees with cache order, the exact case the fix reconciles.
   it('two same-millisecond live arrivals land in cache order, so the viewport-advance pointer and derived count are both correct', async () => {
-    await messageCache.saveMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
+    await messageCache.saveMessages('chat', [archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
     seedCoverage('anchor-stanza')
     chatStore.setState({ activeConversationId: CID })
 
@@ -740,7 +740,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // noLocalStore message is NEVER archived, the next EXACT recount — deriving
   // purely from the archive — silently dropped its contribution back to 0.
   it('an active-but-scrolled-up noLocalStore arrival is recorded in the overlay and survives an exact recount', async () => {
-    await messageCache.saveMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
+    await messageCache.saveMessages('chat', [archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
     setMeta({
       unreadCount: 0,
       readPointer: { order: { role: 'exact', timestamp: new Date(500).getTime(), tiebreak: { kind: 'chat', id: 'anchor' } }, identity: { state: 'local', messageId: 'anchor' } },
@@ -794,7 +794,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // ---------------------------------------------------------------------
 
   it('latest-wins: a slow recount started before a fast one must not overwrite the fast one', async () => {
-    await messageCache.saveMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
+    await messageCache.saveMessages('chat', [archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
     setMeta({
       unreadCount: 0,
       readPointer: { order: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
@@ -823,7 +823,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   })
 
   it('holds an invalidated active recount until forward catch-up durably completes', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
     ])
@@ -877,7 +877,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   })
 
   it('retains a failed live cache write in the unread recount overlay', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       ...Array.from({ length: 5 }, (_, index) => archiveMsg(`u${index + 1}`, 1100 + index)),
@@ -911,7 +911,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   })
 
   it('resumes a held active recount after a backward archive write commits', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('older', 700),
       archiveMsg('p0', 1000),
@@ -1009,7 +1009,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // fails every run — the switch migrates the beforeEach conversation in.
     expect(localStorage.getItem(`xmpp-chat-storage:${accountA}`) ?? '').not.toContain(CID)
     chatStore.getState().addConversation(createConversation(CID))
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
     ])
@@ -1050,7 +1050,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // only orders a recompute against ANOTHER recompute; it does nothing here.
   // Re-reading the pointer at commit time is what closes this gap.
   it('a stale allowActive recompute does not clobber a pointer/count that moved via a direct write while it awaited the archive read', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       archiveMsg('u1', 1001),
@@ -1115,7 +1115,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
     const p0 = archiveMsg('p0', 1000)
     const u1 = archiveMsg('u1', 1001)
-    await messageCache.saveMessages([anchor, p0, u1])
+    await messageCache.saveMessages('chat', [anchor, p0, u1])
     setMeta({
       unreadCount: 99,
       readPointer: { order: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
@@ -1151,7 +1151,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
     const p0 = archiveMsg('p0', 1000)
     const u1 = archiveMsg('u1', 1001)
-    await messageCache.saveMessages([anchor, p0, u1])
+    await messageCache.saveMessages('chat', [anchor, p0, u1])
     setMeta({
       unreadCount: 1,
       readPointer: { order: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
@@ -1187,7 +1187,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     const p0 = archiveMsg('p0', 1000)
     const u1 = archiveMsg('u1', 1001)
     const resident = [anchor, p0, u1]
-    await messageCache.saveMessages(resident)
+    await messageCache.saveMessages('chat', resident)
     setMeta({
       unreadCount: 1,
       readPointer: { order: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
@@ -1217,7 +1217,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   it('deletes the divider marker when the derived count is zero', async () => {
     const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
     const p0 = archiveMsg('p0', 1000)
-    await messageCache.saveMessages([anchor, p0])
+    await messageCache.saveMessages('chat', [anchor, p0])
     setMeta({
       unreadCount: 99,
       readPointer: { order: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
@@ -1251,7 +1251,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     const SEEDED_MENTIONS = 7
 
     it('exact outcome', async () => {
-      await messageCache.saveMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
+      await messageCache.saveMessages('chat', [archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
       // Seeded unreadCount (5) deliberately differs from the true exact
       // derivation (0, since nothing is archived after the pointer) — this
       // forces the commit path to actually run (a no-op "nothing changed"
@@ -1279,7 +1279,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     })
 
     it('unavailable outcome', async () => {
-      await messageCache.saveMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
+      await messageCache.saveMessages('chat', [archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
       setMeta({
         unreadCount: 3,
         mentionsCount: SEEDED_MENTIONS,
@@ -1301,7 +1301,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // ---------------------------------------------------------------------
 
   it('the transient overlay is summed into the committed unread count', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       archiveMsg('u1', 1001),
@@ -1330,7 +1330,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // No archived unread in any of these — the committed count is driven
     // purely by the transient overlay, so the assertions are unambiguous.
     beforeEach(async () => {
-      await messageCache.saveMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
+      await messageCache.saveMessages('chat', [archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
       setMeta({
         unreadCount: 0,
         readPointer: { order: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
@@ -1425,7 +1425,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     it('a count-only read-through supersedes an in-flight archive recount', async () => {
       const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
       const newest = archiveMsg('newest', 1000)
-      await messageCache.saveMessages([anchor, newest])
+      await messageCache.saveMessages('chat', [anchor, newest])
       chatStore.getState().setActiveConversation(CID)
       const pointer = {
         order: { role: 'exact' as const, timestamp: 1000, tiebreak: { kind: 'chat' as const, id: 'newest' } },
@@ -1459,7 +1459,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       const m1 = archiveMsg('m1', 1000)
       const m2 = archiveMsg('m2', 1001)
       const m3 = archiveMsg('m3', 1002)
-      await messageCache.saveMessages([anchor, m1, m2, m3])
+      await messageCache.saveMessages('chat', [anchor, m1, m2, m3])
       setMeta({
         unreadCount: 5, // stale — distinct from the correct 0 derived below
         readPointer: { order: { role: 'exact', timestamp: new Date(500).getTime(), tiebreak: { kind: 'chat', id: 'anchor' } }, identity: { state: 'local', messageId: 'anchor' } },
@@ -1493,7 +1493,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       const m1 = archiveMsg('m1', 1000)
       const m2 = archiveMsg('m2', 1001)
       const m3 = archiveMsg('m3', 1002)
-      await messageCache.saveMessages([anchor, m1, m2, m3])
+      await messageCache.saveMessages('chat', [anchor, m1, m2, m3])
       setMeta({
         unreadCount: 5, // stale — distinct from BOTH 0 and the correct 2
         readPointer: { order: { role: 'exact', timestamp: new Date(500).getTime(), tiebreak: { kind: 'chat', id: 'anchor' } }, identity: { state: 'local', messageId: 'anchor' } },
@@ -1519,7 +1519,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     it('reading a conversation to the bottom then deactivating reconciles the stale badge instead of leaving it stuck', async () => {
       const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
       const m1 = archiveMsg('m1', 1000)
-      await messageCache.saveMessages([anchor, m1])
+      await messageCache.saveMessages('chat', [anchor, m1])
       // The pointer already sits at the newest message (as if the user had
       // read to the bottom through some OTHER path than advanceReadPointer —
       // isolating the deactivation trigger from the advance trigger tested
@@ -1559,7 +1559,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       const p0 = archiveMsg('p0', 1000)
       const u1 = archiveMsg('u1', 1001)
       const u2 = archiveMsg('u2', 1002)
-      await messageCache.saveMessages([anchor, p0, u1, u2])
+      await messageCache.saveMessages('chat', [anchor, p0, u1, u2])
       // The pointer is seeded directly at p0 — NOT the newest message — so u1
       // and u2 are genuinely still unread. This isolates the deactivation
       // trigger from the advance trigger (advanceReadPointer is never called
@@ -1596,7 +1596,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // Archive recounts are asynchronous. Wait for a changed count or mention value before
     // checking the pointer, so an assertion cannot pass merely because nothing ran yet.
     it('a forward merge + recount does NOT snap a fresh conversation pointer to the newest message', async () => {
-      await messageCache.saveMessages([
+      await messageCache.saveMessages('chat', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         archiveMsg('h1', 600),
         archiveMsg('h2', 700),
@@ -1626,7 +1626,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // The OTHER two call sites: the guard pass inside the derivation itself.
     // Reached with no merge at all, so it needs its own control.
     it('the recount itself does NOT snap a fresh conversation pointer to the newest message', async () => {
-      await messageCache.saveMessages([
+      await messageCache.saveMessages('chat', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         archiveMsg('h1', 600),
         archiveMsg('h2', 700),
@@ -1640,7 +1640,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     })
 
     it('the recount itself does NOT advance the pointer to an outgoing message', async () => {
-      await messageCache.saveMessages([
+      await messageCache.saveMessages('chat', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         archiveMsg('p0', 1000),
         archiveMsg('u1', 1100),
@@ -1662,7 +1662,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     })
 
     it('a forward merge does NOT advance the pointer to an outgoing message', async () => {
-      await messageCache.saveMessages([
+      await messageCache.saveMessages('chat', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         archiveMsg('p0', 1000),
         archiveMsg('u1', 1100),
@@ -1693,7 +1693,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     })
 
     it('messages arriving after creation and merged during catch-up count as unread', async () => {
-      await messageCache.saveMessages([
+      await messageCache.saveMessages('chat', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         archiveMsg('n1', 2000),
         archiveMsg('n2', 3000),
@@ -1719,7 +1719,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // closed. This PIN proves the input-version guard is load-bearing, so a later
     // refactor cannot quietly drop it.
     it('a live arrival during an in-flight recount is not clobbered by the stale result', async () => {
-      await messageCache.saveMessages([
+      await messageCache.saveMessages('chat', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         archiveMsg('p0', 1000),
         archiveMsg('u1', 1100),
@@ -1762,7 +1762,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     it('opening a conversation whose pointer is already at the newest message clears the stale badge', async () => {
       const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
       const m1 = archiveMsg('m1', 1000)
-      await messageCache.saveMessages([anchor, m1])
+      await messageCache.saveMessages('chat', [anchor, m1])
       // Fully read: the pointer already sits on the newest message, so the
       // viewport observer has nothing left to advance.
       setMeta({
@@ -1794,7 +1794,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       const p0 = archiveMsg('p0', 1000)
       const u1 = archiveMsg('u1', 1001)
       const u2 = archiveMsg('u2', 1002)
-      await messageCache.saveMessages([anchor, p0, u1, u2])
+      await messageCache.saveMessages('chat', [anchor, p0, u1, u2])
       setMeta({
         unreadCount: 5, // stale — distinct from BOTH 0 (naive force-zero) and the correct 2
         readPointer: { order: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
@@ -1870,7 +1870,7 @@ describe('chatStore — `start`-filtered catch-up bootstraps coverage from its w
     clearTransientScope(getStorageScopeJid() ?? '')
     chatStore.getState().addConversation(createConversation(CID))
 
-    await messageCache.saveMessages([ownSend()])
+    await messageCache.saveMessages('chat', [ownSend()])
     chatStore.setState({ activeConversationId: 'someone-else@example.com' })
     setMeta({ unreadCount: 4, readPointer: POINTER_ON_OWN_SEND })
     markCaughtUpWithoutCoverage()

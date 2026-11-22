@@ -34,7 +34,7 @@ import {
   type BaseMessage,
   type ContactIdentity,
 } from '@fluux/sdk'
-import { getMessages, getRoomMessages } from '@fluux/sdk/cache'
+import { getMessages } from '@fluux/sdk/cache'
 import { getSearchClient } from '@fluux/sdk/stores'
 import { useConnectionStore, useRoomStore } from '@fluux/sdk/react'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
@@ -249,20 +249,20 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
         let after: (Message | RoomMessage)[]
 
         if (previewResult.isRoom) {
-          before = await getRoomMessages(previewResult.conversationId, {
+          before = await getMessages('room', previewResult.conversationId, {
             before: targetDate,
             limit: CONTEXT_BATCH_SIZE,
           })
-          after = await getRoomMessages(previewResult.conversationId, {
+          after = await getMessages('room', previewResult.conversationId, {
             after: new Date(targetDate.getTime() - 1),
             limit: CONTEXT_BATCH_SIZE,
           })
         } else {
-          before = await getMessages(previewResult.conversationId, {
+          before = await getMessages('chat', previewResult.conversationId, {
             before: targetDate,
             limit: CONTEXT_BATCH_SIZE,
           })
-          after = await getMessages(previewResult.conversationId, {
+          after = await getMessages('chat', previewResult.conversationId, {
             after: new Date(targetDate.getTime() - 1),
             limit: CONTEXT_BATCH_SIZE,
           })
@@ -324,12 +324,12 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
       let older: (Message | RoomMessage)[]
 
       if (previewResult.isRoom) {
-        older = await getRoomMessages(previewResult.conversationId, {
+        older = await getMessages('room', previewResult.conversationId, {
           before: oldestTimestamp,
           limit: CONTEXT_BATCH_SIZE,
         })
       } else {
-        older = await getMessages(previewResult.conversationId, {
+        older = await getMessages('chat', previewResult.conversationId, {
           before: oldestTimestamp,
           limit: CONTEXT_BATCH_SIZE,
         })

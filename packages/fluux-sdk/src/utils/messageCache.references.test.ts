@@ -27,12 +27,12 @@ function original(kind: Kind): Row {
     : { ...common, type: 'groupchat', from: `${room}/Bob`, roomJid: room, nick: 'Bob', occupantId: 'bob' }
 }
 async function save(row: Row) {
-  if (row.type === 'chat') await cache.saveMessage(row)
-  else await cache.saveRoomMessage(row)
+  if (row.type === 'chat') await cache.saveMessage('chat', row)
+  else await cache.saveMessage('room', row)
 }
 async function reload(kind: Kind): Promise<Row> {
   cache._resetDBForTesting()
-  const rows = kind === 'chat' ? await cache.getMessages(peer) : await cache.getRoomMessages(room)
+  const rows = kind === 'chat' ? await cache.getMessages('chat', peer) : await cache.getMessages('room', room)
   expect(rows).toHaveLength(1)
   return rows[0]
 }
@@ -57,14 +57,14 @@ describe.each<Kind>(['chat', 'room'])('%s shared-link content ownership', kind =
       isEdited: true as const, correctionTimestamp: Date.parse('2026-05-01T10:01:00Z'), correctionTimestampSource: 'delay' as const,
       correctionRevision: { ids: ['origin:revised-room-link'], supersedes: [] } }
     await save(first)
-    if (kind === 'chat') await cache.updateMessage(peer, first.id, update, first.from)
-    else await cache.updateRoomMessage(room, first.id, update, first.from)
+    if (kind === 'chat') await cache.updateMessage('chat', peer, first.id, update, first.from)
+    else await cache.updateMessage('room', room, first.id, update, first.from)
     const edited = await reload(kind)
     expect(edited.body).toBe(update.body)
     expect(correctionContent(edited).references).toEqual(update.references)
     const history = kind === 'chat'
-      ? await cache.reconcileChatHistoryMessages([first as StoredMessage], () => [], account)
-      : await cache.reconcileRoomHistoryMessages([first as StoredRoomMessage], () => [], account)
+      ? await cache.reconcileHistoryMessages('chat', [first as StoredMessage], () => [], account)
+      : await cache.reconcileHistoryMessages('room', [first as StoredRoomMessage], () => [], account)
     expect(history[0]).toMatchObject({ body: update.body, references: update.references })
     expect(reconcileCorrectionHandoff(first, edited, account)).toMatchObject({ body: update.body, references: update.references })
     await save(first)
@@ -80,8 +80,8 @@ describe.each<Kind>(['chat', 'room'])('%s shared-link content ownership', kind =
     })
     try {
       const updates = correctionContent({ body: linkB, references: references(linkB), isEdited: true })
-      if (first.type === 'chat') await cache.applyChatCorrection(peer, first.id, updates, { actorJid: first.from })
-      else await cache.applyRoomCorrection(room, first.id, updates, { actorJid: first.from, actorOccupantId: first.occupantId })
+      if (first.type === 'chat') await cache.applyCorrection('chat', peer, first.id, updates, { actorJid: first.from })
+      else await cache.applyCorrection('room', room, first.id, updates, { actorJid: first.from, actorOccupantId: first.occupantId })
       expect(committed.at(-1)).toMatchObject({ body: linkB, references: references(linkB) })
       expect(await reload(kind)).toMatchObject({ body: committed.at(-1)!.body, references: committed.at(-1)!.references })
     } finally { unsubscribe() }
@@ -99,8 +99,8 @@ describe.each<Kind>(['chat', 'room'])('%s shared-link content ownership', kind =
     })
     try {
       const stale = { body: linkB, references: references(linkB) }
-      if (first.type === 'chat') await cache.updateMessage(peer, first.id, stale, first.from)
-      else await cache.updateRoomMessage(room, first.id, stale, first.from)
+      if (first.type === 'chat') await cache.updateMessage('chat', peer, first.id, stale, first.from)
+      else await cache.updateMessage('room', room, first.id, stale, first.from)
       expect(deletionSignals.at(-1)).toMatchObject({ isRetracted: true, body: '', references: undefined })
     } finally { unsubscribe() }
     const deleted = await reload(kind)

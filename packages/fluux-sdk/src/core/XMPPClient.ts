@@ -140,7 +140,7 @@ import { NS_MAM, NS_PING } from './namespaces'
 import { createDefaultStoreBindings } from './defaultStoreBindings'
 import { createPresenceReader, type PresenceReader } from './presenceReader'
 import { initSearchIndex, backfillFromMessageCache, updateMessage as updateSearchIndex } from '../utils/searchIndex'
-import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage, deleteMessage as cacheDeleteMessage, deleteMessageForRecovery } from '../utils/messageCache'
+import { getMessagesWithEncryptedPayload, updateMessage, deleteMessage, deleteMessageForRecovery } from '../utils/messageCache'
 import { queryPepNodeSymbol, publishPepNodeSymbol } from './rawXmppAccess'
 
 /**
@@ -730,8 +730,8 @@ export class XMPPClient {
       getOwnBareJid: () => (this.currentJid ? getBareJid(this.currentJid) : ''),
       cache: {
         getMessagesWithEncryptedPayload,
-        updateMessage: cacheUpdateMessage,
-        deleteMessage: cacheDeleteMessage,
+        updateMessage,
+        deleteMessage,
         deleteMessageForRecovery,
       },
     })

@@ -163,8 +163,8 @@ describe('unread recount after reconnect MAM', () => {
       supportsMAM: true, unreadCount: 0, mentionsCount: 0, occupants: new Map(), typingUsers: new Set(),
     })
     chatStore.getState().addConversation({ id: CHAT, name: 'alice', type: 'chat', unreadCount: 0 })
-    await cache.saveRoomMessages([ROOM_ROWS[0]])
-    await cache.saveMessages([CHAT_ROWS[0]])
+    await cache.saveMessages('room', [ROOM_ROWS[0]])
+    await cache.saveMessages('chat', [CHAT_ROWS[0]])
     roomStore.setState(state => ({
       roomMeta: new Map(state.roomMeta).set(ROOM, { ...state.roomMeta.get(ROOM)!, readPointer: makeReadPointer(ROOM_ROWS[0], 'room') }),
       roomCoverage: new Map([[ROOM, { bottomId: 's-r0', countBottomId: 's-r0' }]]),
@@ -196,8 +196,8 @@ describe('unread recount after reconnect MAM', () => {
   it('updates both unopened badges after catching up an existing archive', async () => {
     await reconnect()
     expectQueriesFinished()
-    expect(await cache.getRoomMessages(ROOM)).toHaveLength(3)
-    expect(await cache.getMessages(CHAT)).toHaveLength(3)
+    expect(await cache.getMessages('room', ROOM)).toHaveLength(3)
+    expect(await cache.getMessages('chat', CHAT)).toHaveLength(3)
     await vi.waitFor(() => expect(counts()).toEqual({ room: 2, chat: 2 }))
     expect(roomStore.getState().activeRoomJid).toBeNull()
     expect(chatStore.getState().activeConversationId).toBeNull()
@@ -212,7 +212,7 @@ describe('unread recount after reconnect MAM', () => {
 
   function holdArchiveWrites() {
     const gate = deferred<void>()
-    const saveRooms = cache.saveRoomMessages
+    const saveRooms = cache.saveMessages
     const saveChats = cache.saveMessages
     vi.spyOn(cache, 'saveRoomMessages').mockImplementation(async rows => {
       const saved = await saveRooms(rows)
@@ -247,7 +247,7 @@ describe('unread recount after reconnect MAM', () => {
 
   it('retries initial recounts invalidated by live arrivals for both unopened entities', async () => {
     const gate = deferred<void>()
-    const countRooms = cache.countRoomUnreadInArchive
+    const countRooms = cache.countUnreadInArchive
     const countChats = cache.countUnreadInArchive
     const rooms = vi.spyOn(cache, 'countRoomUnreadInArchive').mockImplementationOnce(async (...args) => {
       const result = await countRooms(...args)
@@ -294,8 +294,8 @@ describe('unread recount after reconnect MAM', () => {
     vi.spyOn(cache, 'saveMessages').mockResolvedValue(false)
     await reconnect()
     expectQueriesFinished()
-    expect(await cache.getRoomMessages(ROOM)).toHaveLength(1)
-    expect(await cache.getMessages(CHAT)).toHaveLength(1)
+    expect(await cache.getMessages('room', ROOM)).toHaveLength(1)
+    expect(await cache.getMessages('chat', CHAT)).toHaveLength(1)
     expect(counts()).toEqual({ room: 0, chat: 0 })
     expect(verdicts).toEqual([])
     await settle(60000)
@@ -333,8 +333,8 @@ describe('unread recount after reconnect MAM', () => {
       expectQueriesFinished()
       await vi.waitFor(() => expect(counts()).toEqual({ room: 2, chat: 2 }))
     }
-    expect(await cache.getRoomMessages(ROOM)).toHaveLength(3)
-    expect(await cache.getMessages(CHAT)).toHaveLength(3)
+    expect(await cache.getMessages('room', ROOM)).toHaveLength(3)
+    expect(await cache.getMessages('chat', CHAT)).toHaveLength(3)
   })
 
   it('does not let an older request completion unlock a replacement request', async () => {

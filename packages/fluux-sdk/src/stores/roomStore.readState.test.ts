@@ -20,10 +20,10 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
   return {
     ...actual,
-    deleteRoomMessages: vi.fn().mockResolvedValue(undefined),
-    saveRoomMessage: vi.fn().mockResolvedValue(undefined),
-    saveRoomMessageWithResult: vi.fn().mockResolvedValue(true),
-    getRoomMessages: vi.fn().mockResolvedValue([]),
+    deleteConversationMessages: vi.fn().mockResolvedValue(undefined),
+    saveMessage: vi.fn().mockResolvedValue(undefined),
+    saveMessageWithResult: vi.fn().mockResolvedValue(true),
+    getMessages: vi.fn().mockResolvedValue([]),
   }
 })
 

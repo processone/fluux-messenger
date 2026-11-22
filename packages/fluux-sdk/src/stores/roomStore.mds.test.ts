@@ -42,15 +42,15 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
   return {
     ...actual,
     isMessageCacheAvailable: vi.fn().mockReturnValue(true),
-    saveRoomMessage: vi.fn().mockResolvedValue(undefined),
-    saveRoomMessageWithResult: vi.fn().mockResolvedValue(true),
-    saveRoomMessages: vi.fn().mockResolvedValue(true),
-    getRoomMessages: vi.fn().mockResolvedValue([]),
-    getRoomMessagesAround: vi.fn().mockResolvedValue([]),
-    getRoomMessageByStanzaId: vi.fn().mockResolvedValue(null),
+    saveMessage: vi.fn().mockResolvedValue(undefined),
+    saveMessageWithResult: vi.fn().mockResolvedValue(true),
+    saveMessages: vi.fn().mockResolvedValue(true),
+    getMessages: vi.fn().mockResolvedValue([]),
+    getMessagesAround: vi.fn().mockResolvedValue([]),
+    getMessageByStanzaId: vi.fn().mockResolvedValue(null),
     resolveArchivePosition: vi.fn().mockResolvedValue(null),
-    updateRoomMessage: vi.fn().mockResolvedValue(undefined),
-    deleteRoomMessages: vi.fn().mockResolvedValue(undefined),
+    updateMessage: vi.fn().mockResolvedValue(undefined),
+    deleteConversationMessages: vi.fn().mockResolvedValue(undefined),
   }
 })
 import * as messageCache from '../utils/messageCache'
@@ -190,9 +190,9 @@ describe('roomStore.applyRemoteDisplayed', () => {
     roomStore.getState().applyRemoteDisplayed(ROOM, 's9')
     expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s9')
     // The first lookup missed; the marker's row has been cached since.
-    await vi.waitFor(() => expect(messageCache.getRoomMessageByStanzaId).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(messageCache.getMessageByStanzaId).toHaveBeenCalledTimes(1))
     await new Promise((resolve) => setTimeout(resolve, 0))
-    vi.mocked(messageCache.getRoomMessageByStanzaId).mockResolvedValueOnce(rmsg('m9', 's9', 9))
+    vi.mocked(messageCache.getMessageByStanzaId).mockResolvedValueOnce(rmsg('m9', 's9', 9))
 
     roomStore.getState().applyRemoteDisplayed(ROOM, 's9')
 
@@ -209,7 +209,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m9')
     expect(roomStore.getState().messages.get(ROOM)?.map((m) => m.id)).toEqual(['m1'])
-    expect(messageCache.saveRoomMessages).not.toHaveBeenCalled()
+    expect(messageCache.saveMessages).not.toHaveBeenCalled()
   })
 
   it('confirms a coverage record whose bottom is cached and drops one whose bottom is gone', async () => {
@@ -541,7 +541,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     const page = [rmsg('p0', 's-ptr', 4100), rmsg('p1', 'sp1', 4200)]
     // Cache read resolves AFTER the room becomes active: gate it.
     let releaseCache: (msgs: RoomMessage[]) => void
-    vi.mocked(messageCache.getRoomMessages).mockReturnValueOnce(
+    vi.mocked(messageCache.getMessages).mockReturnValueOnce(
       new Promise<RoomMessage[]>((resolve) => { releaseCache = resolve })
     )
     roomStore.getState().mergeRoomMAMMessages(ROOM, page, { first: 's-ptr' }, false, 'backward')
@@ -568,7 +568,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(5)
 
     // Restore the factory default so a stale one-shot can't leak into later tests.
-    vi.mocked(messageCache.getRoomMessages).mockReset().mockResolvedValue([])
+    vi.mocked(messageCache.getMessages).mockReset().mockResolvedValue([])
   })
 })
 
@@ -729,7 +729,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
       rmsg('m1', 's1', 1, DEEP_ROOM), rmsg('m2', 's2', 2, DEEP_ROOM), rmsg('m3', 's3', 3, DEEP_ROOM),
       rmsg('m4', 's4', 4, DEEP_ROOM), rmsg('m5', 's5', 5, DEEP_ROOM), rmsg('m6', 's6', 6, DEEP_ROOM),
     ]
-    vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValueOnce(aroundSlice)
+    vi.mocked(messageCache.getMessagesAround).mockResolvedValueOnce(aroundSlice)
 
     await roomStore.getState().activateRoom(DEEP_ROOM)
 

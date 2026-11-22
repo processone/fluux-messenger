@@ -16,7 +16,7 @@
  */
 
 export {
-  // Chat message operations
+  // Message operations: each takes the archive kind ('chat' | 'room') first
   saveMessage,
   saveMessages,
   getMessage,
@@ -28,23 +28,11 @@ export {
   deleteMessage,
   deleteConversationMessages,
   getOldestMessageTimestamp,
-  // Room message operations
-  saveRoomMessage,
-  saveRoomMessages,
-  getRoomMessage,
-  getRoomMessageByStanzaId,
-  getRoomMessages,
-  getRoomMessagesAround,
-  getRoomMessageCount,
-  updateRoomMessage,
-  deleteRoomMessage,
-  deleteRoomMessages,
-  getOldestRoomMessageTimestamp,
   // Utility
   clearAllMessages,
   isMessageCacheAvailable,
 } from '../utils/messageCache'
-export type { GetMessagesOptions, GetMessagesAroundOptions } from '../utils/messageCache'
+export type { ArchiveKind, GetMessagesOptions, GetMessagesAroundOptions } from '../utils/messageCache'
 
 // Avatar cache operations
 export {

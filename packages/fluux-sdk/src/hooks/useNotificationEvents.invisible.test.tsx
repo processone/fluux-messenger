@@ -15,7 +15,7 @@ import * as messageCache from '../utils/messageCache'
 
 vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
-  return { ...actual, isMessageCacheAvailable: vi.fn().mockReturnValue(false), getRoomMessages: vi.fn().mockResolvedValue([]) }
+  return { ...actual, isMessageCacheAvailable: vi.fn().mockReturnValue(false), getMessages: vi.fn().mockResolvedValue([]) }
 })
 
 const ROOM = 'tech@conference.example.com'
@@ -47,7 +47,7 @@ const mention = (id: string, nick: string, extra: Partial<RoomMessage> = {}): Ro
 describe('notifications for what the user cannot see', () => {
   beforeEach(() => {
     vi.mocked(messageCache.isMessageCacheAvailable).mockReturnValue(false)
-    vi.mocked(messageCache.getRoomMessages).mockResolvedValue([])
+    vi.mocked(messageCache.getMessages).mockResolvedValue([])
     clock = Date.now() - 60_000
     connectionStore.setState({ windowVisible: false })
     roomStore.setState({
@@ -156,7 +156,7 @@ describe('notifications for what the user cannot see', () => {
       act(() => roomStore.getState().setActiveRoom(null))
       expect(roomStore.getState().messages.get(ROOM)).toHaveLength(0)
       vi.mocked(messageCache.isMessageCacheAvailable).mockReturnValue(true)
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(cached)
+      vi.mocked(messageCache.getMessages).mockResolvedValue(cached)
       await act(async () => { await roomStore.getState().activateRoom(ROOM) })
 
       expect(roomStore.getState().messages.get(ROOM)).toHaveLength(1)

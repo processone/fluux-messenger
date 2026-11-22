@@ -84,6 +84,7 @@ function unavailableUpdates(message: Pick<Message, 'contentAvailability'>, outco
 export interface DeferredDecryptCache {
   getMessagesWithEncryptedPayload: () => Promise<CachedChatMessage[]>
   updateMessage: (
+    kind: 'chat',
     conversationId: string,
     id: string,
     updates: Partial<Message>,
@@ -93,6 +94,7 @@ export interface DeferredDecryptCache {
   ) => Promise<void>
   deleteMessageForRecovery?: (conversationId: string, message: Message, scopeJid: string | null) => Promise<boolean>
   deleteMessage: (
+    kind: 'chat',
     conversationId: string,
     id: string,
     from: string,
@@ -423,7 +425,7 @@ export class DeferredDecryptEngine {
         if (accountChanged()) return decryptedCount
         if (outcome.kind === 'decrypted') {
           const updates = recoveredUpdates(msg, outcome, accountScope)
-          await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from, accountScope, msg.cacheKey)
+          await this.deps.cache.updateMessage('chat', conversationId, msg.id, updates, msg.from, accountScope, msg.cacheKey)
           if (accountChanged()) return decryptedCount
           await this.deps.updateSearchIndex({ ...msg, ...updates }, accountScope)
             .catch(error => logWarn(`Failed to index recovered message: ${String(error)}`))
@@ -437,7 +439,7 @@ export class DeferredDecryptEngine {
           const unavailable = unavailableUpdates(msg, outcome)
           if (!unavailable) continue
           const updates = guardedUpdates(msg, unavailable, accountScope)
-          await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from, accountScope, msg.cacheKey)
+          await this.deps.cache.updateMessage('chat', conversationId, msg.id, updates, msg.from, accountScope, msg.cacheKey)
           if (accountChanged()) return decryptedCount
           if (outcome.clearPayload) {
             await this.deps.updateSearchIndex({ ...msg, ...updates }, accountScope)
@@ -459,7 +461,7 @@ export class DeferredDecryptEngine {
               ...(outcome.securityContext && { securityContext: outcome.securityContext }),
               encryptedPayload: undefined,
             }, accountScope)
-            await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from, accountScope, msg.cacheKey)
+            await this.deps.cache.updateMessage('chat', conversationId, msg.id, updates, msg.from, accountScope, msg.cacheKey)
             if (accountChanged()) return decryptedCount
             await this.deps.updateSearchIndex({ ...msg, ...updates }, accountScope)
               .catch(error => logWarn(`Failed to index recovered message: ${String(error)}`))
@@ -471,7 +473,7 @@ export class DeferredDecryptEngine {
             encryptedPayload: undefined,
             unsupportedEncryption: outcome.info,
           }, accountScope)
-          await this.deps.cache.updateMessage(conversationId, msg.id, updates, msg.from, accountScope, msg.cacheKey)
+          await this.deps.cache.updateMessage('chat', conversationId, msg.id, updates, msg.from, accountScope, msg.cacheKey)
           if (accountChanged()) return decryptedCount
           stores.chat.refreshLastMessageContent?.(conversationId, msg, updates)
         }
@@ -567,7 +569,7 @@ export class DeferredDecryptEngine {
     } else if (this.deps.cache.deleteMessageForRecovery) {
       if (!await this.deps.cache.deleteMessageForRecovery(conversationId, placeholder, accountScope)) return false
     } else {
-      await this.deps.cache.deleteMessage(conversationId, placeholder.id, placeholder.from, accountScope, chatCacheKey(placeholder))
+      await this.deps.cache.deleteMessage('chat', conversationId, placeholder.id, placeholder.from, accountScope, chatCacheKey(placeholder))
     }
     if (accountChanged() || !isCurrent()) return false
     const selected = { ...placeholder, contentRecovery }

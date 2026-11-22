@@ -3,7 +3,7 @@ import type { SDKEvents } from '../../core/types/sdk-events'
 import { roomStanzaIdsMergeable } from '../../utils/roomStanzaId'
 import { resolveCorrectionUpdates, type StoredMessage, type StoredRoomMessage } from '../../core/types/message-internal'
 import { archiveIdentityConflict, chatArchiveConflict, CHAT_SCOPE, chatMessageAuthor, identityKeys, roomMessageAuthor, roomScope, sameLogicalMessage } from '../../utils/messageIdentity'
-import { reconcileChatHistoryMessages, reconcileRoomHistoryMessages } from '../../utils/messageCache'
+import { reconcileHistoryMessages } from '../../utils/messageCache'
 import { getStorageScopeJid } from '../../utils/storageScope'
 import { moderationMetadata } from '../../utils/moderation'
 
@@ -101,8 +101,8 @@ export async function refreshCachedCorrections<T extends Row>(cached: T[], isCur
   if (!cached.length || !isCurrent()) return []
   const scope = getStorageScopeJid()
   const refreshed = cached[0].type === 'chat'
-    ? await reconcileChatHistoryMessages(cached as StoredMessage[], () => [], scope)
-    : await reconcileRoomHistoryMessages(cached as StoredRoomMessage[], () => [], scope)
+    ? await reconcileHistoryMessages('chat', cached as StoredMessage[], () => [], scope)
+    : await reconcileHistoryMessages('room', cached as StoredRoomMessage[], () => [], scope)
   return isCurrent() ? reconcileCachedCorrections(cached, refreshed as T[], scope) : []
 }
 

@@ -50,11 +50,11 @@ describe.each(['chat', 'room'] as const)('%s cache-only correction account scope
       : { ...common, type: 'groupchat', roomJid: ROOM, from: `${ROOM}/Peer`, nick: 'Peer', occupantId: 'peer-occupant' }
     const otherMessage = { ...message, body: 'unchanged text' }
     const save = async (row: Message | RoomMessage) => {
-      if (row.type === 'chat') await messageCache.saveMessages([row])
-      else await messageCache.saveRoomMessages([row])
+      if (row.type === 'chat') await messageCache.saveMessages('chat', [row])
+      else await messageCache.saveMessages('room', [row])
       await searchIndex.indexMessage(row)
     }
-    const read = () => kind === 'chat' ? messageCache.getMessages(PEER) : messageCache.getRoomMessages(ROOM, {})
+    const read = () => kind === 'chat' ? messageCache.getMessages('chat', PEER) : messageCache.getMessages('room', ROOM, {})
 
     setStorageScopeJid(ACCOUNT_B)
     await save(otherMessage)
@@ -65,8 +65,8 @@ describe.each(['chat', 'room'] as const)('%s cache-only correction account scope
     const completion = deferred()
     const writes: Promise<unknown>[] = []
     const operations = {
-      chat: messageCache.applyChatCorrection,
-      room: messageCache.applyRoomCorrection,
+      chat: messageCache.applyCorrection,
+      room: messageCache.applyCorrection,
       search: searchIndex.updateMessage,
     }
     const track = <A extends unknown[], R>(operation: (...args: A) => Promise<R>, wait = Promise.resolve()) => (...args: A) => {

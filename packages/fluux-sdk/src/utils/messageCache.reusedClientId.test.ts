@@ -47,7 +47,7 @@ function room(over: Partial<RoomMessage>): RoomMessage {
 
 const first = () => chat({ stanzaId: 's1', body: 'first apple' })
 const second = () => chat({ stanzaId: 's2', body: 'second banana', timestamp: new Date(T + 1000) })
-const stored = async () => cache.getMessages(CONV, {})
+const stored = async () => cache.getMessages('chat', CONV, {})
 
 /** Fake IndexedDB completes each request on a macrotask; the stores' durable writes are fire-and-forget. */
 async function settle(): Promise<void> {
@@ -68,7 +68,7 @@ beforeEach(async () => {
     pendingRetractions: new Map(), conversationCoverage: new Map(), conversationGaps: new Map(),
     mamQueryStates: new Map(),
   })
-  await cache.saveMessages([first(), second()])
+  await cache.saveMessages('chat', [first(), second()])
 })
 afterEach(() => cache._resetDBForTesting())
 
@@ -77,12 +77,12 @@ describe('cached chat rows sharing a client id', () => {
     await cache.clearAllMessages()
     const originOnly = chat({ originId: 'oB', body: 'origin-only apple' })
     const archived = chat({ stanzaId: 's2', originId: 'oA', body: 'archived banana', timestamp: new Date(T + 1000) })
-    await cache.saveMessages([originOnly, archived])
+    await cache.saveMessages('chat', [originOnly, archived])
     const held = { ...archived, originId: 'oB' }
 
-    expect(await cache.getMessage(CONV, 'X', held)).toMatchObject(archived)
-    expect(await cache.getMessagesAround(CONV, held, { before: 0, after: 0 })).toMatchObject([archived])
-    await cache.updateMessage(CONV, 'X', { body: 'updated banana' }, CONV, SCOPE, held)
+    expect(await cache.getMessage('chat', CONV, 'X', held)).toMatchObject(archived)
+    expect(await cache.getMessagesAround('chat', CONV, held, { before: 0, after: 0 })).toMatchObject([archived])
+    await cache.updateMessage('chat', CONV, 'X', { body: 'updated banana' }, CONV, SCOPE, held)
 
     expect(await stored()).toMatchObject([originOnly, { ...archived, body: 'updated banana' }])
   })
@@ -90,12 +90,12 @@ describe('cached chat rows sharing a client id', () => {
   it.each(['single', 'batch', 'identity-update'] as const)('preserves search documents of skipped merge candidates on %s', async path => {
     await searchIndex.indexMessages([first(), second()])
     const incoming = chat({ body: 'first apple' })
-    if (path === 'single') await cache.saveMessage(incoming)
-    else if (path === 'batch') await cache.saveMessages([incoming])
+    if (path === 'single') await cache.saveMessage('chat', incoming)
+    else if (path === 'batch') await cache.saveMessages('chat', [incoming])
     else {
-      await cache.saveMessage({ ...incoming, id: 'Y' })
+      await cache.saveMessage('chat', { ...incoming, id: 'Y' })
       await searchIndex.indexMessage({ ...incoming, id: 'Y' })
-      await cache.updateMessage(CONV, 'Y', { id: 'X' }, CONV)
+      await cache.updateMessage('chat', CONV, 'Y', { id: 'X' }, CONV)
     }
     expect((await stored()).map(row => row.stanzaId)).toEqual(['s1', 's2'])
     expect(await searchIndex.search('apple')).toMatchObject([{ stanzaId: 's1', body: 'first apple' }])
@@ -103,60 +103,60 @@ describe('cached chat rows sharing a client id', () => {
   })
 
   it('selects the shared stanza despite a different held origin across cache operations', async () => {
-    await cache.updateMessage(CONV, 'X', { originId: 'oA' }, CONV, undefined, second())
+    await cache.updateMessage('chat', CONV, 'X', { originId: 'oA' }, CONV, undefined, second())
     const selected = { ...second(), originId: 'oB' }
-    expect(await cache.getMessage(CONV, 'X', selected)).toMatchObject({ stanzaId: 's2', originId: 'oA' })
-    expect(await cache.updateMessageReactions(CONV, 's2', SCOPE, ['🍌'], selected)).toBe(true)
-    await cache.updateMessage(CONV, 'X', { linkPreview: { url: 'https://example.test/second' } }, CONV, undefined, selected)
-    expect(await cache.applyChatCorrection(CONV, 's2', { body: 'edited banana', isEdited: true }, { actorJid: CONV }, SCOPE, selected))
+    expect(await cache.getMessage('chat', CONV, 'X', selected)).toMatchObject({ stanzaId: 's2', originId: 'oA' })
+    expect(await cache.updateMessageReactions('chat', CONV, 's2', SCOPE, ['🍌'], selected)).toBe(true)
+    await cache.updateMessage('chat', CONV, 'X', { linkPreview: { url: 'https://example.test/second' } }, CONV, undefined, selected)
+    expect(await cache.applyCorrection('chat', CONV, 's2', { body: 'edited banana', isEdited: true }, { actorJid: CONV }, SCOPE, selected))
       .toMatchObject({ stanzaId: 's2', body: 'edited banana' })
-    expect(await cache.getMessage(CONV, 'X', selected)).toMatchObject({
+    expect(await cache.getMessage('chat', CONV, 'X', selected)).toMatchObject({
       body: 'edited banana', reactions: { '🍌': [SCOPE] }, linkPreview: { url: 'https://example.test/second' },
     })
-    expect(await cache.getMessage(CONV, 'X', first())).toMatchObject(first())
-    await cache.deleteMessage(CONV, 'X', CONV, SCOPE, selected)
+    expect(await cache.getMessage('chat', CONV, 'X', first())).toMatchObject(first())
+    await cache.deleteMessage('chat', CONV, 'X', CONV, SCOPE, selected)
     expect(await stored()).toMatchObject([first()])
   })
 
   it('anchors each origin-only twin without falling back to the other twin', async () => {
     await cache.clearAllMessages()
     const twins = ['o1', 'o2'].map((originId, index) => chat({ originId, body: `twin ${index}`, timestamp: new Date(T + index) }))
-    await cache.saveMessages(twins)
+    await cache.saveMessages('chat', twins)
     for (const twin of twins) {
-      expect(await cache.getMessagesAround(CONV, twin, { before: 0, after: 0 })).toMatchObject([twin])
+      expect(await cache.getMessagesAround('chat', CONV, twin, { before: 0, after: 0 })).toMatchObject([twin])
     }
-    expect(await cache.getMessagesAround(CONV, { id: 'X', originId: 'missing' })).toEqual([])
+    expect(await cache.getMessagesAround('chat', CONV, { id: 'X', originId: 'missing' })).toEqual([])
   })
   it('holds both rows and windows around either one', async () => {
     expect((await stored()).map(m => [m.stanzaId, m.body])).toEqual([['s1', 'first apple'], ['s2', 'second banana']])
-    expect((await cache.getMessagesAround(CONV, { id: 'X' }, { before: 10 })).map(m => m.stanzaId)).toEqual(['s1', 's2'])
-    expect((await cache.getMessagesAround(CONV, { id: 'X', stanzaId: 's2' }, { before: 0 })).map(m => m.stanzaId)).toEqual(['s2'])
-    expect((await cache.getMessagesAround(CONV, { id: 's2' }, { before: 0 })).map(m => m.stanzaId)).toEqual(['s2'])
+    expect((await cache.getMessagesAround('chat', CONV, { id: 'X' }, { before: 10 })).map(m => m.stanzaId)).toEqual(['s1', 's2'])
+    expect((await cache.getMessagesAround('chat', CONV, { id: 'X', stanzaId: 's2' }, { before: 0 })).map(m => m.stanzaId)).toEqual(['s2'])
+    expect((await cache.getMessagesAround('chat', CONV, { id: 's2' }, { before: 0 })).map(m => m.stanzaId)).toEqual(['s2'])
   })
 
   it('reacts, previews and updates the twin its identity names', async () => {
-    expect(await cache.updateMessageReactions(CONV, 's2', 'bob@example.test', ['👍'])).toBe(true)
-    await cache.updateMessage(CONV, 'X', { linkPreview: { url: 'https://x' } as never }, CONV, undefined, { stanzaId: 's2' })
+    expect(await cache.updateMessageReactions('chat', CONV, 's2', 'bob@example.test', ['👍'])).toBe(true)
+    await cache.updateMessage('chat', CONV, 'X', { linkPreview: { url: 'https://x' } as never }, CONV, undefined, { stanzaId: 's2' })
     const rows = await stored()
     expect(rows.filter(r => r.reactions && Object.keys(r.reactions).length).map(r => r.stanzaId)).toEqual(['s2'])
     expect(rows.filter(r => r.linkPreview).map(r => r.stanzaId)).toEqual(['s2'])
   })
 
   it('deletes the twin its identity names', async () => {
-    await cache.deleteMessage(CONV, 'X', CONV, undefined, { stanzaId: 's2' })
+    await cache.deleteMessage('chat', CONV, 'X', CONV, undefined, { stanzaId: 's2' })
     expect((await stored()).map(r => r.stanzaId)).toEqual(['s1'])
   })
 
   it('writes nothing when the held identity contradicts every row', async () => {
-    await cache.updateMessage(CONV, 'X', { body: 'stray' }, CONV, undefined, { stanzaId: 's3' })
-    await cache.deleteMessage(CONV, 'X', CONV, undefined, { stanzaId: 's3' })
+    await cache.updateMessage('chat', CONV, 'X', { body: 'stray' }, CONV, undefined, { stanzaId: 's3' })
+    await cache.deleteMessage('chat', CONV, 'X', CONV, undefined, { stanzaId: 's3' })
     expect((await stored()).map(r => [r.stanzaId, r.body])).toEqual([['s1', 'first apple'], ['s2', 'second banana']])
-    expect(await cache.getMessage(CONV, 'X', { stanzaId: 's3' })).toBeNull()
+    expect(await cache.getMessage('chat', CONV, 'X', { stanzaId: 's3' })).toBeNull()
   })
 
   it('still updates a row the held copy has no archive id for yet', async () => {
-    await cache.saveMessage(chat({ id: 'Y', body: 'local echo', timestamp: new Date(T + 2000) }))
-    await cache.updateMessage(CONV, 'Y', { stanzaId: 's9' }, CONV, undefined, { stanzaId: 's9' })
+    await cache.saveMessage('chat', chat({ id: 'Y', body: 'local echo', timestamp: new Date(T + 2000) }))
+    await cache.updateMessage('chat', CONV, 'Y', { stanzaId: 's9' }, CONV, undefined, { stanzaId: 's9' })
     expect((await stored()).map(r => [r.id, r.stanzaId])).toEqual([['X', 's1'], ['X', 's2'], ['Y', 's9']])
   })
 })
@@ -178,7 +178,7 @@ describe('chat store mutators against the real cache', () => {
   it('uses shared stanza identity for resident actions and preview updates despite different origins', async () => {
     const cached = { ...second(), originId: 'oA' }
     const held = { ...second(), originId: 'oB' }
-    await cache.saveMessage(cached)
+    await cache.saveMessage('chat', cached)
     chatStore.setState({ messages: new Map([[CONV, [first(), cached]]]) })
     chatStore.getState().addConversation({ id: CONV, name: 'Alice', type: 'chat', unreadCount: 0, lastMessage: held })
     expect(chatStore.getState().getMessage(CONV, held)).toBe(cached)
@@ -186,7 +186,7 @@ describe('chat store mutators against the real cache', () => {
     chatStore.getState().updateMessage(CONV, held, { body: 'edited banana', isEdited: true }, undefined, { actorJid: CONV })
     await settle()
     expect(chatStore.getState().getMessage(CONV, held)).toMatchObject({ body: 'edited banana', reactions: { '🍌': [SCOPE] } })
-    expect(await cache.getMessage(CONV, 'X', held)).toMatchObject({ body: 'edited banana', reactions: { '🍌': [SCOPE] } })
+    expect(await cache.getMessage('chat', CONV, 'X', held)).toMatchObject({ body: 'edited banana', reactions: { '🍌': [SCOPE] } })
     expect(chatStore.getState().conversationMeta.get(CONV)?.lastMessage).toMatchObject({ body: 'edited banana', originId: 'oB' })
     chatStore.getState().refreshLastMessageContent(CONV, cached, { encryptedPayload: undefined, securityContext: { protocolId: 'dummy', trust: 'verified' } })
     expect(chatStore.getState().conversationMeta.get(CONV)?.lastMessage?.securityContext?.trust).toBe('verified')
@@ -200,7 +200,7 @@ describe('chat store mutators against the real cache', () => {
   it('hands cached content to a resident copy and preview with a different origin on the same stanza', async () => {
     const cached = { ...second(), originId: 'oA' }
     const held = { ...second(), originId: 'oB' }
-    await cache.saveMessage(cached)
+    await cache.saveMessage('chat', cached)
     chatStore.setState({ messages: new Map([[CONV, [first()]]]) })
     chatStore.getState().addConversation({ id: CONV, name: 'Alice', type: 'chat', unreadCount: 0, lastMessage: first() })
     chatStore.getState().updateMessage(CONV, held, { body: 'edited banana', isEdited: true }, undefined, { actorJid: CONV })
@@ -209,7 +209,7 @@ describe('chat store mutators against the real cache', () => {
     await settle()
     expect(chatStore.getState().getMessage(CONV, held)).toMatchObject({ body: 'edited banana', originId: 'oB' })
     expect(chatStore.getState().conversationMeta.get(CONV)?.lastMessage).toMatchObject({ body: 'edited banana', originId: 'oB' })
-    expect(await cache.getMessage(CONV, 'X', held)).toMatchObject({ body: 'edited banana', originId: 'oA' })
+    expect(await cache.getMessage('chat', CONV, 'X', held)).toMatchObject({ body: 'edited banana', originId: 'oA' })
   })
 
   it('persists an update and a reaction onto the second twin only', async () => {
@@ -225,7 +225,7 @@ describe('chat store mutators against the real cache', () => {
 
   it('persists a live twin that arrives while the conversation is open', async () => {
     await cache.clearAllMessages()
-    await cache.saveMessage(first())
+    await cache.saveMessage('chat', first())
     chatStore.setState({ messages: new Map() })
     await chatStore.getState().loadMessagesFromCache(CONV, { limit: 100 })
     chatStore.getState().addMessage(second())
@@ -251,7 +251,7 @@ describe.each(['stanza', 'origin'] as const)('chat preview ownership for %s twin
         timestamp: new Date(T + index * 1000),
         ...(identity === 'stanza' ? { stanzaId: `s${index + 1}`, originId: 'X' } : { originId: `o${index + 1}` }),
       }))
-      await cache.saveMessages(twins)
+      await cache.saveMessages('chat', twins)
       const held = resident ? twins : [twins[0]]
       chatStore.setState({ messages: new Map([[CONV, held]]), pendingRetractions: new Map() })
       chatStore.getState().addConversation({ id: CONV, name: 'Alice', type: 'chat', unreadCount: 0, lastMessage: twins[previewIndex] })
@@ -323,7 +323,7 @@ describe('chat preview archive backfill and cache handoff', () => {
           : [second]
         chatStore.getState().mergeMAMMessages(CONV, page, { first: 's2', last: 's2' }, true, path.includes('backward') ? 'backward' : 'forward')
       } else {
-        await cache.saveMessage(second)
+        await cache.saveMessage('chat', second)
         if (path === 'cache-latest') await chatStore.getState().loadMessagesFromCache(CONV)
         else await chatStore.getState().loadMessagesAroundFromCache(CONV, { id: 'X', stanzaId: 's2' })
       }
@@ -337,8 +337,8 @@ describe('chat preview archive backfill and cache handoff', () => {
       await settle()
       expect(preview()).toMatchObject({ stanzaId: 's2', isRetracted: true, body: '' })
       expect(chatStore.getState().messages.has(CONV)).toBe(false)
-      expect(await cache.getMessage(CONV, 'X', first)).toMatchObject({ body: 'first' })
-      expect(await cache.getMessage(CONV, 'X', second)).toMatchObject({ isRetracted: true, body: '' })
+      expect(await cache.getMessage('chat', CONV, 'X', first)).toMatchObject({ body: 'first' })
+      expect(await cache.getMessage('chat', CONV, 'X', second)).toMatchObject({ isRetracted: true, body: '' })
       assertPersistedPreview()
     },
   )
@@ -351,7 +351,7 @@ describe('chat preview archive backfill and cache handoff', () => {
     if (path === 'live') chatStore.getState().addMessage(second)
     else if (path.startsWith('cache')) {
       await settle()
-      await cache.saveMessage(second)
+      await cache.saveMessage('chat', second)
       if (path === 'cache-latest') await chatStore.getState().loadMessagesFromCache(CONV)
       else await chatStore.getState().loadMessagesAroundFromCache(CONV, { id: 'X', stanzaId: 's2' })
     }
@@ -365,33 +365,33 @@ describe('chat preview archive backfill and cache handoff', () => {
   describe.each([false, true])('stale preview belongs to another twin: %s', otherTwin => {
     it.each(['retraction', 'correction', 'actor-correction', 'body-update'])('reconciles a cached %s into only its matching preview', async action => {
       const rows = twins()
-      await cache.saveMessages(rows)
+      await cache.saveMessages('chat', rows)
       const held = { ...rows[otherTwin ? 0 : 1], stanzaId: undefined }
       chatStore.getState().addConversation({ id: CONV, name: 'Alice', type: 'chat', unreadCount: 0, lastMessage: held })
       const updates = action === 'retraction'
         ? { isRetracted: true, retractedAt: new Date(T + 2000) }
         : { body: 'updated second', ...(action !== 'body-update' && { isEdited: true }) }
       chatStore.getState().updateMessage(CONV, rows[1], updates, undefined, action === 'actor-correction' ? { actorJid: SCOPE } : undefined)
-      await vi.waitFor(async () => expect(await cache.getMessage(CONV, 'X', rows[1])).toMatchObject(updates))
+      await vi.waitFor(async () => expect(await cache.getMessage('chat', CONV, 'X', rows[1])).toMatchObject(updates))
       await settle()
       if (otherTwin) expect(preview()).toBe(held)
       else expect(preview()).toMatchObject({ stanzaId: 's2', originId: 'o2', ...(action === 'retraction' ? { isRetracted: true, body: '' } : { body: 'updated second' }) })
       expect(chatStore.getState().messages.has(CONV)).toBe(false)
-      expect(await cache.getMessage(CONV, 'X', rows[0])).toMatchObject({ body: 'first' })
+      expect(await cache.getMessage('chat', CONV, 'X', rows[0])).toMatchObject({ body: 'first' })
       assertPersistedPreview()
     })
   })
 
   it.each(['retraction', 'actor-correction', 'body-update'])('discards a %s cache handoff after an account switch', async action => {
     const rows = twins()
-    await cache.saveMessages(rows)
+    await cache.saveMessages('chat', rows)
     chatStore.getState().addConversation({ id: CONV, name: 'Alice', type: 'chat', unreadCount: 0, lastMessage: { ...rows[1], stanzaId: undefined } })
     let release!: () => void
     const gate = new Promise<void>(resolve => { release = resolve })
     let ready!: () => void
     const read = new Promise<void>(resolve => { ready = resolve })
     const getMessage = cache.getMessage
-    const applyCorrection = cache.applyChatCorrection
+    const applyCorrection = cache.applyCorrection
     const spy = action !== 'actor-correction'
       ? vi.spyOn(cache, 'getMessage').mockImplementationOnce(async (...args) => { const result = await getMessage(...args); ready(); await gate; return result })
       : vi.spyOn(cache, 'applyChatCorrection').mockImplementationOnce(async (...args) => { const result = await applyCorrection(...args); ready(); await gate; return result })
@@ -415,18 +415,18 @@ describe('chat preview archive backfill and cache handoff', () => {
 
 describe('room witness: a reused nick and client id', () => {
   it('a ref with an occupant picks its row, a bare ref resolves to nothing', async () => {
-    await cache.saveRoomMessages([room({ occupantId: 'o1', body: 'first', receivedAt: new Date(T) })])
-    await cache.saveRoomMessages([room({ occupantId: 'o2', body: 'second', receivedAt: new Date(T + 1000), timestamp: new Date(T + 1000) })])
-    expect((await cache.getRoomMessages(ROOM, {})).map(m => m.body)).toEqual(['first', 'second'])
-    expect((await cache.getRoomMessagesAround(ROOM, { id: 'X', occupantId: 'o2' }, { before: 0, after: 0 })).map(m => m.body)).toEqual(['second'])
-    expect(await cache.getRoomMessagesAround(ROOM, { id: 'X' }, { before: 0, after: 0 })).toEqual([])
+    await cache.saveMessages('room', [room({ occupantId: 'o1', body: 'first', receivedAt: new Date(T) })])
+    await cache.saveMessages('room', [room({ occupantId: 'o2', body: 'second', receivedAt: new Date(T + 1000), timestamp: new Date(T + 1000) })])
+    expect((await cache.getMessages('room', ROOM, {})).map(m => m.body)).toEqual(['first', 'second'])
+    expect((await cache.getMessagesAround('room', ROOM, { id: 'X', occupantId: 'o2' }, { before: 0, after: 0 })).map(m => m.body)).toEqual(['second'])
+    expect(await cache.getMessagesAround('room', ROOM, { id: 'X' }, { before: 0, after: 0 })).toEqual([])
   })
 
   it('a ref naming the second archive id lands on the second row', async () => {
-    await cache.saveRoomMessages([room({ occupantId: 'o1', stanzaId: 'sa', body: 'first' })])
-    await cache.saveRoomMessages([room({ occupantId: 'o2', stanzaId: 'sb', body: 'second', timestamp: new Date(T + 1000) })])
-    expect((await cache.getRoomMessagesAround(ROOM, { id: 'X', stanzaId: 'sb' }, { before: 0, after: 0 })).map(m => m.body)).toEqual(['second'])
-    expect((await cache.getRoomMessagesAround(ROOM, { id: 'sb' }, { before: 0, after: 0 })).map(m => m.body)).toEqual(['second'])
+    await cache.saveMessages('room', [room({ occupantId: 'o1', stanzaId: 'sa', body: 'first' })])
+    await cache.saveMessages('room', [room({ occupantId: 'o2', stanzaId: 'sb', body: 'second', timestamp: new Date(T + 1000) })])
+    expect((await cache.getMessagesAround('room', ROOM, { id: 'X', stanzaId: 'sb' }, { before: 0, after: 0 })).map(m => m.body)).toEqual(['second'])
+    expect((await cache.getMessagesAround('room', ROOM, { id: 'sb' }, { before: 0, after: 0 })).map(m => m.body)).toEqual(['second'])
   })
 })
 
@@ -436,20 +436,20 @@ describe('archive conflict separation at every durable write boundary', () => {
     await cache.clearAllMessages()
     const twins = [chat({ stanzaId: 's1', originId: 'X', body: 'first' }), chat({ stanzaId: 's2', originId: 'X', body: 'second' })]
     if (mode === 'single') {
-      for (const twin of twins) await cache.saveMessage(twin)
-    } else await cache.saveMessages(twins)
+      for (const twin of twins) await cache.saveMessage('chat', twin)
+    } else await cache.saveMessages('chat', twins)
     expect((await stored()).map(row => [row.stanzaId, row.body])).toEqual([['s1', 'first'], ['s2', 'second']])
-    expect((await cache.findChatMessageCopies(CONV, twins[1])).map(copy => copy.message.stanzaId)).toEqual(['s2'])
+    expect((await cache.findMessageCopies('chat', CONV, twins[1])).map(copy => copy.message.stanzaId)).toEqual(['s2'])
   })
 
   it('keeps twins separate while adding a shared origin ID through updateMessage', async () => {
-    await cache.updateMessage(CONV, 'X', { originId: 'X' }, CONV, undefined, { stanzaId: 's1' })
-    await cache.updateMessage(CONV, 'X', { originId: 'X' }, CONV, undefined, { stanzaId: 's2' })
+    await cache.updateMessage('chat', CONV, 'X', { originId: 'X' }, CONV, undefined, { stanzaId: 's1' })
+    await cache.updateMessage('chat', CONV, 'X', { originId: 'X' }, CONV, undefined, { stanzaId: 's2' })
     expect((await stored()).map(row => [row.stanzaId, row.originId])).toEqual([['s1', 'X'], ['s2', 'X']])
   })
 
   it('does not use an unqualified copy to merge two archive-distinct rows', async () => {
-    await cache.saveMessage(chat({ id: 'X', body: 'unqualified copy' }))
+    await cache.saveMessage('chat', chat({ id: 'X', body: 'unqualified copy' }))
     expect((await stored()).map(row => row.stanzaId)).toEqual(['s1', 's2'])
   })
 
@@ -457,30 +457,30 @@ describe('archive conflict separation at every durable write boundary', () => {
     await cache.clearAllMessages()
     const copies = [chat({ id: 'A', stanzaId: 's9', originId: 'oA' }), chat({ id: 'B', stanzaId: 's9', originId: 'oB' })]
     if (mode === 'single') {
-      for (const copy of copies) await cache.saveMessage(copy)
-    } else await cache.saveMessages(copies)
+      for (const copy of copies) await cache.saveMessage('chat', copy)
+    } else await cache.saveMessages('chat', copies)
     expect((await stored()).map(row => row.stanzaId)).toEqual(['s9'])
-    expect((await cache.getMessage(CONV, 'A'))?.stanzaId).toBe('s9')
-    expect((await cache.getMessage(CONV, 'B'))?.stanzaId).toBe('s9')
+    expect((await cache.getMessage('chat', CONV, 'A'))?.stanzaId).toBe('s9')
+    expect((await cache.getMessage('chat', CONV, 'B'))?.stanzaId).toBe('s9')
   })
 })
 
 describe('chat cache windows with tied timestamps', () => {
   it('keeps either twin as a zero-context anchor', async () => {
-    await cache.updateMessage(CONV, 'X', { timestamp: new Date(T) }, CONV, undefined, { stanzaId: 's2' })
+    await cache.updateMessage('chat', CONV, 'X', { timestamp: new Date(T) }, CONV, undefined, { stanzaId: 's2' })
     for (const stanzaId of ['s1', 's2']) {
-      expect((await cache.getMessagesAround(CONV, { id: 'X', stanzaId }, { before: 0, after: 0 })).map(row => row.stanzaId)).toEqual([stanzaId])
+      expect((await cache.getMessagesAround('chat', CONV, { id: 'X', stanzaId }, { before: 0, after: 0 })).map(row => row.stanzaId)).toEqual([stanzaId])
     }
-    expect((await cache.getMessagesAround(CONV, { id: 'X', stanzaId: 's1' }, { before: 0 })).map(row => row.stanzaId)).toEqual(['s1', 's2'])
-    expect((await cache.getMessagesAround(CONV, { id: 'X', stanzaId: 's2' }, { before: 1, after: 0 })).map(row => row.stanzaId)).toEqual(['s1', 's2'])
+    expect((await cache.getMessagesAround('chat', CONV, { id: 'X', stanzaId: 's1' }, { before: 0 })).map(row => row.stanzaId)).toEqual(['s1', 's2'])
+    expect((await cache.getMessagesAround('chat', CONV, { id: 'X', stanzaId: 's2' }, { before: 1, after: 0 })).map(row => row.stanzaId)).toEqual(['s1', 's2'])
   })
 
   it('applies the default context limit after locating the anchor within a large timestamp bucket', async () => {
     await cache.clearAllMessages()
     const twins = Array.from({ length: 80 }, (_, index) => chat({ stanzaId: `s${String(index).padStart(2, '0')}` }))
-    await cache.saveMessages(twins)
-    expect((await cache.getMessagesAround(CONV, { id: 'X', stanzaId: 's00' })).map(row => row.stanzaId)).toEqual(twins.map(row => row.stanzaId))
-    expect((await cache.getMessagesAround(CONV, { id: 'X', stanzaId: 's60' }, { after: 1 })).map(row => row.stanzaId)).toEqual(twins.slice(10, 62).map(row => row.stanzaId))
+    await cache.saveMessages('chat', twins)
+    expect((await cache.getMessagesAround('chat', CONV, { id: 'X', stanzaId: 's00' })).map(row => row.stanzaId)).toEqual(twins.map(row => row.stanzaId))
+    expect((await cache.getMessagesAround('chat', CONV, { id: 'X', stanzaId: 's60' }, { after: 1 })).map(row => row.stanzaId)).toEqual(twins.slice(10, 62).map(row => row.stanzaId))
   })
 })
 
@@ -517,7 +517,7 @@ describe('selected local actions through protocol, bindings, store and cache', (
     const twins = identity === 'stanza'
       ? [chat({ stanzaId: 's1', originId: 'X', body: 'first' }), chat({ stanzaId: 's2', originId: 'X', body: 'second' })]
       : [chat({ originId: 'o1', body: 'first' }), chat({ originId: 'o2', body: 'second' })]
-    await cache.saveMessages(twins)
+    await cache.saveMessages('chat', twins)
     chatStore.setState({ messages: new Map(), activeConversationId: CONV, pendingRetractions: new Map() })
     await chatStore.getState().loadMessagesFromCache(CONV)
     const { module, sent } = localChatHarness()
@@ -565,7 +565,7 @@ describe('selected local actions through protocol, bindings, store and cache', (
       chat({ from: SCOPE, isOutgoing: true, stanzaId: 's1', originId: 'o1', body: 'first' }),
       chat({ from: SCOPE, isOutgoing: true, stanzaId: 's2', originId: 'o2', body: 'second' }),
     ]
-    await cache.saveMessages(twins)
+    await cache.saveMessages('chat', twins)
     chatStore.setState({ messages: new Map(), activeConversationId: CONV, pendingRetractions: new Map() })
     await chatStore.getState().loadMessagesFromCache(CONV)
     const selected = chatStore.getState().getMessage(CONV, twins[1])!

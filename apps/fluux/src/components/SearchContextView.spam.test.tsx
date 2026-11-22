@@ -1,6 +1,6 @@
 import { roomMessageFixture } from '@/test-utils/roomMessages'
 import 'fake-indexeddb/auto'
-import { clearAllMessages, saveRoomMessages } from '@fluux/sdk/cache'
+import { clearAllMessages, saveMessages } from '@fluux/sdk/cache'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { createRef, type ComponentProps } from 'react'
@@ -113,7 +113,7 @@ describe('search context quotation authority', () => {
       body: 'Unrelated spam', isRetracted: true, isModerated: true, moderationReason: 'Spam' }
     const reply = { ...base, id: 'reply', stanzaId: 'reply-archive', body: 'Reply text',
       replyTo: { id: base.stanzaId!, to: base.from, fallbackBody: 'Ordinary fallback' } }
-    await saveRoomMessages([legitimate, collision])
+    await saveMessages('room', [legitimate, collision])
     roomStore.setState({ messages: new Map([[roomJid, [collision]]]) })
     render(<SearchContextMessageList {...props} messages={source === 'snapshot' ? [legitimate, collision, reply] : [collision, reply]} />)
     await waitFor(() => expect(screen.getByTestId('row-reply').querySelector('.reply-quote-preview')).toHaveTextContent(base.body))
@@ -125,7 +125,7 @@ describe('search context quotation authority', () => {
     const collision = { ...base, id: base.stanzaId!, stanzaId: 'collision-archive', occupantId: 'later-author', body: 'Unrelated legitimate message' }
     const reply = { ...base, id: 'reply', stanzaId: 'reply-archive', body: 'Reply text',
       replyTo: { id: base.stanzaId!, to: base.from, fallbackBody: 'Hidden fallback' } }
-    await saveRoomMessages([original, collision])
+    await saveMessages('room', [original, collision])
     roomStore.setState({ messages: new Map([[roomJid, [collision]]]) })
     render(<SearchContextMessageList {...props} messages={[collision, reply]} />)
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)) })
@@ -146,7 +146,7 @@ describe('full context archive identity', () => {
     const first = roomMessageFixture({ ...base, id: 'shared', occupantId: 'author', stanzaId: 'archive-a',
       body: 'First archive result', timestamp: new Date(1000) })
     const second = roomMessageFixture({ ...first, stanzaId: 'archive-b', body: 'Second archive result', timestamp: new Date(2000) })
-    await saveRoomMessages([first, second])
+    await saveMessages('room', [first, second])
     const preview = (message: RoomMessage): SearchResult => ({
       indexId: message.stanzaId!, messageId: message.id, conversationId: roomJid, conversationName: 'Room',
       isRoom: true, from: message.from, occupantId: message.occupantId, stanzaId: message.stanzaId,
@@ -162,7 +162,7 @@ describe('full context archive identity', () => {
     expect(container.querySelector('[data-archive-id="archive-a"] > .cursor-pointer')).toBeTruthy()
     expect(container.querySelector('[data-archive-id="archive-b"] > .cursor-pointer')).toBeNull()
     const fresh = roomMessageFixture({ ...second, id: 'new-context', stanzaId: 'new-context', body: 'Freshly loaded context', timestamp: new Date(3000) })
-    await saveRoomMessages([fresh])
+    await saveMessages('room', [fresh])
     vi.mocked(useSearch).mockReturnValue({ ...searchState, previewResult: preview(second), query: 'unmatched-search-term', setPreviewResult })
     rerender(<SearchContextView />)
     await waitFor(() => expect(screen.getByText(fresh.body)).toBeInTheDocument())

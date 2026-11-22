@@ -21,7 +21,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
 }))
 vi.mock('@fluux/sdk/cache', () => ({
   getMessagesAround: (...args: unknown[]) => around(...args),
-  getRoomMessagesAround: (...args: unknown[]) => around(...args),
+  getMessagesAround: (...args: unknown[]) => around(...args),
 }))
 vi.mock('@fluux/sdk/react', () => ({
   useChatStore: (selector: (s: unknown) => unknown) => selector({ messages: new Map() }),

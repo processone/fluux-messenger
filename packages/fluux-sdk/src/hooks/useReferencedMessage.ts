@@ -1,7 +1,7 @@
 import { getRoomModerationId } from '../utils/roomStanzaId'
 import { useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { getRoomMessageByReference } from '../utils/messageCache'
+import { getMessageByReference } from '../utils/messageCache'
 import { captureStorageScope } from '../utils/storageScope'
 import { roomStore } from '../stores/roomStore'
 import { applyPendingRetractions, type PendingRetraction } from '../stores/shared/pendingRetractions'
@@ -104,7 +104,7 @@ export function useReferencedMessage(params: ReferencedMessageParams): Message |
     if (!cache || !roomJid || !id || (roomMatch && getRoomModerationId(roomMatch) === id)) return
     const scope = captureStorageScope()
     let cancelled = false
-    void getRoomMessageByReference(roomJid, id, from, localCandidates).then(message => {
+    void getMessageByReference('room', roomJid, id, from, localCandidates).then(message => {
       if (!cancelled && scope.isCurrent()) {
         const resolved = message
           ? applyPendingRetractions([message], roomStore.getState().pendingRetractions.get(roomJid) ?? EMPTY_RETRACTIONS, roomRetractionAuthorized).messages[0]

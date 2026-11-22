@@ -19,10 +19,10 @@ import * as cache from '../utils/messageCache'
 
 vi.mock('../utils/messageCache', async importOriginal => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
-  return { ...actual, saveRoomMessageWithResult: vi.fn(actual.saveRoomMessageWithResult), saveRoomMessages: vi.fn(actual.saveRoomMessages) }
+  return { ...actual, saveMessageWithResult: vi.fn(actual.saveRoomMessageWithResult), saveMessages: vi.fn(actual.saveRoomMessages) }
 })
-const saveOne = vi.mocked(cache.saveRoomMessageWithResult).getMockImplementation()!
-const saveBatch = vi.mocked(cache.saveRoomMessages).getMockImplementation()!
+const saveOne = vi.mocked(cache.saveMessageWithResult).getMockImplementation()!
+const saveBatch = vi.mocked(cache.saveMessages).getMockImplementation()!
 const ROOM = 'identity@conference.example.com'
 const ACCOUNT = 'review@example.com'
 const key = { accountScope: ACCOUNT, kind: 'room' as const, entityId: ROOM }
@@ -54,8 +54,8 @@ beforeEach(async () => {
   roomStore.getState().reset()
   roomStore.getState().switchAccount(ACCOUNT)
   _clearAllTransientForTesting()
-  vi.mocked(cache.saveRoomMessageWithResult).mockReset().mockImplementation(saveOne)
-  vi.mocked(cache.saveRoomMessages).mockReset().mockImplementation(saveBatch)
+  vi.mocked(cache.saveMessageWithResult).mockReset().mockImplementation(saveOne)
+  vi.mocked(cache.saveMessages).mockReset().mockImplementation(saveBatch)
   connectionStore.setState({ windowVisible: true })
   roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
   await saveBatch([bottom])
@@ -105,7 +105,7 @@ it.each(['single', 'batch', 'moderation'] as const)('keeps B transient after %s 
   connectionStore.setState({ windowVisible: false })
   const writeA = deferred()
   const writeB = deferred()
-  vi.mocked(cache.saveRoomMessageWithResult).mockImplementationOnce(() => writeA.promise).mockImplementationOnce(() => writeB.promise)
+  vi.mocked(cache.saveMessageWithResult).mockImplementationOnce(() => writeA.promise).mockImplementationOnce(() => writeB.promise)
   await roomStore.getState().addMessage(ROOM, a)
   await roomStore.getState().addMessage(ROOM, b, { incrementMentions: true })
   expect(transientCounts(key, undefined)).toEqual({ unread: 2 })
@@ -139,7 +139,7 @@ it.each(['single', 'batch', 'moderation'] as const)('keeps B transient after %s 
 
 it('preserves uncertain transient collisions while deduplicating genuine confirmation and pending replay', async () => {
   connectionStore.setState({ windowVisible: false })
-  vi.mocked(cache.saveRoomMessageWithResult).mockResolvedValue(false)
+  vi.mocked(cache.saveMessageWithResult).mockResolvedValue(false)
   const legacy = { ...a, stanzaId: 'actual-a', body: 'Legacy A', timestamp: new Date(500) }
   await roomStore.getState().addMessage(ROOM, legacy)
   await roomStore.getState().addMessage(ROOM, b)
@@ -157,13 +157,13 @@ it('preserves uncertain transient collisions while deduplicating genuine confirm
 it('retires only a validated backfill after its archive patch commits', async () => {
   connectionStore.setState({ windowVisible: false })
   roomStore.setState({ activeRoomJid: ROOM })
-  vi.mocked(cache.saveRoomMessageWithResult).mockResolvedValue(false)
+  vi.mocked(cache.saveMessageWithResult).mockResolvedValue(false)
   const legacy = { ...a, stanzaId: undefined }
   await roomStore.getState().addMessage(ROOM, legacy)
   await roomStore.getState().addMessage(ROOM, b)
   const gate = deferred()
   let written: RoomMessage[] = []
-  vi.mocked(cache.saveRoomMessages).mockImplementationOnce(messages => { written = messages; return gate.promise })
+  vi.mocked(cache.saveMessages).mockImplementationOnce(messages => { written = messages; return gate.promise })
   roomStore.getState().mergeRoomMAMMessages(ROOM, [a], { first: a.stanzaId, last: a.stanzaId }, true, 'backward')
   expect(written).toHaveLength(1)
   expect(written[0].localRowRef).toEqual(messageRowRef(legacy))
@@ -177,8 +177,8 @@ it('retires only a validated backfill after its archive patch commits', async ()
 
 it.each([undefined, 'different original', 'archive-a'])('preserves another archive entry even when original content matches (%s)', async originalBody => {
   const legacy = { ...a, stanzaId: 'different-archive', body: 'edited content', originalBody, isEdited: true }
-  await cache.saveRoomMessages([legacy, a])
-  const rows = (await cache.getRoomMessages(ROOM)).filter(message => message.id === a.id)
+  await cache.saveMessages('room', [legacy, a])
+  const rows = (await cache.getMessages('room', ROOM)).filter(message => message.id === a.id)
   expect(rows).toHaveLength(2)
   expect(rows.find(message => message.stanzaId === legacy.stanzaId)).toMatchObject({ body: legacy.body })
   expect(rows.find(message => message.stanzaId === a.stanzaId)).toMatchObject({ body: a.body })

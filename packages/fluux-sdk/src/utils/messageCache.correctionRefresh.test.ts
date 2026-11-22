@@ -21,14 +21,14 @@ function message(kind: Kind, index = 0): Row {
 }
 
 async function save(kind: Kind, rows: Row[]) {
-  if (kind === 'chat') await cache.saveMessages(rows as StoredMessage[])
-  else await cache.saveRoomMessages(rows as StoredRoomMessage[])
+  if (kind === 'chat') await cache.saveMessages('chat', rows as StoredMessage[])
+  else await cache.saveMessages('room', rows as StoredRoomMessage[])
 }
 
 async function reconcile(kind: Kind, rows: Row[], resident: () => Row[] = () => []) {
   return kind === 'chat'
-    ? cache.reconcileChatHistoryMessages(rows as StoredMessage[], resident as () => StoredMessage[])
-    : cache.reconcileRoomHistoryMessages(rows as StoredRoomMessage[], resident as () => StoredRoomMessage[])
+    ? cache.reconcileHistoryMessages('chat', rows as StoredMessage[], resident as () => StoredMessage[])
+    : cache.reconcileHistoryMessages('room', rows as StoredRoomMessage[], resident as () => StoredRoomMessage[])
 }
 
 beforeEach(() => {

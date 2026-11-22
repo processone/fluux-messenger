@@ -130,7 +130,7 @@ function readLatestCachedChatSlice(conversationId: string, limit: number): Promi
   const isCurrent = captureChatCacheRead(conversationId)
   return withMessageCacheOperation('chat', conversationId, async () => {
     if (!isCurrent()) return { status: 'ok', value: [] }
-    const read = await messageCache.readMessages(conversationId, { limit, latest: true })
+    const read = await messageCache.readMessages('chat', conversationId, { limit, latest: true })
     if (read.status === 'unavailable') return read
     return { status: 'ok', value: await refreshCachedCorrections(read.value, isCurrent) }
   })
@@ -769,7 +769,7 @@ function chatReadView(state: ChatState, conversationId: string): ReadStateView |
 async function withFloorPointerRow(conversationId: string, marker: Message): Promise<Message[]> {
   const pointer = chatStore.getState().conversationMeta.get(conversationId)?.readPointer
   if (pointer?.order.role !== 'floor') return [marker]
-  const pointerRow = await messageCache.getMessage(conversationId, pointer.identity.messageId)
+  const pointerRow = await messageCache.getMessage('chat', conversationId, pointer.identity.messageId)
   return sortMessagesByTimestamp(pointerRow && pointerRow.id !== marker.id ? [marker, pointerRow] : [marker], 'chat')
 }
 
@@ -807,7 +807,7 @@ export const chatReadTracker = createReadTracker('chat', {
     void (options ? store.recomputeUnreadForConversation(conversationId, options) : store.recomputeUnreadForConversation(conversationId))
   },
   loadStashedMarkerRows: async (conversationId, stanzaId) => {
-    const marker = await messageCache.getMessageByStanzaId(conversationId, stanzaId)
+    const marker = await messageCache.getMessageByStanzaId('chat', conversationId, stanzaId)
     return marker ? withFloorPointerRow(conversationId, marker) : null
   },
   captureCacheRead: captureChatCacheRead,
@@ -817,7 +817,7 @@ export const chatReadTracker = createReadTracker('chat', {
     // exactly on it; it also forces the backwards cursor, so `limit` yields the NEWEST rows. `after`
     // pins the range inside this conversation — without it the cursor walks every lower-sorting
     // conversation's rows when this one has nothing to return.
-    return messageCache.getMessages(conversationId, {
+    return messageCache.getMessages('chat', conversationId, {
       after: new Date(0),
       before: new Date(pointer.order.timestamp + 1),
       limit: PUBLISH_CACHE_LOOKBACK,
@@ -831,7 +831,7 @@ export const chatReadTracker = createReadTracker('chat', {
     // Guarded on the same bottomId, so a record a concurrent merge already moved on is kept.
     chatStore.getState().clearConversationCoverage(conversationId, record.bottomId)
   },
-  countUnreadFromArchive: (conversationId, range) => messageCache.countUnreadInArchive(conversationId, range),
+  countUnreadFromArchive: (conversationId, range) => messageCache.countUnreadInArchive('chat', conversationId, range),
   archiveReadyForCounting: (conversationId) => {
     const mam = mamState.getMAMQueryState(chatStore.getState().mamQueryStates, conversationId)
     return !conversationArchiveSaves.has(conversationId) && isCaughtUpForCounting(mam)
@@ -874,7 +874,7 @@ const chatArchiveMerge = createArchiveMerge<Message>('chat', {
     return replay.messages
   },
   lastHeldTimestamp: (conversationId) => chatStore.getState().getConversationLastTimestamp(conversationId),
-  saveRows: (rows) => messageCache.saveMessages(rows),
+  saveRows: (rows) => messageCache.saveMessages('chat', rows),
   saves: conversationArchiveSaves,
   readTracker: chatReadTracker,
   pendingRemoteMarker: (conversationId) =>
@@ -1071,7 +1071,7 @@ export async function migrateReadPointer(
     // is" is earned: the row's own archive id may ride along, and this pointer
     // mints `addressable` when the cached row carries one. Contrast the
     // timestamp-resolved branch below, which cannot make that claim.
-    const cached = await messageCache.getMessage(conversationId, lastSeenMessageId)
+    const cached = await messageCache.getMessage('chat', conversationId, lastSeenMessageId)
     if (cached) return makeReadPointer(cached, 'chat')
     return undefined
   }
@@ -1089,7 +1089,7 @@ export async function migrateReadPointer(
     // conversation's rows — `limit` cannot stop it, because the result array
     // never fills. That is one `cursor.continue()` per cached message, on the
     // startup path.
-    const [newest] = await messageCache.getMessages(conversationId, {
+    const [newest] = await messageCache.getMessages('chat', conversationId, {
       after: new Date(0),
       before: new Date(lastReadAt.getTime() + 1),
       limit: 1,
@@ -1439,7 +1439,7 @@ function deserializeState(persisted: PersistedState, storageKey: string): Pick<C
     }
     if (allMessages.length > 0) {
       // Save to IndexedDB asynchronously (fire-and-forget migration)
-      void messageCache.saveMessages(allMessages).then(() => {
+      void messageCache.saveMessages('chat', allMessages).then(() => {
         console.log(`Migrated ${allMessages.length} messages from localStorage to IndexedDB`)
       })
     }
@@ -1833,7 +1833,7 @@ export const chatStore = createStore<ChatState>()(
       deleteConversation: (id) => {
         clearMessageIngressVersions('chat', id)
         // Delete messages from IndexedDB asynchronously
-        void messageCache.deleteConversationMessages(id)
+        void messageCache.deleteConversationMessages('chat', id)
         // The search index keeps its own copy of every body: drop it too, or
         // search keeps finding the deleted conversation's text.
         void searchIndex.removeConversation('chat', id)
@@ -1921,7 +1921,7 @@ export const chatStore = createStore<ChatState>()(
             // Persist the backfilled archive ids so pagination cursors survive a reload.
             for (const p of append.patched) {
               void messageCache.updateMessage(
-                p.conversationId,
+                'chat', p.conversationId,
                 p.id,
                 { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) },
                 p.from,
@@ -2011,7 +2011,7 @@ export const chatStore = createStore<ChatState>()(
         reviveArchivedConversation(msg.conversationId, [msg])
 
         const durableWrite = acceptedMessage && !isNoLocalStore(msg)
-          ? messageCache.saveMessageWithResult(msg)
+          ? messageCache.saveMessageWithResult('chat', msg)
           : undefined
         chatReadTracker.endArrival(arrivalNote, { accepted: acceptedMessage, durableWrite })
         if (durableWrite) {
@@ -2199,8 +2199,8 @@ export const chatStore = createStore<ChatState>()(
             applyResident: async (_result, isLatest) => {
               const before = get().getMessage(conversationId, target)?.reactions
               const cached = (typeof target === 'string'
-                ? await messageCache.getMessageByReference(conversationId, target)
-                : await messageCache.getMessage(conversationId, target.id, target))
+                ? await messageCache.getMessageByReference('chat', conversationId, target)
+                : await messageCache.getMessage('chat', conversationId, target.id, target))
               if (!cached || !isCurrent() || !isLatest(cached, 'reactions')) return
               set(state => {
                 const rows = state.messages.get(conversationId) ?? []
@@ -2223,7 +2223,7 @@ export const chatStore = createStore<ChatState>()(
             // durable cache so the correct state loads when the conversation
             // is reactivated, instead of silently dropping the reaction.
             logInfo(`Reaction for message ${messageId} not in memory — updating in cache`)
-            persistReactions(() => messageCache.updateMessageReactions(conversationId, messageId, reactorJid, emojis, typeof target === 'string' ? undefined : target, timestamp))
+            persistReactions(() => messageCache.updateMessageReactions('chat', conversationId, messageId, reactorJid, emojis, typeof target === 'string' ? undefined : target, timestamp))
             return state
           }
 
@@ -2235,7 +2235,7 @@ export const chatStore = createStore<ChatState>()(
             // sliding window evicted it). Update the durable cache so the
             // reaction survives instead of being silently dropped.
             logInfo(`Reaction for message ${messageId} not in resident window — updating in cache`)
-            persistReactions(() => messageCache.updateMessageReactions(conversationId, messageId, reactorJid, emojis, typeof target === 'string' ? undefined : target, timestamp))
+            persistReactions(() => messageCache.updateMessageReactions('chat', conversationId, messageId, reactorJid, emojis, typeof target === 'string' ? undefined : target, timestamp))
             return state
           }
 
@@ -2244,7 +2244,7 @@ export const chatStore = createStore<ChatState>()(
 
           // Update in IndexedDB asynchronously
           persistReactions(() => messageCache.updateMessageReactions(
-            conversationId, messageId, reactorJid, emojis, message, timestamp
+            'chat', conversationId, messageId, reactorJid, emojis, message, timestamp
           ))
 
           const updatedConvMessages = [...convMessages]
@@ -2279,12 +2279,12 @@ export const chatStore = createStore<ChatState>()(
             const rows = get().messages.get(conversationId) ?? []
             const target = rows[findChatMessageIndex(rows, selectedTarget)] ?? (
               typeof selectedTarget === 'string'
-                ? await messageCache.getMessageByReference(conversationId, selectedTarget)
-                : await messageCache.getMessage(conversationId, selectedTarget.id, selectedTarget)
+                ? await messageCache.getMessageByReference('chat', conversationId, selectedTarget)
+                : await messageCache.getMessage('chat', conversationId, selectedTarget.id, selectedTarget)
             )
             if (!target || !isCurrent()) return null
             return target
-          }, target => messageCache.updateMessage(conversationId, target.id, updates, target.from, scope.jid, target), target => applyResidentUpdate(target, updates, scope.jid))
+          }, target => messageCache.updateMessage('chat', conversationId, target.id, updates, target.from, scope.jid, target), target => applyResidentUpdate(target, updates, scope.jid))
           return
         }
         const messageId = typeof selectedTarget === 'string' ? selectedTarget : canonicalReference(selectedTarget)
@@ -2318,7 +2318,7 @@ export const chatStore = createStore<ChatState>()(
               get().updateMessage(conversationId, selectedTarget, { ...pendingUpdates, liveCorrection: false }, undefined, correctionActor)
             } else if (!resolution?.authoritative) onCorrectionMissing()
           }
-          void messageCache.applyChatCorrection(conversationId, targetId, pendingUpdates, correctionActor, scope.jid, typeof selectedTarget === 'string' ? undefined : selectedTarget)
+          void messageCache.applyCorrection('chat', conversationId, targetId, pendingUpdates, correctionActor, scope.jid, typeof selectedTarget === 'string' ? undefined : selectedTarget)
             .then(message => {
               if (message) {
                 noteSavedCopyChanged()
@@ -2364,12 +2364,12 @@ export const chatStore = createStore<ChatState>()(
             } else if (typeof selectedTarget !== 'string') {
               const scope = captureStorageScope()
               const isCurrent = captureChatCacheRead(conversationId)
-              void messageCache.getMessage(conversationId, selectedTarget.id, selectedTarget).then(async target => {
+              void messageCache.getMessage('chat', conversationId, selectedTarget.id, selectedTarget).then(async target => {
                 if (!target || !isCurrent()) return
                 if (updates.isRetracted) await retractChatMessageInStorage(conversationId, target, updates, scope.jid)
-                else await messageCache.updateMessage(conversationId, target.id, updates, target.from, scope.jid, target)
+                else await messageCache.updateMessage('chat', conversationId, target.id, updates, target.from, scope.jid, target)
                 if (!isCurrent()) return
-                const updated = await messageCache.getMessage(conversationId, target.id, target)
+                const updated = await messageCache.getMessage('chat', conversationId, target.id, target)
                 if (updated && isCurrent()) {
                   reconcileStoredMessage(updated, scope.jid)
                   if (updates.body !== undefined) await searchIndex.updateMessage(updated, scope.jid)
@@ -2423,7 +2423,7 @@ export const chatStore = createStore<ChatState>()(
             const scope = captureStorageScope()
             const reindex = updates.body !== undefined
             const persist = () => messageCache.updateMessage(
-              conversationId,
+              'chat', conversationId,
               target.id,
               { ...updates, ...(contentRecovery && { contentRecovery }) },
               target.from,
@@ -2491,7 +2491,7 @@ export const chatStore = createStore<ChatState>()(
           const window = withChatMessageWindow(state, conversationId, { messages: updatedConvMessages })
 
           void messageCache.updateMessage(
-            conversationId,
+            'chat', conversationId,
             convMessages[messageIndex].id,
             { stanzaId: undefined },
             convMessages[messageIndex].from,
@@ -2631,7 +2631,7 @@ export const chatStore = createStore<ChatState>()(
           void searchIndex.removeMessage(removed)
           const deletion = contentRecovery
             ? messageCache.deleteMessageForRecovery(conversationId, removed, getStorageScopeJid())
-            : messageCache.deleteMessage(conversationId, removed.id, removed.from, undefined, removed)
+            : messageCache.deleteMessage('chat', conversationId, removed.id, removed.from, undefined, removed)
 
           // This may be dropping a noted `noLocalStore` message (a
           // bodiless placeholder never resolves to noLocalStore in practice,
@@ -2652,7 +2652,7 @@ export const chatStore = createStore<ChatState>()(
             const lastMessage = findLastPreviewableMessage(updatedConvMessages)
             void deletion.then(async () => {
               if (!isCurrent()) return
-              const cached = await messageCache.getMessages(conversationId, {
+              const cached = await messageCache.getMessages('chat', conversationId, {
                 limit: 1,
                 latest: true,
                 filter: message => isPreviewableMessage(message) && !sameChatMessage(message, removed),
@@ -2916,7 +2916,7 @@ export const chatStore = createStore<ChatState>()(
       reconcileHistoryMessages: async (messages) => {
         const scope = captureStorageScope()
         const conversations = new Set(messages.map(message => message.conversationId))
-        const reconciled = await messageCache.reconcileChatHistoryMessages(messages, () => {
+        const reconciled = await messageCache.reconcileHistoryMessages('chat', messages, () => {
           scope.assertCurrent()
           return Array.from(conversations, id => get().messages.get(id) ?? []).flat()
         }, scope.jid)
@@ -2953,7 +2953,7 @@ export const chatStore = createStore<ChatState>()(
           if (!isCurrent()) return []
           const { limit = 100, before, peek, oldest } = options
           try {
-            const cachedMessages = await messageCache.getMessages(conversationId, {
+            const cachedMessages = await messageCache.getMessages('chat', conversationId, {
               limit,
               before,
               // When loading without 'before', get the latest messages (most recent)
@@ -3001,7 +3001,7 @@ export const chatStore = createStore<ChatState>()(
             const bound = getResidentWindowSize()
             const contextBefore = options.before ?? messageCache.AROUND_CONTEXT_BEFORE
             const { slice, tailTruncated } = await readAroundBounded(options, bound, anchorRow,
-              (after) => messageCache.getMessagesAround(conversationId, anchorRow, { ...options, ...(after === undefined ? {} : { after }) })
+              (after) => messageCache.getMessagesAround('chat', conversationId, anchorRow, { ...options, ...(after === undefined ? {} : { after }) })
                 .then(messages => refreshCachedCorrections(messages, canPublish)),
               (candidate) => {
                 const resident = withoutRowsPastSlice(get().messages.get(conversationId) || [], candidate, true)
@@ -3037,7 +3037,7 @@ export const chatStore = createStore<ChatState>()(
           }
 
           try {
-            const olderMessages = await messageCache.getMessages(conversationId, {
+            const olderMessages = await messageCache.getMessages('chat', conversationId, {
               limit,
               before: oldestMessage.timestamp,
             }).then(messages => refreshCachedCorrections(messages, isCurrent))
@@ -3087,7 +3087,7 @@ export const chatStore = createStore<ChatState>()(
           }
 
           try {
-            const read = await messageCache.readMessages(conversationId, {
+            const read = await messageCache.readMessages('chat', conversationId, {
               after: newestMessage.timestamp,
               limit,
             })

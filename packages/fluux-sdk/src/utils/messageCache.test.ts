@@ -19,7 +19,7 @@ const roomCanonicalKey = (m: RoomIdentityFields) => canonicalKey(roomScope(m.roo
 // Must import after fake-indexeddb/auto
 import * as messageCache from './messageCache'
 import * as cacheApi from '../cache'
-import { mergeRoomRows, _contentProjectionForTesting } from './messageCache'
+import { mergeRows, _contentProjectionForTesting } from './messageCache'
 import type { StoredMessage, StoredRoomMessage } from './messageCache'
 
 /**
@@ -60,7 +60,7 @@ function createMockRoomMessage(roomJid: string, overrides: Partial<RoomMessage> 
 describe('messageCache', () => {
   it('preserves public single-message save return types', () => {
     expectTypeOf(cacheApi.saveMessage).returns.toEqualTypeOf<Promise<void>>()
-    expectTypeOf(cacheApi.saveRoomMessage).returns.toEqualTypeOf<Promise<void>>()
+    expectTypeOf(cacheApi.saveMessage).returns.toEqualTypeOf<Promise<void>>()
   })
 
   beforeEach(async () => {
@@ -91,21 +91,21 @@ describe('messageCache', () => {
   // Plan: a forwarded copy holds the forwarded text, so a retraction removes it with the body.
   it('keeps a forwarded copy across a reload and scrubs it when the message is retracted', async () => {
     const forwarded = { author: 'Bob', text: 'Ship it', timestamp: 1000 }
-    await messageCache.saveMessage(createMockMessage('alice@example.com', { id: 'fwd', body: 'look', forwarded }))
-    expect((await messageCache.getMessages('alice@example.com')).find(m => m.id === 'fwd')?.forwarded).toEqual(forwarded)
-    await messageCache.saveMessage(createMockMessage('alice@example.com', { id: 'fwd', body: '', forwarded, isRetracted: true, retractedAt: new Date(2000) }))
-    const stored = (await messageCache.getMessages('alice@example.com')).find(m => m.id === 'fwd')
+    await messageCache.saveMessage('chat', createMockMessage('alice@example.com', { id: 'fwd', body: 'look', forwarded }))
+    expect((await messageCache.getMessages('chat', 'alice@example.com')).find(m => m.id === 'fwd')?.forwarded).toEqual(forwarded)
+    await messageCache.saveMessage('chat', createMockMessage('alice@example.com', { id: 'fwd', body: '', forwarded, isRetracted: true, retractedAt: new Date(2000) }))
+    const stored = (await messageCache.getMessages('chat', 'alice@example.com')).find(m => m.id === 'fwd')
     expect(stored?.isRetracted).toBe(true)
     expect(stored?.forwarded).toBeUndefined()
   })
 
   it('gets mixed chat and sender-scoped room references in one batch', async () => {
     const roomJid = 'team@conference.example.com'
-    await messageCache.saveMessage(createMockMessage('alice@example.com', {
+    await messageCache.saveMessage('chat', createMockMessage('alice@example.com', {
       id: 'chat-found',
       body: 'chat body',
     }))
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       createMockRoomMessage(roomJid, {
         id: 'shared-id',
         from: `${roomJid}/Alice`,
@@ -154,24 +154,24 @@ describe('messageCache', () => {
       body: 'beta original',
       timestamp: new Date(2000),
     })
-    await messageCache.saveMessages([alphaMessage, betaMessage])
+    await messageCache.saveMessages('chat', [alphaMessage, betaMessage])
 
-    expect((await messageCache.getMessage(alpha, id))?.body).toBe('alpha original')
-    expect((await messageCache.getMessage(beta, id))?.body).toBe('beta original')
+    expect((await messageCache.getMessage('chat', alpha, id))?.body).toBe('alpha original')
+    expect((await messageCache.getMessage('chat', beta, id))?.body).toBe('beta original')
     expect((await messageCache.getMessagesByReferences(
       [{ conversationId: alpha, id }, { conversationId: beta, id }],
       []
     )).chatMessages.map((message) => message?.body)).toEqual(['alpha original', 'beta original'])
-    expect((await messageCache.getMessagesAround(beta, { id }, { before: 0, after: 0 }))
+    expect((await messageCache.getMessagesAround('chat', beta, { id }, { before: 0, after: 0 }))
       .map((message) => message.body)).toEqual(['beta original'])
 
-    await messageCache.updateMessage(beta, id, { body: 'beta updated' }, betaMessage.from)
-    expect((await messageCache.getMessage(alpha, id))?.body).toBe('alpha original')
-    expect((await messageCache.getMessage(beta, id))?.body).toBe('beta updated')
+    await messageCache.updateMessage('chat', beta, id, { body: 'beta updated' }, betaMessage.from)
+    expect((await messageCache.getMessage('chat', alpha, id))?.body).toBe('alpha original')
+    expect((await messageCache.getMessage('chat', beta, id))?.body).toBe('beta updated')
 
-    await messageCache.deleteMessage(beta, id, betaMessage.from)
-    expect((await messageCache.getMessage(alpha, id))?.body).toBe('alpha original')
-    expect(await messageCache.getMessage(beta, id)).toBeNull()
+    await messageCache.deleteMessage('chat', beta, id, betaMessage.from)
+    expect((await messageCache.getMessage('chat', alpha, id))?.body).toBe('alpha original')
+    expect(await messageCache.getMessage('chat', beta, id)).toBeNull()
   })
 
   // fluux-room-nick-reuse-false-deletion: a departed occupant's row and a new
@@ -200,10 +200,10 @@ describe('messageCache', () => {
     // Same ladder keys — the collision is real, not an artefact of the fixture.
     expect(roomIdentityKeys(departed)).toEqual(roomIdentityKeys(newcomer))
 
-    await messageCache.saveRoomMessage(departed)
-    await messageCache.saveRoomMessage(newcomer)
+    await messageCache.saveMessage('room', departed)
+    await messageCache.saveMessage('room', newcomer)
 
-    const stored = await messageCache.getRoomMessages(roomJid)
+    const stored = await messageCache.getMessages('room', roomJid)
     const original = stored.find((m) => m.occupantId === 'occupant-departed')
     const survivor = stored.find((m) => m.occupantId === 'occupant-newcomer')
     expect(stored).toHaveLength(2)
@@ -222,7 +222,7 @@ describe('messageCache', () => {
     }
     chatRow.cacheKey = messageCache.chatCacheKey(chatRow)
     chatRow.identityKeys = identityKeys(CHAT_SCOPE, chatRow)
-    await messageCache.getMessages(conversationId)
+    await messageCache.getMessages('chat', conversationId)
     const db = await openDB('fluux-message-cache')
     const tx = db.transaction(['messages-canonical', 'room-messages-canonical'], 'readwrite')
     await tx.objectStore('messages-canonical').put(chatRow as never)
@@ -230,8 +230,8 @@ describe('messageCache', () => {
     await tx.done
     db.close()
 
-    const [chat] = await messageCache.getMessages(conversationId)
-    const [room] = await messageCache.getRoomMessages(roomJid)
+    const [chat] = await messageCache.getMessages('chat', conversationId)
+    const [room] = await messageCache.getMessages('room', roomJid)
 
     expect(Object.keys(chat)).toEqual(expect.arrayContaining(['stanzaId', 'originId']))
     expect(Object.keys(room)).toEqual(expect.arrayContaining(['stanzaId', 'originId', 'occupantId']))
@@ -256,7 +256,7 @@ describe('messageCache', () => {
       occupantId: 'occupant-newcomer',
     })
 
-    await messageCache.getRoomMessages(roomJid)
+    await messageCache.getMessages('room', roomJid)
     const db = await openDB('fluux-message-cache')
     const tx = db.transaction('room-messages-canonical', 'readwrite')
     for (const message of [departed, target, compatible]) {
@@ -272,7 +272,7 @@ describe('messageCache', () => {
     }
     await tx.done
     db.close()
-    const copies = await messageCache.findRoomMessageCopies(roomJid, {
+    const copies = await messageCache.findMessageCopies('room', roomJid, {
       ...target,
       occupantId: undefined,
     })
@@ -309,11 +309,11 @@ describe('messageCache', () => {
       body: 'visible newcomer body',
     })
 
-    await messageCache.saveRoomMessage(departed)
-    await messageCache.saveRoomMessage(newcomer)
-    await messageCache.saveRoomMessage(ambiguousArchiveCopy)
+    await messageCache.saveMessage('room', departed)
+    await messageCache.saveMessage('room', newcomer)
+    await messageCache.saveMessage('room', ambiguousArchiveCopy)
 
-    const stored = await messageCache.getRoomMessages(roomJid)
+    const stored = await messageCache.getMessages('room', roomJid)
     const visible = stored.find((message) => message.occupantId === 'occupant-newcomer')
     expect(stored).toHaveLength(2)
     expect(visible?.body).toBe('visible newcomer body')
@@ -323,13 +323,13 @@ describe('messageCache', () => {
   it('resolves an authoritative room tier before a fallback occupant collision', async () => {
     const roomJid = 'tiered@conference.example.com'
     const shared = { id: 'collide', from: `${roomJid}/Alice`, nick: 'Alice' }
-    await messageCache.saveRoomMessage(createMockRoomMessage(roomJid, {
+    await messageCache.saveMessage('room', createMockRoomMessage(roomJid, {
       ...shared,
       stanzaId: 'ARCHIVE-OLD',
       occupantId: 'occupant-departed',
       body: 'old occupant body',
     }))
-    await messageCache.saveRoomMessage(createMockRoomMessage(roomJid, {
+    await messageCache.saveMessage('room', createMockRoomMessage(roomJid, {
       ...shared,
       stanzaId: 'ARCHIVE-NEW',
       occupantId: 'occupant-newcomer',
@@ -346,9 +346,9 @@ describe('messageCache', () => {
     })
 
     expect(await messageCache.areRetractedInCache([archiveCopy])).toEqual([true])
-    await messageCache.saveRoomMessage(archiveCopy)
+    await messageCache.saveMessage('room', archiveCopy)
 
-    const stored = await messageCache.getRoomMessages(roomJid)
+    const stored = await messageCache.getMessages('room', roomJid)
     const target = stored.find((message) => message.stanzaId === 'ARCHIVE-NEW')
     expect(stored).toHaveLength(2)
     expect(target?.originId).toBe('ORIGIN-NEW')
@@ -361,15 +361,15 @@ describe('messageCache', () => {
   // no occupant-id, so an absent id must never be read as a conflict.
   it('still merges copies when only one carries an occupant-id', async () => {
     const roomJid = 'team@conference.example.com'
-    await messageCache.saveRoomMessage(createMockRoomMessage(roomJid, {
+    await messageCache.saveMessage('room', createMockRoomMessage(roomJid, {
       id: 'echo', from: `${roomJid}/Alice`, nick: 'Alice', originId: 'ORIGIN-1', body: 'hello',
     }))
-    await messageCache.saveRoomMessage(createMockRoomMessage(roomJid, {
+    await messageCache.saveMessage('room', createMockRoomMessage(roomJid, {
       id: 'echo', from: `${roomJid}/Alice`, nick: 'Alice', originId: 'ORIGIN-1',
       stanzaId: 'ARCHIVE-1', occupantId: 'occupant-alice', body: 'hello',
     }))
 
-    const stored = await messageCache.getRoomMessages(roomJid)
+    const stored = await messageCache.getMessages('room', roomJid)
     expect(stored).toHaveLength(1)
     expect(stored[0].stanzaId).toBe('ARCHIVE-1')
   })
@@ -392,11 +392,11 @@ describe('messageCache', () => {
     /** A delayed copy of `message`, received after both rows exist. */
     const redelivered = (message: RoomMessage, overrides: Partial<RoomMessage> = {}): RoomMessage =>
       ({ ...message, isDelayed: true, receivedAt: new Date(3_000), ...overrides })
-    const bodies = async () => (await messageCache.getRoomMessages(roomJid)).map((m) => [m.body, m.isRetracted === true])
+    const bodies = async () => (await messageCache.getMessages('room', roomJid)).map((m) => [m.body, m.isRetracted === true])
 
     it('keeps both rows, the newcomer under its receipt-qualified key', async () => {
-      await messageCache.saveRoomMessage(tombstone())
-      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveMessage('room', tombstone())
+      await messageCache.saveMessage('room', newcomer())
 
       expect(await bodies()).toEqual([['', true], ['the newcomer wrote this', false]])
       const db = await openDB('fluux-message-cache')
@@ -407,9 +407,9 @@ describe('messageCache', () => {
     })
 
     it('re-saves the newcomer onto its own row, not a third one', async () => {
-      await messageCache.saveRoomMessage(tombstone())
-      await messageCache.saveRoomMessage(newcomer())
-      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveMessage('room', tombstone())
+      await messageCache.saveMessage('room', newcomer())
+      await messageCache.saveMessage('room', newcomer())
 
       expect(await bodies()).toEqual([['', true], ['the newcomer wrote this', false]])
     })
@@ -417,14 +417,14 @@ describe('messageCache', () => {
     // A late joiner holds Alice's message as a history copy; Bob's live message
     // is still received after it.
     it('keeps a first delivery apart from a delayed tombstone too', async () => {
-      await messageCache.saveRoomMessage({ ...tombstone(), isDelayed: true })
-      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveMessage('room', { ...tombstone(), isDelayed: true })
+      await messageCache.saveMessage('room', newcomer())
 
       expect(await bodies()).toEqual([['', true], ['the newcomer wrote this', false]])
     })
 
     it('answers the tombstone probe for the newcomer with no, and for a re-delivery with yes', async () => {
-      await messageCache.saveRoomMessage(tombstone())
+      await messageCache.saveMessage('room', tombstone())
 
       expect(await messageCache.areRetractedInCache([newcomer()])).toEqual([false])
       expect(await messageCache.areRetractedInCache([redelivered(newcomer())])).toEqual([true])
@@ -434,18 +434,18 @@ describe('messageCache', () => {
     // and without the newcomer's row to attach to it can only be a copy of the
     // deleted message as far as the rung can tell.
     it('still folds a re-delivery into the tombstone', async () => {
-      await messageCache.saveRoomMessage(tombstone())
-      await messageCache.saveRoomMessage(redelivered(newcomer()))
+      await messageCache.saveMessage('room', tombstone())
+      await messageCache.saveMessage('room', redelivered(newcomer()))
 
       expect(await bodies()).toEqual([['', true]])
     })
 
     it('attaches a re-delivery reaching both rows to the one whose stamp is closest', async () => {
-      await messageCache.saveRoomMessage(tombstone())
-      await messageCache.saveRoomMessage(newcomer())
-      await messageCache.saveRoomMessage(redelivered(newcomer(), { stanzaId: 'ARCHIVE-B', timestamp: new Date(2_100) }))
+      await messageCache.saveMessage('room', tombstone())
+      await messageCache.saveMessage('room', newcomer())
+      await messageCache.saveMessage('room', redelivered(newcomer(), { stanzaId: 'ARCHIVE-B', timestamp: new Date(2_100) }))
 
-      const stored = await messageCache.getRoomMessages(roomJid)
+      const stored = await messageCache.getMessages('room', roomJid)
       expect(stored.map((m) => [m.body, m.isRetracted === true, m.stanzaId])).toEqual([
         ['', true, undefined],
         ['the newcomer wrote this', false, 'ARCHIVE-B'],
@@ -455,10 +455,10 @@ describe('messageCache', () => {
     // The merge adopts the archive stamp as the row's timestamp but keeps saying
     // when the client first received the message.
     it('keeps the first delivery\'s receipt instant through an archive-copy merge', async () => {
-      await messageCache.saveRoomMessage(newcomer())
-      await messageCache.saveRoomMessage(redelivered(newcomer(), { stanzaId: 'ARCHIVE-B', timestamp: new Date(1_800) }))
+      await messageCache.saveMessage('room', newcomer())
+      await messageCache.saveMessage('room', redelivered(newcomer(), { stanzaId: 'ARCHIVE-B', timestamp: new Date(1_800) }))
 
-      const [row] = await messageCache.getRoomMessages(roomJid)
+      const [row] = await messageCache.getMessages('room', roomJid)
       expect(row).toMatchObject({ stanzaId: 'ARCHIVE-B', isDelayed: false })
       expect(row.timestamp.getTime()).toBe(1_800)
       expect(row.receivedAt?.getTime()).toBe(2_000)
@@ -468,57 +468,57 @@ describe('messageCache', () => {
     // stamped 1800: the ledger judges Bob's row by its receipt, not by the stamp.
     it('does not let the ledger scrub the newcomer once an earlier-stamped archive copy merged in', async () => {
       noteRetractedIdentity(ledgerScope, roomRetractionAliases(tombstone()), tombstone(), 1_500)
-      await messageCache.saveRoomMessage(newcomer())
-      await messageCache.saveRoomMessage(redelivered(newcomer(), { stanzaId: 'ARCHIVE-B', timestamp: new Date(1_800) }))
+      await messageCache.saveMessage('room', newcomer())
+      await messageCache.saveMessage('room', redelivered(newcomer(), { stanzaId: 'ARCHIVE-B', timestamp: new Date(1_800) }))
 
       expect(await bodies()).toEqual([['the newcomer wrote this', false]])
     })
 
     it('attaches a history copy of the deleted message to the tombstone, never to the newcomer', async () => {
-      await messageCache.saveRoomMessage(tombstone())
-      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveMessage('room', tombstone())
+      await messageCache.saveMessage('room', newcomer())
       // The room replays its history into a window that no longer holds either row.
-      await messageCache.saveRoomMessage(redelivered(tombstone(), { body: 'the deleted text', isRetracted: false, retractedAt: undefined }))
+      await messageCache.saveMessage('room', redelivered(tombstone(), { body: 'the deleted text', isRetracted: false, retractedAt: undefined }))
 
       expect(await bodies()).toEqual([['', true], ['the newcomer wrote this', false]])
     })
 
     it('keeps a re-delivery equidistant from both rows as its own row', async () => {
-      await messageCache.saveRoomMessage(tombstone())
-      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveMessage('room', tombstone())
+      await messageCache.saveMessage('room', newcomer())
       // A later session: the in-memory retraction ledger is gone, the cache remains.
       _clearRetractedIdentitiesForTesting()
-      await messageCache.saveRoomMessage(redelivered(newcomer(), { body: 'which one?', timestamp: new Date(1_500) }))
+      await messageCache.saveMessage('room', redelivered(newcomer(), { body: 'which one?', timestamp: new Date(1_500) }))
 
       expect(await bodies()).toEqual([['', true], ['which one?', false], ['the newcomer wrote this', false]])
     })
 
     it('does not bridge two first deliveries when an equidistant archive copy repeats', async () => {
-      await messageCache.saveRoomMessage(tombstone())
-      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveMessage('room', tombstone())
+      await messageCache.saveMessage('room', newcomer())
       _clearRetractedIdentitiesForTesting()
       const archived = redelivered(newcomer(), {
         body: 'independent archive copy', stanzaId: 'S', timestamp: new Date(1_500),
       })
-      await messageCache.saveRoomMessage(archived)
+      await messageCache.saveMessage('room', archived)
       expect(await bodies()).toEqual([['', true], ['independent archive copy', false], ['the newcomer wrote this', false]])
-      await messageCache.saveRoomMessage(archived)
+      await messageCache.saveMessage('room', archived)
       expect(await bodies()).toEqual([['', true], ['independent archive copy', false], ['the newcomer wrote this', false]])
     })
 
     it('keeps the newcomer apart from the tombstone once its archive copy merged in', async () => {
-      await messageCache.saveRoomMessage(tombstone())
-      await messageCache.saveRoomMessage(newcomer())
-      await messageCache.saveRoomMessage(redelivered(newcomer(), { stanzaId: 'ARCHIVE-B', timestamp: new Date(2_100) }))
-      await messageCache.saveRoomMessage(tombstone())
+      await messageCache.saveMessage('room', tombstone())
+      await messageCache.saveMessage('room', newcomer())
+      await messageCache.saveMessage('room', redelivered(newcomer(), { stanzaId: 'ARCHIVE-B', timestamp: new Date(2_100) }))
+      await messageCache.saveMessage('room', tombstone())
 
       expect(await bodies()).toEqual([['', true], ['the newcomer wrote this', false]])
     })
 
     it('never lets an archived row\'s re-delivery reach a first delivery sharing only from+id', async () => {
-      await messageCache.saveRoomMessage({ ...tombstone(), stanzaId: 'ARCHIVE-A' })
-      await messageCache.saveRoomMessage(newcomer())
-      await messageCache.saveRoomMessage(redelivered(tombstone(), { body: 'the deleted text', isRetracted: false, retractedAt: undefined, stanzaId: 'ARCHIVE-A' }))
+      await messageCache.saveMessage('room', { ...tombstone(), stanzaId: 'ARCHIVE-A' })
+      await messageCache.saveMessage('room', newcomer())
+      await messageCache.saveMessage('room', redelivered(tombstone(), { body: 'the deleted text', isRetracted: false, retractedAt: undefined, stanzaId: 'ARCHIVE-A' }))
 
       expect(await bodies()).toEqual([['', true], ['the newcomer wrote this', false]])
     })
@@ -526,26 +526,26 @@ describe('messageCache', () => {
     it.each(['stanzaId', 'originId'] as const)('routes an owner-qualified update across rewritten IDs by %s', async (tier) => {
       const alice = { ...tombstone(), id: 'i' }
       const bob = { ...newcomer(), id: 'j', [tier]: 'S' }
-      await messageCache.saveRoomMessage(alice)
-      await messageCache.saveRoomMessage(bob)
+      await messageCache.saveMessage('room', alice)
+      await messageCache.saveMessage('room', bob)
       _clearRetractedIdentitiesForTesting()
       const archived = redelivered(bob, { id: 'i' })
-      await messageCache.updateRoomMessage(roomJid, 'i', { reactions: { '👍': ['bob'] } }, shared.from, undefined, archived)
-      const stored = await messageCache.getRoomMessages(roomJid)
+      await messageCache.updateMessage('room', roomJid, 'i', { reactions: { '👍': ['bob'] } }, shared.from, undefined, archived)
+      const stored = await messageCache.getMessages('room', roomJid)
       expect(stored).toHaveLength(2)
       expect(stored.find(row => row.id === 'j')).toMatchObject({ body: bob.body, reactions: { '👍': ['bob'] } })
       expect(stored.find(row => row.id === 'j')?.isRetracted).not.toBe(true)
       expect(stored.find(row => row.id === 'i')?.reactions).toBeUndefined()
-      expect(await messageCache.getRoomMessage(roomJid, 'i', shared.from)).toMatchObject({ id: 'i', isRetracted: true })
+      expect(await messageCache.getMessage('room', roomJid, 'i', shared.from)).toMatchObject({ id: 'i', isRetracted: true })
     })
 
     it('routes an update aimed at the newcomer to the newcomer row', async () => {
-      await messageCache.saveRoomMessage(tombstone())
-      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveMessage('room', tombstone())
+      await messageCache.saveMessage('room', newcomer())
 
-      await messageCache.updateRoomMessage(roomJid, shared.id, { reactions: { '👍': ['bob'] } }, shared.from, undefined, newcomer())
+      await messageCache.updateMessage('room', roomJid, shared.id, { reactions: { '👍': ['bob'] } }, shared.from, undefined, newcomer())
 
-      const stored = await messageCache.getRoomMessages(roomJid)
+      const stored = await messageCache.getMessages('room', roomJid)
       expect(stored.find((m) => m.body === 'the newcomer wrote this')?.reactions).toEqual({ '👍': ['bob'] })
       expect(stored.find((m) => m.isRetracted)?.reactions).toBeUndefined()
       expect(stored).toHaveLength(2)
@@ -555,22 +555,22 @@ describe('messageCache', () => {
     // re-delivers, so the ledger judges Bob's copy as Bob's message.
     it('reconciles a history copy of the newcomer against the newcomer, not the tombstone', async () => {
       noteRetractedIdentity(ledgerScope, roomRetractionAliases(tombstone()), tombstone(), 1_500)
-      await messageCache.saveRoomMessage(tombstone())
-      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveMessage('room', tombstone())
+      await messageCache.saveMessage('room', newcomer())
 
-      const [copy] = await messageCache.reconcileRoomHistoryMessages([redelivered(newcomer(), { timestamp: new Date(2_050) })], () => [], null, true)
+      const [copy] = await messageCache.reconcileHistoryMessages('room', [redelivered(newcomer(), { timestamp: new Date(2_050) })], () => [], null, true)
       expect(copy.isRetracted).toBeFalsy()
       expect(copy).toMatchObject({ isDelayed: false, receivedAt: new Date(2_000) })
       expect(messageCache.reconcileRoomRetraction(copy).isRetracted).toBeFalsy()
 
-      const [aliceCopy] = await messageCache.reconcileRoomHistoryMessages([redelivered(tombstone(), { body: 'the deleted text', isRetracted: false, retractedAt: undefined })], () => [], null, true)
+      const [aliceCopy] = await messageCache.reconcileHistoryMessages('room', [redelivered(tombstone(), { body: 'the deleted text', isRetracted: false, retractedAt: undefined })], () => [], null, true)
       expect(aliceCopy).toMatchObject({ isRetracted: true, body: '' })
     })
 
     it('does not let the session ledger tombstone a first delivery received after the retraction', async () => {
       noteRetractedIdentity(ledgerScope, roomRetractionAliases(tombstone()), tombstone(), 1_500)
 
-      await messageCache.saveRoomMessage(newcomer())
+      await messageCache.saveMessage('room', newcomer())
 
       expect(await bodies()).toEqual([['the newcomer wrote this', false]])
     })
@@ -579,7 +579,7 @@ describe('messageCache', () => {
       const original = createMockRoomMessage(roomJid, { ...shared, body: 'deleted before its write landed', timestamp: new Date(1_000), receivedAt: new Date(1_000) })
       noteRetractedIdentity(ledgerScope, roomRetractionAliases(original), original, 1_500)
 
-      await messageCache.saveRoomMessage(original)
+      await messageCache.saveMessage('room', original)
 
       expect(await bodies()).toEqual([['', true]])
     })
@@ -590,17 +590,17 @@ describe('messageCache', () => {
 
     it('should isolate messages per account scope', async () => {
       setStorageScopeJid('alice@example.com')
-      await messageCache.saveMessage(createMockMessage(conversationId, { id: 'shared-id', body: 'Alice message' }))
+      await messageCache.saveMessage('chat', createMockMessage(conversationId, { id: 'shared-id', body: 'Alice message' }))
 
       setStorageScopeJid('bob@example.com')
-      await messageCache.saveMessage(createMockMessage(conversationId, { id: 'shared-id', body: 'Bob message' }))
+      await messageCache.saveMessage('chat', createMockMessage(conversationId, { id: 'shared-id', body: 'Bob message' }))
 
       setStorageScopeJid('alice@example.com')
-      const aliceMessage = await messageCache.getMessage(conversationId, 'shared-id')
+      const aliceMessage = await messageCache.getMessage('chat', conversationId, 'shared-id')
       expect(aliceMessage?.body).toBe('Alice message')
 
       setStorageScopeJid('bob@example.com')
-      const bobMessage = await messageCache.getMessage(conversationId, 'shared-id')
+      const bobMessage = await messageCache.getMessage('chat', conversationId, 'shared-id')
       expect(bobMessage?.body).toBe('Bob message')
     })
 
@@ -608,9 +608,9 @@ describe('messageCache', () => {
       it('should save a message to IndexedDB', async () => {
         const message = createMockMessage(conversationId, { id: 'msg-1' })
 
-        await expect(messageCache.saveMessage(message)).resolves.toBeUndefined()
+        await expect(messageCache.saveMessage('chat', message)).resolves.toBeUndefined()
 
-        const retrieved = await messageCache.getMessage(conversationId, 'msg-1')
+        const retrieved = await messageCache.getMessage('chat', conversationId, 'msg-1')
         expect(retrieved).not.toBeNull()
         expect(retrieved?.id).toBe('msg-1')
         expect(retrieved?.body).toBe('Test message')
@@ -622,9 +622,9 @@ describe('messageCache', () => {
           stanzaId: 'stanza-123',
         })
 
-        await expect(messageCache.saveMessage(message)).resolves.toBeUndefined()
+        await expect(messageCache.saveMessage('chat', message)).resolves.toBeUndefined()
 
-        const byStanzaId = await messageCache.getMessageByStanzaId(conversationId, 'stanza-123')
+        const byStanzaId = await messageCache.getMessageByStanzaId('chat', conversationId, 'stanza-123')
         expect(byStanzaId).not.toBeNull()
         expect(byStanzaId?.id).toBe('msg-2')
       })
@@ -636,9 +636,9 @@ describe('messageCache', () => {
           timestamp,
         })
 
-        await messageCache.saveMessage(message)
+        await messageCache.saveMessage('chat', message)
 
-        const retrieved = await messageCache.getMessage(conversationId, 'msg-date')
+        const retrieved = await messageCache.getMessage('chat', conversationId, 'msg-date')
         expect(retrieved?.timestamp).toBeInstanceOf(Date)
         expect(retrieved?.timestamp.getTime()).toBe(timestamp.getTime())
       })
@@ -649,9 +649,9 @@ describe('messageCache', () => {
           reactions: { '👍': ['alice@example.com'], '❤️': ['bob@example.com'] },
         })
 
-        await messageCache.saveMessage(message)
+        await messageCache.saveMessage('chat', message)
 
-        const retrieved = await messageCache.getMessage(conversationId, 'msg-reactions')
+        const retrieved = await messageCache.getMessage('chat', conversationId, 'msg-reactions')
         expect(retrieved?.reactions).toEqual({
           '👍': ['alice@example.com'],
           '❤️': ['bob@example.com'],
@@ -669,9 +669,9 @@ describe('messageCache', () => {
           },
         })
 
-        await messageCache.saveMessage(message)
+        await messageCache.saveMessage('chat', message)
 
-        const retrieved = await messageCache.getMessage(conversationId, 'msg-attachment')
+        const retrieved = await messageCache.getMessage('chat', conversationId, 'msg-attachment')
         expect(retrieved?.attachment).toBeDefined()
         expect(retrieved?.attachment?.url).toBe('https://example.com/file.jpg')
       })
@@ -685,20 +685,20 @@ describe('messageCache', () => {
           createMockMessage(conversationId, { id: 'batch-3' }),
         ]
 
-        await messageCache.saveMessages(messages)
+        await messageCache.saveMessages('chat', messages)
 
-        const retrieved = await messageCache.getMessages(conversationId)
+        const retrieved = await messageCache.getMessages('chat', conversationId)
         expect(retrieved.length).toBe(3)
       })
 
       it('resolves true when the transaction commits', async () => {
         await expect(
-          messageCache.saveMessages([createMockMessage(conversationId, { id: 'commit-1' })])
+          messageCache.saveMessages('chat', [createMockMessage(conversationId, { id: 'commit-1' })])
         ).resolves.toBe(true)
       })
 
       it('resolves true for an empty batch', async () => {
-        await expect(messageCache.saveMessages([])).resolves.toBe(true)
+        await expect(messageCache.saveMessages('chat', [])).resolves.toBe(true)
       })
 
       it('resolves false when the write fails', async () => {
@@ -708,7 +708,7 @@ describe('messageCache', () => {
         globalThis.indexedDB = { open: () => { throw new Error('quota exceeded') } } as unknown as IDBFactory
         try {
           await expect(
-            messageCache.saveMessages([createMockMessage(conversationId, { id: 'fail-1' })])
+            messageCache.saveMessages('chat', [createMockMessage(conversationId, { id: 'fail-1' })])
           ).resolves.toBe(false)
         } finally {
           globalThis.indexedDB = original
@@ -726,9 +726,9 @@ describe('messageCache', () => {
         const signal = createMockMessage(conversationId, {
           id: 'z-signal', body: '', encryptedPayload: 'sealed', timestamp: new Date(2000),
         })
-        await messageCache.saveMessages([...history, newest, signal])
+        await messageCache.saveMessages('chat', [...history, newest, signal])
         const visited: string[] = []
-        const result = await messageCache.getMessages(conversationId, {
+        const result = await messageCache.getMessages('chat', conversationId, {
           latest: true, limit: 1,
           filter: message => {
             visited.push(message.id)
@@ -745,9 +745,9 @@ describe('messageCache', () => {
           createMockMessage(conversationId, { id: 'get-2', timestamp: new Date('2024-01-01T11:00:00Z') }),
         ]
 
-        await messageCache.saveMessages(messages)
+        await messageCache.saveMessages('chat', messages)
 
-        const retrieved = await messageCache.getMessages(conversationId)
+        const retrieved = await messageCache.getMessages('chat', conversationId)
         expect(retrieved.length).toBe(2)
         // Should be sorted by timestamp ascending
         expect(retrieved[0].id).toBe('get-1')
@@ -755,27 +755,27 @@ describe('messageCache', () => {
       })
 
       it('should return empty array for non-existent conversation', async () => {
-        const retrieved = await messageCache.getMessages('nonexistent@example.com')
+        const retrieved = await messageCache.getMessages('chat', 'nonexistent@example.com')
         expect(retrieved).toEqual([])
       })
 
       it('skips legacy blank rows (empty body, no payload) left by older builds', async () => {
-        await messageCache.saveMessages([
+        await messageCache.saveMessages('chat', [
           createMockMessage(conversationId, { id: 'real-1', body: 'hello', timestamp: new Date('2024-02-01T10:00:00Z') }),
           // The stale artifact: empty body, nothing renderable.
           createMockMessage(conversationId, { id: 'blank-1', body: '', timestamp: new Date('2024-02-01T11:00:00Z') }),
         ])
 
-        const retrieved = await messageCache.getMessages(conversationId)
+        const retrieved = await messageCache.getMessages('chat', conversationId)
         expect(retrieved.map((m) => m.id)).toEqual(['real-1'])
       })
 
       it('keeps an empty-body retraction tombstone', async () => {
-        await messageCache.saveMessages([
+        await messageCache.saveMessages('chat', [
           createMockMessage(conversationId, { id: 'tomb-1', body: '', isRetracted: true, timestamp: new Date('2024-02-02T10:00:00Z') }),
         ])
 
-        const retrieved = await messageCache.getMessages(conversationId)
+        const retrieved = await messageCache.getMessages('chat', conversationId)
         expect(retrieved.map((m) => m.id)).toEqual(['tomb-1'])
       })
 
@@ -787,9 +787,9 @@ describe('messageCache', () => {
           })
         )
 
-        await messageCache.saveMessages(messages)
+        await messageCache.saveMessages('chat', messages)
 
-        const retrieved = await messageCache.getMessages(conversationId, { limit: 5 })
+        const retrieved = await messageCache.getMessages('chat', conversationId, { limit: 5 })
         expect(retrieved.length).toBe(5)
       })
 
@@ -802,9 +802,9 @@ describe('messageCache', () => {
           createMockMessage(conversationId, { id: 'after-2', timestamp: new Date('2024-01-15T14:00:00Z') }),
         ]
 
-        await messageCache.saveMessages(messages)
+        await messageCache.saveMessages('chat', messages)
 
-        const retrieved = await messageCache.getMessages(conversationId, { before: cutoff })
+        const retrieved = await messageCache.getMessages('chat', conversationId, { before: cutoff })
         expect(retrieved.length).toBe(2)
         expect(retrieved.every(m => m.timestamp < cutoff)).toBe(true)
       })
@@ -817,9 +817,9 @@ describe('messageCache', () => {
           createMockMessage(conversationId, { id: 'after-2', timestamp: new Date('2024-01-15T14:00:00Z') }),
         ]
 
-        await messageCache.saveMessages(messages)
+        await messageCache.saveMessages('chat', messages)
 
-        const retrieved = await messageCache.getMessages(conversationId, { after: cutoff })
+        const retrieved = await messageCache.getMessages('chat', conversationId, { after: cutoff })
         expect(retrieved.length).toBe(2)
         expect(retrieved.every(m => m.timestamp > cutoff)).toBe(true)
       })
@@ -828,34 +828,34 @@ describe('messageCache', () => {
     describe('updateMessage', () => {
       it('should update an existing message', async () => {
         const message = createMockMessage(conversationId, { id: 'update-1', body: 'Original' })
-        await messageCache.saveMessage(message)
+        await messageCache.saveMessage('chat', message)
 
-        await messageCache.updateMessage(conversationId, 'update-1', {
+        await messageCache.updateMessage('chat', conversationId, 'update-1', {
           body: 'Updated',
           isEdited: true,
         }, message.from)
 
-        const retrieved = await messageCache.getMessage(conversationId, 'update-1')
+        const retrieved = await messageCache.getMessage('chat', conversationId, 'update-1')
         expect(retrieved?.body).toBe('Updated')
         expect(retrieved?.isEdited).toBe(true)
       })
 
       it('should update reactions', async () => {
         const message = createMockMessage(conversationId, { id: 'react-update' })
-        await messageCache.saveMessage(message)
+        await messageCache.saveMessage('chat', message)
 
-        await messageCache.updateMessage(conversationId, 'react-update', {
+        await messageCache.updateMessage('chat', conversationId, 'react-update', {
           reactions: { '🎉': ['user@example.com'] },
         }, message.from)
 
-        const retrieved = await messageCache.getMessage(conversationId, 'react-update')
+        const retrieved = await messageCache.getMessage('chat', conversationId, 'react-update')
         expect(retrieved?.reactions).toEqual({ '🎉': ['user@example.com'] })
       })
 
       it('should handle updating non-existent message gracefully', async () => {
         // Should not throw
         await expect(
-          messageCache.updateMessage(conversationId, 'nonexistent', { body: 'Test' }, 'user@example.com')
+          messageCache.updateMessage('chat', conversationId, 'nonexistent', { body: 'Test' }, 'user@example.com')
         ).resolves.not.toThrow()
       })
     })
@@ -863,44 +863,44 @@ describe('messageCache', () => {
     describe('updateMessageReactions', () => {
       it('should add reactions to a message found by id', async () => {
         const message = createMockMessage(conversationId, { id: 'react-1' })
-        await messageCache.saveMessage(message)
+        await messageCache.saveMessage('chat', message)
 
-        const found = await messageCache.updateMessageReactions(conversationId, 'react-1', 'bob@example.com', ['👍'])
+        const found = await messageCache.updateMessageReactions('chat', conversationId, 'react-1', 'bob@example.com', ['👍'])
 
         expect(found).toBe(true)
-        const retrieved = await messageCache.getMessage(conversationId, 'react-1')
+        const retrieved = await messageCache.getMessage('chat', conversationId, 'react-1')
         expect(retrieved?.reactions).toEqual({ '👍': ['bob@example.com'] })
       })
 
       it('should find the message by stanzaId when the reaction references the server-assigned id', async () => {
         const message = createMockMessage(conversationId, { id: 'react-2', stanzaId: 'server-stanza-id-1' })
-        await messageCache.saveMessage(message)
+        await messageCache.saveMessage('chat', message)
 
-        const found = await messageCache.updateMessageReactions(conversationId, 'server-stanza-id-1', 'bob@example.com', ['👍'])
+        const found = await messageCache.updateMessageReactions('chat', conversationId, 'server-stanza-id-1', 'bob@example.com', ['👍'])
 
         expect(found).toBe(true)
-        const retrieved = await messageCache.getMessage(conversationId, 'react-2')
+        const retrieved = await messageCache.getMessage('chat', conversationId, 'react-2')
         expect(retrieved?.reactions).toEqual({ '👍': ['bob@example.com'] })
       })
 
       it('should find the message by originId', async () => {
         const message = createMockMessage(conversationId, { id: 'react-origin', originId: 'origin-reaction-id' })
-        await messageCache.saveMessage(message)
+        await messageCache.saveMessage('chat', message)
 
-        const found = await messageCache.updateMessageReactions(conversationId, 'origin-reaction-id', 'bob@example.com', ['👍'])
+        const found = await messageCache.updateMessageReactions('chat', conversationId, 'origin-reaction-id', 'bob@example.com', ['👍'])
 
         expect(found).toBe(true)
-        const retrieved = await messageCache.getMessage(conversationId, message.id)
+        const retrieved = await messageCache.getMessage('chat', conversationId, message.id)
         expect(retrieved?.reactions).toEqual({ '👍': ['bob@example.com'] })
       })
 
       it('should replace reactions from the same reactor', async () => {
         const message = createMockMessage(conversationId, { id: 'react-3', reactions: { '👍': ['bob@example.com'] } })
-        await messageCache.saveMessage(message)
+        await messageCache.saveMessage('chat', message)
 
-        await messageCache.updateMessageReactions(conversationId, 'react-3', 'bob@example.com', ['❤️'])
+        await messageCache.updateMessageReactions('chat', conversationId, 'react-3', 'bob@example.com', ['❤️'])
 
-        const retrieved = await messageCache.getMessage(conversationId, 'react-3')
+        const retrieved = await messageCache.getMessage('chat', conversationId, 'react-3')
         expect(retrieved?.reactions).toEqual({ '❤️': ['bob@example.com'] })
       })
 
@@ -909,16 +909,16 @@ describe('messageCache', () => {
           id: 'react-4',
           reactions: { '👍': ['bob@example.com', 'carol@example.com'] },
         })
-        await messageCache.saveMessage(message)
+        await messageCache.saveMessage('chat', message)
 
-        await messageCache.updateMessageReactions(conversationId, 'react-4', 'bob@example.com', [])
+        await messageCache.updateMessageReactions('chat', conversationId, 'react-4', 'bob@example.com', [])
 
-        const retrieved = await messageCache.getMessage(conversationId, 'react-4')
+        const retrieved = await messageCache.getMessage('chat', conversationId, 'react-4')
         expect(retrieved?.reactions).toEqual({ '👍': ['carol@example.com'] })
       })
 
       it('should return false when the message is not found', async () => {
-        const found = await messageCache.updateMessageReactions(conversationId, 'nonexistent', 'bob@example.com', ['👍'])
+        const found = await messageCache.updateMessageReactions('chat', conversationId, 'nonexistent', 'bob@example.com', ['👍'])
         expect(found).toBe(false)
       })
     })
@@ -926,11 +926,11 @@ describe('messageCache', () => {
     describe('deleteMessage', () => {
       it('should delete a message', async () => {
         const message = createMockMessage(conversationId, { id: 'delete-1' })
-        await messageCache.saveMessage(message)
+        await messageCache.saveMessage('chat', message)
 
-        await messageCache.deleteMessage(conversationId, 'delete-1', message.from)
+        await messageCache.deleteMessage('chat', conversationId, 'delete-1', message.from)
 
-        const retrieved = await messageCache.getMessage(conversationId, 'delete-1')
+        const retrieved = await messageCache.getMessage('chat', conversationId, 'delete-1')
         expect(retrieved).toBeNull()
       })
     })
@@ -941,21 +941,21 @@ describe('messageCache', () => {
           createMockMessage(conversationId, { id: 'conv-del-1' }),
           createMockMessage(conversationId, { id: 'conv-del-2' }),
         ]
-        await messageCache.saveMessages(messages)
+        await messageCache.saveMessages('chat', messages)
 
         // Save message in another conversation
         const otherConv = 'other@example.com'
         await messageCache.saveMessage(
-          createMockMessage(otherConv, { id: 'other-conv' })
+          'chat', createMockMessage(otherConv, { id: 'other-conv' })
         )
 
-        await messageCache.deleteConversationMessages(conversationId)
+        await messageCache.deleteConversationMessages('chat', conversationId)
 
-        const deleted = await messageCache.getMessages(conversationId)
+        const deleted = await messageCache.getMessages('chat', conversationId)
         expect(deleted.length).toBe(0)
 
         // Other conversation should be unaffected
-        const other = await messageCache.getMessages(otherConv)
+        const other = await messageCache.getMessages('chat', otherConv)
         expect(other.length).toBe(1)
       })
     })
@@ -967,14 +967,14 @@ describe('messageCache', () => {
           createMockMessage(conversationId, { id: 'count-2' }),
           createMockMessage(conversationId, { id: 'count-3' }),
         ]
-        await messageCache.saveMessages(messages)
+        await messageCache.saveMessages('chat', messages)
 
-        const count = await messageCache.getMessageCount(conversationId)
+        const count = await messageCache.getMessageCount('chat', conversationId)
         expect(count).toBe(3)
       })
 
       it('should return 0 for empty conversation', async () => {
-        const count = await messageCache.getMessageCount('empty@example.com')
+        const count = await messageCache.getMessageCount('chat', 'empty@example.com')
         expect(count).toBe(0)
       })
     })
@@ -987,27 +987,27 @@ describe('messageCache', () => {
           createMockMessage(conversationId, { id: 'oldest-2', timestamp: new Date('2024-06-15T00:00:00Z') }),
           createMockMessage(conversationId, { id: 'oldest-3', timestamp: new Date('2024-12-31T00:00:00Z') }),
         ]
-        await messageCache.saveMessages(messages)
+        await messageCache.saveMessages('chat', messages)
 
-        const timestamp = await messageCache.getOldestMessageTimestamp(conversationId)
+        const timestamp = await messageCache.getOldestMessageTimestamp('chat', conversationId)
         expect(timestamp?.getTime()).toBe(oldest.getTime())
       })
 
       it('should return null for empty conversation', async () => {
-        const timestamp = await messageCache.getOldestMessageTimestamp('empty@example.com')
+        const timestamp = await messageCache.getOldestMessageTimestamp('chat', 'empty@example.com')
         expect(timestamp).toBeNull()
       })
     })
 
     describe('getMessagesAround', () => {
       it('anchors on the archive-distinct row a reused client id names and keeps both rows', async () => {
-        await messageCache.saveMessages([
+        await messageCache.saveMessages('chat', [
           createMockMessage(conversationId, { id: 'reused', stanzaId: 'first', timestamp: new Date(1000) }),
           createMockMessage(conversationId, { id: 'reused', stanzaId: 'second', timestamp: new Date(2000) }),
         ])
-        expect((await messageCache.getMessages(conversationId)).map(message => message.stanzaId)).toEqual(['first', 'second'])
+        expect((await messageCache.getMessages('chat', conversationId)).map(message => message.stanzaId)).toEqual(['first', 'second'])
         const around = async (anchor: { id: string; stanzaId?: string }) =>
-          (await messageCache.getMessagesAround(conversationId, anchor, { before: 0 })).map(message => message.stanzaId)
+          (await messageCache.getMessagesAround('chat', conversationId, anchor, { before: 0 })).map(message => message.stanzaId)
         expect(await around({ id: 'reused' })).toEqual(['first', 'second'])
         expect(await around({ id: 'reused', stanzaId: 'first' })).toEqual(['first', 'second'])
         expect(await around({ id: 'reused', stanzaId: 'second' })).toEqual(['second'])
@@ -1020,7 +1020,7 @@ describe('messageCache', () => {
       const around = (i: number) => new Date(`2024-03-01T10:0${i}:00Z`)
       async function seedTen() {
         await messageCache.saveMessages(
-          Array.from({ length: 10 }, (_, i) =>
+          'chat', Array.from({ length: 10 }, (_, i) =>
             createMockMessage(conversationId, { id: `a${i}`, timestamp: around(i) })
           )
         )
@@ -1029,36 +1029,36 @@ describe('messageCache', () => {
       it('loads the anchor plus context above it AND the full tail through the latest', async () => {
         await seedTen()
         // Anchor a5, two messages of context above it, tail uncapped → reach a9.
-        const slice = await messageCache.getMessagesAround(conversationId, { id: 'a5' }, { before: 2 })
+        const slice = await messageCache.getMessagesAround('chat', conversationId, { id: 'a5' }, { before: 2 })
         expect(slice.map((m) => m.id)).toEqual(['a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9'])
       })
 
       it('honours an explicit forward cap (windowed load for search)', async () => {
         await seedTen()
-        const slice = await messageCache.getMessagesAround(conversationId, { id: 'a5' }, { before: 2, after: 2 })
+        const slice = await messageCache.getMessagesAround('chat', conversationId, { id: 'a5' }, { before: 2, after: 2 })
         expect(slice.map((m) => m.id)).toEqual(['a3', 'a4', 'a5', 'a6', 'a7'])
       })
 
       it('returns the anchor at the head when there is no older context', async () => {
         await seedTen()
-        const slice = await messageCache.getMessagesAround(conversationId, { id: 'a0' }, { before: 5 })
+        const slice = await messageCache.getMessagesAround('chat', conversationId, { id: 'a0' }, { before: 5 })
         expect(slice[0].id).toBe('a0')
         expect(slice.map((m) => m.id)).toEqual(['a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9'])
       })
 
       it('returns an empty array when the anchor id is not cached', async () => {
         await seedTen()
-        const slice = await messageCache.getMessagesAround(conversationId, { id: 'not-here' }, { before: 2 })
+        const slice = await messageCache.getMessagesAround('chat', conversationId, { id: 'not-here' }, { before: 2 })
         expect(slice).toEqual([])
       })
 
       it('resolves the anchor by stanzaId when the id is a server stanza id', async () => {
-        await messageCache.saveMessages([
+        await messageCache.saveMessages('chat', [
           createMockMessage(conversationId, { id: 'sa0', timestamp: around(0) }),
           createMockMessage(conversationId, { id: 'sa1', stanzaId: 'stanza-anchor', timestamp: around(1) }),
           createMockMessage(conversationId, { id: 'sa2', timestamp: around(2) }),
         ])
-        const slice = await messageCache.getMessagesAround(conversationId, { id: 'stanza-anchor' }, { before: 5 })
+        const slice = await messageCache.getMessagesAround('chat', conversationId, { id: 'stanza-anchor' }, { before: 5 })
         expect(slice.map((m) => m.id)).toEqual(['sa0', 'sa1', 'sa2'])
       })
     })
@@ -1071,9 +1071,9 @@ describe('messageCache', () => {
       it('should save a room message to IndexedDB', async () => {
         const message = createMockRoomMessage(roomJid, { id: 'room-1' })
 
-        await expect(messageCache.saveRoomMessage(message)).resolves.toBeUndefined()
+        await expect(messageCache.saveMessage('room', message)).resolves.toBeUndefined()
 
-        const retrieved = await messageCache.getRoomMessage(roomJid, 'room-1')
+        const retrieved = await messageCache.getMessage('room', roomJid, 'room-1')
         expect(retrieved).not.toBeNull()
         expect(retrieved?.id).toBe('room-1')
       })
@@ -1084,9 +1084,9 @@ describe('messageCache', () => {
           stanzaId: 'room-stanza-123',
         })
 
-        await expect(messageCache.saveRoomMessage(message)).resolves.toBeUndefined()
+        await expect(messageCache.saveMessage('room', message)).resolves.toBeUndefined()
 
-        const byStanzaId = await messageCache.getRoomMessageByStanzaId(roomJid, 'room-stanza-123')
+        const byStanzaId = await messageCache.getMessageByStanzaId('room', roomJid, 'room-stanza-123')
         expect(byStanzaId).not.toBeNull()
         expect(byStanzaId?.id).toBe('room-stanza')
       })
@@ -1100,20 +1100,20 @@ describe('messageCache', () => {
           createMockRoomMessage(roomJid, { id: 'room-batch-2' }),
         ]
 
-        await messageCache.saveRoomMessages(messages)
+        await messageCache.saveMessages('room', messages)
 
-        const retrieved = await messageCache.getRoomMessages(roomJid)
+        const retrieved = await messageCache.getMessages('room', roomJid)
         expect(retrieved.length).toBe(2)
       })
 
       it('resolves true when the transaction commits', async () => {
         await expect(
-          messageCache.saveRoomMessages([createMockRoomMessage(roomJid, { id: 'room-commit-1' })])
+          messageCache.saveMessages('room', [createMockRoomMessage(roomJid, { id: 'room-commit-1' })])
         ).resolves.toBe(true)
       })
 
       it('resolves true for an empty batch', async () => {
-        await expect(messageCache.saveRoomMessages([])).resolves.toBe(true)
+        await expect(messageCache.saveMessages('room', [])).resolves.toBe(true)
       })
 
       it('resolves false when the write fails', async () => {
@@ -1122,7 +1122,7 @@ describe('messageCache', () => {
         globalThis.indexedDB = { open: () => { throw new Error('quota exceeded') } } as unknown as IDBFactory
         try {
           await expect(
-            messageCache.saveRoomMessages([createMockRoomMessage(roomJid, { id: 'room-fail-1' })])
+            messageCache.saveMessages('room', [createMockRoomMessage(roomJid, { id: 'room-fail-1' })])
           ).resolves.toBe(false)
         } finally {
           globalThis.indexedDB = original
@@ -1138,9 +1138,9 @@ describe('messageCache', () => {
           createMockRoomMessage(roomJid, { id: 'room-get-2', timestamp: new Date('2024-01-01T11:00:00Z') }),
         ]
 
-        await messageCache.saveRoomMessages(messages)
+        await messageCache.saveMessages('room', messages)
 
-        const retrieved = await messageCache.getRoomMessages(roomJid)
+        const retrieved = await messageCache.getMessages('room', roomJid)
         expect(retrieved.length).toBe(2)
         // Should be sorted by timestamp ascending
         expect(retrieved[0].id).toBe('room-get-1')
@@ -1155,9 +1155,9 @@ describe('messageCache', () => {
           createMockRoomMessage(roomJid, { id: 'ra-1', timestamp: new Date('2024-01-15T13:00:00Z') }),
         ]
 
-        await messageCache.saveRoomMessages(messages)
+        await messageCache.saveMessages('room', messages)
 
-        const retrieved = await messageCache.getRoomMessages(roomJid, { before: cutoff, limit: 1 })
+        const retrieved = await messageCache.getMessages('room', roomJid, { before: cutoff, limit: 1 })
         expect(retrieved.length).toBe(1)
         expect(retrieved[0].timestamp < cutoff).toBe(true)
       })
@@ -1165,12 +1165,12 @@ describe('messageCache', () => {
       it('skips a legacy blank room row so it cannot render or seed the catch-up cursor', async () => {
         // Mirrors the reported XSF case: the newest cached row is an empty-body
         // leftover. It must be filtered so the newest returned row is the real one.
-        await messageCache.saveRoomMessages([
+        await messageCache.saveMessages('room', [
           createMockRoomMessage(roomJid, { id: 'room-real', body: 'real text', timestamp: new Date('2024-02-01T10:00:00Z') }),
           createMockRoomMessage(roomJid, { id: 'room-blank', body: '', timestamp: new Date('2024-02-01T11:00:00Z') }),
         ])
 
-        const retrieved = await messageCache.getRoomMessages(roomJid)
+        const retrieved = await messageCache.getMessages('room', roomJid)
         expect(retrieved.map((m) => m.id)).toEqual(['room-real'])
       })
     })
@@ -1178,14 +1178,14 @@ describe('messageCache', () => {
     describe('updateRoomMessage', () => {
       it('should update an existing room message', async () => {
         const message = createMockRoomMessage(roomJid, { id: 'room-update', body: 'Original' })
-        await messageCache.saveRoomMessage(message)
+        await messageCache.saveMessage('room', message)
 
-        await messageCache.updateRoomMessage(roomJid, 'room-update', {
+        await messageCache.updateMessage('room', roomJid, 'room-update', {
           body: 'Updated',
           isEdited: true,
         })
 
-        const retrieved = await messageCache.getRoomMessage(roomJid, 'room-update')
+        const retrieved = await messageCache.getMessage('room', roomJid, 'room-update')
         expect(retrieved?.body).toBe('Updated')
         expect(retrieved?.isEdited).toBe(true)
       })
@@ -1194,11 +1194,11 @@ describe('messageCache', () => {
     describe('deleteRoomMessage', () => {
       it('should delete a room message', async () => {
         const message = createMockRoomMessage(roomJid, { id: 'room-delete' })
-        await messageCache.saveRoomMessage(message)
+        await messageCache.saveMessage('room', message)
 
-        await messageCache.deleteRoomMessage(roomJid, 'room-delete')
+        await messageCache.deleteMessage('room', roomJid, 'room-delete')
 
-        const retrieved = await messageCache.getRoomMessage(roomJid, 'room-delete')
+        const retrieved = await messageCache.getMessage('room', roomJid, 'room-delete')
         expect(retrieved).toBeNull()
       })
     })
@@ -1209,21 +1209,21 @@ describe('messageCache', () => {
           createMockRoomMessage(roomJid, { id: 'room-del-1' }),
           createMockRoomMessage(roomJid, { id: 'room-del-2' }),
         ]
-        await messageCache.saveRoomMessages(messages)
+        await messageCache.saveMessages('room', messages)
 
         // Save message in another room
         const otherRoom = 'other@conference.example.com'
-        await messageCache.saveRoomMessage(
-          createMockRoomMessage(otherRoom, { id: 'other-room' })
+        await messageCache.saveMessage(
+          'room', createMockRoomMessage(otherRoom, { id: 'other-room' })
         )
 
-        await messageCache.deleteRoomMessages(roomJid)
+        await messageCache.deleteConversationMessages('room', roomJid)
 
-        const deleted = await messageCache.getRoomMessages(roomJid)
+        const deleted = await messageCache.getMessages('room', roomJid)
         expect(deleted.length).toBe(0)
 
         // Other room should be unaffected
-        const other = await messageCache.getRoomMessages(otherRoom)
+        const other = await messageCache.getMessages('room', otherRoom)
         expect(other.length).toBe(1)
       })
     })
@@ -1234,9 +1234,9 @@ describe('messageCache', () => {
           createMockRoomMessage(roomJid, { id: 'room-count-1' }),
           createMockRoomMessage(roomJid, { id: 'room-count-2' }),
         ]
-        await messageCache.saveRoomMessages(messages)
+        await messageCache.saveMessages('room', messages)
 
-        const count = await messageCache.getRoomMessageCount(roomJid)
+        const count = await messageCache.getMessageCount('room', roomJid)
         expect(count).toBe(2)
       })
     })
@@ -1248,9 +1248,9 @@ describe('messageCache', () => {
           createMockRoomMessage(roomJid, { id: 'room-oldest-1', timestamp: oldest }),
           createMockRoomMessage(roomJid, { id: 'room-oldest-2', timestamp: new Date('2024-12-31T00:00:00Z') }),
         ]
-        await messageCache.saveRoomMessages(messages)
+        await messageCache.saveMessages('room', messages)
 
-        const timestamp = await messageCache.getOldestRoomMessageTimestamp(roomJid)
+        const timestamp = await messageCache.getOldestMessageTimestamp('room', roomJid)
         expect(timestamp?.getTime()).toBe(oldest.getTime())
       })
     })
@@ -1258,8 +1258,8 @@ describe('messageCache', () => {
     describe('getRoomMessagesAround', () => {
       const around = (i: number) => new Date(`2024-03-01T10:0${i}:00Z`)
       async function seedTen() {
-        await messageCache.saveRoomMessages(
-          Array.from({ length: 10 }, (_, i) =>
+        await messageCache.saveMessages(
+          'room', Array.from({ length: 10 }, (_, i) =>
             createMockRoomMessage(roomJid, { id: `r${i}`, timestamp: around(i) })
           )
         )
@@ -1267,13 +1267,13 @@ describe('messageCache', () => {
 
       it('loads the anchor plus context above it AND the full tail through the latest', async () => {
         await seedTen()
-        const slice = await messageCache.getRoomMessagesAround(roomJid, { id: 'r5' }, { before: 2 })
+        const slice = await messageCache.getMessagesAround('room', roomJid, { id: 'r5' }, { before: 2 })
         expect(slice.map((m) => m.id)).toEqual(['r3', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9'])
       })
 
       it('returns an empty array when the anchor id is not cached', async () => {
         await seedTen()
-        const slice = await messageCache.getRoomMessagesAround(roomJid, { id: 'not-here' }, { before: 2 })
+        const slice = await messageCache.getMessagesAround('room', roomJid, { id: 'not-here' }, { before: 2 })
         expect(slice).toEqual([])
       })
 
@@ -1282,22 +1282,22 @@ describe('messageCache', () => {
       // rather than on whichever copy the index returns first.
       it('centres the slice on the anchor OCCUPANT, not the first same-id row', async () => {
         const nick = `${roomJid}/alice`
-        await messageCache.saveRoomMessages([
+        await messageCache.saveMessages('room', [
           createMockRoomMessage(roomJid, { id: 'early', timestamp: around(0) }),
           createMockRoomMessage(roomJid, { id: 'shared', from: nick, occupantId: 'occupant-a', timestamp: around(1) }),
           createMockRoomMessage(roomJid, { id: 'shared', from: nick, occupantId: 'occupant-b', timestamp: around(8) }),
           createMockRoomMessage(roomJid, { id: 'late', timestamp: around(9) }),
         ])
 
-        const onB = await messageCache.getRoomMessagesAround(
-          roomJid,
+        const onB = await messageCache.getMessagesAround(
+          'room', roomJid,
           { id: 'shared', occupantId: 'occupant-b' },
           { before: 1, after: 1 }
         )
         expect(onB.map((m) => m.occupantId ?? m.id)).toEqual(['occupant-a', 'occupant-b', 'late'])
 
-        const onA = await messageCache.getRoomMessagesAround(
-          roomJid,
+        const onA = await messageCache.getMessagesAround(
+          'room', roomJid,
           { id: 'shared', occupantId: 'occupant-a' },
           { before: 1, after: 1 }
         )
@@ -1308,35 +1308,35 @@ describe('messageCache', () => {
 
   describe('getTotalMessageCount', () => {
     it('should count all chat messages across conversations', async () => {
-      await messageCache.saveMessage(createMockMessage('alice@example.com', { id: 'total-1' }))
-      await messageCache.saveMessage(createMockMessage('alice@example.com', { id: 'total-2' }))
-      await messageCache.saveMessage(createMockMessage('bob@example.com', { id: 'total-3' }))
+      await messageCache.saveMessage('chat', createMockMessage('alice@example.com', { id: 'total-1' }))
+      await messageCache.saveMessage('chat', createMockMessage('alice@example.com', { id: 'total-2' }))
+      await messageCache.saveMessage('chat', createMockMessage('bob@example.com', { id: 'total-3' }))
 
-      const count = await messageCache.getTotalMessageCount()
+      const count = await messageCache.getTotalMessageCount('chat')
       expect(count).toBe(3)
     })
 
     it('should return 0 when no messages exist', async () => {
-      const count = await messageCache.getTotalMessageCount()
+      const count = await messageCache.getTotalMessageCount('chat')
       expect(count).toBe(0)
     })
   })
 
   describe('getTotalRoomMessageCount', () => {
     it('should count all room messages across rooms', async () => {
-      await messageCache.saveRoomMessage(
-        createMockRoomMessage('room1@conference.example.com', { id: 'rtotal-1' })
+      await messageCache.saveMessage(
+        'room', createMockRoomMessage('room1@conference.example.com', { id: 'rtotal-1' })
       )
-      await messageCache.saveRoomMessage(
-        createMockRoomMessage('room2@conference.example.com', { id: 'rtotal-2' })
+      await messageCache.saveMessage(
+        'room', createMockRoomMessage('room2@conference.example.com', { id: 'rtotal-2' })
       )
 
-      const count = await messageCache.getTotalRoomMessageCount()
+      const count = await messageCache.getTotalMessageCount('room')
       expect(count).toBe(2)
     })
 
     it('should return 0 when no room messages exist', async () => {
-      const count = await messageCache.getTotalRoomMessageCount()
+      const count = await messageCache.getTotalMessageCount('room')
       expect(count).toBe(0)
     })
   })
@@ -1346,12 +1346,12 @@ describe('messageCache', () => {
       // Direct-write semantics: a single save is visible immediately,
       // no buffer to drain. This is the guarantee that fixes the
       // reload-loses-notified-message race.
-      await messageCache.saveRoomMessage(
-        createMockRoomMessage('room@conference.example.com', { id: 'iter-direct-1', body: 'Direct write' })
+      await messageCache.saveMessage(
+        'room', createMockRoomMessage('room@conference.example.com', { id: 'iter-direct-1', body: 'Direct write' })
       )
 
       const collected: RoomMessage[] = []
-      await messageCache.iterateAllRoomMessages(100, async (batch) => {
+      await messageCache.iterateAllMessages('room', 100, async (batch) => {
         collected.push(...batch)
       })
 
@@ -1366,17 +1366,17 @@ describe('messageCache', () => {
       const roomJid = 'room@example.com'
 
       // Add chat messages
-      await messageCache.saveMessage(createMockMessage(conversationId, { id: 'clear-chat' }))
+      await messageCache.saveMessage('chat', createMockMessage(conversationId, { id: 'clear-chat' }))
 
       // Add room messages
-      await messageCache.saveRoomMessage(
-        createMockRoomMessage(roomJid, { id: 'clear-room' })
+      await messageCache.saveMessage(
+        'room', createMockRoomMessage(roomJid, { id: 'clear-room' })
       )
 
       await messageCache.clearAllMessages()
 
-      const chatMessages = await messageCache.getMessages(conversationId)
-      const roomMessages = await messageCache.getRoomMessages(roomJid)
+      const chatMessages = await messageCache.getMessages('chat', conversationId)
+      const roomMessages = await messageCache.getMessages('room', roomJid)
 
       expect(chatMessages.length).toBe(0)
       expect(roomMessages.length).toBe(0)
@@ -1391,7 +1391,7 @@ describe('messageCache', () => {
 
       // Session 1: the message was decrypted live and persisted as plaintext.
       await messageCache.saveMessage(
-        createMockMessage(conversationId, {
+        'chat', createMockMessage(conversationId, {
           id: 'm1',
           body: 'Bonjour en clair',
           // no encryptedPayload — fully decrypted
@@ -1401,7 +1401,7 @@ describe('messageCache', () => {
       // Reload → fresh-session MAM catch-up re-ingests the SAME message (same
       // id) while the OpenPGP key is still locked: it arrives undecryptable,
       // carrying the encrypted placeholder. This must NOT clobber the plaintext.
-      await messageCache.saveMessages([
+      await messageCache.saveMessages('chat', [
         createMockMessage(conversationId, {
           id: 'm1',
           body: '[OpenPGP-encrypted message]',
@@ -1409,7 +1409,7 @@ describe('messageCache', () => {
         }),
       ])
 
-      const stored = await messageCache.getMessage(conversationId, 'm1')
+      const stored = await messageCache.getMessage('chat', conversationId, 'm1')
       expect(stored?.body).toBe('Bonjour en clair')
       expect(stored?.encryptedPayload).toBeUndefined()
     })
@@ -1419,7 +1419,7 @@ describe('messageCache', () => {
 
       // Received while locked → stored undecryptable.
       await messageCache.saveMessage(
-        createMockMessage(conversationId, {
+        'chat', createMockMessage(conversationId, {
           id: 'm2',
           body: '[OpenPGP-encrypted message]',
           encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">CIPHER</openpgp>',
@@ -1428,13 +1428,13 @@ describe('messageCache', () => {
 
       // Deferred decrypt succeeds → plaintext, no stash. Upgrade must apply.
       await messageCache.saveMessage(
-        createMockMessage(conversationId, {
+        'chat', createMockMessage(conversationId, {
           id: 'm2',
           body: 'Coucou déchiffré',
         })
       )
 
-      const stored = await messageCache.getMessage(conversationId, 'm2')
+      const stored = await messageCache.getMessage('chat', conversationId, 'm2')
       expect(stored?.body).toBe('Coucou déchiffré')
       expect(stored?.encryptedPayload).toBeUndefined()
     })
@@ -1443,40 +1443,40 @@ describe('messageCache', () => {
       setStorageScopeJid('me@example.com')
 
       await messageCache.saveMessage(
-        createMockMessage(conversationId, {
+        'chat', createMockMessage(conversationId, {
           id: 'm3',
           body: '[OpenPGP-encrypted message]',
           encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">OLD</openpgp>',
         })
       )
       await messageCache.saveMessage(
-        createMockMessage(conversationId, {
+        'chat', createMockMessage(conversationId, {
           id: 'm3',
           body: '[OpenPGP-encrypted message]',
           encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">NEW</openpgp>',
         })
       )
 
-      const stored = await messageCache.getMessage(conversationId, 'm3')
+      const stored = await messageCache.getMessage('chat', conversationId, 'm3')
       expect(stored?.encryptedPayload).toContain('NEW')
     })
 
     it('does not let an unsupported-encryption fallback overwrite an already-decrypted message', async () => {
       setStorageScopeJid('me@example.com')
       await messageCache.saveMessage(
-        createMockMessage(conversationId, { id: 'u1', body: 'Texte clair' })
+        'chat', createMockMessage(conversationId, { id: 'u1', body: 'Texte clair' })
       )
       // Peer toggled their encryption off → re-ingest arrives as a fallback
       // with no ciphertext to retry. Must not clobber the decrypted plaintext.
       await messageCache.saveMessage(
-        createMockMessage(conversationId, {
+        'chat', createMockMessage(conversationId, {
           id: 'u1',
           body: '[Encrypted message]',
           unsupportedEncryption: { namespace: 'urn:xmpp:openpgp:0', name: 'OpenPGP' },
         })
       )
 
-      const stored = await messageCache.getMessage(conversationId, 'u1')
+      const stored = await messageCache.getMessage('chat', conversationId, 'u1')
       expect(stored?.body).toBe('Texte clair')
       expect(stored?.unsupportedEncryption).toBeUndefined()
     })
@@ -1484,7 +1484,7 @@ describe('messageCache', () => {
     it('does not let an unsupported fallback overwrite a retriable encryptedPayload message', async () => {
       setStorageScopeJid('me@example.com')
       await messageCache.saveMessage(
-        createMockMessage(conversationId, {
+        'chat', createMockMessage(conversationId, {
           id: 'u2',
           body: '[OpenPGP-encrypted message]',
           encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">CIPHER</openpgp>',
@@ -1492,14 +1492,14 @@ describe('messageCache', () => {
       )
       // A fallback (no ciphertext) must not destroy the retriable ciphertext.
       await messageCache.saveMessage(
-        createMockMessage(conversationId, {
+        'chat', createMockMessage(conversationId, {
           id: 'u2',
           body: '[Encrypted message]',
           unsupportedEncryption: { namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' },
         })
       )
 
-      const stored = await messageCache.getMessage(conversationId, 'u2')
+      const stored = await messageCache.getMessage('chat', conversationId, 'u2')
       expect(stored?.encryptedPayload).toContain('CIPHER')
       expect(stored?.unsupportedEncryption).toBeUndefined()
     })
@@ -1507,7 +1507,7 @@ describe('messageCache', () => {
     it('lets a retriable encryptedPayload replace an unsupported fallback (upgrade)', async () => {
       setStorageScopeJid('me@example.com')
       await messageCache.saveMessage(
-        createMockMessage(conversationId, {
+        'chat', createMockMessage(conversationId, {
           id: 'u3',
           body: '[Encrypted message]',
           unsupportedEncryption: { namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' },
@@ -1516,14 +1516,14 @@ describe('messageCache', () => {
       // Plugin now available → ciphertext arrives and SHOULD take over so the
       // deferred retry can decrypt it.
       await messageCache.saveMessage(
-        createMockMessage(conversationId, {
+        'chat', createMockMessage(conversationId, {
           id: 'u3',
           body: '[OpenPGP-encrypted message]',
           encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">C3</openpgp>',
         })
       )
 
-      const stored = await messageCache.getMessage(conversationId, 'u3')
+      const stored = await messageCache.getMessage('chat', conversationId, 'u3')
       expect(stored?.encryptedPayload).toContain('C3')
       expect(stored?.unsupportedEncryption).toBeUndefined()
     })
@@ -1533,17 +1533,17 @@ describe('messageCache', () => {
     it('returns only messages that still carry an encryptedPayload, across conversations', async () => {
       setStorageScopeJid('me@example.com')
       await messageCache.saveMessage(
-        createMockMessage('a@example.com', { id: 'plain', body: 'clair' })
+        'chat', createMockMessage('a@example.com', { id: 'plain', body: 'clair' })
       )
       await messageCache.saveMessage(
-        createMockMessage('a@example.com', {
+        'chat', createMockMessage('a@example.com', {
           id: 'enc1',
           body: '[OpenPGP-encrypted message]',
           encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">ONE</openpgp>',
         })
       )
       await messageCache.saveMessage(
-        createMockMessage('b@example.com', {
+        'chat', createMockMessage('b@example.com', {
           id: 'enc2',
           body: '[OpenPGP-encrypted message]',
           encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">TWO</openpgp>',
@@ -1560,7 +1560,7 @@ describe('messageCache', () => {
     it('returns an empty array when nothing is pending', async () => {
       setStorageScopeJid('me@example.com')
       await messageCache.saveMessage(
-        createMockMessage('a@example.com', { id: 'plain', body: 'clair' })
+        'chat', createMockMessage('a@example.com', { id: 'plain', body: 'clair' })
       )
       expect(await messageCache.getMessagesWithEncryptedPayload()).toEqual([])
     })
@@ -1568,12 +1568,12 @@ describe('messageCache', () => {
 
   describe('Error handling', () => {
     it('should handle getMessages on empty database gracefully', async () => {
-      const messages = await messageCache.getMessages('nonexistent@example.com')
+      const messages = await messageCache.getMessages('chat', 'nonexistent@example.com')
       expect(messages).toEqual([])
     })
 
     it('should handle getMessage for non-existent ID', async () => {
-      const message = await messageCache.getMessage('nonexistent@example.com', 'nonexistent-id')
+      const message = await messageCache.getMessage('chat', 'nonexistent@example.com', 'nonexistent-id')
       expect(message).toBeNull()
     })
   })
@@ -1592,12 +1592,12 @@ describe('messageCache', () => {
     const sessionStartTime = new Date('2026-06-25T22:00:00.000Z').getTime()
 
     it('anchors the catch-up cursor on the newest renderable row, not the blank one', async () => {
-      await messageCache.saveRoomMessages([
+      await messageCache.saveMessages('room', [
         createMockRoomMessage(cursorRoomJid, { id: 'cursor-real', body: 'real text', timestamp: realTs }),
         createMockRoomMessage(cursorRoomJid, { id: 'cursor-blank', body: '', timestamp: blankTs }),
       ])
 
-      const cached = await messageCache.getRoomMessages(cursorRoomJid)
+      const cached = await messageCache.getMessages('room', cursorRoomJid)
       const query = selectCatchUpQuery(cached, { sessionStartTime })
 
       // Forward query, anchored exactly as if only the real row existed...
@@ -1613,7 +1613,7 @@ const rrow = (over: Partial<StoredRoomMessage> = {}): StoredRoomMessage => {
   const base = { type: 'groupchat', id: 'origin-1', roomJid: 'r@c', from: 'r@c/alice', body: 'hi', timestamp: 1000, isOutgoing: false, ...over } as StoredRoomMessage
   return { ...base, cacheKey: roomCanonicalKey(base), identityKeys: roomIdentityKeys(base), ids: [base.id], ...over } as StoredRoomMessage
 }
-const both = (a: StoredRoomMessage, b: StoredRoomMessage) => [mergeRoomRows(a, b), mergeRoomRows(b, a)]
+const both = (a: StoredRoomMessage, b: StoredRoomMessage) => [mergeRows('room', a, b), mergeRows('room', b, a)]
 
 describe('mergeRoomRows — commutative, associative, field-complete', () => {
   it('retains incomparable revisions and converges after archive evidence in every save order', () => {
@@ -1624,9 +1624,9 @@ describe('mergeRoomRows — commutative, associative, field-complete', () => {
     ]
     const orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]
     for (const [a, b, c] of orders) {
-      const held = mergeRoomRows(mergeRoomRows(rows[a], rows[b]), rows[c])
+      const held = mergeRows('room', mergeRows('room', rows[a], rows[b]), rows[c])
       expect([held.body, ...(held.correctionAlternatives ?? []).map(candidate => candidate.body)].sort()).toEqual(['alpha', 'zulu'])
-      const resolved = mergeRoomRows(held, rrow({ isEdited: true, body: 'zulu', correctionRevision: {
+      const resolved = mergeRows('room', held, rrow({ isEdited: true, body: 'zulu', correctionRevision: {
         ...rows[0].correctionRevision!, archiveTimestamp: 5000, supersedes: ['id:before-a', 'id:b'], predecessors: [['id:b']],
       } }))
       expect(resolved.body).toBe('zulu')
@@ -1709,21 +1709,21 @@ describe('mergeRoomRows — commutative, associative, field-complete', () => {
   it('is commutative on a mixed pair with EQUAL ids', () => {
     const a = rrow({ body: 'plain', originId: 'O', id: 'client-1', timestamp: 5000, reactions: { a: ['alice'] } })
     const b = rrow({ body: '', unsupportedEncryption: { kind: 'x' } as never, stanzaId: 'S', id: 'client-1', timestamp: 4000, reactions: { a: ['bob'] } })
-    expect(mergeRoomRows(a, b)).toEqual(mergeRoomRows(b, a))
+    expect(mergeRows('room', a, b)).toEqual(mergeRows('room', b, a))
   })
 
   // The tie the old contentOwner got wrong: identical id/body/rank/edit, DIFFERENT attachment.
   it('is commutative when rows tie on rank/body/id but differ in attachment', () => {
     const a = rrow({ id: 'x', body: 'same', attachment: { url: 'a://1' } as never })
     const b = rrow({ id: 'x', body: 'same', attachment: { url: 'a://2' } as never })
-    expect(mergeRoomRows(a, b)).toEqual(mergeRoomRows(b, a))
+    expect(mergeRows('room', a, b)).toEqual(mergeRows('room', b, a))
   })
 
   it('is associative and order-independent across three rows', () => {
     const a = rrow({ originId: 'O', id: 'c1', timestamp: 5000, reactions: { a: ['a'] } })
     const b = rrow({ stanzaId: 'S', id: 'c2', timestamp: 4000, reactions: { r: ['b'] } })
     const c = rrow({ body: 'edited', isEdited: true, id: 'c1', timestamp: 4500, reactions: { a: ['d'] } })
-    const rs = [mergeRoomRows(mergeRoomRows(a,b),c), mergeRoomRows(a,mergeRoomRows(b,c)), mergeRoomRows(mergeRoomRows(b,a),c), mergeRoomRows(mergeRoomRows(c,b),a)]
+    const rs = [mergeRows('room', mergeRows('room', a,b),c), mergeRows('room', a,mergeRows('room', b,c)), mergeRows('room', mergeRows('room', b,a),c), mergeRows('room', mergeRows('room', c,b),a)]
     for (const r of rs) expect(r).toEqual(rs[0])
   })
 
@@ -1789,12 +1789,12 @@ describe('mergeRoomRows — commutative, associative, field-complete', () => {
     const b = rrow({ body: 'same', reactions: { '2': ['n'] }, systemEvent: evt('b') })
     const c = rrow({ body: 'same', reactions: { '1': ['n'], '2': ['n'] }, systemEvent: evt('c') })
     const groupings = [
-      mergeRoomRows(mergeRoomRows(a, b), c),
-      mergeRoomRows(a, mergeRoomRows(b, c)),
-      mergeRoomRows(mergeRoomRows(b, a), c),
-      mergeRoomRows(mergeRoomRows(c, b), a),
-      mergeRoomRows(mergeRoomRows(a, c), b),
-      mergeRoomRows(c, mergeRoomRows(a, b)),
+      mergeRows('room', mergeRows('room', a, b), c),
+      mergeRows('room', a, mergeRows('room', b, c)),
+      mergeRows('room', mergeRows('room', b, a), c),
+      mergeRows('room', mergeRows('room', c, b), a),
+      mergeRows('room', mergeRows('room', a, c), b),
+      mergeRows('room', c, mergeRows('room', a, b)),
     ]
     for (const g of groupings) {
       // Projection tiebreak keeps row a's systemEvent in every grouping (a's is the
@@ -1830,14 +1830,14 @@ describe('v4 migration — identity-resolving canonicalization (streaming)', () 
       { cacheKey: 'k1', originId: 'O', type: 'groupchat', id: 'client-1', roomJid: ROOM, from: FROM, body: 'hi', timestamp: 1000, isOutgoing: true },
       { cacheKey: 'k2', stanzaId: 'S', originId: 'O', type: 'groupchat', id: 'server-9', roomJid: ROOM, from: FROM, body: 'hi', timestamp: 2000, isOutgoing: true },
     ])
-    const mine = (await messageCache.getRoomMessages(ROOM, {})).filter((m) => m.originId === 'O')
+    const mine = (await messageCache.getMessages('room', ROOM, {})).filter((m) => m.originId === 'O')
     expect(mine).toHaveLength(1)
     expect(mine[0].timestamp.getTime()).toBe(2000)
-    expect(await messageCache.getRoomMessage(ROOM, 'client-1')).not.toBeNull()
-    expect(await messageCache.getRoomMessage(ROOM, 'server-9')).not.toBeNull()
+    expect(await messageCache.getMessage('room', ROOM, 'client-1')).not.toBeNull()
+    expect(await messageCache.getMessage('room', ROOM, 'server-9')).not.toBeNull()
     // Room-scoped getRoomMessageByStanzaId(roomJid, stanzaId): the merged row
     // stays resolvable by its stanzaId within its own room.
-    expect(await messageCache.getRoomMessageByStanzaId(ROOM, 'S')).not.toBeNull()
+    expect(await messageCache.getMessageByStanzaId('room', ROOM, 'S')).not.toBeNull()
   })
 
   it('does not merge identical stanzaIds across different rooms', async () => {
@@ -1845,8 +1845,8 @@ describe('v4 migration — identity-resolving canonicalization (streaming)', () 
       { cacheKey: 'a', stanzaId: '1', type: 'groupchat', id: 'i', roomJid: 'A@c', from: 'A@c/x', body: 'a', timestamp: 1000, isOutgoing: false },
       { cacheKey: 'b', stanzaId: '1', type: 'groupchat', id: 'i', roomJid: 'B@c', from: 'B@c/x', body: 'b', timestamp: 1000, isOutgoing: false },
     ])
-    expect(await messageCache.getRoomMessages('A@c', {})).toHaveLength(1)
-    expect(await messageCache.getRoomMessages('B@c', {})).toHaveLength(1)
+    expect(await messageCache.getMessages('room', 'A@c', {})).toHaveLength(1)
+    expect(await messageCache.getMessages('room', 'B@c', {})).toHaveLength(1)
   })
 
   it('does not downgrade a decrypted body during migration', async () => {
@@ -1854,13 +1854,13 @@ describe('v4 migration — identity-resolving canonicalization (streaming)', () 
       { cacheKey: 'x', stanzaId: 'S1', type: 'groupchat', id: 'o2', roomJid: ROOM, from: FROM, body: '', unsupportedEncryption: { kind: 'x' }, timestamp: 3000, isOutgoing: false },
       { cacheKey: 'y', stanzaId: 'S1', type: 'groupchat', id: 'o2', roomJid: ROOM, from: FROM, body: 'decrypted', timestamp: 3000, isOutgoing: false },
     ])
-    expect((await messageCache.getRoomMessages(ROOM, {})).find((m) => m.stanzaId === 'S1')!.body).toBe('decrypted')
+    expect((await messageCache.getMessages('room', ROOM, {})).find((m) => m.stanzaId === 'S1')!.body).toBe('decrypted')
   })
 
   it('aborts the whole upgrade if the migration throws — DB stays at v3', async () => {
     await seedV3([{ cacheKey: 'z', stanzaId: 'S9', type: 'groupchat', id: 'o9', roomJid: ROOM, from: FROM, body: 'x', timestamp: 5000, isOutgoing: false }])
     messageCache._setMigrationFaultForTesting(true)
-    await expect(messageCache.getRoomMessages(ROOM, {})).resolves.toEqual([])
+    await expect(messageCache.getMessages('room', ROOM, {})).resolves.toEqual([])
     messageCache._setMigrationFaultForTesting(false); messageCache._resetDBForTesting()
     const raw = await openDB(dbName)
     expect(raw.version).toBe(3)
@@ -1876,75 +1876,75 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
   beforeEach(() => { globalThis.indexedDB = new IDBFactory(); messageCache._resetDBForTesting(); _resetStorageScopeForTesting() })
 
   it('merges a reflection (rewritten id + stanzaId) into the optimistic echo', async () => {
-    await messageCache.saveRoomMessage(mk())
-    await messageCache.saveRoomMessage(mk({ id: 'server-9', stanzaId: 'S', timestamp: new Date(4000) }))
-    const mine = (await messageCache.getRoomMessages(ROOM, {})).filter((m) => m.originId === 'O')
+    await messageCache.saveMessage('room', mk())
+    await messageCache.saveMessage('room', mk({ id: 'server-9', stanzaId: 'S', timestamp: new Date(4000) }))
+    const mine = (await messageCache.getMessages('room', ROOM, {})).filter((m) => m.originId === 'O')
     expect(mine).toHaveLength(1); expect(mine[0].timestamp.getTime()).toBe(4000)
   })
   it('the discarded optimistic id still resolves after the merge', async () => {
-    await messageCache.saveRoomMessage(mk()); await messageCache.saveRoomMessage(mk({ id: 'server-9', stanzaId: 'S' }))
-    expect(await messageCache.getRoomMessage(ROOM, 'client-1')).not.toBeNull()
-    expect(await messageCache.getRoomMessage(ROOM, 'server-9')).not.toBeNull()
-    expect(await messageCache.getRoomMessageByStanzaId(ROOM, 'S')).not.toBeNull()
+    await messageCache.saveMessage('room', mk()); await messageCache.saveMessage('room', mk({ id: 'server-9', stanzaId: 'S' }))
+    expect(await messageCache.getMessage('room', ROOM, 'client-1')).not.toBeNull()
+    expect(await messageCache.getMessage('room', ROOM, 'server-9')).not.toBeNull()
+    expect(await messageCache.getMessageByStanzaId('room', ROOM, 'S')).not.toBeNull()
   })
   it('updateRoomMessage that ADDS a stanzaId re-keys and merges with any matching row', async () => {
     // A separate MAM copy already carries stanzaId S and NO originId — so it shares
     // no identity tier with the optimistic echo (originId O, id client-1) and the two
     // stay SEPARATE at save time. If the MAM copy also carried originId O they would
     // merge on save, making updateRoomMessage a no-op and the re-key branch untested.
-    await messageCache.saveRoomMessage(mk({ id: 'server-9', stanzaId: 'S', originId: undefined }))
+    await messageCache.saveMessage('room', mk({ id: 'server-9', stanzaId: 'S', originId: undefined }))
     // ...and the optimistic row is only now confirmed via an identity-adding update.
-    await messageCache.saveRoomMessage(mk()) // optimistic: originId O, no stanzaId
-    await messageCache.updateRoomMessage(ROOM, 'client-1', { stanzaId: 'S', originId: 'O' })
-    expect((await messageCache.getRoomMessages(ROOM, {})).filter((m) => m.originId === 'O')).toHaveLength(1)
+    await messageCache.saveMessage('room', mk()) // optimistic: originId O, no stanzaId
+    await messageCache.updateMessage('room', ROOM, 'client-1', { stanzaId: 'S', originId: 'O' })
+    expect((await messageCache.getMessages('room', ROOM, {})).filter((m) => m.originId === 'O')).toHaveLength(1)
   })
   it('updateRoomMessage that ADDS an originId (canonical key UNCHANGED) still merges a row already at that originId', async () => {
     // Row 1 has stanzaId S, no originId → canonical key stanzaId:S.
-    await messageCache.saveRoomMessage(mk({ id: 'a1', stanzaId: 'S', originId: undefined }))
+    await messageCache.saveMessage('room', mk({ id: 'a1', stanzaId: 'S', originId: undefined }))
     // Row 2 is a separate copy already carrying originId O (no stanzaId).
-    await messageCache.saveRoomMessage(mk({ id: 'a2', originId: 'O', stanzaId: undefined }))
+    await messageCache.saveMessage('room', mk({ id: 'a2', originId: 'O', stanzaId: undefined }))
     // Confirm row 1 also carries originId O — its canonical key stays stanzaId:S,
     // so a key-only identityChanged check would MISS this and leave two rows.
-    await messageCache.updateRoomMessage(ROOM, 'a1', { originId: 'O' })
-    expect((await messageCache.getRoomMessages(ROOM, {})).filter((m) => m.stanzaId === 'S' || m.originId === 'O')).toHaveLength(1)
-    expect(await messageCache.getRoomMessage(ROOM, 'a1')).not.toBeNull()          // every alias
-    expect(await messageCache.getRoomMessage(ROOM, 'a2')).not.toBeNull()          // preserved
-    expect(await messageCache.getRoomMessageByStanzaId(ROOM, 'S')).not.toBeNull()
+    await messageCache.updateMessage('room', ROOM, 'a1', { originId: 'O' })
+    expect((await messageCache.getMessages('room', ROOM, {})).filter((m) => m.stanzaId === 'S' || m.originId === 'O')).toHaveLength(1)
+    expect(await messageCache.getMessage('room', ROOM, 'a1')).not.toBeNull()          // every alias
+    expect(await messageCache.getMessage('room', ROOM, 'a2')).not.toBeNull()          // preserved
+    expect(await messageCache.getMessageByStanzaId('room', ROOM, 'S')).not.toBeNull()
   })
   it('re-keys a fallback row when an occupant id is added', async () => {
-    await messageCache.saveRoomMessage(mk({ originId: undefined, occupantId: undefined }))
+    await messageCache.saveMessage('room', mk({ originId: undefined, occupantId: undefined }))
 
-    await messageCache.updateRoomMessage(ROOM, 'client-1', { occupantId: 'occupant-alice' })
+    await messageCache.updateMessage('room', ROOM, 'client-1', { occupantId: 'occupant-alice' })
 
-    const stored = await messageCache.getRoomMessages(ROOM, {})
+    const stored = await messageCache.getMessages('room', ROOM, {})
     expect(stored).toHaveLength(1)
     expect(stored[0].occupantId).toBe('occupant-alice')
   })
   it('removes a deliberately cleared stale stanzaId alias (clearMessageStanzaId)', async () => {
-    await messageCache.saveRoomMessage(mk({ stanzaId: 'stale-S' })) // has stanzaId + originId O + id client-1
-    await messageCache.updateRoomMessage(ROOM, 'client-1', { stanzaId: undefined }) // revoke the stanzaId
+    await messageCache.saveMessage('room', mk({ stanzaId: 'stale-S' })) // has stanzaId + originId O + id client-1
+    await messageCache.updateMessage('room', ROOM, 'client-1', { stanzaId: undefined }) // revoke the stanzaId
     // The scoped stanza alias must be GONE — else a later message with 'stale-S' merges wrongly.
-    expect(await messageCache.getRoomMessageByStanzaId(ROOM, 'stale-S')).toBeNull()
+    expect(await messageCache.getMessageByStanzaId('room', ROOM, 'stale-S')).toBeNull()
     // ...but the message itself, and its other aliases, remain.
-    expect(await messageCache.getRoomMessage(ROOM, 'client-1')).not.toBeNull()
-    expect(await messageCache.getRoomMessages(ROOM, {})).toHaveLength(1)
+    expect(await messageCache.getMessage('room', ROOM, 'client-1')).not.toBeNull()
+    expect(await messageCache.getMessages('room', ROOM, {})).toHaveLength(1)
   })
   it('updateRoomMessageReactions resolves a pre-merge id and is authoritative (does not un-remove)', async () => {
-    await messageCache.saveRoomMessage(mk()); await messageCache.saveRoomMessage(mk({ id: 'server-9', stanzaId: 'S' }))
-    await messageCache.updateRoomMessageReactions(ROOM, 'client-1', 'r@c/bob', ['👍'])
-    expect((await messageCache.getRoomMessage(ROOM, 'server-9'))!.reactions?.['👍']).toContain('r@c/bob')
-    await messageCache.updateRoomMessageReactions(ROOM, 'client-1', 'r@c/bob', []) // removal
-    expect((await messageCache.getRoomMessage(ROOM, 'server-9'))!.reactions?.['👍'] ?? []).not.toContain('r@c/bob')
+    await messageCache.saveMessage('room', mk()); await messageCache.saveMessage('room', mk({ id: 'server-9', stanzaId: 'S' }))
+    await messageCache.updateMessageReactions('room', ROOM, 'client-1', 'r@c/bob', ['👍'])
+    expect((await messageCache.getMessage('room', ROOM, 'server-9'))!.reactions?.['👍']).toContain('r@c/bob')
+    await messageCache.updateMessageReactions('room', ROOM, 'client-1', 'r@c/bob', []) // removal
+    expect((await messageCache.getMessage('room', ROOM, 'server-9'))!.reactions?.['👍'] ?? []).not.toContain('r@c/bob')
   })
   it('updateRoomMessageReactions resolves an origin id', async () => {
-    await messageCache.saveRoomMessage(mk({ id: 'origin-reaction-target', originId: 'reaction-origin' }))
-    const found = await messageCache.updateRoomMessageReactions(ROOM, 'reaction-origin', 'r@c/bob', ['👍'])
+    await messageCache.saveMessage('room', mk({ id: 'origin-reaction-target', originId: 'reaction-origin' }))
+    const found = await messageCache.updateMessageReactions('room', ROOM, 'reaction-origin', 'r@c/bob', ['👍'])
     expect(found).toBe(true)
-    expect((await messageCache.getRoomMessage(ROOM, 'origin-reaction-target'))!.reactions?.['👍']).toContain('r@c/bob')
+    expect((await messageCache.getMessage('room', ROOM, 'origin-reaction-target'))!.reactions?.['👍']).toContain('r@c/bob')
   })
   it('getRoomMessagesAround returns each logical message once', async () => {
-    await messageCache.saveRoomMessage(mk({ stanzaId: 'S' }))
-    expect((await messageCache.getRoomMessagesAround(ROOM, { id: 'client-1' }, { before: 5, after: 5 })).filter((m) => m.originId === 'O')).toHaveLength(1)
+    await messageCache.saveMessage('room', mk({ stanzaId: 'S' }))
+    expect((await messageCache.getMessagesAround('room', ROOM, { id: 'client-1' }, { before: 5, after: 5 })).filter((m) => m.originId === 'O')).toHaveLength(1)
   })
   it('updateRoomMessageReactions on a stanza-id fallback is room-scoped — a same-stanzaId message in another room is untouched', async () => {
     // Two DIFFERENT rooms each cache a message under the SAME server-assigned
@@ -1954,17 +1954,17 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     // stanza alias — a global stanzaId index would resolve to whichever row it
     // hits first, independent of which room the reaction actually belongs to.
     const ROOM_B = 'other-room@c', FROM_B = 'other-room@c/carol'
-    await messageCache.saveRoomMessage(mk({ id: 'a-room-msg', stanzaId: 'DUP', originId: undefined }))
-    await messageCache.saveRoomMessage({
+    await messageCache.saveMessage('room', mk({ id: 'a-room-msg', stanzaId: 'DUP', originId: undefined }))
+    await messageCache.saveMessage('room', {
       type: 'groupchat', id: 'b-room-msg', roomJid: ROOM_B, from: FROM_B, body: 'hi',
       timestamp: new Date(5000), isOutgoing: false, stanzaId: 'DUP',
     } as RoomMessage)
 
-    const ok = await messageCache.updateRoomMessageReactions(ROOM, 'DUP', 'r@c/bob', ['🔥'])
+    const ok = await messageCache.updateMessageReactions('room', ROOM, 'DUP', 'r@c/bob', ['🔥'])
     expect(ok).toBe(true)
 
-    const roomAMsg = (await messageCache.getRoomMessages(ROOM, {})).find((m) => m.id === 'a-room-msg')
-    const roomBMsg = (await messageCache.getRoomMessages(ROOM_B, {})).find((m) => m.id === 'b-room-msg')
+    const roomAMsg = (await messageCache.getMessages('room', ROOM, {})).find((m) => m.id === 'a-room-msg')
+    const roomBMsg = (await messageCache.getMessages('room', ROOM_B, {})).find((m) => m.id === 'b-room-msg')
     expect(roomAMsg!.reactions?.['🔥']).toContain('r@c/bob')
     expect(roomBMsg!.reactions).toBeUndefined()
   })
@@ -1976,17 +1976,17 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     // getFromIndex('ids', …) returns ROOM_B's row first and writes the reaction to
     // the wrong room.
     const ROOM_B = 'other-room@c', FROM_B = 'other-room@c/carol'
-    await messageCache.saveRoomMessage(mk({ id: 'SAME', originId: undefined }))
-    await messageCache.saveRoomMessage({
+    await messageCache.saveMessage('room', mk({ id: 'SAME', originId: undefined }))
+    await messageCache.saveMessage('room', {
       type: 'groupchat', id: 'SAME', roomJid: ROOM_B, from: FROM_B, body: 'hi',
       timestamp: new Date(5000), isOutgoing: false,
     } as RoomMessage)
 
-    const ok = await messageCache.updateRoomMessageReactions(ROOM, 'SAME', 'r@c/bob', ['🔥'])
+    const ok = await messageCache.updateMessageReactions('room', ROOM, 'SAME', 'r@c/bob', ['🔥'])
     expect(ok).toBe(true)
 
-    const roomAMsg = (await messageCache.getRoomMessages(ROOM, {})).find((m) => m.id === 'SAME')
-    const roomBMsg = (await messageCache.getRoomMessages(ROOM_B, {})).find((m) => m.id === 'SAME')
+    const roomAMsg = (await messageCache.getMessages('room', ROOM, {})).find((m) => m.id === 'SAME')
+    const roomBMsg = (await messageCache.getMessages('room', ROOM_B, {})).find((m) => m.id === 'SAME')
     expect(roomAMsg!.reactions?.['🔥']).toContain('r@c/bob')
     expect(roomBMsg!.reactions).toBeUndefined()
   })
@@ -1995,22 +1995,22 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     // the requested room. ROOM_B sorts before ROOM by cacheKey, so an unscoped
     // index `get` would return ROOM_B's row for a ROOM lookup.
     const ROOM_B = 'other-room@c'
-    await messageCache.saveRoomMessage(mk({ id: 'SAME', originId: undefined }))
-    await messageCache.saveRoomMessage({
+    await messageCache.saveMessage('room', mk({ id: 'SAME', originId: undefined }))
+    await messageCache.saveMessage('room', {
       type: 'groupchat', id: 'SAME', roomJid: ROOM_B, from: `${ROOM_B}/carol`, body: 'decoy',
       timestamp: new Date(5000), isOutgoing: false,
     } as RoomMessage)
-    expect((await messageCache.getRoomMessage(ROOM, 'SAME'))!.from).toBe(FROM)
-    expect((await messageCache.getRoomMessage(ROOM_B, 'SAME'))!.from).toBe(`${ROOM_B}/carol`)
+    expect((await messageCache.getMessage('room', ROOM, 'SAME'))!.from).toBe(FROM)
+    expect((await messageCache.getMessage('room', ROOM_B, 'SAME'))!.from).toBe(`${ROOM_B}/carol`)
   })
   it('getRoomMessage uses occupant evidence for a colliding room id and nick', async () => {
-    await messageCache.saveRoomMessage(mk({
+    await messageCache.saveMessage('room', mk({
       id: 'SAME',
       originId: undefined,
       occupantId: 'old-occupant',
       body: 'departed',
     }))
-    await messageCache.saveRoomMessage(mk({
+    await messageCache.saveMessage('room', mk({
       id: 'SAME',
       originId: undefined,
       occupantId: 'new-occupant',
@@ -2018,21 +2018,21 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
       timestamp: new Date(6000),
     }))
 
-    expect((await messageCache.getRoomMessage(
-      ROOM,
+    expect((await messageCache.getMessage(
+      'room', ROOM,
       'SAME',
       FROM,
       'new-occupant'
     ))?.body).toBe('newcomer')
   })
   it('does not guess between conflicting occupants without evidence', async () => {
-    await messageCache.saveRoomMessage(mk({
+    await messageCache.saveMessage('room', mk({
       id: 'AMBIGUOUS',
       originId: undefined,
       stanzaId: 'OLD',
       occupantId: 'old-occupant',
     }))
-    await messageCache.saveRoomMessage(mk({
+    await messageCache.saveMessage('room', mk({
       id: 'AMBIGUOUS',
       originId: undefined,
       stanzaId: 'NEW',
@@ -2040,10 +2040,10 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
       timestamp: new Date(6500),
     }))
 
-    expect(await messageCache.getRoomMessage(ROOM, 'AMBIGUOUS', FROM)).toBeNull()
+    expect(await messageCache.getMessage('room', ROOM, 'AMBIGUOUS', FROM)).toBeNull()
   })
   it('does not inherit cached retraction state across an occupant conflict', async () => {
-    await messageCache.saveRoomMessage(mk({
+    await messageCache.saveMessage('room', mk({
       id: 'REUSED',
       originId: undefined,
       occupantId: 'old-occupant',
@@ -2065,47 +2065,47 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     // same-id message. The assertions read each room through the room-scoped
     // getRoomMessages cursor, independent of the id resolver under test.
     const ROOM_B = 'other-room@c'
-    await messageCache.saveRoomMessage(mk({ id: 'SAME', originId: undefined }))
-    await messageCache.saveRoomMessage({
+    await messageCache.saveMessage('room', mk({ id: 'SAME', originId: undefined }))
+    await messageCache.saveMessage('room', {
       type: 'groupchat', id: 'SAME', roomJid: ROOM_B, from: `${ROOM_B}/carol`, body: 'hi',
       timestamp: new Date(5000), isOutgoing: false,
     } as RoomMessage)
 
-    await messageCache.updateRoomMessage(ROOM, 'SAME', { isRetracted: true })
+    await messageCache.updateMessage('room', ROOM, 'SAME', { isRetracted: true })
 
-    const a = (await messageCache.getRoomMessages(ROOM, {})).find((m) => m.id === 'SAME')
-    const b = (await messageCache.getRoomMessages(ROOM_B, {})).find((m) => m.id === 'SAME')
+    const a = (await messageCache.getMessages('room', ROOM, {})).find((m) => m.id === 'SAME')
+    const b = (await messageCache.getMessages('room', ROOM_B, {})).find((m) => m.id === 'SAME')
     expect(a!.isRetracted).toBe(true)
     expect(b!.isRetracted).toBeFalsy()
   })
   it('deleteRoomMessage is room-scoped — a same-id message in another room survives', async () => {
     const ROOM_B = 'other-room@c'
-    await messageCache.saveRoomMessage(mk({ id: 'SAME', originId: undefined }))
-    await messageCache.saveRoomMessage({
+    await messageCache.saveMessage('room', mk({ id: 'SAME', originId: undefined }))
+    await messageCache.saveMessage('room', {
       type: 'groupchat', id: 'SAME', roomJid: ROOM_B, from: `${ROOM_B}/carol`, body: 'keep',
       timestamp: new Date(5000), isOutgoing: false,
     } as RoomMessage)
 
-    await messageCache.deleteRoomMessage(ROOM, 'SAME') // delete THIS room's copy
+    await messageCache.deleteMessage('room', ROOM, 'SAME') // delete THIS room's copy
 
-    expect((await messageCache.getRoomMessages(ROOM_B, {})).some((m) => m.id === 'SAME')).toBe(true)
-    expect((await messageCache.getRoomMessages(ROOM, {})).some((m) => m.id === 'SAME')).toBe(false)
+    expect((await messageCache.getMessages('room', ROOM_B, {})).some((m) => m.id === 'SAME')).toBe(true)
+    expect((await messageCache.getMessages('room', ROOM, {})).some((m) => m.id === 'SAME')).toBe(false)
   })
   it('getRoomMessagesAround resolves the anchor in the REQUESTED room, not a same-id decoy elsewhere', async () => {
     // ROOM holds the real anchor (t=1000) plus later fillers. ROOM_B holds a same-id
     // decoy far in the future (t=10000) whose cacheKey sorts first. An unscoped anchor
     // lookup builds the window around t=10000, dropping the real anchor at t=1000.
     const ROOM_B = 'other-room@c'
-    await messageCache.saveRoomMessage(mk({ id: 'ANCH', originId: undefined, timestamp: new Date(1000) }))
+    await messageCache.saveMessage('room', mk({ id: 'ANCH', originId: undefined, timestamp: new Date(1000) }))
     for (const [i, t] of [[1, 2000], [2, 3000], [3, 4000], [4, 5000]] as const) {
-      await messageCache.saveRoomMessage(mk({ id: `f${i}`, originId: undefined, timestamp: new Date(t) }))
+      await messageCache.saveMessage('room', mk({ id: `f${i}`, originId: undefined, timestamp: new Date(t) }))
     }
-    await messageCache.saveRoomMessage({
+    await messageCache.saveMessage('room', {
       type: 'groupchat', id: 'ANCH', roomJid: ROOM_B, from: `${ROOM_B}/carol`, body: 'decoy',
       timestamp: new Date(10000), isOutgoing: false,
     } as RoomMessage)
 
-    const around = await messageCache.getRoomMessagesAround(ROOM, { id: 'ANCH' }, { before: 2, after: 2 })
+    const around = await messageCache.getMessagesAround('room', ROOM, { id: 'ANCH' }, { before: 2, after: 2 })
     expect(around.some((m) => m.timestamp.getTime() === 1000)).toBe(true)
   })
 })
@@ -2119,12 +2119,12 @@ describe('countUnreadInArchive (chat)', () => {
   beforeEach(() => { globalThis.indexedDB = new IDBFactory(); messageCache._resetDBForTesting(); _resetStorageScopeForTesting() })
 
   it('counts renderable incoming messages after the pointer', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       createMockMessage(CONV, { id: 'm1', timestamp: new Date(1000), isOutgoing: false }),
       createMockMessage(CONV, { id: 'm2', timestamp: new Date(2000), isOutgoing: false }),
       createMockMessage(CONV, { id: 'm3', timestamp: new Date(3000), isOutgoing: false }),
     ])
-    const res = await messageCache.countUnreadInArchive(CONV, {
+    const res = await messageCache.countUnreadInArchive('chat', CONV, {
       floor: new Date(1000),
       pointer: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'm1' } },
     })
@@ -2132,12 +2132,12 @@ describe('countUnreadInArchive (chat)', () => {
   })
 
   it('excludes outgoing messages', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       createMockMessage(CONV, { id: 'm1', timestamp: new Date(1000), isOutgoing: false }),
       createMockMessage(CONV, { id: 'm2', timestamp: new Date(2000), isOutgoing: true }),
       createMockMessage(CONV, { id: 'm3', timestamp: new Date(3000), isOutgoing: false }),
     ])
-    const res = await messageCache.countUnreadInArchive(CONV, {
+    const res = await messageCache.countUnreadInArchive('chat', CONV, {
       floor: new Date(1000),
       pointer: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'm1' } },
     })
@@ -2145,12 +2145,12 @@ describe('countUnreadInArchive (chat)', () => {
   })
 
   it('excludes non-renderable (blank legacy) rows', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       createMockMessage(CONV, { id: 'm1', timestamp: new Date(1000), isOutgoing: false }),
       createMockMessage(CONV, { id: 'm2', timestamp: new Date(2000), isOutgoing: false, body: '' }),
       createMockMessage(CONV, { id: 'm3', timestamp: new Date(3000), isOutgoing: false }),
     ])
-    const res = await messageCache.countUnreadInArchive(CONV, {
+    const res = await messageCache.countUnreadInArchive('chat', CONV, {
       floor: new Date(1000),
       pointer: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'm1' } },
     })
@@ -2159,11 +2159,11 @@ describe('countUnreadInArchive (chat)', () => {
 
   it('same-ms: pointer at m1@t, unread m2@t later by id, counts exactly 1', async () => {
     const t = new Date(5000)
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       createMockMessage(CONV, { id: 'm1', timestamp: t, isOutgoing: false }),
       createMockMessage(CONV, { id: 'm2', timestamp: t, isOutgoing: false }),
     ])
-    const res = await messageCache.countUnreadInArchive(CONV, {
+    const res = await messageCache.countUnreadInArchive('chat', CONV, {
       floor: t,
       pointer: { role: 'exact', timestamp: t.getTime(), tiebreak: { kind: 'chat', id: 'm1' } },
     })
@@ -2175,23 +2175,23 @@ describe('countUnreadInArchive (chat)', () => {
     // not a large archive. Ten rows against a cap of five: without the cursor
     // `break` this counts 10.
     await messageCache.saveMessages(
-      Array.from({ length: 10 }, (_, i) => createMockMessage(CONV, { id: `m${i}`, timestamp: new Date(1000 + i), isOutgoing: false }))
+      'chat', Array.from({ length: 10 }, (_, i) => createMockMessage(CONV, { id: `m${i}`, timestamp: new Date(1000 + i), isOutgoing: false }))
     )
-    const res = await messageCache.countUnreadInArchive(CONV, { floor: new Date(0), unreadCap: 5 })
+    const res = await messageCache.countUnreadInArchive('chat', CONV, { floor: new Date(0), unreadCap: 5 })
     expect(res!.unread).toBe(5)
   })
 
   it('does not saturate below unreadCap — reports the true count when rows < cap', async () => {
     await messageCache.saveMessages(
-      Array.from({ length: 3 }, (_, i) => createMockMessage(CONV, { id: `m${i}`, timestamp: new Date(1000 + i), isOutgoing: false }))
+      'chat', Array.from({ length: 3 }, (_, i) => createMockMessage(CONV, { id: `m${i}`, timestamp: new Date(1000 + i), isOutgoing: false }))
     )
-    const res = await messageCache.countUnreadInArchive(CONV, { floor: new Date(0), unreadCap: 5 })
+    const res = await messageCache.countUnreadInArchive('chat', CONV, { floor: new Date(0), unreadCap: 5 })
     expect(res!.unread).toBe(3)
   })
 
   it('missing tiebreak falls back to at-or-after-timestamp (over-counts, safe)', async () => {
     const t = new Date(5000)
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       createMockMessage(CONV, { id: 'm1', timestamp: t, isOutgoing: false }),
       createMockMessage(CONV, { id: 'm2', timestamp: t, isOutgoing: false }),
       createMockMessage(CONV, { id: 'm3', timestamp: new Date(6000), isOutgoing: false }),
@@ -2201,7 +2201,7 @@ describe('countUnreadInArchive (chat)', () => {
     // m1 (the pointer's own message) and m2 (its same-ms sibling) resolve as "after"
     // the pointer — the read boundary itself gets re-counted rather than a genuinely
     // unread sibling being silently dropped. m3 (a later timestamp) counts regardless.
-    const res = await messageCache.countUnreadInArchive(CONV, {
+    const res = await messageCache.countUnreadInArchive('chat', CONV, {
       floor: t,
       pointer: { role: 'floor', timestamp: t.getTime() },
     })
@@ -2213,7 +2213,7 @@ describe('countUnreadInArchive (chat)', () => {
     const original = globalThis.indexedDB
     globalThis.indexedDB = { open: () => { throw new Error('boom') } } as unknown as IDBFactory
     try {
-      const res = await messageCache.countUnreadInArchive(CONV, { floor: new Date(0) })
+      const res = await messageCache.countUnreadInArchive('chat', CONV, { floor: new Date(0) })
       expect(res).toBeNull()
     } finally {
       globalThis.indexedDB = original
@@ -2227,12 +2227,12 @@ describe('countRoomUnreadInArchive (room)', () => {
   beforeEach(() => { globalThis.indexedDB = new IDBFactory(); messageCache._resetDBForTesting(); _resetStorageScopeForTesting() })
 
   it('counts renderable incoming messages after the pointer', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       createMockRoomMessage(ROOM, { id: 'm1', timestamp: new Date(1000), isOutgoing: false }),
       createMockRoomMessage(ROOM, { id: 'm2', timestamp: new Date(2000), isOutgoing: false }),
       createMockRoomMessage(ROOM, { id: 'm3', timestamp: new Date(3000), isOutgoing: false }),
     ])
-    const res = await messageCache.countRoomUnreadInArchive(ROOM, {
+    const res = await messageCache.countUnreadInArchive('room', ROOM, {
       floor: new Date(1000),
       pointer: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
     })
@@ -2240,12 +2240,12 @@ describe('countRoomUnreadInArchive (room)', () => {
   })
 
   it('excludes outgoing messages', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       createMockRoomMessage(ROOM, { id: 'm1', timestamp: new Date(1000), isOutgoing: false }),
       createMockRoomMessage(ROOM, { id: 'm2', timestamp: new Date(2000), isOutgoing: true }),
       createMockRoomMessage(ROOM, { id: 'm3', timestamp: new Date(3000), isOutgoing: false }),
     ])
-    const res = await messageCache.countRoomUnreadInArchive(ROOM, {
+    const res = await messageCache.countUnreadInArchive('room', ROOM, {
       floor: new Date(1000),
       pointer: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
     })
@@ -2253,12 +2253,12 @@ describe('countRoomUnreadInArchive (room)', () => {
   })
 
   it('excludes non-renderable (blank legacy) rows', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       createMockRoomMessage(ROOM, { id: 'm1', timestamp: new Date(1000), isOutgoing: false }),
       createMockRoomMessage(ROOM, { id: 'm2', timestamp: new Date(2000), isOutgoing: false, body: '' }),
       createMockRoomMessage(ROOM, { id: 'm3', timestamp: new Date(3000), isOutgoing: false }),
     ])
-    const res = await messageCache.countRoomUnreadInArchive(ROOM, {
+    const res = await messageCache.countUnreadInArchive('room', ROOM, {
       floor: new Date(1000),
       pointer: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
     })
@@ -2267,11 +2267,11 @@ describe('countRoomUnreadInArchive (room)', () => {
 
   it('same-ms: pointer at m1@t (from alice), unread m2@t (from bob, sorts after) counts exactly 1', async () => {
     const t = new Date(5000)
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       createMockRoomMessage(ROOM, { id: 'm1', from: `${ROOM}/alice`, timestamp: t, isOutgoing: false }),
       createMockRoomMessage(ROOM, { id: 'm2', from: `${ROOM}/bob`, timestamp: t, isOutgoing: false }),
     ])
-    const res = await messageCache.countRoomUnreadInArchive(ROOM, {
+    const res = await messageCache.countUnreadInArchive('room', ROOM, {
       floor: t,
       pointer: { role: 'exact', timestamp: t.getTime(), tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm1' } },
     })
@@ -2287,14 +2287,14 @@ describe('countRoomUnreadInArchive (room)', () => {
   it('same-ms, same from AND same id: counts the row the OTHER occupant wrote', async () => {
     const t = new Date(5000)
     const shared = { id: 'm1', from: `${ROOM}/alice`, timestamp: t, isOutgoing: false }
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       createMockRoomMessage(ROOM, { ...shared, stanzaId: 'arch-a', occupantId: 'occ-a' }),
       createMockRoomMessage(ROOM, { ...shared, stanzaId: 'arch-b', occupantId: 'occ-b' }),
     ])
     // Two rows, not one: conflicting occupant-ids block the merge.
-    expect(await messageCache.getRoomMessageCount(ROOM)).toBe(2)
+    expect(await messageCache.getMessageCount('room', ROOM)).toBe(2)
 
-    const res = await messageCache.countRoomUnreadInArchive(ROOM, {
+    const res = await messageCache.countUnreadInArchive('room', ROOM, {
       floor: t,
       pointer: {
         role: 'exact',
@@ -2313,11 +2313,11 @@ describe('countRoomUnreadInArchive (room)', () => {
   it('same-ms pair under an occupant-less pointer over-counts rather than swallowing', async () => {
     const t = new Date(5000)
     const shared = { id: 'm1', from: `${ROOM}/alice`, timestamp: t, isOutgoing: false }
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       createMockRoomMessage(ROOM, { ...shared, stanzaId: 'arch-a', occupantId: 'occ-a' }),
       createMockRoomMessage(ROOM, { ...shared, stanzaId: 'arch-b', occupantId: 'occ-b' }),
     ])
-    const res = await messageCache.countRoomUnreadInArchive(ROOM, {
+    const res = await messageCache.countUnreadInArchive('room', ROOM, {
       floor: t,
       pointer: { role: 'exact', timestamp: t.getTime(), tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm1' } },
     })
@@ -2326,34 +2326,34 @@ describe('countRoomUnreadInArchive (room)', () => {
 
   it('missing tiebreak falls back to at-or-after-timestamp (over-counts, safe)', async () => {
     const t = new Date(5000)
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       createMockRoomMessage(ROOM, { id: 'm1', from: `${ROOM}/alice`, timestamp: t, isOutgoing: false }),
       createMockRoomMessage(ROOM, { id: 'm2', from: `${ROOM}/bob`, timestamp: t, isOutgoing: false }),
       createMockRoomMessage(ROOM, { id: 'm3', from: `${ROOM}/bob`, timestamp: new Date(6000), isOutgoing: false }),
     ])
     // Same over-count rationale as the chat case: both same-ms rows (m1, m2) resolve
     // as "after" an unresolved pointer position; m3 counts regardless of the key.
-    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: t, pointer: { role: 'floor', timestamp: t.getTime() } })
+    const res = await messageCache.countUnreadInArchive('room', ROOM, { floor: t, pointer: { role: 'floor', timestamp: t.getTime() } })
     expect(res).toEqual({ unread: 3 })
   })
 
   it('saturates unread at unreadCap and stops the walk there', async () => {
-    await messageCache.saveRoomMessages(
-      Array.from({ length: 10 }, (_, i) =>
+    await messageCache.saveMessages(
+      'room', Array.from({ length: 10 }, (_, i) =>
         createMockRoomMessage(ROOM, { id: `m${i}`, from: `${ROOM}/alice`, timestamp: new Date(1000 + i), isOutgoing: false })
       )
     )
-    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: new Date(0), unreadCap: 5 })
+    const res = await messageCache.countUnreadInArchive('room', ROOM, { floor: new Date(0), unreadCap: 5 })
     expect(res!.unread).toBe(5)
   })
 
   it('does not saturate below unreadCap — reports the true count when rows < cap', async () => {
-    await messageCache.saveRoomMessages(
-      Array.from({ length: 3 }, (_, i) =>
+    await messageCache.saveMessages(
+      'room', Array.from({ length: 3 }, (_, i) =>
         createMockRoomMessage(ROOM, { id: `m${i}`, from: `${ROOM}/alice`, timestamp: new Date(1000 + i), isOutgoing: false })
       )
     )
-    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: new Date(0), unreadCap: 5 })
+    const res = await messageCache.countUnreadInArchive('room', ROOM, { floor: new Date(0), unreadCap: 5 })
     expect(res!.unread).toBe(3)
   })
 
@@ -2362,7 +2362,7 @@ describe('countRoomUnreadInArchive (room)', () => {
     const original = globalThis.indexedDB
     globalThis.indexedDB = { open: () => { throw new Error('boom') } } as unknown as IDBFactory
     try {
-      const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: new Date(0) })
+      const res = await messageCache.countUnreadInArchive('room', ROOM, { floor: new Date(0) })
       expect(res).toBeNull()
     } finally {
       globalThis.indexedDB = original
@@ -2443,26 +2443,26 @@ describe('cursor ranges stay scoped to one entity', () => {
   async function seedChats(): Promise<void> {
     for (const id of [FIRST, MIDDLE, LAST]) {
       await messageCache.saveMessages(
-        Array.from({ length: PER }, (_, i) =>
+        'chat', Array.from({ length: PER }, (_, i) =>
           createMockMessage(id, { id: `${id}-${i}`, timestamp: new Date(BASE + i * 60_000) })
         )
       )
     }
     for (const id of [FIRST, MIDDLE, LAST]) {
-      expect(await messageCache.getMessageCount(id)).toBe(PER)
+      expect(await messageCache.getMessageCount('chat', id)).toBe(PER)
     }
   }
 
   async function seedRooms(): Promise<void> {
     for (const jid of [FIRST, MIDDLE, LAST]) {
-      await messageCache.saveRoomMessages(
-        Array.from({ length: PER }, (_, i) =>
+      await messageCache.saveMessages(
+        'room', Array.from({ length: PER }, (_, i) =>
           createMockRoomMessage(jid, { id: `${jid}-${i}`, timestamp: new Date(BASE + i * 60_000) })
         )
       )
     }
     for (const jid of [FIRST, MIDDLE, LAST]) {
-      expect(await messageCache.getRoomMessageCount(jid)).toBe(PER)
+      expect(await messageCache.getMessageCount('room', jid)).toBe(PER)
     }
   }
 
@@ -2474,7 +2474,7 @@ describe('cursor ranges stay scoped to one entity', () => {
     // latest-100 slice. FIRST sorts before every other conversation, so an
     // unscoped lowerBound walk crosses all 400 of their rows.
     ranges = []
-    const tail = await messageCache.getMessages(FIRST, {
+    const tail = await messageCache.getMessages('chat', FIRST, {
       after: new Date(BASE + ANCHOR * 60_000),
     })
 
@@ -2490,7 +2490,7 @@ describe('cursor ranges stay scoped to one entity', () => {
     // cutoff, so the walk never satisfies `results.length < limit` and — with an
     // unscoped upperBound — keeps descending through the 400 earlier-sorting rows.
     ranges = []
-    const head = await messageCache.getMessages(LAST, {
+    const head = await messageCache.getMessages('chat', LAST, {
       before: new Date(BASE + 10 * 60_000),
       limit: 51,
     })
@@ -2504,7 +2504,7 @@ describe('cursor ranges stay scoped to one entity', () => {
     await seedRooms()
 
     ranges = []
-    const tail = await messageCache.getRoomMessages(FIRST, {
+    const tail = await messageCache.getMessages('room', FIRST, {
       after: new Date(BASE + ANCHOR * 60_000),
     })
     expect(tail).toHaveLength(PER - ANCHOR - 1)
@@ -2512,7 +2512,7 @@ describe('cursor ranges stay scoped to one entity', () => {
     expectScopedTo(ranges[0], FIRST)
 
     ranges = []
-    const head = await messageCache.getRoomMessages(LAST, {
+    const head = await messageCache.getMessages('room', LAST, {
       before: new Date(BASE + 10 * 60_000),
       limit: 51,
     })
@@ -2525,11 +2525,11 @@ describe('cursor ranges stay scoped to one entity', () => {
     await seedChats()
 
     ranges = []
-    await messageCache.getMessages(FIRST, { limit: 100, latest: true })
+    await messageCache.getMessages('chat', FIRST, { limit: 100, latest: true })
     expectScopedTo(ranges[0], FIRST)
 
     ranges = []
-    await messageCache.getMessages(FIRST, {
+    await messageCache.getMessages('chat', FIRST, {
       after: new Date(BASE),
       before: new Date(BASE + 10 * 60_000),
     })
@@ -2620,15 +2620,15 @@ describe('v5 migration — chat-store canonicalization', () => {
       legacyChat({ id: 'c4', conversationId: BOB, from: BOB, body: 'other peer', timestamp: 4000 }),
     ])
 
-    const alice = await messageCache.getMessages(ALICE, {})
-    const bob = await messageCache.getMessages(BOB, {})
+    const alice = await messageCache.getMessages('chat', ALICE, {})
+    const bob = await messageCache.getMessages('chat', BOB, {})
     expect(alice.map((m) => m.body).sort()).toEqual(['first', 'no archive id', 'second'])
     expect(bob.map((m) => m.body)).toEqual(['other peer'])
     // Every row stays addressable by the client id it was stored under.
     for (const id of ['c1', 'c2', 'c3', 'c4']) {
-      expect((await messageCache.getMessage(id === 'c4' ? BOB : ALICE, id))?.id).toBe(id)
+      expect((await messageCache.getMessage('chat', id === 'c4' ? BOB : ALICE, id))?.id).toBe(id)
     }
-    expect(await messageCache.getTotalMessageCount()).toBe(4)
+    expect(await messageCache.getTotalMessageCount('chat')).toBe(4)
   })
 
   it('drains BOTH legacy stores in one upgrade, from a v3 database', async () => {
@@ -2637,8 +2637,8 @@ describe('v5 migration — chat-store canonicalization', () => {
       [{ cacheKey: 'k1', type: 'groupchat', id: 'r1', roomJid: ROOM, from: `${ROOM}/alice`, body: 'room survives', timestamp: 1000, isOutgoing: false }]
     )
 
-    expect((await messageCache.getMessages(ALICE, {})).map((m) => m.body)).toEqual(['chat survives'])
-    expect((await messageCache.getRoomMessages(ROOM, {})).map((m) => m.body)).toEqual(['room survives'])
+    expect((await messageCache.getMessages('chat', ALICE, {})).map((m) => m.body)).toEqual(['chat survives'])
+    expect((await messageCache.getMessages('room', ROOM, {})).map((m) => m.body)).toEqual(['room survives'])
 
     const raw = await openDB(dbName)
     expect(raw.version).toBe(11)
@@ -2652,12 +2652,12 @@ describe('v5 migration — chat-store canonicalization', () => {
     // Not reachable from a legacy seed: `keyPath: 'id'` meant only ONE of these
     // could be stored at all, which is the wider half of the same defect. Driven
     // through the live write path, where it is reachable.
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       { type: 'chat', id: 'shared', stanzaId: undefined, originId: undefined, conversationId: ALICE, from: JID, body: 'to alice', timestamp: new Date(1000), isOutgoing: true },
       { type: 'chat', id: 'shared', stanzaId: undefined, originId: undefined, conversationId: BOB, from: JID, body: 'to bob', timestamp: new Date(2000), isOutgoing: true },
     ])
-    expect((await messageCache.getMessages(ALICE, {})).map((m) => m.body)).toEqual(['to alice'])
-    expect((await messageCache.getMessages(BOB, {})).map((m) => m.body)).toEqual(['to bob'])
+    expect((await messageCache.getMessages('chat', ALICE, {})).map((m) => m.body)).toEqual(['to alice'])
+    expect((await messageCache.getMessages('chat', BOB, {})).map((m) => m.body)).toEqual(['to bob'])
   })
 
   it('does not merge two senders that share a client id in one conversation', async () => {
@@ -2667,7 +2667,7 @@ describe('v5 migration — chat-store canonicalization', () => {
       legacyChat({ id: 'mine', from: JID, isOutgoing: true, body: 'mine' }),
       legacyChat({ id: 'theirs', from: ALICE, body: 'theirs' }),
     ])
-    expect((await messageCache.getMessages(ALICE, {})).map((m) => m.body).sort()).toEqual(['mine', 'theirs'])
+    expect((await messageCache.getMessages('chat', ALICE, {})).map((m) => m.body).sort()).toEqual(['mine', 'theirs'])
   })
 
   it('collapses copies that agree on an archive id, keeping every id resolvable', async () => {
@@ -2677,12 +2677,12 @@ describe('v5 migration — chat-store canonicalization', () => {
       legacyChat({ id: 'echo', originId: 'O', body: 'another', timestamp: 3000 }),
       legacyChat({ id: 'archived', originId: 'O', body: 'another', timestamp: 4000 }),
     ])
-    const rows = await messageCache.getMessages(ALICE, {})
+    const rows = await messageCache.getMessages('chat', ALICE, {})
     expect(rows).toHaveLength(2)
     for (const id of ['live', 'mam', 'echo', 'archived']) {
-      expect(await messageCache.getMessage(ALICE, id)).not.toBeNull()
+      expect(await messageCache.getMessage('chat', ALICE, id)).not.toBeNull()
     }
-    expect(await messageCache.getMessageByStanzaId(ALICE, 'S')).not.toBeNull()
+    expect(await messageCache.getMessageByStanzaId('chat', ALICE, 'S')).not.toBeNull()
   })
 
   it('keeps two messages apart when their archive ids disagree', async () => {
@@ -2693,7 +2693,7 @@ describe('v5 migration — chat-store canonicalization', () => {
       legacyChat({ id: 'reused', stanzaId: 'S1', body: 'first', timestamp: 1000, isRetracted: true, retractedAt: 1500 }),
       legacyChat({ id: 'reused-later', stanzaId: 'S2', body: 'second', timestamp: 9000 }),
     ])
-    const rows = (await messageCache.getMessages(ALICE, {})).slice().sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+    const rows = (await messageCache.getMessages('chat', ALICE, {})).slice().sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
     expect(rows).toHaveLength(2)
     expect(rows[1].body).toBe('second')
     expect(rows[1].isRetracted).toBeFalsy()
@@ -2704,7 +2704,7 @@ describe('v5 migration — chat-store canonicalization', () => {
       legacyChat({ id: 'cipher', stanzaId: 'S9', body: '', unsupportedEncryption: { kind: 'x' }, timestamp: 1000 }),
       legacyChat({ id: 'clear', stanzaId: 'S9', body: 'decrypted', timestamp: 1000 }),
     ])
-    const rows = await messageCache.getMessages(ALICE, {})
+    const rows = await messageCache.getMessages('chat', ALICE, {})
     expect(rows).toHaveLength(1)
     expect(rows[0].body).toBe('decrypted')
   })
@@ -2714,7 +2714,7 @@ describe('v5 migration — chat-store canonicalization', () => {
       legacyChat({ id: 'gone', stanzaId: 'S3', body: '', isRetracted: true, retractedAt: 500, timestamp: 1000 }),
       legacyChat({ id: 'gone-mam', stanzaId: 'S3', body: 'the original text', timestamp: 1000 }),
     ])
-    const rows = await messageCache.getMessages(ALICE, {})
+    const rows = await messageCache.getMessages('chat', ALICE, {})
     expect(rows).toHaveLength(1)
     expect(rows[0].isRetracted).toBe(true)
     expect(rows[0].body).toBe('')
@@ -2727,7 +2727,7 @@ describe('v5 migration — chat-store canonicalization', () => {
       [{ cacheKey: 'k1', identityKeys: ['x'], ids: ['r1'], type: 'groupchat', id: 'r1', roomJid: ROOM, from: `${ROOM}/a`, body: 'room row', timestamp: 1000, isOutgoing: false }]
     )
     messageCache._setMigrationFaultForTesting(true)
-    await expect(messageCache.getMessages(ALICE, {})).resolves.toEqual([])
+    await expect(messageCache.getMessages('chat', ALICE, {})).resolves.toEqual([])
 
     messageCache._setMigrationFaultForTesting(false)
     messageCache._resetDBForTesting()
@@ -2740,6 +2740,6 @@ describe('v5 migration — chat-store canonicalization', () => {
 
     // And the retry after the fault clears completes normally.
     messageCache._resetDBForTesting()
-    expect((await messageCache.getMessages(ALICE, {})).map((m) => m.body)).toEqual(['still here'])
+    expect((await messageCache.getMessages('chat', ALICE, {})).map((m) => m.body)).toEqual(['still here'])
   })
 })

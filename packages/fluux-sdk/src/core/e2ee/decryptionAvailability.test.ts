@@ -68,7 +68,7 @@ describe('state-aware preview availability', () => {
   it.each(['preview-only', 'resident', 'cached'] as const)('tracks only active work and recovers a %s preview without a new arrival', async (location) => {
     const message = pending()
     if (location === 'resident') chatStore.setState({ messages: new Map([[PEER, [message]]]) })
-    if (location === 'cached') await cache.saveMessages([message])
+    if (location === 'cached') await cache.saveMessages('chat', [message])
     const original = verifiedDecrypt
     let release!: () => void
     const gate = new Promise<void>(resolve => { release = resolve })
@@ -89,16 +89,16 @@ describe('state-aware preview availability', () => {
     expect(preview()).toMatchObject({ id: message.id, timestamp: message.timestamp, body: 'hello', contentAvailability: { state: 'ready' }, encryptedPayload: undefined })
     expect(chatStore.getState().conversations.get(PEER)?.unreadCount).toBe(2)
     expect(isMessageDecrypting(PEER, preview())).toBe(false)
-    if (location === 'cached') expect(await cache.getMessage(PEER, message.id, message)).toMatchObject({ body: 'hello', contentAvailability: { state: 'ready' } })
+    if (location === 'cached') expect(await cache.getMessage('chat', PEER, message.id, message)).toMatchObject({ body: 'hello', contentAvailability: { state: 'ready' } })
   })
 
   it('persists settled failure availability with ciphertext and restores it after reopening the cache', async () => {
     const message = pending()
-    await cache.saveMessages([message])
+    await cache.saveMessages('chat', [message])
     vi.spyOn(plugin, 'decrypt').mockRejectedValue(new E2EEPluginError('permanent', 'no-session-key', 'not encrypted to this key'))
     await engine.retryPending()
     cache._resetDBForTesting()
-    const restored = await cache.getMessage(PEER, message.id, message)
+    const restored = await cache.getMessage('chat', PEER, message.id, message)
     expect(restored).toMatchObject({ encryptedPayload: payload, contentAvailability: { state: 'failed', reason: 'key-unavailable' } })
     expect(restored?.contentAvailability).toEqual(preview().contentAvailability)
     expect(restored && isMessageDecrypting(PEER, restored)).toBe(false)

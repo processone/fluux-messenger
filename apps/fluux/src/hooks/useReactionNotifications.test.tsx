@@ -43,8 +43,8 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
 vi.mock('@fluux/sdk/cache', () => ({
   getMessage: (...args: unknown[]) => mockGetCachedMessage(...args),
   getMessageByStanzaId: (...args: unknown[]) => mockGetCachedMessageByStanzaId(...args),
-  getRoomMessage: (...args: unknown[]) => mockGetCachedRoomMessage(...args),
-  getRoomMessageByStanzaId: (...args: unknown[]) => mockGetCachedRoomMessageByStanzaId(...args),
+  getMessage: (...args: unknown[]) => mockGetCachedRoomMessage(...args),
+  getMessageByStanzaId: (...args: unknown[]) => mockGetCachedRoomMessageByStanzaId(...args),
 }))
 
 vi.mock('react-i18next', () => ({

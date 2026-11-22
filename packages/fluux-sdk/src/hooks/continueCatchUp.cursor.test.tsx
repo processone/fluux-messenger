@@ -40,7 +40,6 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     ...actual,
     isMessageCacheAvailable: vi.fn().mockReturnValue(true),
     getMessages: vi.fn().mockResolvedValue([]),
-    getRoomMessages: vi.fn().mockResolvedValue([]),
   }
 })
 
@@ -288,7 +287,7 @@ describe('continueRoomCatchUp cursor selection', () => {
   it('resumes from the newest cached archive id when the window is parked off the live edge', async () => {
     seedRoomMessages([{ timestamp: new Date('2026-01-01T12:00:00Z'), stanzaId: 'parked-id' }])
     roomStore.setState({ windowAtLiveEdge: new Map([[ROOM, false]]) })
-    vi.mocked(messageCache.getRoomMessages).mockResolvedValueOnce([{
+    vi.mocked(messageCache.getMessages).mockResolvedValueOnce([{
       type: 'groupchat', id: 'cached-newest', originId: undefined, occupantId: undefined, roomJid: ROOM, from: `${ROOM}/alice`, nick: 'alice', body: 'newest',
       timestamp: new Date('2026-06-01T12:00:00Z'), isOutgoing: false, stanzaId: 'cached-newest-id',
     }])

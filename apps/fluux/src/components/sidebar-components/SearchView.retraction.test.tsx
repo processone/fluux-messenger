@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { clearAllMessages, saveRoomMessages } from '@fluux/sdk/cache'
+import { clearAllMessages, saveMessages } from '@fluux/sdk/cache'
 import { roomMessageFixture } from '@/test-utils/roomMessages'
 /**
  * Retracted neighbours in a search result's context lines.
@@ -275,7 +275,7 @@ describe('moderation of an already displayed search hit', () => {
     mockSearch = baseSearch(new Map())
     mockSearch.results = [hit, { ...hit, indexId: 'control', messageId: 'control', stanzaId: 'control-archive', body: 'Unrelated result',
       matchSnippet: { text: 'Unrelated result', matchStart: 0, matchEnd: 9 } }]
-    if (source === 'pending') await saveRoomMessages([confirmedHitMessage(hit)])
+    if (source === 'pending') await saveMessages('room', [confirmedHitMessage(hit)])
     const { container } = render(<SearchView />)
     expect(container.textContent).toContain('hello world')
     act(() => {
@@ -320,7 +320,7 @@ it.each(['hidden', 'remaining'])('keeps keyboard selection and preview consisten
   mockSearch = baseSearch(new Map())
   mockSearch.results = [hit]
   mockSearch.mamResults = [remaining]
-  await saveRoomMessages([confirmedHitMessage(hit)])
+  await saveMessages('room', [confirmedHitMessage(hit)])
   const { container } = render(<SearchView />)
   fireEvent.keyDown(document.body, { key: 'ArrowDown' })
   if (selected === 'remaining') fireEvent.keyDown(document.body, { key: 'ArrowDown' })
@@ -380,7 +380,7 @@ it.each(['local', 'mam'] as const)('navigates from a %s result to the complete c
     from: 'room@example.com/Peer', occupantId: 'peer', stanzaId: 'shared-archive', source }
   const confirmed = confirmedHitMessage(hit)
   const legacy = { ...confirmed, stanzaId: 'earlier-archive', body: 'Uncertain earlier row', timestamp: new Date(1000) }
-  await saveRoomMessages([legacy, confirmed])
+  await saveMessages('room', [legacy, confirmed])
   roomStore.setState({ messages: new Map([[hit.conversationId, [legacy, confirmed]]]), pendingRetractions: new Map() })
   mockSearch = { ...baseSearch(new Map()), results: source === 'local' ? [hit] : [], mamResults: source === 'mam' ? [hit] : [] }
   const { container } = render(<SearchView />)

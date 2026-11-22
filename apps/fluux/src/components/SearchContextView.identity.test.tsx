@@ -2,7 +2,7 @@
 import 'fake-indexeddb/auto'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { clearAllMessages, saveMessages, saveRoomMessages, updateMessage } from '@fluux/sdk/cache'
+import { clearAllMessages, saveMessages, updateMessage } from '@fluux/sdk/cache'
 import { roomStore, rosterStore, setSearchClient } from '@fluux/sdk/stores'
 import { useSearch, messageRowRef, getResource, type Message, type SearchResult } from '@fluux/sdk'
 import { useRoomStore } from '@fluux/sdk/react'
@@ -30,7 +30,7 @@ it.each(['local', 'mam'] as const)('preserves an uncached anonymous reactor in a
   const message = roomMessageFixture({ type: 'groupchat' as const, roomJid, from: `${roomJid}/Peer`, nick: 'Peer',
     id: 'anonymous-history', body: 'Historical anonymous reaction', timestamp: new Date(2000), isOutgoing: false,
     stanzaId: undefined, originId: undefined, occupantId: undefined, reactions: { '🔥': [nick] } })
-  if (source === 'local') await saveRoomMessages([message])
+  if (source === 'local') await saveMessages('room', [message])
   else setSearchClient({ messages: {
     fetchContextAround: vi.fn().mockResolvedValue({ messages: [message] }), catchUpTo: vi.fn().mockResolvedValue(undefined),
   } } as never)
@@ -71,7 +71,7 @@ it.each(['occupant', 'avatar-cache', 'jid-cache'].flatMap(source => ['stored-nic
     const message = roomMessageFixture({ type: 'groupchat' as const, roomJid, from: `${roomJid}/Peer`, nick: 'Peer', id: 'reaction-preview', body: 'Room reaction preview',
       timestamp: new Date(2000), isOutgoing: false, stanzaId: undefined, originId: undefined, occupantId: undefined,
       reactions: { '👍': ['Alice/Work', getResource(`${roomJid}/Alice@Work`)!, representation === 'stored-nick' ? nick : getResource(`${roomJid}/${nick}`)!], '❤️': ['Bob'] } })
-    await saveRoomMessages([message])
+    await saveMessages('room', [message])
     const state = vi.mocked(useSearch).getMockImplementation()!()
     const setPreviewResult = vi.fn()
     vi.mocked(useSearch).mockReturnValue({ ...state, query: '', setPreviewResult, previewResult: {
@@ -133,7 +133,7 @@ it.each((['stanzaId', 'originId'] as const).flatMap(tier =>
   const first: Message = { type: 'chat', conversationId: 'alice@example.com', from: 'alice@example.com',
     id: 'shared', stanzaId: undefined, originId: undefined, [tier]: 'first', body: 'Earlier chat twin', timestamp: new Date(1000), isOutgoing: false }
   const second = { ...first, [tier]: 'second', body: 'Later chat twin', timestamp: new Date(2000) }
-  if (source === 'local') await saveMessages([first, second])
+  if (source === 'local') await saveMessages('chat', [first, second])
   else setSearchClient({ messages: {
     fetchContextAround: vi.fn().mockResolvedValue({ messages: [first, second, first] }), catchUpTo: vi.fn().mockResolvedValue(undefined),
   } } as never)
@@ -171,17 +171,17 @@ it.each(identityChanges.flatMap(change => (['local', 'mam'] as const).map(source
   'resolves a $source preview after $name before scrolling and highlighting', async ({ before, after, source }) => {
     const snapshot: Message = { stanzaId: undefined, originId: undefined, type: 'chat', conversationId: 'alice@example.com', from: 'alice@example.com',
       id: 'shared', body: 'Selected chat result', timestamp: new Date(2000), isOutgoing: false, ...before }
-    await saveMessages([snapshot])
+    await saveMessages('chat', [snapshot])
     const previewResult: SearchResult = { indexId: 'selected', messageId: snapshot.id, isRoom: false,
       conversationId: snapshot.conversationId, conversationName: 'Alice', from: snapshot.from,
       stanzaId: snapshot.stanzaId, originId: snapshot.originId, body: snapshot.body,
       timestamp: +snapshot.timestamp, source, matchSnippet: null }
-    await updateMessage(snapshot.conversationId, snapshot.id, after, snapshot.from)
+    await updateMessage('chat', snapshot.conversationId, snapshot.id, after, snapshot.from)
     const current = { ...snapshot, ...after }
     const twin = current.stanzaId || current.originId ? { ...current, id: snapshot.id,
       stanzaId: current.stanzaId ? 'other-archive' : undefined, originId: current.originId ? 'other-origin' : undefined,
       body: 'Earlier unrelated twin', timestamp: new Date(1000) } : undefined
-    if (twin) await saveMessages([twin])
+    if (twin) await saveMessages('chat', [twin])
     if (source === 'mam') setSearchClient({ messages: {
       fetchContextAround: vi.fn().mockResolvedValue({ messages: twin ? [twin, current] : [current] }),
       catchUpTo: vi.fn().mockResolvedValue(undefined),
@@ -222,7 +222,7 @@ it.each(['local', 'mam'] as const)('keeps both room first deliveries in a %s pre
     from: 'search@conference.example.com/Peer', nick: 'Peer', id: 'shared', body: 'First room delivery',
     timestamp: new Date(1000), receivedAt: new Date(1000), isOutgoing: false, isDelayed: false })
   const second = { ...first, body: 'Second room delivery', timestamp: new Date(2000), receivedAt: new Date(2000) }
-  if (source === 'local') await saveRoomMessages([first, second])
+  if (source === 'local') await saveMessages('room', [first, second])
   else setSearchClient({ messages: {
     fetchContextAround: vi.fn().mockResolvedValue({ messages: [first, second] }), catchUpTo: vi.fn().mockResolvedValue(undefined),
   } } as never)
@@ -245,7 +245,7 @@ it('loads and highlights only confirmed B and navigates to its exact rendered ro
   const legacy = { type: 'groupchat' as const, roomJid: 'search@conference.example.com', from: 'search@conference.example.com/Peer',
     nick: 'Peer', id: 'shared', originId: undefined, occupantId: 'peer', stanzaId: 'same', body: 'Earlier uncertain A', timestamp: new Date(1000), isOutgoing: false }
   const confirmed = roomMessageFixture({ ...legacy, stanzaId: 'later-archive', body: 'Later confirmed B', timestamp: new Date(2000) })
-  await saveRoomMessages([legacy, confirmed])
+  await saveMessages('room', [legacy, confirmed])
   const previewResult: SearchResult = { indexId: 'confirmed', messageId: confirmed.id, isRoom: true, conversationId: confirmed.roomJid,
     conversationName: 'Search room', from: confirmed.from, stanzaId: confirmed.stanzaId, occupantId: confirmed.occupantId,
      body: confirmed.body, timestamp: +confirmed.timestamp, source: 'local', matchSnippet: null }

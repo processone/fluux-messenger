@@ -6,7 +6,7 @@ import { exactPosition, isAfterBoundary } from '../stores/shared/readState'
 import type { ReadPointer } from '../core/types/readState'
 import { isSpamModerated } from './moderation'
 import { archiveIdentityConflict, findChatMessageIndex, roomScope, sameLogicalMessage, selectRoomMergeTargets } from './messageIdentity'
-import { getMessage, getRoomMessage, getRoomMessageByReference, isMessageCacheAvailable } from './messageCache'
+import { getMessage, getMessageByReference, isMessageCacheAvailable } from './messageCache'
 import { captureStorageScope } from './storageScope'
 
 export function isNotificationMessageReady(message: Parameters<typeof isPreviewableMessage>[0] & Pick<Message, 'encryptedPayload' | 'securityContext'>): boolean {
@@ -63,9 +63,9 @@ export async function resolveNotificationMessage(reference: Message | RoomMessag
   if (isMessageCacheAvailable()) {
     cached = reference.type === 'groupchat'
       ? reference.stanzaId
-        ? await getRoomMessageByReference(reference.roomJid, reference.stanzaId, reference.from)
-        : await getRoomMessage(reference.roomJid, reference.id, reference.from, reference.occupantId)
-      : await getMessage(reference.conversationId, reference.id, reference)
+        ? await getMessageByReference('room', reference.roomJid, reference.stanzaId, reference.from)
+        : await getMessage('room', reference.roomJid, reference.id, reference.from, reference.occupantId)
+      : await getMessage('chat', reference.conversationId, reference.id, reference)
   }
   if (!scope.isCurrent()) return undefined
   const current = residentNotificationMessage(reference)

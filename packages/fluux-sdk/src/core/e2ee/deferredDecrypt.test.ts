@@ -454,7 +454,7 @@ describe('DeferredDecryptEngine', () => {
       body: '[encrypted second]',
       timestamp: new Date(1_700_000_001_000),
     }
-    await messageCache.saveMessages([first, second])
+    await messageCache.saveMessages('chat', [first, second])
 
     cache = {
       getMessagesWithEncryptedPayload: messageCache.getMessagesWithEncryptedPayload,
@@ -472,7 +472,7 @@ describe('DeferredDecryptEngine', () => {
     stores.chat.getEncryptedPreviews.mockReturnValue([])
 
     const repairedCount = await engine.retryPending()
-    const repaired = await messageCache.getMessages(conversationId, { limit: 10 })
+    const repaired = await messageCache.getMessages('chat', conversationId, { limit: 10 })
     expect({
       repairedCount,
       rows: repaired.map((message) => ({
@@ -528,7 +528,7 @@ describe('DeferredDecryptEngine', () => {
         body: COULD_NOT_DECRYPT_BODY, timestamp: new Date(1_700_000_001_000),
         encryptedPayload: DUMMY_PAYLOAD_XML, ...fields,
       }
-      await messageCache.saveMessages([first, pending])
+      await messageCache.saveMessages('chat', [first, pending])
       chatStore.setState({ messages: new Map([[conversationId, resident ? [first, pending] : [first]]]) })
       chatStore.getState().addConversation({ id: conversationId, type: 'chat', name: 'Bob', unreadCount: 0, lastMessage: pending })
       return { first, pending }
@@ -557,7 +557,7 @@ describe('DeferredDecryptEngine', () => {
         const { pending } = await seedTwins({ body: '[encrypted]', encryptedPayload: sealed([copy]) }, false)
         durable()
         await engine.retryPending()
-        expect(await messageCache.getMessage(conversationId, pending.id, pending)).toMatchObject({
+        expect(await messageCache.getMessage('chat', conversationId, pending.id, pending)).toMatchObject({
           body: '', forwarded: { author: 'Bob', text: 'Ship it' },
         })
       })
@@ -567,7 +567,7 @@ describe('DeferredDecryptEngine', () => {
         durable()
         rejects()
         await engine.retryPending()
-        const row = await messageCache.getMessage(conversationId, pending.id, pending)
+        const row = await messageCache.getMessage('chat', conversationId, pending.id, pending)
         expect(row).toMatchObject({ body: MESSAGE_REJECTED_BODY, encryptedPayload: undefined })
         expect(row?.forwarded).toBeUndefined()
       })
@@ -580,7 +580,7 @@ describe('DeferredDecryptEngine', () => {
         durable()
         malformed()
         await engine.retryPending()
-        const row = await messageCache.getMessage(conversationId, pending.id, pending)
+        const row = await messageCache.getMessage('chat', conversationId, pending.id, pending)
         expect(row).toMatchObject({ body: COULD_NOT_DECRYPT_BODY, encryptedPayload: undefined, contentAvailability: { state: 'failed' } })
         expect(row?.forwarded).toBeUndefined()
       })
@@ -666,7 +666,7 @@ describe('DeferredDecryptEngine', () => {
       expect(await searchIndex.search(mode === 'rejected body' ? 'rejected' : 'recovered')).toMatchObject([{
         messageId: pending.id, stanzaId: pending.stanzaId, originId: pending.originId, body,
       }])
-      expect(await messageCache.getMessage(conversationId, pending.id, pending)).toMatchObject({ body, encryptedPayload: undefined })
+      expect(await messageCache.getMessage('chat', conversationId, pending.id, pending)).toMatchObject({ body, encryptedPayload: undefined })
       expect(chatStore.getState().messages.get(conversationId)).toEqual([first])
       expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage).toEqual(first)
       expect(await searchIndex.search('first')).toMatchObject([{ body: first.body }])
@@ -695,7 +695,7 @@ describe('DeferredDecryptEngine', () => {
       expect(chatStore.getState().getMessage(conversationId, 'X')).toEqual(first)
       expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage).toEqual(first)
       await vi.waitFor(async () => {
-        expect(await messageCache.getMessages(conversationId, {})).toMatchObject([first])
+        expect(await messageCache.getMessages('chat', conversationId, {})).toMatchObject([first])
       })
     })
 
@@ -725,7 +725,7 @@ describe('DeferredDecryptEngine', () => {
       expect(chatStore.getState().getMessage(conversationId, pending)).toMatchObject(expected)
       expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage).toMatchObject(expected)
       await vi.waitFor(async () => {
-        const rows = await messageCache.getMessages(conversationId, {})
+        const rows = await messageCache.getMessages('chat', conversationId, {})
         expect(rows).toHaveLength(2)
         expect(rows[0]).toMatchObject(first)
         expect(rows[1]).toMatchObject(expected)
@@ -745,7 +745,7 @@ describe('DeferredDecryptEngine', () => {
       expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage).toMatchObject(ownsPreview
         ? { ...pending, body: 'recovered second', encryptedPayload: undefined }
         : { ...first, encryptedPayload: DUMMY_PAYLOAD_XML })
-      const rows = await messageCache.getMessages(conversationId, {})
+      const rows = await messageCache.getMessages('chat', conversationId, {})
       expect(rows).toHaveLength(2)
       expect(rows[0]).toMatchObject(first)
       expect(rows[1]).toMatchObject({ body: 'recovered second', encryptedPayload: undefined })

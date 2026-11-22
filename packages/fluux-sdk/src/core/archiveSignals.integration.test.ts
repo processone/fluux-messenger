@@ -90,7 +90,7 @@ describe('durable archive signals across fresh sessions', () => {
   const last = () => chatStore.getState().conversationMeta.get(PEER)!.lastMessage
   async function seedState(pointerRow: Message, cached: Message[] = [pointerRow], unread = 0, preview = cached.at(-1)!) {
     archive = cached
-    await cache.saveMessages(cached)
+    await cache.saveMessages('chat', cached)
     chatStore.getState().addConversation({ id: PEER, name: 'Synthetic peer', type: 'chat', unreadCount: unread,
       lastMessage: preview, readPointer: makeReadPointer(pointerRow, 'chat') })
     chatStore.setState({ conversationCoverage: new Map([[PEER, { bottomId: cached[0].stanzaId!, countBottomId: cached[0].stanzaId! }]]) })
@@ -192,8 +192,8 @@ describe('durable archive signals across fresh sessions', () => {
     await reactionCatchup(); expect(count()).toBe(1)
     decryptMode = 'verified'; await readyManager(); expect(await engine.retryPending()).toBe(1); await settle(1000)
     expect(count()).toBe(0); expect(decryptAttempts).toBe(1)
-    expect((await cache.getMessages(PEER)).map(m => m.id)).toEqual(['read', 'own'])
-    expect((await cache.getMessages(PEER)).find(m => m.id === 'own')?.reactions).toEqual({ '👍': [PEER] })
+    expect((await cache.getMessages('chat', PEER)).map(m => m.id)).toEqual(['read', 'own'])
+    expect((await cache.getMessages('chat', PEER)).find(m => m.id === 'own')?.reactions).toEqual({ '👍': [PEER] })
     connectionStore.getState().setStatus('disconnected'); chatStore.getState().resetMAMStates(); manager = null
     cache._resetDBForTesting()
     await fresh(); expect(count()).toBe(0)
@@ -221,7 +221,7 @@ describe('durable archive signals across fresh sessions', () => {
       cache._resetDBForTesting()
       decryptMode = 'verified'
       await readyManager()
-      expect((await cache.getMessage(PEER, 'own'))?.reactions).toEqual({ '❤️': [PEER], '🎉': [OWN] })
+      expect((await cache.getMessage('chat', PEER, 'own'))?.reactions).toEqual({ '❤️': [PEER], '🎉': [OWN] })
       if (mode === 'all') await engine.retryPending()
       else if (mode === 'peer') await engine.retryForPeer(PEER)
       else if (mode === 'mam-search') await mam.searchArchive({ with: PEER, query: 'synthetic' })
@@ -229,9 +229,9 @@ describe('durable archive signals across fresh sessions', () => {
       await settle(1000)
       const expected = { '❤️': [PEER], '🎉': [OWN] }
       const expectReactions = async () => {
-        expect((await cache.getMessages(PEER)).find(message => message.id === 'own')?.reactions).toEqual(expected)
+        expect((await cache.getMessages('chat', PEER)).find(message => message.id === 'own')?.reactions).toEqual(expected)
         expect(chatStore.getState().messages.get(PEER)?.find(message => message.id === 'own')?.reactions).toEqual(expected)
-        expect((await cache.getMessages(PEER)).find(message => message.id === 'read')?.reactions).toEqual({ '👀': [PEER] })
+        expect((await cache.getMessages('chat', PEER)).find(message => message.id === 'read')?.reactions).toEqual({ '👀': [PEER] })
       }
       await expectReactions()
       await cache.rememberArchiveSignal({ ...newer, archiveId: 'removed-reaction', id: 'removed-reaction',
@@ -263,7 +263,7 @@ describe('durable archive signals across fresh sessions', () => {
     const result = await mam.queryArchive({ with: PEER, before: '' })
     await settle(1000)
     expect(result.messages.find(message => message.id === 'own')?.reactions).toEqual(expected)
-    expect((await cache.getMessage(PEER, 'own'))?.reactions).toEqual(expected)
+    expect((await cache.getMessage('chat', PEER, 'own'))?.reactions).toEqual(expected)
     expect(chatStore.getState().messages.get(PEER)?.find(message => message.id === 'own')?.reactions).toEqual(expected)
     const search = await mam.searchArchive({ with: PEER, query: 'synthetic' })
     expect(search.messages.find(message => message.id === 'own')?.reactions).toEqual(expected)
@@ -283,7 +283,7 @@ describe('durable archive signals across fresh sessions', () => {
       await settle(1000)
       const expected = emojis.length ? { '❤️': [PEER] } : undefined
       if (mode === 'page') expect(result.messages.find(message => message.id === 'own')?.reactions).toEqual(expected)
-      expect((await cache.getMessage(PEER, 'own'))?.reactions).toEqual(expected)
+      expect((await cache.getMessage('chat', PEER, 'own'))?.reactions).toEqual(expected)
       expect(chatStore.getState().messages.get(PEER)?.find(message => message.id === 'own')?.reactions).toEqual(expected)
       cache._resetDBForTesting()
       const search = await mam.searchArchive({ with: PEER, query: 'synthetic' })
@@ -312,13 +312,13 @@ describe('durable archive signals across fresh sessions', () => {
     expect(await cache.getArchiveSignal(PEER, 's-correction', PEER)).toMatchObject({
       effect: { type: 'update', targetId: 'older', authorOnly: true },
     })
-    expect(await cache.getMessage(PEER, 'older')).toBeNull()
+    expect(await cache.getMessage('chat', PEER, 'older')).toBeNull()
     const second = await mam.queryArchive({ with: PEER, before: 's-filler' })
     await settle(1000)
     expect(second.complete).toBe(true)
     const corrected = { body: 'corrected', isEdited: true, originalBody: 'synthetic' }
     expect(second.messages.find(message => message.id === 'older')).toMatchObject(corrected)
-    expect(await cache.getMessage(PEER, 'older')).toMatchObject(corrected)
+    expect(await cache.getMessage('chat', PEER, 'older')).toMatchObject(corrected)
     expect(chatStore.getState().messages.get(PEER)?.find(message => message.id === 'older')).toMatchObject(corrected)
     expect(chatStore.getState().messages.get(PEER)?.some(message => message.id === 'correction')).toBe(false)
   })
@@ -337,15 +337,15 @@ describe('durable archive signals across fresh sessions', () => {
     const page = await mam.queryArchive({ with: PEER, before: '' })
     await settle(1000)
     expect(page.messages.map(message => [message.id, message.reactions])).toEqual([['other', undefined]])
-    expect((await cache.getMessage(PEER, '42', target))?.reactions).toEqual({ '👍': [PEER] })
-    expect((await cache.getMessage(PEER, 'other', collision))?.reactions).toBeUndefined()
+    expect((await cache.getMessage('chat', PEER, '42', target))?.reactions).toEqual({ '👍': [PEER] })
+    expect((await cache.getMessage('chat', PEER, 'other', collision))?.reactions).toBeUndefined()
     expect(chatStore.getState().messages.get(PEER)?.find(message => message.id === 'other')?.reactions).toBeUndefined()
     cache._resetDBForTesting()
     const search = await mam.searchArchive({ with: PEER, query: 'synthetic' })
     expect(search.messages.map(message => [message.id, message.reactions])).toEqual([['other', undefined]])
     await settle(1000)
-    expect((await cache.getMessage(PEER, 'other', collision))?.reactions).toBeUndefined()
-    expect((await cache.getMessage(PEER, '42', target))?.reactions).toEqual({ '👍': [PEER] })
+    expect((await cache.getMessage('chat', PEER, 'other', collision))?.reactions).toBeUndefined()
+    expect((await cache.getMessage('chat', PEER, '42', target))?.reactions).toEqual({ '👍': [PEER] })
     expect(pointer()).toBe('42')
   })
 
@@ -371,7 +371,7 @@ describe('durable archive signals across fresh sessions', () => {
         ...(placement === 'page' ? { start: target.timestamp.toISOString() } : { after: target.stanzaId }) })
       await settle(1000)
       const expectRemoved = async () => {
-        expect((await cache.getMessage(PEER, 'own'))?.reactions).toBeUndefined()
+        expect((await cache.getMessage('chat', PEER, 'own'))?.reactions).toBeUndefined()
         expect(chatStore.getState().messages.get(PEER)?.find(message => message.id === 'own')?.reactions).toBeUndefined()
       }
       if (placement === 'page') expect(result.messages.find(message => message.id === 'own')?.reactions).toBeUndefined()
@@ -398,7 +398,7 @@ describe('durable archive signals across fresh sessions', () => {
       const resident = { ...canonical, id: 'b' }
       const conflict = { ...row('a', 4, true), stanzaId: 'different-S' }
       await seedState(canonical, [canonical, resident, conflict])
-      expect(await cache.getMessageByReference(PEER, 'b')).toMatchObject({ id: 'a', stanzaId: 'S', ids: ['a', 'b'] })
+      expect(await cache.getMessageByReference('chat', PEER, 'b')).toMatchObject({ id: 'a', stanzaId: 'S', ids: ['a', 'b'] })
       reactionTarget = 'b'
       const signal = row('reaction', 3)
       archive = [canonical, signal]
@@ -416,10 +416,10 @@ describe('durable archive signals across fresh sessions', () => {
         id: 'b', stanzaId: 'S', reactions: { '👍': [PEER] },
       })
       expect(chatStore.getState().messages.get(PEER)?.find(message => message.stanzaId === 'different-S')?.reactions).toBeUndefined()
-      expect((await cache.getMessage(PEER, 'a', canonical))?.reactions).toEqual({ '👍': [PEER] })
-      expect((await cache.getMessage(PEER, 'a', conflict))?.reactions).toBeUndefined()
+      expect((await cache.getMessage('chat', PEER, 'a', canonical))?.reactions).toEqual({ '👍': [PEER] })
+      expect((await cache.getMessage('chat', PEER, 'a', conflict))?.reactions).toBeUndefined()
       cache._resetDBForTesting()
-      expect((await cache.getMessageByReference(PEER, 'b'))?.reactions).toEqual({ '👍': [PEER] })
+      expect((await cache.getMessageByReference('chat', PEER, 'b'))?.reactions).toEqual({ '👍': [PEER] })
     },
   )
 
@@ -448,21 +448,21 @@ describe('durable archive signals across fresh sessions', () => {
     await fresh()
     expect(count()).toBe(0)
     expect(decryptAttempts).toBe(1)
-    expect((await cache.getMessages(PEER)).find(message => message.id === 'own')?.reactions).toEqual({ '👍': [PEER] })
-    expect((await cache.getMessages(PEER)).some(message => message.id === 'reaction')).toBe(false)
+    expect((await cache.getMessages('chat', PEER)).find(message => message.id === 'own')?.reactions).toEqual({ '👍': [PEER] })
+    expect((await cache.getMessages('chat', PEER)).some(message => message.id === 'reaction')).toBe(false)
     expect(pointer()).toBe('own')
   })
 
   it('remembers deferred processing under the own archive id rather than a foreign stanza id', async () => {
     await reactionCatchup()
-    await cache.updateMessage(PEER, 'reaction', { stanzaId: 'foreign-archive-id' }, PEER)
+    await cache.updateMessage('chat', PEER, 'reaction', { stanzaId: 'foreign-archive-id' }, PEER)
     decryptMode = 'verified'
     await readyManager()
     expect(await engine.retryPending()).toBe(1)
     await settle(1000)
     expect(await cache.getArchiveSignal(PEER, 's-reaction', PEER)).toBeDefined()
     expect(await cache.getArchiveSignal(PEER, 'foreign-archive-id', PEER)).toBeUndefined()
-    expect((await cache.getMessages(PEER)).some(message => message.id === 'reaction')).toBe(false)
+    expect((await cache.getMessages('chat', PEER)).some(message => message.id === 'reaction')).toBe(false)
     manager = null
     connectionStore.getState().setStatus('disconnected')
     chatStore.getState().resetMAMStates()

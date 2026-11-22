@@ -146,8 +146,8 @@ function harness(kind: Kind) {
       return kind === 'room' ? mam.queryRoomArchive({ roomJid: id, ...options }) : mam.queryArchive({ with: id, ...options })
     },
     async cached(entry: Entry) {
-      return kind === 'room' ? cache.getRoomMessageByStanzaId(id, `archive-${entry.id}`)
-        : cache.getMessageByStanzaId(id, `archive-${entry.id}`)
+      return kind === 'room' ? cache.getMessageByStanzaId('room', id, `archive-${entry.id}`)
+        : cache.getMessageByStanzaId('chat', id, `archive-${entry.id}`)
     },
   }
 }
@@ -216,7 +216,7 @@ describe.each(['room', 'chat'] as const)('%s coverage through MAM and durable st
     let release!: () => void
     const gate = new Promise<void>(resolve => { release = resolve })
     if (kind === 'room') {
-      const save = cache.saveRoomMessages
+      const save = cache.saveMessages
       vi.spyOn(cache, 'saveRoomMessages').mockImplementationOnce(async messages => { await gate; return save(messages) })
     } else {
       const save = cache.saveMessages

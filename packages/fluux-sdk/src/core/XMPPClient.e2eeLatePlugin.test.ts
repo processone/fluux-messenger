@@ -115,7 +115,7 @@ describe('encrypted messages stored just before the E2EE plugin registers', () =
   it('stores their decrypted text in the store, the message cache and the preview when the signature is not checked yet', async () => {
     TEXTS.forEach((text, i) => socket._emit('stanza', encrypted(`late-${i}`, text)))
     const ids = TEXTS.map((_, i) => `late-${i}`)
-    const cachedRows = async () => (await messageCache.getMessages(BOB)).filter((m) => ids.includes(m.id))
+    const cachedRows = async () => (await messageCache.getMessages('chat', BOB)).filter((m) => ids.includes(m.id))
     // Before the plugin: stored, and cached, with the fallback text and the encrypted copy.
     await vi.waitFor(async () => {
       const rows = await cachedRows()
@@ -145,7 +145,7 @@ describe('encrypted messages stored just before the E2EE plugin registers', () =
   it('drops their encrypted copy once the plugin reports the signature check done', async () => {
     TEXTS.forEach((text, i) => socket._emit('stanza', encrypted(`late-${i}`, text)))
     const ids = TEXTS.map((_, i) => `late-${i}`)
-    const cachedRows = async () => (await messageCache.getMessages(BOB)).filter((m) => ids.includes(m.id))
+    const cachedRows = async () => (await messageCache.getMessages('chat', BOB)).filter((m) => ids.includes(m.id))
     await vi.waitFor(async () => expect(await cachedRows()).toHaveLength(TEXTS.length))
     const plugin = new KeyArrivesLaterPlugin()
     await client.e2ee!.register(plugin)

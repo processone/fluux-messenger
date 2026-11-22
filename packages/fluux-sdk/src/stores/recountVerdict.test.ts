@@ -61,13 +61,13 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
   return {
     ...actual,
     countUnreadInArchive: vi.fn(actual.countUnreadInArchive),
-    countRoomUnreadInArchive: vi.fn(actual.countRoomUnreadInArchive),
+    countUnreadInArchive: vi.fn(actual.countRoomUnreadInArchive),
   }
 })
 import * as messageCache from '../utils/messageCache'
 
 const countUnreadImplementation = vi.mocked(messageCache.countUnreadInArchive).getMockImplementation()!
-const countRoomUnreadImplementation = vi.mocked(messageCache.countRoomUnreadInArchive).getMockImplementation()!
+const countRoomUnreadImplementation = vi.mocked(messageCache.countUnreadInArchive).getMockImplementation()!
 
 const CID = 'carol@example.com'
 const ROOM = 'general@conference.example.com'
@@ -182,7 +182,7 @@ function roomPointerAt(ts: number, id: string, occupantId?: string): Record<stri
 
 /** The archive, the pointer and the coverage record of a healthy conversation. */
 async function seedHealthyConversation(badge: number): Promise<void> {
-  await messageCache.saveMessages([
+  await messageCache.saveMessages('chat', [
     archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
     archiveMsg('p0', 1000),
     archiveMsg('u1', 1001),
@@ -195,7 +195,7 @@ async function seedHealthyConversation(badge: number): Promise<void> {
 
 async function seedHealthyRoom(badge: number): Promise<void> {
   roomStore.getState().addRoom(createRoom(ROOM))
-  await messageCache.saveRoomMessages([
+  await messageCache.saveMessages('room', [
     roomMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
     roomMsg('p0', 1000),
     roomMsg('u1', 1001),
@@ -247,8 +247,8 @@ beforeEach(async () => {
   chatStore.getState().addConversation(createConversation(CID))
   vi.mocked(messageCache.countUnreadInArchive).mockReset()
   vi.mocked(messageCache.countUnreadInArchive).mockImplementation(countUnreadImplementation)
-  vi.mocked(messageCache.countRoomUnreadInArchive).mockReset()
-  vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementation(countRoomUnreadImplementation)
+  vi.mocked(messageCache.countUnreadInArchive).mockReset()
+  vi.mocked(messageCache.countUnreadInArchive).mockImplementation(countRoomUnreadImplementation)
   clearTransientScope(getStorageScopeJid() ?? '')
   _clearAllViewportEvidenceForTesting()
 })
@@ -294,7 +294,7 @@ describe('every reachable guard names itself', () => {
       name: 'no coverage record',
       reason: 'coverage-missing',
       arrange: async () => {
-        await messageCache.saveMessages([archiveMsg('u1', 1001)])
+        await messageCache.saveMessages('chat', [archiveMsg('u1', 1001)])
         setMeta({ unreadCount: 1, readPointer: pointerAt(1000, 'p0') })
         chatStore.setState((state) => {
           const mamQueryStates = new Map(state.mamQueryStates)
@@ -331,7 +331,7 @@ describe('every reachable guard names itself', () => {
       name: 'a pointerless entity showing a count',
       reason: 'pointerless-defer',
       arrange: async () => {
-        await messageCache.saveMessages([archiveMsg('u1', 1001)])
+        await messageCache.saveMessages('chat', [archiveMsg('u1', 1001)])
         setMeta({ unreadCount: 4, readPointer: undefined, historyFloor: undefined })
         seedCoverage('anchor-stanza')
       },
@@ -605,7 +605,7 @@ describe('the room recount reports the same way', () => {
 
   it('declines with pointer-changed when a room pointer moves mid-count', async () => {
     await seedHealthyRoom(2)
-    vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(async (...args) => {
+    vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(async (...args) => {
       roomStore.setState((state) => {
         const roomMeta = new Map(state.roomMeta)
         roomMeta.set(ROOM, {

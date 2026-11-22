@@ -17,14 +17,14 @@ export async function findLatestCopy(entry: SavedMessage, ownJid: string): Promi
   const candidates: Array<Message | RoomMessage | null> = []
   try {
     if (entry.type === 'groupchat') {
-      if (entry.stanzaId) candidates.push(await messageCache.getRoomMessageByStanzaId(entry.conversationJid, entry.stanzaId))
+      if (entry.stanzaId) candidates.push(await messageCache.getMessageByStanzaId('room', entry.conversationJid, entry.stanzaId))
       for (const reference of [entry.originId, entry.messageId]) {
-        if (reference) candidates.push(await messageCache.getRoomMessageByReference(entry.conversationJid, reference, entry.from))
+        if (reference) candidates.push(await messageCache.getMessageByReference('room', entry.conversationJid, reference, entry.from))
       }
     } else {
-      if (entry.stanzaId) candidates.push(await messageCache.getMessageByStanzaId(entry.conversationJid, entry.stanzaId))
+      if (entry.stanzaId) candidates.push(await messageCache.getMessageByStanzaId('chat', entry.conversationJid, entry.stanzaId))
       for (const reference of [entry.originId, entry.messageId]) {
-        if (reference) candidates.push(await messageCache.getMessageByReference(entry.conversationJid, reference))
+        if (reference) candidates.push(await messageCache.getMessageByReference('chat', entry.conversationJid, reference))
       }
     }
   } catch {

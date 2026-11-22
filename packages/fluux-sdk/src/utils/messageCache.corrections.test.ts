@@ -83,15 +83,15 @@ async function drain() {
 }
 
 async function save(kind: Kind, ...messages: Row[]) {
-  if (kind === 'chat') await cache.saveMessages(messages as StoredMessage[])
-  else await cache.saveRoomMessages(messages as StoredRoomMessage[])
+  if (kind === 'chat') await cache.saveMessages('chat', messages as StoredMessage[])
+  else await cache.saveMessages('room', messages as StoredRoomMessage[])
 }
 
 async function reload(kind: Kind): Promise<Row> {
   await drain()
   seed(kind, [])
   cache._resetDBForTesting()
-  const messages = kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})
+  const messages = kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {})
   expect(messages).toHaveLength(1)
   seed(kind, messages)
   return messages[0] as Row
@@ -429,7 +429,7 @@ describe.each<Kind>(['chat', 'room'])('%s account switch after modification reso
       for (const [scope, expected] of [[SELF, base], ['second@example.test', other]] as const) {
         setStorageScopeJid(scope)
         cache._resetDBForTesting(); searchIndex._resetDBForTesting()
-        const rows = kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})
+        const rows = kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {})
         expect(rows).toHaveLength(1)
         expect(rows[0]).toMatchObject(expected)
         expect(rows[0].isRetracted).not.toBe(true)
@@ -465,7 +465,7 @@ async function abortCorrectionWrite(kind: Kind, mutate: () => void) {
 
 
 describe.each<Kind>(['chat', 'room'])('%s correction persistence retry', kind => {
-  const read = () => kind === 'chat' ? cache.getMessages(PEER) : cache.getRoomMessages(ROOM, {})
+  const read = () => kind === 'chat' ? cache.getMessages('chat', PEER) : cache.getMessages('room', ROOM, {})
   const retryModes = kind === 'chat' ? ['mam', 'live', 'carbon'] : ['mam', 'live']
 
   it.each(retryModes.flatMap(mode => ['text', 'empty caption', 'ciphertext'].map(content => ({ mode, content }))))(
@@ -493,7 +493,7 @@ describe.each<Kind>(['chat', 'room'])('%s correction persistence retry', kind =>
       expect(repaired.encryptedPayload).toBe(current.encryptedPayload)
       expect(repaired.correctionRevision?.supersedes).toEqual([])
       expect(repaired.liveCorrection).toBeUndefined()
-      const writer = kind === 'chat' ? vi.mocked(cache.applyChatCorrection) : vi.mocked(cache.applyRoomCorrection)
+      const writer = kind === 'chat' ? vi.mocked(cache.applyCorrection) : vi.mocked(cache.applyCorrection)
       expect(writer.mock.calls.at(-1)?.[2].liveCorrection).not.toBe(true)
       expect(await searchIndex.search('original')).toHaveLength(0)
       expect(await searchIndex.search('replacement')).toHaveLength(content === 'empty caption' ? 0 : 1)
@@ -570,7 +570,7 @@ describe.each<Kind>(['chat', 'room'])('%s queried retraction handoff', kind => {
       expect(resident(kind)?.isRetracted === true).toBe(!foreign)
       expect(preview(kind)?.isRetracted === true).toBe(!foreign)
       if (kind === 'room') expect(roomStore.getState().rooms.get(ROOM)?.lastMessage).toEqual(preview(kind))
-      const durable = (kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {}))[0]
+      const durable = (kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {}))[0]
       expect(durable.isRetracted === true).toBe(!foreign)
       expect(await searchIndex.search('caption')).toHaveLength(foreign ? 1 : 0)
       expect(await searchIndex.search('original')).toHaveLength(0)
@@ -614,8 +614,8 @@ describe.each<Kind>(['chat', 'room'])('%s preview recovery source ownership', ki
       ...(edited && { isEdited: true, correctionRevision: { ids: ['stanza:sid-c1'], supersedes: [], archiveTimestamp: Date.parse(T1) }, correctionStanzaIds: ['sid-c1'] }),
     }
     await save(kind, source); seed(kind, [source]); seedPreview(kind, source)
-    if (kind === 'chat') vi.mocked(cache.applyChatCorrection).mockResolvedValueOnce(null)
-    else vi.mocked(cache.applyRoomCorrection).mockResolvedValueOnce(null)
+    if (kind === 'chat') vi.mocked(cache.applyCorrection).mockResolvedValueOnce(null)
+    else vi.mocked(cache.applyCorrection).mockResolvedValueOnce(null)
     await h.live({ id: 'c2', body: 'newest unsaved caption', at: T2, authoredAt: T2 })
     const before = structuredClone(preview(kind)!)
     expect(before.body).toBe('newest unsaved caption')
@@ -658,7 +658,7 @@ describe.each<Kind>(['chat', 'room'])('%s same-page correction alias retractions
       ...(kind === 'room' ? [xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: foreign ? 'foreign-occupant' : 'peer-occupant' })] : []))
     const matches = await h.search(corrections, true, [signal], signalsFirst, 'caption')
     expect(matches).toHaveLength(foreign ? 1 : 0)
-    expect(kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})).toHaveLength(0)
+    expect(kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {})).toHaveLength(0)
     const [row] = await h.archive(corrections, true, [signal])
     expect(row.id).toBe(base.id)
     expect(row.stanzaId).toBe(base.stanzaId)
@@ -805,8 +805,8 @@ describe.each(['chat-cache', 'chat-resident', 'room-resident'] as const)('%s rec
         await update(...args); written.resolve(); await releaseWrite.promise
       })
     } else {
-      const update = vi.mocked(cache.updateRoomMessage).getMockImplementation()!
-      vi.mocked(cache.updateRoomMessage).mockImplementationOnce(async (...args) => {
+      const update = vi.mocked(cache.updateMessage).getMockImplementation()!
+      vi.mocked(cache.updateMessage).mockImplementationOnce(async (...args) => {
         await update(...args); written.resolve(); await releaseWrite.promise
       })
     }
@@ -848,7 +848,7 @@ describe.each(['chat-cache', 'chat-resident', 'room-resident'] as const)('%s rec
     expect(await retry).toBe(1); await drain()
     expect(resident(kind)?.body).toBe('recovered private caption')
     expect(preview(kind)?.body).toBe('recovered private caption')
-    expect(kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})).toHaveLength(0)
+    expect(kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {})).toHaveLength(0)
     expect(await searchIndex.search('private')).toHaveLength(0)
     expect(await searchIndex.search('fallback')).toHaveLength(0)
   })
@@ -1050,18 +1050,18 @@ describe.each<Kind>(['chat', 'room'])('%s durable corrections', kind => {
       isEdited: true, body: 'stale', correctionStanzaIds: ['sid-c1'],
       correctionRevision: { ids: ['id:c1'], supersedes: [], archiveTimestamp: Date.parse(T1) },
     }
-    if (kind === 'chat') await cache.updateMessage(PEER, 'original', updates, PEER)
-    else await cache.updateRoomMessage(ROOM, 'original', updates, `${ROOM}/Peer`)
+    if (kind === 'chat') await cache.updateMessage('chat', PEER, 'original', updates, PEER)
+    else await cache.updateMessage('room', ROOM, 'original', updates, `${ROOM}/Peer`)
     const row = await reload(kind)
     expect(row).toMatchObject({ body: 'newest', correctionStanzaIds: ['sid-c1', 'sid-c2'] })
     seed(kind, [])
-    const resolution = kind === 'chat' ? await cache.findChatRetractionTargets(PEER, 'sid-c1') : await cache.findRoomRetractionTargets(ROOM, 'sid-c1')
+    const resolution = kind === 'chat' ? await cache.findRetractionTargets('chat', PEER, 'sid-c1') : await cache.findRetractionTargets('room', ROOM, 'sid-c1')
     expect(resolution?.candidates).toHaveLength(1)
-    expect(kind === 'chat' ? await cache.findChatRetractionTargets('other@example.test', 'sid-c1') : await cache.findRoomRetractionTargets('other@conference.example.test', 'sid-c1')).toBeUndefined()
+    expect(kind === 'chat' ? await cache.findRetractionTargets('chat', 'other@example.test', 'sid-c1') : await cache.findRetractionTargets('room', 'other@conference.example.test', 'sid-c1')).toBeUndefined()
     if (kind === 'chat') h.emitSDK('chat:retraction-pending', { conversationId: PEER, targetId: 'sid-c1', actorJid: PEER })
     else h.emitSDK('room:retraction-pending', { roomJid: ROOM, targetId: 'sid-c1', actorJid: `${ROOM}/Peer`, actorOccupantId: 'peer-occupant' })
     await vi.waitFor(async () => {
-      const rows = kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})
+      const rows = kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {})
       expect(rows[0].isRetracted).toBe(true)
       expect(rows[0].body).not.toBe('newest')
     })
@@ -1140,7 +1140,7 @@ describe.each<Kind>(['chat', 'room'])('%s history reconciliation boundaries', ki
     correctionStanzaIds: ['sid-c2'],
     correctionRevision: { ids: ['stanza:sid-c2'], supersedes: [], archiveTimestamp: Date.parse(T2) },
   })
-  const read = () => kind === 'chat' ? cache.getMessages(PEER) : cache.getRoomMessages(ROOM, {})
+  const read = () => kind === 'chat' ? cache.getMessages('chat', PEER) : cache.getMessages('room', ROOM, {})
   const retract = async (h: ReturnType<typeof harness>, targetId: string, foreign: boolean) => {
     if (kind === 'chat') h.emitSDK('chat:retraction-pending', { conversationId: PEER, targetId, actorJid: foreign ? 'foreign@example.test' : PEER })
     else h.emitSDK('room:retraction-pending', { roomJid: ROOM, targetId, actorJid: `${ROOM}/Peer`, actorOccupantId: foreign ? 'foreign-occupant' : 'peer-occupant' })
@@ -1172,7 +1172,7 @@ describe.each<Kind>(['chat', 'room'])('%s history reconciliation boundaries', ki
     const alias = inner === 'missing' ? 'result-c1' : 'sid-c1'
     const revisionId = inner === 'trusted' ? 'sid-c1' : 'result-c1'
     expect((await read())[0]).toMatchObject({ correctionStanzaIds: [...new Set([alias, revisionId])].sort(), correctionRevision: { ids: expect.arrayContaining([`stanza:${revisionId}`]) } })
-    const resolution = kind === 'chat' ? await cache.findChatRetractionTargets(PEER, alias) : await cache.findRoomRetractionTargets(ROOM, alias)
+    const resolution = kind === 'chat' ? await cache.findRetractionTargets('chat', PEER, alias) : await cache.findRetractionTargets('room', ROOM, alias)
     expect(resolution?.candidates).toHaveLength(1)
     await retract(h, alias, false)
     expect((await read())[0]).toMatchObject({ body: '', isRetracted: true })
@@ -1386,10 +1386,10 @@ it('cancels the final room reconciliation after an already-emitted forward page'
   expect(await result).toMatchObject({ error: { name: 'AbortError' } })
   expect(h.events).toHaveLength(count)
   expect(roomStore.getState().messages.size).toBe(0)
-  expect(await cache.getRoomMessages(ROOM, {})).toEqual([])
+  expect(await cache.getMessages('room', ROOM, {})).toEqual([])
   expect(await searchIndex.search('confidential')).toEqual([])
   setStorageScopeJid(SELF)
-  expect((await cache.getRoomMessages(ROOM, {}))[0].body).toBe('confidential room')
+  expect((await cache.getMessages('room', ROOM, {}))[0].body).toBe('confidential room')
   expect(await searchIndex.search('confidential')).toHaveLength(1)
 })
 
@@ -1434,9 +1434,9 @@ describe.each<Kind>(['chat', 'room'])('%s cached correction hydration', kind => 
       else if (mode === 'newer') vi.spyOn(cache, 'readMessages').mockImplementationOnce(block(cache.readMessages))
       else vi.spyOn(cache, 'getMessages').mockImplementationOnce(block(cache.getMessages))
     } else {
-      if (mode === 'around') vi.spyOn(cache, 'getRoomMessagesAround').mockImplementationOnce(block(cache.getRoomMessagesAround))
-      else if (mode === 'newer') vi.spyOn(cache, 'readRoomMessages').mockImplementationOnce(block(cache.readRoomMessages))
-      else vi.spyOn(cache, 'getRoomMessages').mockImplementationOnce(block(cache.getRoomMessages))
+      if (mode === 'around') vi.spyOn(cache, 'getRoomMessagesAround').mockImplementationOnce(block(cache.getMessagesAround))
+      else if (mode === 'newer') vi.spyOn(cache, 'readRoomMessages').mockImplementationOnce(block(cache.readMessages))
+      else vi.spyOn(cache, 'getRoomMessages').mockImplementationOnce(block(cache.getMessages))
     }
     return { started, release }
   }
@@ -1456,10 +1456,10 @@ describe.each<Kind>(['chat', 'room'])('%s cached correction hydration', kind => 
       const read = async () => {
         const before = { before: new Date(base.timestamp.getTime() + 1), limit: 51 }
         const after = { after: base.timestamp }
-        const older = kind === 'chat' ? await cache.getMessages(PEER, before) : await cache.getRoomMessages(ROOM, before)
+        const older = kind === 'chat' ? await cache.getMessages('chat', PEER, before) : await cache.getMessages('room', ROOM, before)
         started.resolve()
         await release.promise
-        const newer = kind === 'chat' ? await cache.getMessages(PEER, after) : await cache.getRoomMessages(ROOM, after)
+        const newer = kind === 'chat' ? await cache.getMessages('chat', PEER, after) : await cache.getMessages('room', ROOM, after)
         return [...older, ...newer]
       }
       if (kind === 'chat') vi.spyOn(cache, 'getMessagesAround').mockImplementationOnce(async () => await read() as StoredMessage[])
@@ -1471,7 +1471,7 @@ describe.each<Kind>(['chat', 'room'])('%s cached correction hydration', kind => 
     await read.started.promise
     await h.live({ id: 'c1', body: 'sole completed correction', authoredAt: FAST })
     expect(resident(kind)).toBeUndefined()
-    expect((kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {}))[0].body).toBe('sole completed correction')
+    expect((kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {}))[0].body).toBe('sole completed correction')
     read.release.resolve()
     const loaded = await loading
     const expected = {
@@ -1546,7 +1546,7 @@ describe.each<Kind>(['chat', 'room'])('%s cached correction hydration', kind => 
     const base = original(kind)
     await save(kind, base)
     await h.archive([{ id: 'c2', body: 'current edit', at: T2 }])
-    const current = (kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {}))[0]
+    const current = (kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {}))[0]
     seed(kind, [current]); seedPreview(kind, base)
     await load('latest')
     expect(resident(kind)?.body).toBe('current edit')
@@ -1584,8 +1584,8 @@ describe.each<Kind>(['chat', 'room'])('%s cached correction hydration', kind => 
       await release.promise
       return result
     }
-    if (kind === 'chat') vi.spyOn(cache, 'reconcileChatHistoryMessages').mockImplementationOnce(block(cache.reconcileChatHistoryMessages))
-    else vi.spyOn(cache, 'reconcileRoomHistoryMessages').mockImplementationOnce(block(cache.reconcileRoomHistoryMessages))
+    if (kind === 'chat') vi.spyOn(cache, 'reconcileChatHistoryMessages').mockImplementationOnce(block(cache.reconcileHistoryMessages))
+    else vi.spyOn(cache, 'reconcileRoomHistoryMessages').mockImplementationOnce(block(cache.reconcileHistoryMessages))
     const loading = load('around')
     await started.promise
     if (change === 'account round trip') {
@@ -1737,12 +1737,12 @@ describe('live cache-only chat corrections', () => {
     activate('chat')
     const base = original('chat') as StoredMessage
     await save('chat', base); seedPreview('chat', base); await searchIndex.indexMessage(base)
-    const before = (await cache.findChatMessageCopies(PEER, base))[0]
+    const before = (await cache.findMessageCopies('chat', PEER, base))[0]
     expect(resident('chat')).toBeUndefined()
     await h.live({ id: 'c2', body: 'live newest secret', at: T2 })
     expect(resident('chat')).toBeUndefined()
     expect(h.events.filter(({ event }) => event === 'chat:message')).toHaveLength(0)
-    const copies = await cache.findChatMessageCopies(PEER, base)
+    const copies = await cache.findMessageCopies('chat', PEER, base)
     expect(copies).toHaveLength(1)
     expect(copies[0].cacheKey).toBe(before.cacheKey)
     expect(copies[0].message).toMatchObject({ id: base.id, stanzaId: base.stanzaId, timestamp: base.timestamp, body: 'live newest secret', correctionStanzaIds: ['sid-c2'], correctionRevision: { ids: expect.arrayContaining(['stanza:sid-c2', 'origin:c2']) } })
@@ -1775,7 +1775,7 @@ describe('live cache-only chat corrections', () => {
     await h.live({ id: 'c1', body: 'forged correction', at: T1, targetId: foreign.stanzaId })
     expect(h.events.filter(({ event }) => event === 'chat:message')).toHaveLength(0)
     expect(resident('chat')).toBeUndefined()
-    expect(await cache.getMessages(PEER)).toMatchObject([{ body: 'original text', from: foreign.from }])
+    expect(await cache.getMessages('chat', PEER)).toMatchObject([{ body: 'original text', from: foreign.from }])
     expect(await searchIndex.search('forged')).toEqual([])
   })
 
@@ -1790,7 +1790,7 @@ describe('live cache-only chat corrections', () => {
     expect(h.events.filter(({ event }) => event === 'chat:message')).toHaveLength(1)
     expect(resident('chat')).toMatchObject({ id: foreign.id, from: PEER, body: 'unknown sender correction' })
     cache._resetDBForTesting()
-    const messages = await cache.getMessages(PEER)
+    const messages = await cache.getMessages('chat', PEER)
     expect(messages).toHaveLength(2)
     expect(messages.find(message => message.from === SELF)).toMatchObject(foreign)
     expect(messages.find(message => message.from === PEER)).toMatchObject({ id: foreign.id, stanzaId: 'sid-c1', timestamp: new Date(T1), body: 'unknown sender correction' })
@@ -1802,9 +1802,9 @@ describe('live cache-only chat corrections', () => {
     activate('chat')
     setStorageScopeJid(SELF)
     if (cached) { await save('chat', original('chat')); seedPreview('chat', original('chat')) }
-    const apply = vi.mocked(cache.applyChatCorrection).getMockImplementation()!
+    const apply = vi.mocked(cache.applyCorrection).getMockImplementation()!
     const started = deferred(), release = deferred()
-    vi.mocked(cache.applyChatCorrection).mockImplementationOnce((...args) => {
+    vi.mocked(cache.applyCorrection).mockImplementationOnce((...args) => {
       const pending = (async () => {
         const result = await apply(...args)
         started.resolve(); await release.promise
@@ -1819,7 +1819,7 @@ describe('live cache-only chat corrections', () => {
     chatStore.getState().switchAccount('other@example.test')
     release.resolve(); await work; await drain()
     expect(chatStore.getState().messages.size).toBe(0)
-    expect(await cache.getMessages(PEER)).toEqual([])
+    expect(await cache.getMessages('chat', PEER)).toEqual([])
     expect(await searchIndex.search('secret')).toEqual([])
     expect(h.events.filter(({ event }) => event === 'chat:message')).toHaveLength(0)
     setStorageScopeJid(SELF)
@@ -1839,8 +1839,8 @@ function deferCorrectionCompletion(kind: Kind) {
     writes.push(work)
     return work
   }
-  if (kind === 'chat') vi.mocked(cache.applyChatCorrection).mockImplementationOnce(wrap(vi.mocked(cache.applyChatCorrection).getMockImplementation()!))
-  else vi.mocked(cache.applyRoomCorrection).mockImplementationOnce(wrap(vi.mocked(cache.applyRoomCorrection).getMockImplementation()!))
+  if (kind === 'chat') vi.mocked(cache.applyCorrection).mockImplementationOnce(wrap(vi.mocked(cache.applyCorrection).getMockImplementation()!))
+  else vi.mocked(cache.applyCorrection).mockImplementationOnce(wrap(vi.mocked(cache.applyCorrection).getMockImplementation()!))
   return { started, release }
 }
 
@@ -1868,7 +1868,7 @@ describe.each<Kind>(['chat', 'room'])('%s correction completion ownership', kind
         const rows = await get(...args); readStarted.resolve(); await install.promise; return rows
       })
     } else {
-      const get = cache.getRoomMessages
+      const get = cache.getMessages
       vi.spyOn(cache, 'getRoomMessages').mockImplementationOnce(async (...args) => {
         const rows = await get(...args); readStarted.resolve(); await install.promise; return rows
       })
@@ -1921,7 +1921,7 @@ describe.each<Kind>(['chat', 'room'])('%s correction completion ownership', kind
     await work; await drain()
     expect(resident(kind)).toEqual(other)
     expect(preview(kind)).toEqual(other)
-    const rows = kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})
+    const rows = kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {})
     expect(rows).toHaveLength(persistOther ? 2 : 1)
     expect(rows.find(row => row.stanzaId === base.stanzaId)?.body).toBe('corrected cached secret')
     if (persistOther) expect(rows.find(row => row.stanzaId === other.stanzaId)).toMatchObject(other)
@@ -1963,7 +1963,7 @@ describe.each<Kind>(['chat', 'room'])('%s correction completion ownership', kind
     expect(preview(kind)?.body).toBe('replacement state')
     if (change === 'account') {
       expect(await searchIndex.search('secret')).toEqual([])
-      expect(kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})).toEqual([])
+      expect(kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {})).toEqual([])
     }
     setStorageScopeJid(SELF)
     expect(await searchIndex.search('secret')).toHaveLength(kind === 'chat' && change === 'session' ? 0 : 1)
@@ -1997,10 +1997,10 @@ describe('live room correction cache handoff', () => {
     activate('room')
     const base = indexedBase('room', true) as StoredRoomMessage
     await save('room', base); seedPreview('room', base)
-    const before = (await cache.findRoomMessageCopies(ROOM, base))[0]
+    const before = (await cache.findMessageCopies('room', ROOM, base))[0]
     await h.live({ id: 'c2', body: 'live room correction', at: T1, from: `${ROOM}/NewNick` })
     expect(h.events.filter(({ event }) => event === 'room:message')).toEqual([])
-    const after = (await cache.findRoomMessageCopies(ROOM, base))[0]
+    const after = (await cache.findMessageCopies('room', ROOM, base))[0]
     expect(after.cacheKey).toBe(before.cacheKey)
     expect(after.message).toMatchObject({ body: 'live room correction', id: base.id, stanzaId: base.stanzaId, timestamp: base.timestamp, occupantId: base.occupantId,
       correctionStanzaIds: ['sid-c2'], correctionRevision: { ids: expect.arrayContaining(['stanza:sid-c2', 'origin:c2']), supersedes: ['stanza:sid-c0'], afterArchiveTimestamp: Date.parse(T0) } })
@@ -2016,7 +2016,7 @@ describe('live room correction cache handoff', () => {
     const foreign = confirmedOriginal('room', { occupantId: 'different-occupant' }) as StoredRoomMessage
     if (target !== 'unknown') await save('room', foreign)
     await h.live({ id: 'c2', body: 'new occupant correction', targetId: target === 'authoritative-foreign' ? foreign.stanzaId : foreign.id })
-    const rows = await cache.getRoomMessages(ROOM, {})
+    const rows = await cache.getMessages('room', ROOM, {})
     if (target === 'authoritative-foreign') {
       expect(h.events.filter(({ event }) => event === 'room:message')).toEqual([])
       expect(rows).toMatchObject([foreign])
@@ -2039,7 +2039,7 @@ it('routes a chat correction past a resident foreign client-ID collision to its 
   expect(resident('chat')).toEqual(foreign)
   expect(preview('chat')).toEqual(foreign)
   expect(h.events.filter(({ event }) => event === 'chat:message')).toEqual([])
-  const rows = await cache.getMessages(PEER)
+  const rows = await cache.getMessages('chat', PEER)
   expect(rows).toHaveLength(2)
   expect(rows.find(row => row.from === PEER)).toMatchObject({ body: 'cached peer correction', stanzaId: base.stanzaId, timestamp: base.timestamp })
   expect(await searchIndex.search('cached')).toHaveLength(1)
@@ -2086,8 +2086,8 @@ describe.each<Kind>(['chat', 'room'])('%s delayed durable search completion', ki
     const apply = async (id: string, body: string) => {
       const updates = { body, isEdited: true, liveCorrection: true, correctionRevision: { ids: [`stanza:${id}`], supersedes: [] } }
       return kind === 'chat'
-        ? await cache.applyChatCorrection(PEER, base.id, updates, { actorJid: base.from })
-        : await cache.applyRoomCorrection(ROOM, base.id, updates, { actorJid: base.from, actorOccupantId: 'peer-occupant' })
+        ? await cache.applyCorrection('chat', PEER, base.id, updates, { actorJid: base.from })
+        : await cache.applyCorrection('room', ROOM, base.id, updates, { actorJid: base.from, actorOccupantId: 'peer-occupant' })
     }
     const first = await apply('c1', 'first searchable revision')
     const firstInsert = deferred(), secondInsert = deferred()
@@ -2183,7 +2183,7 @@ describe.each<Kind>(['chat', 'room'])('%s correction identity and older activati
       const get = cache.getMessagesAround
       vi.spyOn(cache, 'getMessagesAround').mockImplementationOnce(async (...args) => { const rows = await get(...args); read.resolve(); await install.promise; return rows })
     } else {
-      const get = cache.getRoomMessagesAround
+      const get = cache.getMessagesAround
       vi.spyOn(cache, 'getRoomMessagesAround').mockImplementationOnce(async (...args) => { const rows = await get(...args); read.resolve(); await install.promise; return rows })
     }
     const loading = kind === 'chat' ? chatStore.getState().loadMessagesAroundFromCache(PEER, { id: base.id })
@@ -2316,7 +2316,7 @@ describe.each<Kind>(['chat', 'room'])('%s cached correction reference isolation'
       { id: 'c2', targetId: second.stanzaId, body: 'second target edit', at: T1 },
     ])
     await drain()
-    const rows = kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})
+    const rows = kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {})
     expect(rows).toHaveLength(2)
     expect(rows.find(row => row.stanzaId === first.stanzaId)?.body).toBe('first target edit')
     const other = rows.find(row => row.stanzaId === second.stanzaId) as Row
@@ -2336,7 +2336,7 @@ describe.each<Kind>(['chat', 'room'])('%s cached correction reference isolation'
     resolve.mockImplementation(async (...args) => {
       if (++lookups === 2) {
         await h.context([])
-        const rows = kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})
+        const rows = kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {})
         expect(rows[0]).toMatchObject({ id: base.id, stanzaId: 'archive-original', originId: base.originId, timestamp: base.timestamp })
         if (!inMemory) seed(kind, [])
       }
@@ -2367,7 +2367,7 @@ describe.each<Kind>(['chat', 'room'])('%s cached correction reference isolation'
       { edits: [{ id: 'c2', targetId: second.stanzaId, body: 'second target edit', at: T1 }] },
       { edits: [{ id: 'c3', targetId: first.stanzaId, body: 'latest first target', at: T1 }] },
     ], true)
-    const rows = kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})
+    const rows = kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {})
     expect(rows).toHaveLength(2)
     const one = rows.find(row => row.stanzaId === first.stanzaId) as Row
     const two = rows.find(row => row.stanzaId === second.stanzaId) as Row
@@ -2501,14 +2501,14 @@ describe.each<Kind>(['chat', 'room'])('%s durable live predecessor selection', k
     const base = { ...indexedBase(kind, true), ...(kind === 'chat' && outgoing && { from: SELF, isOutgoing: true }) }
     await save(kind, base); seedPreview(kind, base)
     await h.live({ id: 'c0', body: base.body, ...(kind === 'chat' && outgoing && { to: PEER }) })
-    const observed = (kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {}))[0] as Row
+    const observed = (kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {}))[0] as Row
     Object.assign(base, observed)
     const read = deferred(), install = deferred()
     if (kind === 'chat') {
       const get = cache.getMessages
       vi.spyOn(cache, 'getMessages').mockImplementationOnce(async (...args) => { const rows = await get(...args); read.resolve(); await install.promise; return rows })
     } else {
-      const get = cache.getRoomMessages
+      const get = cache.getMessages
       vi.spyOn(cache, 'getRoomMessages').mockImplementationOnce(async (...args) => { const rows = await get(...args); read.resolve(); await install.promise; return rows })
     }
     const loading = loadWindow(kind)
@@ -2597,7 +2597,7 @@ describe('deferred recovery storage generation', () => {
     expect(preview(kind)).toEqual(replacement)
     if (kind === 'room') expect(roomStore.getState().rooms.get(ROOM)?.lastMessage).toEqual(replacement)
     expect(await searchIndex.search('stale')).toEqual([])
-    const durable = (kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {}))[0]
+    const durable = (kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {}))[0]
     expect(durable.body).toBe(phase === 'durable write' ? 'stale recovered text' : base.body)
   })
 })
@@ -2879,8 +2879,8 @@ describe.each<Kind>(['chat', 'room'])('%s independent equal-time revision ingest
       correctionTimestamp: Date.parse(FAST), correctionRevision: { ids: ['stanza:c1'], supersedes: [], archiveTimestamp: Date.parse(T1) } }
     await save(kind, held)
     const reconciled = kind === 'chat'
-      ? await cache.reconcileChatHistoryMessages([stale as StoredMessage], () => [])
-      : await cache.reconcileRoomHistoryMessages([stale as StoredRoomMessage], () => [])
+      ? await cache.reconcileHistoryMessages('chat', [stale as StoredMessage], () => [])
+      : await cache.reconcileHistoryMessages('room', [stale as StoredRoomMessage], () => [])
     expect(reconciled[0]).toMatchObject({ body: held.body, encryptedPayload: held.encryptedPayload, correctionTimestamp: held.correctionTimestamp })
     await searchIndex.indexMessage(stale)
     expect(await searchIndex.search('obsolete')).toEqual([])
@@ -2922,7 +2922,7 @@ describe.each<Kind>(['chat', 'room'])('%s search insertion after identity enrich
     try {
       await h.context([])
       await h.outgoing(body, attachment)
-      const rows = kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})
+      const rows = kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {})
       expect(rows.find(row => row.id === base.id)).toMatchObject({ body, stanzaId: 'archive-original', originId: base.originId, timestamp: base.timestamp, attachment })
       expect(await searchIndex.search('original')).toEqual([])
       await searchIndex.closeSearchIndex(); cache._resetDBForTesting()
@@ -2961,13 +2961,13 @@ describe.each<Kind>(['chat', 'room'])('%s search insertion after identity enrich
       // paused insertion. Observe the durable row without awaiting that queue.
       enrichment = save(kind, enriched)
       await vi.waitFor(async () => {
-        const rows = kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})
+        const rows = kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {})
         expect(rows.find(row => row.id === base.id)?.stanzaId).toBe(enriched.stanzaId)
       })
       const updates = { body: '', isEdited: true, correctionRevision: { ids: ['stanza:c1'], supersedes: [], archiveTimestamp: Date.parse(T1) } }
       const current = kind === 'chat'
-        ? await cache.applyChatCorrection(PEER, base.id, updates, { actorJid: base.from })
-        : await cache.applyRoomCorrection(ROOM, base.id, updates, { actorJid: base.from, actorOccupantId: 'peer-occupant' })
+        ? await cache.applyCorrection('chat', PEER, base.id, updates, { actorJid: base.from })
+        : await cache.applyCorrection('room', ROOM, base.id, updates, { actorJid: base.from, actorOccupantId: 'peer-occupant' })
       expect(current).toBeTruthy()
       correction = searchIndex.updateMessage(current!)
       await Promise.race([correction, new Promise(resolve => setTimeout(resolve, 50))])
@@ -3050,7 +3050,7 @@ it('resolves an absorbed chat client ID to its current canonical cached edit', a
   const base = { ...original('chat'), id: 'z-original', stanzaId: undefined, originId: 'origin-original' }
   await save('chat', base); await searchIndex.indexMessage(base)
   await save('chat', { ...base, id: 'a-canonical', stanzaId: 'archive-original' })
-  const corrected = await cache.applyChatCorrection(PEER, base.id, {
+  const corrected = await cache.applyCorrection('chat', PEER, base.id, {
     body: '', isEdited: true, correctionRevision: { ids: ['stanza:c1'], supersedes: [], archiveTimestamp: Date.parse(T1) },
   }, { actorJid: base.from })
   expect(corrected?.id).toBe('a-canonical')
@@ -3082,8 +3082,8 @@ describe.each<Kind>(['chat', 'room'])('%s legacy encrypted correction preservati
     expect(await reload(kind)).toMatchObject(legacy)
     seed(kind, [])
     const reconcile = async (rows: Row[]) => kind === 'chat'
-      ? cache.reconcileChatHistoryMessages(rows as StoredMessage[], () => [])
-      : cache.reconcileRoomHistoryMessages(rows as StoredRoomMessage[], () => [])
+      ? cache.reconcileHistoryMessages('chat', rows as StoredMessage[], () => [])
+      : cache.reconcileHistoryMessages('room', rows as StoredRoomMessage[], () => [])
     expect((await reconcile([base]))[0]).toMatchObject(legacy)
     await cache.clearAllMessages()
     await save(kind, base)
@@ -3140,7 +3140,7 @@ describe.each<Kind>(['chat', 'room'])('%s correction handoff after recovered sou
       return pending
     }
     const port = { ...cache, updateMessage: block(cache.updateMessage) }
-    if (kind === 'room') vi.spyOn(cache, 'updateRoomMessage').mockImplementationOnce(block(cache.updateRoomMessage))
+    if (kind === 'room') vi.spyOn(cache, 'updateRoomMessage').mockImplementationOnce(block(cache.updateMessage))
     const engine = new DeferredDecryptEngine({ getManager: () => decrypt.manager, getStores: () => h.stores, getOwnBareJid: () => SELF, cache: port, updateSearchIndex: searchIndex.updateMessage })
     const retry = engine.retryPending()
     await decrypt.started.promise; decrypt.release.resolve()
@@ -3157,7 +3157,7 @@ describe.each<Kind>(['chat', 'room'])('%s correction handoff after recovered sou
     seed(kind, []); seedPreview(kind, structuredClone(c1))
     release.resolve(); await retry; await drain()
     expect(preview(kind)?.body).toBe(c1.body)
-    const durable = (kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {}))[0] as Row
+    const durable = (kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {}))[0] as Row
     expect(durable.body).toBe('stale recovered text')
     expect(durable.encryptedPayload).toBeUndefined()
     expect(durable.correctionRevision?.archiveTimestamp).toBeUndefined()
@@ -3247,7 +3247,7 @@ describe('live encrypted receive session ownership', () => {
       await save('chat', replacement); seedPreview('chat', replacement)
       seed('chat', location === 'resident' ? [replacement] : [])
     }
-    const durableBefore = await cache.getMessages(PEER)
+    const durableBefore = await cache.getMessages('chat', PEER)
     const before = structuredClone(chatStore.getState().messages)
     const beforePreview = structuredClone(preview('chat'))
     const beforeEvents = h.events.length
@@ -3255,7 +3255,7 @@ describe('live encrypted receive session ownership', () => {
     await expect(task.mock.results[0].value).resolves.toBeUndefined()
     await drain()
     if (change === 'same') {
-      const rows = await cache.getMessages(PEER)
+      const rows = await cache.getMessages('chat', PEER)
       expect(rows).toHaveLength(1)
       expect(rows[0].body).toBe('private decrypted correction')
       expect(await searchIndex.search('private')).toHaveLength(1)
@@ -3267,12 +3267,12 @@ describe('live encrypted receive session ownership', () => {
     } else {
       expect(chatStore.getState().messages).toEqual(before)
       expect(preview('chat')).toEqual(beforePreview)
-      expect(await cache.getMessages(PEER)).toEqual(durableBefore)
+      expect(await cache.getMessages('chat', PEER)).toEqual(durableBefore)
       expect(await searchIndex.search('private')).toEqual([])
       expect(h.events.slice(beforeEvents)).toEqual([])
       cache._resetDBForTesting(); searchIndex._resetDBForTesting()
       expect(await searchIndex.search('private')).toEqual([])
-      expect(await cache.getMessages(PEER)).toEqual(durableBefore)
+      expect(await cache.getMessages('chat', PEER)).toEqual(durableBefore)
     }
   })
 
@@ -3471,8 +3471,8 @@ describe('encrypted receive through transport recovery', () => {
       const lookupReleased = deferred()
       if (completion === 'lookup resumption') {
         const lookupStarted = deferred()
-        const apply = vi.mocked(cache.applyChatCorrection).getMockImplementation()!
-        vi.mocked(cache.applyChatCorrection).mockImplementationOnce((...args) => {
+        const apply = vi.mocked(cache.applyCorrection).getMockImplementation()!
+        vi.mocked(cache.applyCorrection).mockImplementationOnce((...args) => {
           const pending = (async () => {
             const result = await apply(...args)
             lookupStarted.resolve(); await lookupReleased.promise
@@ -3512,7 +3512,7 @@ describe('encrypted receive through transport recovery', () => {
         }
         lookupReleased.resolve(); release.resolve(); await task.mock.results[0].value; await drain()
         const cancelled = completion === 'logout' || completion === 'replaced session'
-        let rows = await cache.getMessages(PEER)
+        let rows = await cache.getMessages('chat', PEER)
         expect(rows).toHaveLength(known || !cancelled ? 1 : 0)
         expect(rows[0]?.body).toBe(cancelled ? (known ? base.body : undefined) : 'recovered received content')
         if (known) expect(preview('chat')?.body).toBe(cancelled ? base.body : 'recovered received content')
@@ -3523,7 +3523,7 @@ describe('encrypted receive through transport recovery', () => {
         expect(eventCount).toBe(1)
         replacement._emit('stanza', envelope()); await task.mock.results.at(-1)!.value; await drain()
         cache._resetDBForTesting(); searchIndex._resetDBForTesting(); seed('chat', [])
-        rows = await cache.getMessages(PEER)
+        rows = await cache.getMessages('chat', PEER)
         expect(rows).toHaveLength(1)
         expect(rows[0].body).toBe('recovered received content')
         expect(await searchIndex.search('recovered')).toHaveLength(1)
@@ -3670,7 +3670,7 @@ describe('receive order survives deferred correction completion', () => {
             scenario === 'newer outer' || scenario === 'mixed original first' ? 'outer' : ''))
         if (encryptedNewer) await tasks.mock.results[1].value
         await drain()
-        expect((await cache.getMessages(PEER))[0].body).toBe('newer current correction')
+        expect((await cache.getMessages('chat', PEER))[0].body).toBe('newer current correction')
         if (scenario.startsWith('replay') || scenario.includes('first')) {
           const duplicateRelease = deferred(), duplicateStarted = deferred()
           const originalFirst = scenario.includes('original first')
@@ -3686,7 +3686,7 @@ describe('receive order survives deferred correction completion', () => {
             duplicateRelease.resolve()
           }
           await tasks.mock.results.at(-1)!.value; await drain()
-          expect((await cache.getMessages(PEER))[0].body).toBe('newer current correction')
+          expect((await cache.getMessages('chat', PEER))[0].body).toBe('newer current correction')
         }
         release.resolve(); await tasks.mock.results[0].value; await drain()
         const current = await reload('chat')
@@ -3869,7 +3869,7 @@ it.each(['success', 'send error', 'account change'] as const)('orders outgoing e
       xml('body', {}, 'intervening carbon edit'), xml('origin-id', { xmlns: 'urn:xmpp:sid:0', id: 'other-device' }),
       xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: base.id }))))))
   await drain()
-  expect((await cache.getMessages(PEER))[0].body).toBe('intervening carbon edit')
+  expect((await cache.getMessages('chat', PEER))[0].body).toBe('intervening carbon edit')
   if (outcome === 'send error') h.deps.sendStanza = async () => { throw new Error('send failed') }
   if (outcome === 'account change') setStorageScopeJid('other@example.test')
   release.resolve()
@@ -3918,7 +3918,7 @@ describe.each<Kind>(['chat', 'room'])('%s asynchronous correction request failur
       expect(requestError).toMatchObject({ name: 'ConstraintError' })
       expect(results.filter(result => result.status === 'rejected')).toHaveLength(1)
       expect(unhandled).toEqual([])
-      const read = () => kind === 'chat' ? cache.getMessages(PEER) : cache.getRoomMessages(ROOM, {})
+      const read = () => kind === 'chat' ? cache.getMessages('chat', PEER) : cache.getMessages('room', ROOM, {})
       expect((await read())[0].body).toBe(base.body)
       expect(await searchIndex.search('original')).toHaveLength(1)
       fault.mockRestore()
@@ -3962,9 +3962,9 @@ describe.each(['live', 'received', 'sent'] as const)('%s pending correction iden
         h.chat.handle(stanza('middle', 'middle revision', 's2', false)); await drain()
         h.chat.handle(stanza('shared', 'older encrypted revision', 's1', true))
         await tasks.mock.results[1].value; await drain()
-        expect((await cache.getMessages(PEER))[0].body).toBe('middle revision')
+        expect((await cache.getMessages('chat', PEER))[0].body).toBe('middle revision')
         h.chat.handle(stanza('shared', 'latest distinct revision', 's3', false)); await drain()
-        expect((await cache.getMessages(PEER))[0].body).toBe('latest distinct revision')
+        expect((await cache.getMessages('chat', PEER))[0].body).toBe('latest distinct revision')
         release.resolve(); await tasks.mock.results[0].value; await drain()
         const current = await reload('chat')
         expect(current).toMatchObject({ id: base.id, stanzaId: base.stanzaId, timestamp: base.timestamp, body: 'latest distinct revision' })
@@ -4009,7 +4009,7 @@ it('keeps pending weak correction identities scoped to the sender and conversati
     await h.live({ id: 'shared', body: 'latest peer revision', omitOriginId: true, omitStanzaId: true })
     release.resolve(); await tasks.mock.results[0].value; await drain()
     expect((await reload('chat')).body).toBe('latest peer revision')
-    expect((await cache.getMessages(otherPeer))[0].body).toBe('other sender content')
+    expect((await cache.getMessages('chat', otherPeer))[0].body).toBe('other sender content')
     expect(preview('chat')?.body).toBe('latest peer revision')
   } finally { release.resolve(); await tasks.mock.results[0].value }
 })
@@ -4044,7 +4044,7 @@ describe('pending live corrections across bounded MAM pages', () => {
       h.chat.handle(c1()); await started.promise
       try {
         await h.archivePages([{ edits: [{ id: 'c2', body: 'newer archive correction', encrypted, at: T2, to: own ? PEER : SELF }] }], true)
-        expect((kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {}))[0].body).toBe('newer archive correction')
+        expect((kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {}))[0].body).toBe('newer archive correction')
         if (replay) { h.chat.handle(c1()); await tasks.mock.results.at(-1)!.value; await drain() }
         release.resolve(); await tasks.mock.results[0].value; await drain()
         await h.archivePages([{ edits: [{ id: 'c1', body: 'earlier private correction', at: T1, to: own ? PEER : SELF }] }], true)
@@ -4097,7 +4097,7 @@ describe.each<Kind>(['chat', 'room'])('%s cache-only failed predecessor write', 
           await drain()
         } finally { fault.mockRestore() }
       }
-      const read = () => kind === 'chat' ? cache.getMessages(PEER) : cache.getRoomMessages(ROOM, {})
+      const read = () => kind === 'chat' ? cache.getMessages('chat', PEER) : cache.getMessages('room', ROOM, {})
       expect(await read()).toMatchObject([{ id: base.id, stanzaId: base.stanzaId, body: base.body }])
       expect(await read()).toHaveLength(1)
       expect(await searchIndex.search('first')).toEqual([])
@@ -4119,7 +4119,7 @@ describe.each(['single', 'batch'] as const)('%s room preview hydration ownership
     setStorageScopeJid(SELF)
     await save('room', original('room'))
     const started = deferred(), release = deferred()
-    const read = cache.getRoomMessages
+    const read = cache.getMessages
     vi.spyOn(cache, 'getRoomMessages').mockImplementationOnce(async (...args) => {
       const rows = await read(...args); started.resolve(); await release.promise; return rows
     })
@@ -4155,7 +4155,7 @@ it.each<Kind>(['chat', 'room'])('retains failed %s predecessor evidence without 
   const c1 = { id: 'c1', body: 'earlier failed correction' }
   await abortCorrectionWrite(kind, () => h.receive(c1))
   await h.live({ id: 'c2', body: 'newer durable correction' })
-  const read = () => kind === 'chat' ? cache.getMessages(PEER) : cache.getRoomMessages(ROOM, {})
+  const read = () => kind === 'chat' ? cache.getMessages('chat', PEER) : cache.getMessages('room', ROOM, {})
   expect(await read()).toHaveLength(1)
   expect((await read())[0].body).toBe('newer durable correction')
   await h.archivePages([{ edits: [{ ...c1, at: T1 }] }], true)
@@ -4169,7 +4169,7 @@ it('commits only surviving room previews after a batched read overlaps recreatio
   const other = { ...original('room'), roomJid: otherRoom, from: `${otherRoom}/Peer`, body: 'surviving room content' } as StoredRoomMessage
   await save('room', original('room'), other)
   const started = deferred(), release = deferred()
-  const read = cache.getRoomMessages
+  const read = cache.getMessages
   vi.spyOn(cache, 'getRoomMessages').mockImplementation(async (...args) => {
     const rows = await read(...args)
     if (args[0] === otherRoom) { started.resolve(); await release.promise }
@@ -5004,7 +5004,7 @@ describe.each<Kind>(['chat', 'room'])('%s reconciliation request ownership', kin
       await deliver(2); releases[1].resolve()
       await vi.waitFor(async () => {
         await drain()
-        const rows = kind === 'chat' ? await cache.getMessages(PEER) : await cache.getRoomMessages(ROOM, {})
+        const rows = kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {})
         expect(rows).toHaveLength(3)
         for (let i = 0; i < 3; i++) expect(rows.find(row => row.id === bases[i].id)?.body).toBe(`current caption ${i}`)
       })

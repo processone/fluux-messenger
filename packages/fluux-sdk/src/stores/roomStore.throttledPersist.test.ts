@@ -7,7 +7,7 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, wri
 // persistable messages gates its coverage transition on the IndexedDB write.
 vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
-  return { ...actual, saveRoomMessages: vi.fn().mockResolvedValue(true) }
+  return { ...actual, saveMessages: vi.fn().mockResolvedValue(true) }
 })
 
 import { roomStore } from './roomStore'

@@ -23,7 +23,7 @@ vi.mock('../utils/messageCache', async importOriginal => {
       await holdSnapshot?.()
       return rows
     },
-    getRoomMessages: async (...args: Parameters<typeof actual.getRoomMessages>) => {
+    getMessages: async (...args: Parameters<typeof actual.getRoomMessages>) => {
       const rows = await actual.getRoomMessages(...args)
       await holdSnapshot?.()
       return rows
@@ -62,8 +62,8 @@ for (const kind of ['chat', 'room'] as const) {
       body: 'Original', timestamp: new Date(1000), isOutgoing: false,
       ...(kind === 'chat' ? { type: 'chat', conversationId: CHAT } : { type: 'groupchat', roomJid: ROOM, nick: 'Peer' }),
     } as Message | RoomMessage
-    const seed = () => kind === 'chat' ? cache.saveMessages([message as Message]) : cache.saveRoomMessages([message as RoomMessage])
-    const read = () => kind === 'chat' ? cache.getMessage(jid, message.id) : cache.getRoomMessage(jid, message.id)
+    const seed = () => kind === 'chat' ? cache.saveMessages('chat', [message as Message]) : cache.saveMessages('room', [message as RoomMessage])
+    const read = () => kind === 'chat' ? cache.getMessage('chat', jid, message.id) : cache.getMessage('room', jid, message.id)
     const hydrate = () => kind === 'chat' ? chatStore.getState().loadMessagesFromCache(jid) : roomStore.getState().loadMessagesFromCache(jid)
     const resident = () => (kind === 'chat' ? chatStore : roomStore).getState().messages.get(jid)?.find(row => row.id === message.id)
     const emit = (id = message.id) => {
@@ -129,9 +129,9 @@ for (const kind of ['chat', 'room'] as const) {
     })
 
     if (kind === 'room') it.each([false, true])('keeps a synchronous poll tally ahead of an older reaction completion (edited: %s)', async edited => {
-      await cache.saveRoomMessages([{ ...message as RoomMessage, ...(edited && { isEdited: true, correctionRevision: { ids: ['stanza:edited'], supersedes: [] }, correctionStanzaIds: ['edited'] }) }])
+      await cache.saveMessages('room', [{ ...message as RoomMessage, ...(edited && { isEdited: true, correctionRevision: { ids: ['stanza:edited'], supersedes: [] }, correctionStanzaIds: ['edited'] }) }])
       await hydrate()
-      const actual = cache.updateRoomMessage
+      const actual = cache.updateMessage
       let release!: () => void
       let persisted!: () => void
       const durable = new Promise<void>(resolve => { persisted = resolve })
@@ -189,8 +189,8 @@ for (const kind of ['chat', 'room'] as const) {
 
     it('keeps a retracted target free of preview content', async () => {
       const retracted = { ...message, body: '', isRetracted: true }
-      if (kind === 'chat') await cache.saveMessages([retracted as Message])
-      else await cache.saveRoomMessages([retracted as RoomMessage])
+      if (kind === 'chat') await cache.saveMessages('chat', [retracted as Message])
+      else await cache.saveMessages('room', [retracted as RoomMessage])
       await hydrate()
       emit()
       await (kind === 'chat' ? chatStore : roomStore).getState().loadMessagesFromCache(jid, { peek: true })
@@ -221,7 +221,7 @@ for (const kind of ['chat', 'room'] as const) {
           return original(...args)
         })
       } else {
-        const original = cache.updateRoomMessage
+        const original = cache.updateMessage
         vi.spyOn(cache, 'updateRoomMessage').mockImplementationOnce(async (...args) => {
           writing()
           await writeGate
@@ -265,7 +265,7 @@ for (const kind of ['chat', 'room'] as const) {
         const reconciliationStarted = new Promise<void>(resolve => { reconciling = resolve })
         let releaseArrival!: () => void
         const arrivalGate = new Promise<void>(resolve => { releaseArrival = resolve })
-        const reconcile = cache.reconcileRoomHistoryMessages
+        const reconcile = cache.reconcileHistoryMessages
         vi.spyOn(cache, 'reconcileRoomHistoryMessages').mockImplementationOnce(async (...args) => {
           reconciling()
           await arrivalGate

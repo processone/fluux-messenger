@@ -31,15 +31,15 @@ afterEach(() => {
 
 it('restores a long room tail without deriving identities for every pair of rows', async () => {
   const rows = Array.from({ length: 256 }, (_, index) => message(index))
-  await cache.saveRoomMessages(rows)
+  await cache.saveMessages('room', rows)
   const keys = vi.spyOn(identity, 'identityKeys')
-  const restored = await cache.getRoomMessagesAround(ROOM, { id: rows[0].id }, { before: 0 })
+  const restored = await cache.getMessagesAround('room', ROOM, { id: rows[0].id }, { before: 0 })
   expect(restored.map(row => row.id)).toEqual(rows.map(row => row.id))
   expect(keys.mock.calls.length).toBeLessThanOrEqual(rows.length * 4)
 })
 
 async function restoreCopies(copies: Partial<RoomMessage>[]) {
-  await cache.getRoomMessages(ROOM)
+  await cache.getMessages('room', ROOM)
   const db = await openDB('fluux-message-cache')
   const tx = db.transaction('room-messages-canonical', 'readwrite')
   const rows = copies.map((copy, index) => ({ ...message(index), ...copy }))
@@ -53,7 +53,7 @@ async function restoreCopies(copies: Partial<RoomMessage>[]) {
   }
   await tx.done
   db.close()
-  return cache.getRoomMessagesAround(ROOM, { id: rows[0].id }, { before: 0 })
+  return cache.getMessagesAround('room', ROOM, { id: rows[0].id }, { before: 0 })
 }
 
 it('keeps the first copy when a later copy shares several identities', async () => {

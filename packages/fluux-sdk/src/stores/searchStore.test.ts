@@ -28,7 +28,6 @@ vi.mock('../utils/messageCache', () => ({
   areRetractedInCache: vi.fn().mockImplementation(async (messages: unknown[]) =>
     messages.map(() => false)
   ),
-  getRoomMessages: vi.fn().mockResolvedValue([]),
 }))
 
 // Mock localStorage for chatStore/roomStore (they use persist middleware)
@@ -1013,7 +1012,7 @@ describe('searchStore', () => {
           timestamp: now + 5_000, isRoom: true, body: 'carol launchcode',
         },
       ])
-      vi.mocked(messageCache.getRoomMessages).mockImplementation(async (_jid, options) =>
+      vi.mocked(messageCache.getMessages).mockImplementation(async (_jid, options) =>
         options?.before && +options.before === now + 5_000 ? [bobArchived] : [])
 
       searchStore.getState().search('launchcode')
@@ -1039,7 +1038,7 @@ describe('searchStore', () => {
         stanzaId: undefined, originId: undefined, occupantId: undefined,
         timestamp: stamp, receivedAt: 3000, isDelayed: true, isRoom: true, body: 'delayed launchcode',
       }])
-      vi.mocked(messageCache.getRoomMessages).mockImplementation(async (_jid, options) =>
+      vi.mocked(messageCache.getMessages).mockImplementation(async (_jid, options) =>
         options?.before ? [alice] : [bob])
       searchStore.getState().search('launchcode')
       await vi.runAllTimersAsync()
@@ -1062,7 +1061,7 @@ describe('searchStore', () => {
         isRoom: true,
         body: 'Matched message',
       }])
-      vi.mocked(messageCache.getRoomMessages)
+      vi.mocked(messageCache.getMessages)
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{
           id: 'shared',
@@ -1183,7 +1182,7 @@ describe('searchStore', () => {
         messageId: 'matched', conversationId: roomJid, from: `${roomJid}/Other`, nick: 'Other',
         timestamp: now, isRoom: true, body: 'legitimate match',
       }])
-      vi.mocked(messageCache.getRoomMessages)
+      vi.mocked(messageCache.getMessages)
         .mockResolvedValueOnce([source === 'cache' ? tombstones[0] : before])
         .mockResolvedValueOnce([source === 'cache' ? tombstones[1] : after])
       if (source === 'resident') roomStore.setState({ messages: new Map([[roomJid, tombstones]]) })

@@ -36,7 +36,7 @@ afterEach(() => vi.restoreAllMocks())
 
 describe('room message snapshots', () => {
   it('settles with a fresh input array on every consumer render', async () => {
-    await cache.saveRoomMessage(spam)
+    await cache.saveMessage('room', spam)
     let renders = 0
     const reads = vi.spyOn(cache, 'getRoomMessageByRowRef')
     const { result } = renderHook(() => {
@@ -93,12 +93,12 @@ describe('room message snapshots', () => {
 
   it('tries the validated local alias after an unrelated wire-ID cache hit', async () => {
     const legacy = { ...original, stanzaId: 'foreign' }
-    await cache.saveRoomMessage({ ...original, localRowRef: { id: legacy.id, occupantId: legacy.occupantId, stanzaId: legacy.stanzaId, unconfirmed: true } })
-    await cache.saveRoomMessage({ ...original, isRetracted: true, isModerated: true, moderationReason: 'Spam' })
+    await cache.saveMessage('room', { ...original, localRowRef: { id: legacy.id, occupantId: legacy.occupantId, stanzaId: legacy.stanzaId, unconfirmed: true } })
+    await cache.saveMessage('room', { ...original, isRetracted: true, isModerated: true, moderationReason: 'Spam' })
     const unrelated = { ...original, id: 'other-client', stanzaId: 'foreign', body: 'Keep B', timestamp: new Date(+original.timestamp + 1000) }
 
-    await cache.saveRoomMessage(unrelated)
-    expect(await cache.getRoomMessageByReference(ROOM, 'foreign', original.from)).toMatchObject({ id: unrelated.id })
+    await cache.saveMessage('room', unrelated)
+    expect(await cache.getMessageByReference('room', ROOM, 'foreign', original.from)).toMatchObject({ id: unrelated.id })
     expect(await cache.getRoomMessageByRowRef(ROOM, { id: legacy.id, occupantId: legacy.occupantId, stanzaId: legacy.stanzaId, unconfirmed: true }))
       .toMatchObject({ stanzaId: original.stanzaId, isModerated: true })
     const indexReads = vi.spyOn(IDBIndex.prototype, 'getAll')
@@ -111,7 +111,7 @@ describe('room message snapshots', () => {
   })
 
   it('keeps cache-only moderation scoped to the room and current account', async () => {
-    await cache.saveRoomMessage(spam)
+    await cache.saveMessage('room', spam)
     const { result } = renderHook(() => useRoomMessageSnapshots(ROOM, [original]))
     await waitFor(() => expect(result.current[0].isModerated).toBe(true))
     const otherRoom = { ...original, roomJid: 'other@conference.example.com', from: 'other@conference.example.com/Alice' }
@@ -131,13 +131,13 @@ describe('room message snapshots', () => {
     ]) {
       const collision = { ...spam, ...fields }
       if (source === 'resident') roomStore.setState({ messages: new Map([[ROOM, [collision]]]) })
-      else { await cache.clearAllMessages(); await cache.saveRoomMessage(collision) }
+      else { await cache.clearAllMessages(); await cache.saveMessage('room', collision) }
       expect(await resolveRoomMessageSnapshot(original)).toEqual(original)
     }
   })
 
   it('retains moderation when the pending record is consumed by its cache write', async () => {
-    await cache.saveRoomMessage(original)
+    await cache.saveMessage('room', original)
     const { result } = renderHook(() => useRoomMessageSnapshots(ROOM, [original]))
     await waitFor(() => expect(result.current[0].body).toBe(original.body))
     act(() => roomStore.getState().recordPendingRetraction(ROOM, original.stanzaId!, ROOM, undefined, {
@@ -173,7 +173,7 @@ describe('room message snapshots', () => {
   })
 
   it('uses indexed local reads without fetching history or using the network', async () => {
-    await cache.saveRoomMessage(spam)
+    await cache.saveMessage('room', spam)
     const fetch = vi.spyOn(globalThis, 'fetch')
     const history = vi.spyOn(roomStore.getState(), 'loadOlderMessagesFromCache')
     const indexReads = vi.spyOn(IDBIndex.prototype, 'getAll')
@@ -199,7 +199,7 @@ describe('room message snapshots', () => {
 
 
 it.each(['resident', 'pending'])('ignores unrelated traffic and retains relevant %s moderation through eviction', async source => {
-  await cache.saveRoomMessage(original)
+  await cache.saveMessage('room', original)
   const reads = vi.spyOn(cache, 'getRoomMessageByRowRef')
   let renders = 0
   const { result } = renderHook(() => { renders++; return useRoomMessageSnapshots(ROOM, snapshots) })

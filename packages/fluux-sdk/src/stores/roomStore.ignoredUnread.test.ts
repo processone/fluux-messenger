@@ -36,7 +36,7 @@ beforeEach(async () => {
 
 async function caughtUp() {
   const anchor = { ...message('anchor', 'me', 0), isOutgoing: true, stanzaId: 'archive-anchor' }
-  await cache.saveRoomMessages([anchor])
+  await cache.saveMessages('room', [anchor])
   roomStore.getState().updateRoom(ROOM, { readPointer: makeReadPointer(anchor, 'room'), supportsMAM: true })
   roomStore.setState({
     mamQueryStates: new Map([[ROOM, { isLoading: false, error: null, hasQueried: true, isHistoryComplete: true, isCaughtUpToLive: true }]]),
@@ -71,7 +71,7 @@ describe('room unread respects hidden ignored messages', () => {
       { ...message('hidden', 'alice', 10), isDelayed: true },
       { ...message('visible', 'bob', 20), isDelayed: true },
     ], {}, true, 'forward')
-    await vi.waitFor(async () => expect(await cache.countRoomUnreadInArchive(ROOM, { floor: new Date(0) })).toEqual({ unread: 2 }))
+    await vi.waitFor(async () => expect(await cache.countUnreadInArchive('room', ROOM, { floor: new Date(0) })).toEqual({ unread: 2 }))
     // The merge schedules its own recount. The latest one to start wins and the other stands
     // down without writing, so a recount can return before the badge holds its result.
     await roomStore.getState().recomputeUnreadForRoom(ROOM)
@@ -83,7 +83,7 @@ describe('room unread respects hidden ignored messages', () => {
 
   it('clears an existing ignored-only badge through the MAM recount without moving the pointer', async () => {
     await caughtUp()
-    await cache.saveRoomMessages([message('hidden-1', 'alice', 10), message('hidden-2', 'alice', 20)])
+    await cache.saveMessages('room', [message('hidden-1', 'alice', 10), message('hidden-2', 'alice', 20)])
     roomStore.getState().updateRoom(ROOM, { unreadCount: 2, mentionsCount: 1 })
     const pointer = meta().readPointer
     ignoreAlice()
@@ -121,7 +121,7 @@ describe('room unread respects hidden ignored messages', () => {
     roomStore.setState({ messages: new Map(), lastArrivedMessage: new Map() })
     ignoreAlice()
     await vi.waitFor(() => expect(meta()).toMatchObject({ unreadCount: 1, mentionsCount: 1 }))
-    expect(await cache.countRoomUnreadInArchive(ROOM, { floor: new Date(0) }, row => row.nick !== 'alice'))
+    expect(await cache.countUnreadInArchive('room', ROOM, { floor: new Date(0) }, row => row.nick !== 'alice'))
       .toEqual({ unread: 1 })
   })
 
@@ -157,11 +157,11 @@ describe('room unread respects hidden ignored messages', () => {
     const bob: RoomOccupant = { nick: 'bob', jid: 'bob@example.test/desktop', affiliation: 'member', role: 'participant' }
     const carol: RoomOccupant = { nick: 'carol', jid: 'carol@example.test/desktop', affiliation: 'member', role: 'participant' }
     roomStore.getState().batchAddOccupants(ROOM, [bob, carol])
-    await cache.saveRoomMessages([message('evicted-alice', 'alice', 10)])
+    await cache.saveMessages('room', [message('evicted-alice', 'alice', 10)])
     roomStore.getState().updateRoom(ROOM, { unreadCount: 1 })
     let release!: () => void
     const held = new Promise<void>(resolve => { release = resolve })
-    const count = cache.countRoomUnreadInArchive
+    const count = cache.countUnreadInArchive
     const spy = vi.spyOn(cache, 'countRoomUnreadInArchive').mockImplementation(async (...args) => {
       const result = await count(...args)
       await held
@@ -220,10 +220,10 @@ describe('room unread respects hidden ignored messages', () => {
   })
 
   it('stops the filtered archive walk at the unread cap', async () => {
-    await cache.saveRoomMessages(Array.from({ length: 8 }, (_, index) =>
+    await cache.saveMessages('room', Array.from({ length: 8 }, (_, index) =>
       message(`row-${index}`, index < 3 ? 'alice' : 'bob', index + 1)))
     const visible = vi.fn((row: RoomMessage) => row.nick !== 'alice')
-    expect(await cache.countRoomUnreadInArchive(ROOM, { floor: new Date(0), unreadCap: 2 }, visible))
+    expect(await cache.countUnreadInArchive('room', ROOM, { floor: new Date(0), unreadCap: 2 }, visible))
       .toEqual({ unread: 2 })
     expect(visible).toHaveBeenCalledTimes(5)
   })
@@ -251,9 +251,9 @@ describe('room unread respects hidden ignored messages', () => {
 
   it('finishes a visibility recount after repeated in-flight presence invalidations', async () => {
     await caughtUp()
-    await cache.saveRoomMessages([message('evicted-alice', 'alice', 10)])
+    await cache.saveMessages('room', [message('evicted-alice', 'alice', 10)])
     roomStore.getState().updateRoom(ROOM, { unreadCount: 1 })
-    const count = cache.countRoomUnreadInArchive
+    const count = cache.countUnreadInArchive
     const releases: Array<() => void> = []
     const spy = vi.spyOn(cache, 'countRoomUnreadInArchive').mockImplementation(async (...args) => {
       const result = await count(...args)

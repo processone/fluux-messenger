@@ -380,7 +380,7 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
       chatStore.getState().addConversation({
         ...conversation(readPointer), unreadCount: 1, lastMessage: message,
       })
-      expect(await messageCache.saveMessages([
+      expect(await messageCache.saveMessages('chat', [
         { ...message, id: 'm1', stanzaId: 's1', timestamp: new Date(1_000) }, message,
       ])).toBe(true)
       chatStore.setState({
@@ -476,7 +476,7 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
       chatStore.getState().addConversation({
         ...conversation(readPointer), unreadCount, lastMessage: message,
       })
-      expect(await messageCache.saveMessages([
+      expect(await messageCache.saveMessages('chat', [
         { ...message, id: 'm1', stanzaId: 's1', timestamp: new Date(1_000) }, message,
       ])).toBe(true)
       chatStore.setState({
@@ -499,7 +499,7 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
       roomStore.getState().addRoom(createRoom(ROOM, {
         joined: true, readPointer, lastMessage: message, unreadCount, mentionsCount: 0,
       }), [message])
-      expect(await messageCache.saveRoomMessages([
+      expect(await messageCache.saveMessages('room', [
         { ...message, id: 'm1', stanzaId: 's1', timestamp: new Date(1_000) }, message,
       ])).toBe(true)
       roomStore.setState({
@@ -544,7 +544,7 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
         ...tail, type: 'chat', conversationId: CHAT, from: CHAT, body: 'hello', isOutgoing: false,
       }
       chatStore.getState().addConversation({ ...conversation(readPointer), lastMessage: message, unreadCount: 1 })
-      expect(await messageCache.saveMessages([
+      expect(await messageCache.saveMessages('chat', [
         { ...message, id: 'm1', stanzaId: 's1', timestamp: new Date(1_000) }, message,
       ])).toBe(true)
       chatStore.setState({
@@ -581,7 +581,7 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
       roomStore.getState().addRoom(createRoom(ROOM, {
         joined: true, readPointer, lastMessage: message, unreadCount: 1, mentionsCount: 1,
       }), [message])
-      expect(await messageCache.saveRoomMessages([
+      expect(await messageCache.saveMessages('room', [
         { ...message, id: 'm1', stanzaId: 's1', timestamp: new Date(1_000) }, message,
       ])).toBe(true)
       roomStore.setState({

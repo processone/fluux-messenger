@@ -410,13 +410,13 @@ describe('resolveCoverageBottom', () => {
   })
 
   it('resolves a bottomId that is cached to its archive position', async () => {
-    await messageCache.saveMessage(mockMessage({ stanzaId: 'archive-42', timestamp: new Date(9000) }))
+    await messageCache.saveMessage('chat', mockMessage({ stanzaId: 'archive-42', timestamp: new Date(9000) }))
     const out = await resolveCoverageBottom(CONV, { bottomId: 'archive-42' }, false)
     expect(out).toEqual({ role: 'exact', timestamp: 9000, tiebreak: { kind: 'chat', id: 'client-id-1' } })
   })
 
   it('resolves a bottomId scoped to a room, distinct from the chat lookup', async () => {
-    await messageCache.saveRoomMessages([mockRoomMessage({ stanzaId: 'archive-42', timestamp: new Date(7000) })])
+    await messageCache.saveMessages('room', [mockRoomMessage({ stanzaId: 'archive-42', timestamp: new Date(7000) })])
     const out = await resolveCoverageBottom(ROOM, { bottomId: 'archive-42' }, true)
     expect(out).toEqual({
       role: 'exact',
