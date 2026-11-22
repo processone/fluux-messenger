@@ -8,7 +8,8 @@ export interface ContactSuggestion {
 
 /**
  * Build extra contact suggestions from a room's occupants and affiliated members.
- * Occupant device addresses are reduced to the bare addresses used for membership and hats.
+ * Occupant and cached member device addresses are reduced to the bare addresses used for
+ * membership and hats.
  * Compare without case differences, but retain the reported spelling for callers.
  * Used by ContactSelector in modals that manage room membership or hat assignments.
  */
@@ -28,10 +29,11 @@ export function buildRoomContactSuggestions(room: Room): ContactSuggestion[] {
 
   if (room.affiliatedMembers) {
     for (const member of room.affiliatedMembers) {
-      const key = member.jid.toLowerCase()
+      const jid = getBareJid(member.jid)
+      const key = jid.toLowerCase()
       if (!seen.has(key)) {
         seen.add(key)
-        result.push({ jid: member.jid, name: member.nick })
+        result.push({ jid, name: member.nick })
       }
     }
   }
