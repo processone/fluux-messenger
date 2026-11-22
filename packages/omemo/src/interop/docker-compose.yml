@@ -12,7 +12,7 @@
 #   cd packages/omemo/src/interop && docker compose up -d
 services:
   omemo-peer:
-    image: python:3.12-slim
+    image: python:3.15-slim
     working_dir: /peer
     volumes:
       - ./peer:/peer
