@@ -6,6 +6,7 @@
  */
 
 import { compareExact, exactPosition } from './readState'
+import { isUnconfirmedDelivery, type XMPPStanzaError } from '../../utils/xmppError'
 
 /**
  * Generic interface for messages with a timestamp.
@@ -192,6 +193,7 @@ export interface ArchiveIdentifiableMessage {
   ownArchiveBy?: string
   stanzaId?: string
   originId?: string
+  deliveryError?: XMPPStanzaError
 }
 
 /**
@@ -204,7 +206,9 @@ export interface ArchiveIdentifiableMessage {
  * as a duplicate, so the live copy never receives one — which breaks backward
  * MAM pagination, whose RSM cursor must be a server archive id. This patches
  * the missing fields, matching an incoming "donor" to an existing message by
- * any shared identity key (e.g. `originId`).
+ * any shared identity key (e.g. `originId`). An archived copy also proves the
+ * server received the message, so it removes a "not confirmed" delivery state;
+ * an error the server actually returned stays.
  *
  * Pure: never mutates inputs. Returns the SAME `existing` array reference when
  * nothing changed, so callers can cheaply skip a store update; otherwise a
@@ -265,13 +269,15 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
 
     const ownArchive = (!current.ownArchiveId || !current.ownArchiveBy) && donor.ownArchiveId && donor.ownArchiveBy
       ? { ownArchiveId: donor.ownArchiveId, ownArchiveBy: donor.ownArchiveBy } : undefined
-    if (current.stanzaId && !mergeIdentity && !ownArchive) continue
-    const updated: T = mergeIdentity ? mergeIdentity(current, donor) : {
+    const nowConfirmed = isUnconfirmedDelivery(current.deliveryError)
+    if (current.stanzaId && !mergeIdentity && !ownArchive && !nowConfirmed) continue
+    const merged: T = mergeIdentity ? mergeIdentity(current, donor) : {
       ...current,
       stanzaId: current.stanzaId ?? donor.stanzaId,
       ...ownArchive,
       ...(!current.originId && donor.originId ? { originId: donor.originId } : {}),
     }
+    const updated: T = nowConfirmed ? { ...merged, deliveryError: undefined } : merged
     if (updated === current) continue
     if (messages === existing) messages = [...existing] // copy-on-write
     messages[i] = updated

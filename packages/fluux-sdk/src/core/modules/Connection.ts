@@ -597,6 +597,7 @@ export class Connection extends BaseModule {
       }))
 
     this.smPersistence.persistNow(this.credentials.jid, this.credentials.resource || '', joinedRooms)
+    this.smPersistence.saveUnconfirmed(this.credentials.jid, this.xmpp)
   }
 
   /**
@@ -738,6 +739,7 @@ export class Connection extends BaseModule {
     if (this.storageAdapter) {
       const storedState = await this.smPersistence.load(jid)
       throwIfCancelled()
+      this.smPersistence.restoreUnconfirmed(jid)
       if (!effectiveSmState && storedState.smState) {
         effectiveSmState = storedState.smState
         this.stores.console.addEvent('Loaded SM state from storage for session resumption', 'sm')
@@ -2107,7 +2109,7 @@ export class Connection extends BaseModule {
       patchSmAckQueue(sm)
       patchSmInboundCount(xmppClient)
       patchSmOutboundCount(xmppClient)
-      patchSmResumeQueue(xmppClient)
+      patchSmResumeQueue(xmppClient, (session, h) => this.smPersistence.settleResumed(session, h))
     }
     patchIncomingUnparsableAddress(xmppClient)
 
@@ -2215,6 +2217,30 @@ export class Connection extends BaseModule {
     }
   }
 
+  /** Show as not delivered the messages the server can no longer confirm. */
+  private reportUnconfirmedMessages(): void {
+    const jid = this.credentials?.jid
+    if (!jid) return
+    const messages = this.smPersistence.takeUnconfirmed(jid)
+    if (messages.length === 0) return
+    this.stores.console.addEvent(`${messages.length} sent message(s) not confirmed by the server`, 'sm')
+    for (const message of messages) {
+      this.deps.emitSDK('chat:message-unconfirmed', {
+        conversationId: message.to,
+        messageId: message.id,
+        onSettled: settled => this.smPersistence.settleUnconfirmed(jid, message, settled),
+      })
+    }
+  }
+
+  /** A Retry is sending this message. Call the result once the attempt is in the stream, or could not be sent. */
+  beginMessageRetry(to: string, messageId: string): (sent: boolean) => void {
+    const jid = this.credentials?.jid
+    if (!jid) return () => {}
+    this.smPersistence.beginRetry(jid, messageId, to)
+    return sent => this.smPersistence.endRetry(jid, messageId, sent, this.xmpp)
+  }
+
   /** Give the state machine the window of the session in the cache. */
   private syncSmWindow(): void {
     const windowMs = this.smPersistence.getWindowMs()
@@ -2234,7 +2260,7 @@ export class Connection extends BaseModule {
     const smState = this.smPersistence.restore(requested)
     if (!smState) {
       this.stores.console.addEvent('SM window ran out before this attempt, starting a fresh session', 'sm')
-      this.smPersistence.clearCache()
+      this.smPersistence.abandonResumption()
       return
     }
     const sm = this.xmpp.streamManagement
@@ -2378,6 +2404,7 @@ export class Connection extends BaseModule {
     // Therefore, whenever 'online' fires, it's a new session.
     this.xmpp.on('online', () => {
       logInfo(`Connection handshake complete: online (resolved=${resolved})`)
+      this.smPersistence.settleNewSession()
       // SM enabled inline (SASL2 Bind 2) produces no top-level <enabled/>. xmpp.js emits
       // 'online' before it hands the <bound/> children to the SM module, so the id and max
       // reach the live object only after this handler returns: read them one microtask later,
@@ -2889,6 +2916,10 @@ export class Connection extends BaseModule {
       })
     }
 
+    // Before the archive catch-up that the events below start, so an archived
+    // copy can clear a message that did arrive.
+    this.reportUnconfirmedMessages()
+
     // Emit appropriate event
     this.emit(isResumption ? 'resumed' : 'online')
 
@@ -3033,7 +3064,7 @@ export class Connection extends BaseModule {
       const smState = smResumeViable ? this.getStreamManagementState() : null
       if (!smResumeViable) {
         logInfo('SM resume not viable (long sleep or expired), starting fresh session')
-        this.smPersistence.clearCache()
+        this.smPersistence.abandonResumption()
         this.stores.console.addEvent('SM resume skipped (long sleep detected by state machine)', 'sm')
       } else if (smState) {
         this.stores.console.addEvent(

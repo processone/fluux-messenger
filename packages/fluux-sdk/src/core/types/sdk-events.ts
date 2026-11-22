@@ -229,6 +229,16 @@ export interface ChatEvents {
     error: XMPPStanzaError
   }
 
+  /**
+   * A sent message the server can no longer confirm. The handler records it as
+   * not delivered and calls `onSettled`: with false, it is reported again later.
+   */
+  'chat:message-unconfirmed': {
+    conversationId: string
+    messageId: string
+    onSettled: (settled: boolean) => void
+  }
+
   /** Animation triggered (easter egg) */
   'chat:animation': {
     conversationId: string

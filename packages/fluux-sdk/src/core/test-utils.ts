@@ -1151,6 +1151,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     setTyping: vi.fn(),
     updateReactions: vi.fn(),
     updateMessage: vi.fn(),
+    markUnconfirmedDelivery: vi.fn().mockResolvedValue(true),
     triggerAnimation: vi.fn(),
     applyRemoteDisplayed: vi.fn(),
     clearConversationGapAnchor: vi.fn(),

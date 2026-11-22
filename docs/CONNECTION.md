@@ -112,10 +112,28 @@ an acknowledgement are kept in memory and handed to the new one. When the server
 resumes the session, its `h` says which of them it received. Fluux resends only
 the messages it did not receive, once, and sets its sent count to `h`. Requests
 and presence are not replayed, nor is a console message with an unusable
-address. A page reload keeps no stanzas. A session that
-is not resumed, because the server refused it or enabled a new one through
-Bind 2, starts with an empty queue and count, because the client cannot tell
-what the old session received.
+address. A session that is not resumed, because the server refused it or enabled
+a new one through Bind 2, starts with an empty queue and count, because the client
+cannot tell what the old session received.
+
+Two cases cannot be resent automatically. After a refused resumption Fluux does
+not know what the server received, and resending could duplicate a message. After
+a page reload the queue of unacknowledged stanzas is gone, because it is never
+written to storage. In both cases the conversation shows the message as not
+delivered, with a Retry button that rebuilds it from the saved history and reuses
+its id. Across a reload only each message's id, address and position in the
+session are kept, in session storage: when the session resumes, the server's
+`h` says which of them arrived. When it does not resume, all of them are marked,
+and an archived copy of a message that did arrive removes the mark. A message
+whose saved copy already has an archive id or a server's own error keeps it, and a
+server's error shown but not yet saved is saved in place of the mark. Each record
+stays in session storage until the history holds the mark or that error, so another
+reload or a failed write reports it again. A Retry cancels a mark still waiting
+and keeps the record until Stream Management holds the new attempt, so a reload
+while it is being prepared still shows the message as not delivered. A Retry that
+is refused, or written on a session without Stream Management, keeps its record:
+the next connection or page load marks the message again, and an archived copy
+removes the mark if it did arrive. A manual disconnect marks nothing.
 
 ### Stream Management resumption window
 

@@ -34,6 +34,22 @@ export interface XMPPStanzaError {
   text?: string
 }
 
+/**
+ * The delivery state of a message whose connection ended before the server
+ * confirmed it. The server sent no error: this is the client saying it cannot
+ * tell. An archived copy of the message proves delivery and removes it.
+ */
+export const UNCONFIRMED_DELIVERY_ERROR: XMPPStanzaError = {
+  type: 'wait',
+  condition: 'unconfirmed-delivery',
+  text: 'The connection ended before the server confirmed this message.',
+}
+
+/** Whether `error` is the client's "not confirmed" state rather than a server's refusal. */
+export function isUnconfirmedDelivery(error: XMPPStanzaError | undefined): boolean {
+  return error?.condition === UNCONFIRMED_DELIVERY_ERROR.condition
+}
+
 const VALID_ERROR_TYPES = new Set<string>(['cancel', 'continue', 'modify', 'auth', 'wait'])
 
 /**

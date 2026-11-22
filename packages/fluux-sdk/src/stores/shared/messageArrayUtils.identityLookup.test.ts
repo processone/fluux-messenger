@@ -10,6 +10,7 @@ import {
   selectRoomMergeTargets,
 } from '../../utils/messageIdentity'
 import { roomStanzaIdsMergeable } from '../../utils/roomStanzaId'
+import { UNCONFIRMED_DELIVERY_ERROR, type XMPPStanzaError } from '../../utils/xmppError'
 import { backfillArchiveIds, mergeAndProcessMessages, prependOlderMessages } from './messageArrayUtils'
 import { mergeArchive, type TimelineConfig } from './messageTimeline'
 
@@ -21,6 +22,7 @@ interface Row {
   stanzaId?: string
   originId?: string
   occupantId?: string
+  deliveryError?: XMPPStanzaError
 }
 
 const roomJid = 'fixture@conference.example.com'
@@ -239,6 +241,50 @@ describe('archive identity lookup', () => {
     expect(identified.newMessages).toEqual([])
     expect(identified.patched).toEqual([confirmed])
     expect(identified.resident).toEqual([first, confirmed])
+  })
+
+  it('an archived copy removes the "not confirmed" mark from the message it names', () => {
+    const cfg = config('chat')
+    const sent = row('sent', { originId: 'sent', deliveryError: UNCONFIRMED_DELIVERY_ERROR })
+    const archived = row('sent', { originId: 'sent', stanzaId: 'archive-1' })
+
+    const result = backfillArchiveIds([sent], [archived], cfg.getKeys, cfg.sameMessage, cfg.getMergeCandidates)
+
+    expect(result.messages[0]).toMatchObject({ stanzaId: 'archive-1' })
+    expect(result.messages[0].deliveryError).toBeUndefined()
+    expect(result.patched).toHaveLength(1)
+  })
+
+  it('removes the mark from a row that already has its archive id', () => {
+    const cfg = config('chat')
+    const sent = row('sent', { originId: 'sent', stanzaId: 'archive-1', deliveryError: UNCONFIRMED_DELIVERY_ERROR })
+    const archived = row('sent', { originId: 'sent', stanzaId: 'archive-1' })
+
+    const result = backfillArchiveIds([sent], [archived], cfg.getKeys, cfg.sameMessage, cfg.getMergeCandidates)
+
+    expect(result.messages[0].deliveryError).toBeUndefined()
+  })
+
+  it('keeps an error the server returned, even when an archived copy exists', () => {
+    const cfg = config('chat')
+    const refused: XMPPStanzaError = { type: 'cancel', condition: 'service-unavailable' }
+    const sent = row('sent', { originId: 'sent', deliveryError: refused })
+    const archived = row('sent', { originId: 'sent', stanzaId: 'archive-1' })
+
+    const result = backfillArchiveIds([sent], [archived], cfg.getKeys, cfg.sameMessage, cfg.getMergeCandidates)
+
+    expect(result.messages[0].deliveryError).toEqual(refused)
+  })
+
+  it('leaves the mark on a message with no archived copy', () => {
+    const cfg = config('chat')
+    const sent = row('sent', { originId: 'sent', deliveryError: UNCONFIRMED_DELIVERY_ERROR })
+    const other = row('other', { originId: 'other', stanzaId: 'archive-2' })
+
+    const result = backfillArchiveIds([sent], [other], cfg.getKeys, cfg.sameMessage, cfg.getMergeCandidates)
+
+    expect(result.messages).toEqual([sent])
+    expect(result.patched).toEqual([])
   })
 
   it('backfills only the reciprocal room target when fallback candidates have different delivery times', () => {

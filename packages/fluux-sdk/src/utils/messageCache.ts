@@ -2515,15 +2515,55 @@ async function chatUpdateMessage(
   scopeJid: string | null = getStorageScopeJid(),
   selected?: ChatRowSelector
 ): Promise<void> {
+  await writeChatMessageUpdate(conversationId, id, updates, from, scopeJid, selected)
+}
+
+/** What a guarded update did. `failed` means storage did not answer, so nothing is known to be saved. */
+export type GuardedMessageUpdate = 'updated' | 'declined' | 'missing' | 'failed'
+
+/**
+ * Update a chat row only if `accepts` approves it as stored, inside the write
+ * transaction, so a change committed just before cannot be overwritten. With no
+ * row, `insert` is saved with the updates when `accepts` approves it.
+ */
+export function updateChatMessageIf(
+  conversationId: string,
+  id: string,
+  updates: Partial<Message> & MessageImplState,
+  guard: { accepts: (row: Message) => boolean; insert?: Message },
+  selected?: ChatRowSelector,
+  scopeJid: string | null = getStorageScopeJid(),
+): Promise<GuardedMessageUpdate> {
+  return writeChatMessageUpdate(conversationId, id, updates, undefined, scopeJid, selected, guard)
+}
+
+async function writeChatMessageUpdate(
+  conversationId: string,
+  id: string,
+  updates: Partial<Message> & MessageImplState,
+  from: string | undefined,
+  scopeJid: string | null,
+  selected?: ChatRowSelector,
+  guard?: { accepts: (row: Message) => boolean; insert?: Message },
+): Promise<GuardedMessageUpdate> {
   try {
     const db = await getDB(scopeJid)
     const tx = db.transaction([MESSAGES_STORE, ARCHIVE_SIGNALS_STORE], 'readwrite')
     const store = tx.objectStore(MESSAGES_STORE)
     const existing = await findChatRowById(store, id, conversationId, from, selected)
-    if (!existing) { await tx.done; return }
+    if (!existing) {
+      if (!guard?.insert) { await tx.done; return 'missing' }
+      if (!guard.accepts(guard.insert)) { await tx.done; return 'declined' }
+      const inserted = await upsertChatRowByIdentity(store, { ...guard.insert, ...updates } as Message, scopeJid)
+      await applyPendingArchiveSignals(store, tx.objectStore(ARCHIVE_SIGNALS_STORE), conversationId, scopeJid)
+      await tx.done
+      await reconcileChatIndexChanges([inserted], scopeJid)
+      return 'updated'
+    }
+    if (guard && !guard.accepts(deserializeMessage(existing))) { await tx.done; return 'declined' }
 
     const applicable = applicableCorrectionUpdates(existing, updates, scopeJid)
-    if (!applicable) { await tx.done; return }
+    if (!applicable) { await tx.done; return 'declined' }
     const updated = { ...deserializeMessage(existing), ...applicable } as Message
     const serialized = serializeMessage(updated)
     let change: { previous: StoredMessage[]; current: StoredMessage } | undefined
@@ -2574,10 +2614,13 @@ async function chatUpdateMessage(
     if (['body', 'references', 'encryptedPayload', 'securityContext', 'attachment', 'isRetracted'].some(field => field in applicable)) {
       emitMessageCacheUpdate({ kind: 'chat', conversationId, account: scopeJid, target: deserializeMessage(written) })
     }
+    return 'updated'
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to update message:', error)
+      return 'failed'
     }
+    return 'missing'
   }
 }
 

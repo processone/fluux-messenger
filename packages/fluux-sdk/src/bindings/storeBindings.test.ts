@@ -151,6 +151,34 @@ describe('createStoreBindings', () => {
       )
     })
 
+    it('marks a server error on the message it names', () => {
+      const error = { type: 'cancel' as const, condition: 'service-unavailable' }
+      mockClient.emit('chat:message-error', { conversationId: 'bob@example.com', messageId: 'msg1', error })
+      expect(mockStores.chat.updateMessage).toHaveBeenCalledWith('bob@example.com', 'msg1', { deliveryError: error })
+    })
+
+    it.each([
+      ['saved', true, true],
+      ['not saved', false, false],
+    ])('reports whether the mark of an unconfirmed message was %s', async (_case, stored, expected) => {
+      mockStores.chat.markUnconfirmedDelivery = vi.fn().mockResolvedValue(stored)
+      const onSettled = vi.fn()
+
+      mockClient.emit('chat:message-unconfirmed', { conversationId: 'bob@example.com', messageId: 'msg1', onSettled })
+
+      await vi.waitFor(() => expect(onSettled).toHaveBeenCalledWith(expected))
+      expect(mockStores.chat.markUnconfirmedDelivery).toHaveBeenCalledWith('bob@example.com', 'msg1')
+    })
+
+    it('keeps an unconfirmed message for a later attempt when marking it throws', async () => {
+      mockStores.chat.markUnconfirmedDelivery = vi.fn().mockRejectedValue(new Error('storage closed'))
+      const onSettled = vi.fn()
+
+      mockClient.emit('chat:message-unconfirmed', { conversationId: 'bob@example.com', messageId: 'msg1', onSettled })
+
+      await vi.waitFor(() => expect(onSettled).toHaveBeenCalledWith(false))
+    })
+
     it('should handle message:security-updated by patching securityContext', () => {
       const securityContext = {
         protocolId: 'openpgp',
