@@ -793,7 +793,17 @@ export function MessageComposer({
     restoreTextareaCursor(inputRef, newText, newCursorPosition)
   }
 
+  // A modal's focus trap listens on its panel and sees Tab before React's bubble handlers.
+  // Accepting the suggestion in the capture phase marks the key as used before the trap runs.
+  const handleKeyDownCapture = (e: React.KeyboardEvent<ComposerInputElement>) => {
+    if (e.key !== 'Tab' || !isEmojiAutocompleteActive) return
+    e.preventDefault()
+    selectEmoji(emojiAutocomplete.state.selectedIndex)
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<ComposerInputElement>) => {
+    // The capture handler above already accepted the suggestion for this key.
+    if (e.key === 'Tab' && e.defaultPrevented) return
     const enterSends = e.key === 'Enter' && !e.shiftKey && !usesMobileEnterKey()
     if (isEmojiAutocompleteActive) {
       if (e.key === 'ArrowUp') {
@@ -942,6 +952,7 @@ export function MessageComposer({
       ref={mergedInputRef}
       value={text}
       onChange={handleTextChange}
+      onKeyDownCapture={handleKeyDownCapture}
       onKeyDown={handleKeyDown}
       onSelect={handleSelect}
       onPaste={handlePaste}

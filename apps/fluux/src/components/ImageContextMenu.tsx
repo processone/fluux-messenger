@@ -23,7 +23,7 @@ export function ImageContextMenu({ originalUrl, proxiedUrl, encryption, filename
 
   // This menu can render inside an already-trapped overlay (e.g. ImageLightbox). A Tab keydown
   // bubbles through both container listeners; this is safe because the inner handler moves focus
-  // first and the outer handler then no-ops (active element is still inside its container).
+  // first and prevents the event, so the outer handler leaves it alone.
   useFocusTrap(menu.menuRef, { active: menu.isOpen })
 
   if (!menu.isOpen) return null

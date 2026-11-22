@@ -72,6 +72,7 @@ export const changelog: ChangelogEntry[] = [
         'Replying to someone in a one-to-one chat no longer sends the name you gave them in your contacts. The quote that other apps show above your reply now names them by their address',
         'Invite to Room now lists contacts who are already in the room at the end, marked as already there, whichever device they joined from. They can no longer be invited again by mistake',
         'Shift+Tab in a contact list, such as Invite to Room, New Message or Forward, now moves to the previous contact and stays in the list, so Enter picks that contact instead of pressing Cancel',
+        'Tab and Shift+Tab now stay inside an open window and reach all of its buttons on macOS and other WebKit versions of Fluux, instead of moving to the conversation behind it',
         'Manage Membership and Manage Hats now suggest each person in the room once by their account address, without a device suffix, so adding a member or assigning a hat applies to the person rather than one connection',
         'Find in conversation now highlights the whole word as you type it, in chats and rooms. Messages that stop matching lose their highlight, and closing the find bar clears every highlight',
       ],

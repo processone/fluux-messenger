@@ -4,6 +4,7 @@ import i18n from 'i18next'
 import en from '@/i18n/locales/en.json'
 import { MemoryRouter, NavLink, useLocation, useNavigate } from 'react-router'
 import { ChatLayout } from './ChatLayout'
+import { ModalOverlay } from './ModalOverlay'
 import { ROUTER_USE_TRANSITIONS } from '@/config/routerTransitions'
 import type { Contact, PresenceStatus } from '@fluux/sdk'
 import { setPlatformForTesting } from '@/platform'
@@ -1487,6 +1488,47 @@ describe('ChatLayout - EmptyState visual design', () => {
     expect(screen.getByTestId('empty-state')).toHaveAttribute('data-first-run')
     expect(screen.getByRole('button', { name: 'Start a conversation' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Browse Rooms' })).toBeInTheDocument()
+  })
+})
+
+describe('ChatLayout - keyboard focus with a modal open', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(sessionStorage.getSavedViewState).mockReturnValue(null)
+    setMockState({ activeConversationId: null, activeRoomJid: null, isArchivedResult: false })
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  // The modal mounts first, as the share window does inside the layout, so its own focus
+  // restore runs before the layout's visibility handler and cannot hide a stolen focus.
+  const renderWithModal = () => render(<>
+    <ModalOverlay onClose={vi.fn()}><input aria-label="Search contacts" /></ModalOverlay>
+    <ChatLayoutWithRouter initialRoute="/rooms" />
+  </>)
+
+  it('leaves focus in a modal that is open when the layout mounts', () => {
+    renderWithModal()
+    const input = screen.getByLabelText('Search contacts')
+    expect(input).toHaveFocus()
+    act(() => { vi.advanceTimersByTime(150) })
+    expect(input).toHaveFocus()
+  })
+
+  it('leaves focus in an open modal when the window becomes visible again', () => {
+    renderWithModal()
+    const input = screen.getByLabelText('Search contacts')
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    expect(input).toHaveFocus()
+  })
+
+  it('still focuses the layout for keyboard shortcuts when no modal is open', () => {
+    const { container } = render(<ChatLayoutWithRouter initialRoute="/rooms" />)
+    act(() => { vi.advanceTimersByTime(150) })
+    expect(container.querySelector('.chrome-shell')).toHaveFocus()
   })
 })
 

@@ -635,17 +635,18 @@ function ChatLayoutContent() {
 
   // Ensure container has focus for keyboard shortcuts on mount and when window becomes visible
   useEffect(() => {
+    // An open modal keeps focus: from the shell, the next Tab would reach the page behind it.
+    const focusContainer = () => {
+      if (!document.querySelector('[data-modal="true"]')) containerRef.current?.focus()
+    }
+
     // Focus container on mount (handles case where keychain dialog steals focus)
     // Use setTimeout to ensure the element is mounted and any dialogs have closed
-    const focusTimer = setTimeout(() => {
-      containerRef.current?.focus()
-    }, 100)
+    const focusTimer = setTimeout(focusContainer, 100)
 
     // Re-focus when window becomes visible (e.g., after switching apps)
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        containerRef.current?.focus()
-      }
+      if (document.visibilityState === 'visible') focusContainer()
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)

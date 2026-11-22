@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MessageComposer } from './MessageComposer'
+import { ModalOverlay } from './ModalOverlay'
 import { setPlatformForTesting } from '@/platform'
 import { settleDynamicImports } from '@/test-utils/dynamicImports'
 
@@ -215,6 +216,29 @@ describe('MessageComposer emoji overlay coordination', () => {
       expect(textarea.selectionStart).toBe('❤️'.length)
       expect(document.activeElement).toBe(textarea)
     })
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('accepts a suggestion with Tab inside a modal without the focus trap moving focus', async () => {
+    render(
+      <ModalOverlay onClose={vi.fn()}>
+        <MessageComposer placeholder="Type a message" onSend={vi.fn().mockResolvedValue(true)} />
+        <button type="button">Cancel</button>
+      </ModalOverlay>,
+    )
+    await typeEmojiToken()
+
+    const textarea = screen.getByRole('combobox', { name: 'Type a message' }) as HTMLTextAreaElement
+    await screen.findByRole('listbox')
+    textarea.focus()
+    // Accepting restores the caret, so only a blur shows the trap took focus away first.
+    const blurred = vi.fn()
+    textarea.addEventListener('blur', blurred)
+    fireEvent.keyDown(textarea, { key: 'Tab' })
+
+    await waitFor(() => expect(textarea).toHaveValue('❤️'))
+    expect(blurred).not.toHaveBeenCalled()
+    expect(textarea).toHaveFocus()
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 

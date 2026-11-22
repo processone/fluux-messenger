@@ -1,6 +1,11 @@
 import { useLayoutEffect, type RefObject } from 'react'
 import { getFocusableElements } from './focusable'
-import { getComposedActiveElement, getComposedFocusableElements } from './composedFocus'
+import {
+  focusNextTabStop,
+  getComposedActiveElement,
+  getComposedFocusableElements,
+  getTabStops,
+} from './composedFocus'
 
 interface FocusTrapOptions {
   /** Preferred element to focus on open; falls back to the first focusable
@@ -8,7 +13,8 @@ interface FocusTrapOptions {
   initialFocusRef?: RefObject<HTMLElement | null>
   /** Gate the trap (e.g. an overlay's `open`/`isOpen` flag). Default true. */
   active?: boolean
-  /** Include open shadow roots and skip inert snapshots in touch menus. */
+  /** For menus hosting web components: pick the opening focus through open shadow
+   *  roots, skipping inert snapshots, and listen for Tab in the capture phase. */
   includeShadowRoots?: boolean
 }
 
@@ -56,32 +62,16 @@ export function useFocusTrap<T extends HTMLElement>(
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // A control inside that already used Tab (a list moving its highlight) keeps focus.
-      if (e.key !== 'Tab' || e.defaultPrevented) return
-      const focusables = focusableElements(container)
-      if (focusables.length === 0) {
-        e.preventDefault()
-        container.focus()
-        return
-      }
-      const first = focusables[0]
-      const last = focusables[focusables.length - 1]
-      const activeEl = includeShadowRoots ? getComposedActiveElement() : document.activeElement
-      if (includeShadowRoots) {
-        // WebKit may skip buttons in its native Tab order depending on the OS
-        // keyboard preference. A modal menu owns the complete traversal.
-        e.preventDefault()
-        const index = focusables.indexOf(activeEl as HTMLElement)
-        const next = index < 0 ? (e.shiftKey ? focusables.length - 1 : 0)
-          : (index + (e.shiftKey ? -1 : 1) + focusables.length) % focusables.length
-        focusables[next].focus()
-      } else if (e.shiftKey && activeEl === first) {
-        e.preventDefault()
-        last.focus()
-      } else if (!e.shiftKey && activeEl === last) {
-        e.preventDefault()
-        first.focus()
-      }
+      // A control inside that already used Tab (a list moving its highlight) keeps focus,
+      // and a key that belongs to an IME composition is the input method's.
+      if (e.key !== 'Tab' || e.defaultPrevented || e.isComposing || e.keyCode === 229) return
+      // WebKit may skip buttons in its native Tab order depending on the OS keyboard
+      // preference, so native Tab can leave the trap from any control. The trap owns the
+      // complete traversal. A control that uses Tab itself must claim it in the capture
+      // phase, because this listener runs before React's bubble handlers.
+      e.preventDefault()
+      const activeEl = getComposedActiveElement()
+      if (!focusNextTabStop(getTabStops(container, activeEl), activeEl, e.shiftKey)) container.focus()
     }
 
     // Shadow-aware menus host widgets (the emoji picker) that may stop Tab
