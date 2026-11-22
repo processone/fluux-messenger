@@ -36,7 +36,7 @@ import { setupMdsSideEffects } from './mdsSideEffects'
 import { setupConversationSyncSideEffects } from './conversationSyncSideEffects'
 import { setupSavedMessagesSideEffects } from './savedMessagesSideEffects'
 import { NS_MAM } from './namespaces'
-import type { Room } from './types/room'
+import type { Room, RoomMessage } from './types/room'
 
 const OWN = 'me@example.com'
 const MARKER = `fluux:cache-marker:${OWN}/web`
@@ -97,6 +97,15 @@ describe('session order trace', () => {
     await engine.handleConnectionSuccess(resume, undefined, disconnectDurationMs)
   }
 
+  /** The room's own presence comes back: the active room fetches its archive unless the session already holds it. */
+  async function confirmRoomJoin(): Promise<void> {
+    trace.push('--- room join confirmed ---')
+    roomStore.getState().markAllRoomsNotJoined()
+    roomStore.getState().setRoomJoined(ROOM, true)
+    client._emitSDK('room:joined', { roomJid: ROOM, joined: true })
+    await advance(2_000)
+  }
+
   async function advance(ms: number): Promise<void> {
     await vi.advanceTimersByTimeAsync(ms)
   }
@@ -118,9 +127,13 @@ describe('session order trace', () => {
     chatStore.getState().setActiveConversation(PEER)
     roomStore.getState().addRoom({
       jid: ROOM, name: 'Team', nickname: 'me', joined: true, isBookmarked: true, supportsMAM: true,
-      occupants: new Map(), messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set(),
+      occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set(),
       isQuickChat: false,
-    } as Room)
+    } as Room, [{
+      type: 'groupchat', id: 'm1', roomJid: ROOM, from: `${ROOM}/alice`, nick: 'alice', body: 'hi',
+      timestamp: new Date('2026-10-16T07:00:00Z'), isOutgoing: false,
+    } as RoomMessage])
+    roomStore.getState().setActiveRoom(ROOM)
 
     client = createMockClient()
     const watch = (label: string, mock: ReturnType<typeof vi.fn>, result?: unknown) =>
@@ -196,6 +209,7 @@ describe('session order trace', () => {
   it('fresh session', async () => {
     await startSession(false)
     await advance(20_000)
+    await confirmRoomJoin()
     expect(trace).toMatchSnapshot()
   })
 
@@ -203,23 +217,27 @@ describe('session order trace', () => {
     localStorageMock.setItem(MARKER, '1')
     await startSession(true, 600_000)
     await advance(20_000)
+    await confirmRoomJoin()
     expect(trace).toMatchSnapshot()
   })
 
   it('resume upgraded to fresh because the cache marker is gone', async () => {
     await startSession(true, 600_000)
     await advance(20_000)
+    await confirmRoomJoin()
     expect(trace).toMatchSnapshot()
   })
 
   it('the resume after an upgraded one resumes normally', async () => {
     await startSession(true, 600_000)
     await advance(20_000)
+    await confirmRoomJoin()
     trace.push('--- next connection ---')
     connectionStore.getState().setStatus('reconnecting')
     connectionStore.getState().setStatus('online')
     await startSession(true, 600_000)
     await advance(20_000)
+    await confirmRoomJoin()
     expect(trace).toMatchSnapshot()
   })
 
@@ -241,6 +259,7 @@ describe('session order trace', () => {
     localStorageMock.setItem(MARKER, '1')
     await startSession(true, 5_000)
     await advance(20_000)
+    await confirmRoomJoin()
     expect(trace).toMatchSnapshot()
   })
 })

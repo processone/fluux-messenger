@@ -31,16 +31,16 @@ exports[`session order trace > disconnect in the middle of setup 1`] = `
   "catching-up:true",
   "retryPendingDecrypts",
   "waitForReplayIngested",
-  "mam.catchUpRoom",
   "savedMessages.fetchAll",
   "discovery.resetSessionCache",
   "presence.connect",
   "ensureE2EEManager",
   "roster.sendInitialPresence",
-  "roster.sendPresenceProbes",
   "catching-up:false",
+  "roster.sendPresenceProbes",
   "admin.discoverAdminCommands",
   "conversationSync.publishConversations",
+  "--- room join confirmed ---",
 ]
 `;
 
@@ -75,6 +75,10 @@ exports[`session order trace > fresh session 1`] = `
   "conversationSync.publishConversations",
   "catching-up:false",
   "retryPendingDecrypts",
+  "--- room join confirmed ---",
+  "catching-up:true",
+  "mam.catchUpRoomHistory",
+  "catching-up:false",
 ]
 `;
 
@@ -83,7 +87,6 @@ exports[`session order trace > resume upgraded to fresh because the cache marker
   "retryPendingDecrypts",
   "catching-up:true",
   "waitForReplayIngested",
-  "mam.catchUpRoom",
   "savedMessages.fetchAll",
   "discovery.resetSessionCache",
   "presence.connect",
@@ -113,6 +116,7 @@ exports[`session order trace > resume upgraded to fresh because the cache marker
   "conversationSync.publishConversations",
   "catching-up:false",
   "retryPendingDecrypts",
+  "--- room join confirmed ---",
 ]
 `;
 
@@ -121,18 +125,18 @@ exports[`session order trace > stream-management resume 1`] = `
   "retryPendingDecrypts",
   "catching-up:true",
   "waitForReplayIngested",
-  "mam.catchUpRoom",
   "savedMessages.fetchAll",
   "discovery.resetSessionCache",
   "presence.connect",
   "ensureE2EEManager",
   "profile.refreshAllAvatarBlobUrls",
   "roster.sendInitialPresence",
+  "catching-up:false",
   "refreshConversationList",
   "roster.sendPresenceProbes",
   "muc.fetchBookmarks",
-  "catching-up:false",
   "admin.discoverAdminCommands",
+  "--- room join confirmed ---",
 ]
 `;
 
@@ -141,7 +145,6 @@ exports[`session order trace > the resume after an upgraded one resumes normally
   "retryPendingDecrypts",
   "catching-up:true",
   "waitForReplayIngested",
-  "mam.catchUpRoom",
   "savedMessages.fetchAll",
   "discovery.resetSessionCache",
   "presence.connect",
@@ -171,20 +174,21 @@ exports[`session order trace > the resume after an upgraded one resumes normally
   "conversationSync.publishConversations",
   "catching-up:false",
   "retryPendingDecrypts",
+  "--- room join confirmed ---",
   "--- next connection ---",
   "catching-up:true",
   "retryPendingDecrypts",
   "waitForReplayIngested",
-  "mam.catchUpRoom",
   "savedMessages.fetchAll",
   "discovery.resetSessionCache",
   "presence.connect",
   "ensureE2EEManager",
   "profile.refreshAllAvatarBlobUrls",
   "roster.sendInitialPresence",
+  "catching-up:false",
   "roster.sendPresenceProbes",
   "muc.fetchBookmarks",
-  "catching-up:false",
   "admin.discoverAdminCommands",
+  "--- room join confirmed ---",
 ]
 `;
