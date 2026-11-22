@@ -3050,19 +3050,10 @@ async function roomGetMessageByStanzaId(
 }
 
 /**
- * Get messages for a room with optional pagination.
- * Messages are returned in chronological order (oldest first).
- * Returns `[]` when the cache cannot be read; see {@link roomReadMessages}.
+ * Get messages for a room with optional pagination, oldest first, reporting an
+ * unreadable cache instead of an empty result (the public `getMessages` maps
+ * that to `[]`).
  */
-async function roomGetMessages(
-  roomJid: string,
-  options: GetMessagesOptions = {}
-): Promise<RoomMessage[]> {
-  const read = await roomReadMessages(roomJid, options)
-  return read.status === 'ok' ? read.value : []
-}
-
-/** {@link roomGetMessages}, reporting an unreadable cache instead of an empty result. */
 async function roomReadMessages(
   roomJid: string,
   options: GetMessagesOptions = {}
