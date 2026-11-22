@@ -53,7 +53,6 @@ import { VirtualizerSpacer } from './VirtualizerSpacer'
 import {
   setActiveMessageListController,
   getActiveMessageListController,
-  type ActiveMessageListController,
 } from './activeMessageListController'
 import { MessageTargetProvider } from './messageTargetContext'
 import { useRowMetrics } from './useRowMetrics'
@@ -613,36 +612,19 @@ export function MessageList<T extends BaseMessage>({
     setScrollContainerRefFromHook(element)
   }, [setScrollContainerRefFromHook])
 
-  // Register this list so code with no enclosing list (PollBanner above the list, find-on-page at
-  // the layout level) and ChatLayout's Escape handler can reach the LIVE conversation. Previews are
-  // excluded on purpose: several static lists can be mounted at once, and this registry holds only
-  // one, so letting them register would make routing depend on which list rendered most recently.
-  // Callers rendered INSIDE a list route by containment instead (see messageTargetContext).
-  // Identity-checked cleanup ensures a fast conversation switch cannot clear the new registration.
-  useEffect(() => {
-    if (staticMode) return
-    const controller: ActiveMessageListController = {
-      requestMessageTarget,
-      scrollToBottom,
-      observeKeyboardNavigation,
-    }
-    setActiveMessageListController(controller)
-    return () => {
-      if (getActiveMessageListController() === controller) setActiveMessageListController(null)
-    }
-  }, [requestMessageTarget, scrollToBottom, observeKeyboardNavigation, staticMode])
-
-  // The command handle the owning view holds. It answers from live refs, so it stays one stable
-  // object per mounted list however often the callbacks below change identity.
+  // The command handle: one stable object per mounted list that answers from live refs however
+  // often the callbacks change identity. The owning view holds it through `handleRef`, and the live
+  // list registers this same object for code with no enclosing list (PollBanner above the list,
+  // find-on-page at the layout level) and ChatLayout's Escape handler.
   const handleLatestRef = useRef({
     requestMessageTarget, scrollToBottom, observeKeyboardNavigation, isAtBottom,
-    assumeAwayFromBottomForKeyboard, conversationId, staticMode,
+    assumeAwayFromBottomForKeyboard, conversationId,
   })
   handleLatestRef.current = {
     requestMessageTarget, scrollToBottom, observeKeyboardNavigation, isAtBottom,
-    assumeAwayFromBottomForKeyboard, conversationId, staticMode,
+    assumeAwayFromBottomForKeyboard, conversationId,
   }
-  useImperativeHandle(handleRef, (): MessageListHandle => ({
+  const handle = useMemo((): MessageListHandle => ({
     requestMessageTarget: id => handleLatestRef.current.requestMessageTarget(id),
     scrollToBottom: () => handleLatestRef.current.scrollToBottom(),
     noteKeyboardNavigation: (phase = 'start') => {
@@ -658,7 +640,20 @@ export function MessageList<T extends BaseMessage>({
     lastVisibleRowId: () => lastVisibleRowId(scrollContainerRef.current),
     contains: node => !!node && !!scrollContainerRef.current?.contains(node),
     measureViewport: () => measureElementViewport(scrollContainerRef.current),
-  }), [handleRef])
+  }), [scrollContainerRef])
+  useImperativeHandle(handleRef, () => handle, [handle])
+
+  // Previews are excluded on purpose: several static lists can be mounted at once, and this registry
+  // holds only one, so letting them register would make routing depend on which list rendered most
+  // recently. Callers rendered INSIDE a list route by containment instead (see messageTargetContext).
+  // Identity-checked cleanup ensures a fast conversation switch cannot clear the new registration.
+  useEffect(() => {
+    if (staticMode) return
+    setActiveMessageListController(handle)
+    return () => {
+      if (getActiveMessageListController() === handle) setActiveMessageListController(null)
+    }
+  }, [handle, staticMode])
 
   useArrivalJump({
     conversationId,
