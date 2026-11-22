@@ -74,7 +74,9 @@
  *    before xmpp.js resends its queue, for two reasons: the saved count can be
  *    ahead of `h` after a page reload, and would hold back later acks; and only
  *    messages are resent. A request's caller is gone with the old client, and a
- *    presence may be out of date, so those stay unsent as they did before.
+ *    presence may be out of date, so those stay unsent as they did before. A
+ *    console message with an unparsable address (patch 4) is not resent either:
+ *    xmpp.js would throw on it and abort the resumption.
  *    When the server instead enables a new session through Bind 2, xmpp.js
  *    keeps its queue and count, so this patch clears them: nothing from the
  *    old session may be resent in the new one.
@@ -376,7 +378,8 @@ export function patchSmResumeQueue(xmppClient: Client): void {
     if (!Number.isSafeInteger(h) || h < 0) return
     const notReceived = sm.outbound_q.slice(Math.max(0, h - sm.outbound))
     sm.outbound = h
-    sm.outbound_q = notReceived.filter(item => item.stanza?.name === 'message')
+    // xmpp.js throws on an address it cannot parse, which would abort the resumption.
+    sm.outbound_q = notReceived.filter(({ stanza }) => stanza?.name === 'message' && !hasUnparsableAddress(stanza))
   })
 }
 

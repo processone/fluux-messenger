@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { client, xml, type Client, type Element } from '@xmpp/client'
-import { patchSmAckQueue, patchSmResumeQueue } from './smPatches'
+import { patchSmAckQueue, patchSmOutboundCount, patchSmResumeQueue } from './smPatches'
 
 const NS_SM = 'urn:xmpp:sm:3'
 const NS_STREAM = 'http://etherx.jabber.org/streams'
@@ -49,6 +49,7 @@ function resumingClient(acked: number, unacknowledged: Element[], session = SESS
 
   const sm = xmppClient.streamManagement
   patchSmAckQueue(sm)
+  patchSmOutboundCount(xmppClient)
   patchSmResumeQueue(xmppClient)
   sm.id = session
   sm.outbound = acked
@@ -126,6 +127,17 @@ describe('Resending after a resumption (patchSmResumeQueue)', () => {
     await resumeWith(harness, 30)
 
     expect(stanzasOn(harness.wire).map(stanza => stanza.name)).toEqual(['message'])
+  })
+
+  it('completes the resume and resends the rest when a lost console message has an unusable address', async () => {
+    const unusable = xml('message', { to: '@', type: 'chat', id: 'console_1', xmlns: 'jabber:client' }, xml('body', {}, 'typed in the console'))
+    const harness = resumingClient(14, [unusable, chat('7b1f0a22', 'still delivered')])
+
+    await resumeWith(harness, 14)
+
+    expect(stanzasOn(harness.wire).map(stanza => stanza.attrs.id)).toEqual(['7b1f0a22'])
+    expect(harness.xmppClient.streamManagement.outbound).toBe(14)
+    expect(harness.xmppClient.streamManagement.outbound_q.map(item => item.stanza?.attrs.id)).toEqual(['7b1f0a22'])
   })
 
   it('keeps the resent message until the server acknowledges it', async () => {
