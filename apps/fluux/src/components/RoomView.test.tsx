@@ -1295,33 +1295,6 @@ describe('RoomView', () => {
     })
   })
 
-  describe.skip('Reply flow', () => {
-    beforeEach(() => {
-      mockActiveRoom = createRoom({
-        occupantsList: [createOccupant()],
-      })
-      mockActiveMessages = [
-        createRoomMessage({ id: 'msg-1', body: 'Hello there!' }),
-        createRoomMessage({ id: 'msg-2', body: 'Another message' }),
-      ]
-    })
-
-    it('should show reply button on message hover', async () => {
-      render(<RoomView />)
-
-      const messageText = screen.getByText('Hello there!')
-      const messageContainer = messageText.closest('[data-message-id]')
-
-      if (messageContainer) {
-        fireEvent.mouseEnter(messageContainer)
-
-        await waitFor(() => {
-          expect(screen.getByTestId('icon-reply')).toBeInTheDocument()
-        })
-      }
-    })
-  })
-
   describe.skip('Edit flow', () => {
     beforeEach(() => {
       mockActiveRoom = createRoom({

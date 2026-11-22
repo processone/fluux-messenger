@@ -74,8 +74,9 @@ miss. Remaining skips outside the required list are warnings, not a claim that
 the whole application compiles.
 
 The command fails if any required hot component does not emit a compiler success
-event: MessageList, MessageBubble, RoomMessageList, ChatView, RoomView,
-MessageComposer, ContactList, ConversationList and RoomsList. It runs its own
+event: MessageList, MessageBubble, ConversationThread, useConversationThread,
+RoomMessageList, ChatView, RoomView, MessageComposer, ContactList,
+ConversationList and RoomsList. It runs its own
 regression tests and is included in application lint, so CI enforces this list.
 Changing or moving one of these components must update the coverage manifest in
 `apps/fluux/scripts/checkReactCompiler.mjs`, not silently remove its requirement.
