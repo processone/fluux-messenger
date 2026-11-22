@@ -146,6 +146,7 @@
         "rename": "Reanomena",
         "removeContact": "Elimina contacte",
         "removeFromRoster": "Elimina dels meus contactes",
+        "removeFromSelection": "Treu {{name}} de la selecció",
         "addContact": "Afegeix un contacte",
         "renameContact": "Reanomena el contacte",
         "displayName": "Nom visible",

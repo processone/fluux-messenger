@@ -146,6 +146,7 @@
         "rename": "Biddel l-isem",
         "removeContact": "Neħħi kuntatt",
         "removeFromRoster": "Neħħi mill-kuntatti tiegħi",
+        "removeFromSelection": "Neħħi {{name}} mill-għażla",
         "addContact": "Żid Kuntatt",
         "renameContact": "Biddel l-Isem tal-Kuntatt",
         "displayName": "Isem li Jidher",

@@ -145,6 +145,7 @@
         "rename": "Pārdēvēt",
         "removeContact": "Noņemt kontaktu",
         "removeFromRoster": "Noņemt no maniem kontaktiem",
+        "removeFromSelection": "Noņemt {{name}} no atlases",
         "addContact": "Pievienot kontaktu",
         "renameContact": "Pārdēvēt kontaktu",
         "displayName": "Attēlojamais vārds",

@@ -144,6 +144,7 @@
         "rename": "Переименовать",
         "removeContact": "Удалить контакт",
         "removeFromRoster": "Удалить из моих контактов",
+        "removeFromSelection": "Убрать {{name}} из выбранных",
         "addContact": "Добавить контакт",
         "renameContact": "Переименовать контакт",
         "displayName": "Отображаемое имя",

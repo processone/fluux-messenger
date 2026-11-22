@@ -144,6 +144,7 @@
         "rename": "重命名",
         "removeContact": "移除联系人",
         "removeFromRoster": "从我的联系人中移除",
+        "removeFromSelection": "从所选项中移除 {{name}}",
         "addContact": "添加联系人",
         "renameContact": "重命名联系人",
         "displayName": "显示名称",

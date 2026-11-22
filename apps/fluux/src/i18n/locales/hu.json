@@ -144,6 +144,7 @@
         "rename": "Átnevezés",
         "removeContact": "Névjegy eltávolítása",
         "removeFromRoster": "Eltávolítás a névjegyeimből",
+        "removeFromSelection": "{{name}} eltávolítása a kijelölésből",
         "addContact": "Névjegy hozzáadása",
         "renameContact": "Névjegy átnevezése",
         "displayName": "Megjelenített név",

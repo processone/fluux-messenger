@@ -48,6 +48,7 @@ export const changelog: ChangelogEntry[] = [
     }, {
       type: 'fixed',
       items: [
+        'Screen readers now name the remove button on each chosen contact in contact pickers, such as Invite to Room, so you can tell which contact it takes out of the selection, in every language',
         'Large contact lists open and filter faster in Contacts, the command palette, recipient picker and room mentions. Suggestions prioritize exact matches and show how many results are hidden; type more to narrow them. Names and usernames take priority over category words in the command palette. Contacts keeps the full list scrollable and its search field in place while you scroll',
         'People whose server name starts with chat., muc., rooms., conference. or groupchat. are no longer mistaken for rooms: their contact requests now appear, and their first messages arrive under Message requests like anyone else\'s',
         'Headings and section titles in Polish, Czech, Slovak, Slovenian, Croatian, Hungarian, Romanian, Latvian, Lithuanian, Estonian and Maltese no longer switch typeface in the middle of a word, and Russian, Ukrainian, Belarusian, Bulgarian and Greek headings now get the same heading style as other languages. The heading font is now Inter Display, which covers the same letters as the rest of the interface',

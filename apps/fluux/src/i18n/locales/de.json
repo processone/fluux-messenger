@@ -146,6 +146,7 @@
         "rename": "Umbenennen",
         "removeContact": "Kontakt entfernen",
         "removeFromRoster": "Aus meinen Kontakten entfernen",
+        "removeFromSelection": "{{name}} aus der Auswahl entfernen",
         "addContact": "Kontakt hinzufügen",
         "renameContact": "Kontakt umbenennen",
         "displayName": "Anzeigename",

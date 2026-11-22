@@ -3,6 +3,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import { ContactSelector } from './ContactSelector'
 import { ModalShell } from './ModalShell'
 import type { Contact, PresenceStatus } from '@fluux/sdk'
+import en from '@/i18n/locales/en.json'
 
 // Mock contacts data
 const mockContacts: Contact[] = [
@@ -44,7 +45,10 @@ vi.mock('@fluux/sdk/react', () => ({
 // Mock react-i18next
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => {
+    t: (key: string, options?: { name?: string }) => {
+      if (key === 'contacts.removeFromSelection') {
+        return en.contacts.removeFromSelection.replace('{{name}}', options?.name ?? '')
+      }
       const translations: Record<string, string> = {
         'contacts.searchContacts': 'Search contacts...',
         'contacts.addMoreContacts': 'Add more contacts...',
@@ -60,6 +64,24 @@ describe('ContactSelector', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  describe('remove buttons on chosen contacts', () => {
+    it('names each button after its contact and removes only that contact', () => {
+      const typedAddress = 'someone@elsewhere.example'
+      const removeName = (name: string) => en.contacts.removeFromSelection.replace('{{name}}', name)
+      render(
+        <ContactSelector
+          selectedContacts={['alice@example.com', typedAddress]}
+          onSelectionChange={mockOnSelectionChange}
+        />
+      )
+
+      expect(screen.getByRole('button', { name: removeName(typedAddress) })).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: removeName('Alice Smith') }))
+
+      expect(mockOnSelectionChange).toHaveBeenCalledExactlyOnceWith([typedAddress])
+    })
   })
 
   describe('contacts who cannot be chosen', () => {
