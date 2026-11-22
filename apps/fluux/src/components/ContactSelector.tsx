@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
-import { createPortal } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import { TextInput } from './ui/TextInput'
 import { SuggestionLimitHint } from './ui/SuggestionLimitHint'
 import { suggestionMatchRank } from '@/utils/suggestionMatchRank'
@@ -78,6 +78,8 @@ interface UnifiedContact {
  * - Escape: step back one layer: clear the search, then close the list, then let the
  *   surrounding window handle it. With the list closed, Tab moves to the next control.
  * - Backspace (empty input): remove last selected contact
+ * - Enter/Space on a remove button: remove that contact and move to the next remove
+ *   button, the previous one at the end of the row, or the input when none remain
  */
 export function ContactSelector({
   selectedContacts,
@@ -111,6 +113,9 @@ export function ContactSelector({
   const popoverRef = useRef<HTMLDivElement>(null)
   const hintRef = useRef<HTMLDivElement>(null)
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const chipRowRef = useRef<HTMLDivElement>(null)
+  // The Enter that removed a contact may still be down when focus reaches the next control.
+  const removalKeyHeldRef = useRef(false)
 
   // Recent-activity ordering is a one-shot nicety for the dropdown. Read it
   // non-reactively (getState, not a subscription) so the picker does NOT re-render
@@ -397,6 +402,36 @@ export function ContactSelector({
     onSelectionChange(selectedContacts.filter(j => j !== jid))
   }
 
+  // The focused button is about to leave the page, which would drop focus outside a modal
+  // and its focus trap. A key press reports a click count of 0; a pointer press keeps its
+  // behavior, so clicking a chip away does not open the suggestions.
+  const removeChosenContact = (e: React.MouseEvent<HTMLButtonElement>, jid: string) => {
+    const button = e.currentTarget
+    const movesFocus = e.detail === 0 && document.activeElement === button
+    const position = selectedContacts.indexOf(jid)
+    // Commit now, so the control that receives focus is the one left after the removal.
+    flushSync(() => removeContact(jid))
+    if (!movesFocus || button.isConnected) return
+    const remaining = chipRowRef.current?.querySelectorAll<HTMLButtonElement>('button')
+    const next = remaining?.[Math.min(position, remaining.length - 1)] ?? inputRef.current
+    removalKeyHeldRef.current = true
+    next?.focus()
+  }
+
+  // Enter presses a button on key-down, so its auto-repeat must not press the control focus
+  // just moved to: holding it would remove every contact and then pick a suggestion. Only
+  // Enter's own release or new press ends this; a released Shift says nothing about Enter.
+  // Space presses a button on key-up, so it is never still held here.
+  const handleRemovalKeyRepeat = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!removalKeyHeldRef.current || e.key !== 'Enter') return
+    if (e.repeat) {
+      e.preventDefault()
+      e.stopPropagation()
+    } else {
+      removalKeyHeldRef.current = false
+    }
+  }
+
   // Move the highlight, wrapping at both ends; with nothing highlighted, start at an end.
   const moveHighlight = (step: 1 | -1) => {
     const count = filteredContacts.length
@@ -482,10 +517,13 @@ export function ContactSelector({
   const defaultAddMorePlaceholder = t('contacts.addMoreContacts')
 
   return (
-    <div>
+    <div
+      onKeyDownCapture={handleRemovalKeyRepeat}
+      onKeyUpCapture={(e) => { if (e.key === 'Enter') removalKeyHeldRef.current = false }}
+    >
       {/* Selected contacts chips */}
       {selectedContacts.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2">
+        <div ref={chipRowRef} className="flex flex-wrap gap-1 mb-2">
           {selectedContacts.map(jid => {
             const key = rosterMergeKey(jid)
             const contact = contacts.find(c => rosterMergeKey(c.jid) === key)
@@ -499,7 +537,7 @@ export function ContactSelector({
                 {displayName}
                 <button
                   type="button"
-                  onClick={() => removeContact(jid)}
+                  onClick={(e) => removeChosenContact(e, jid)}
                   aria-label={t('contacts.removeFromSelection', { name: displayName })}
                   className="hover:text-fluux-text"
                   disabled={disabled}

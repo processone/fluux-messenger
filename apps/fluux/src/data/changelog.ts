@@ -50,6 +50,7 @@ export const changelog: ChangelogEntry[] = [
       items: [
         'In Contacts and Search, pressing an arrow key in the search field and then Enter now opens the highlighted result right away',
         'Screen readers now name the remove button on each chosen contact in contact pickers, such as Invite to Room, so you can tell which contact it takes out of the selection, in every language',
+        'Keyboard users keep their place in contact pickers: removing a chosen contact moves focus to a neighboring contact\'s remove button, or to the search field when no contact is left, instead of out of the window',
         'A message you send just as your connection drops is no longer lost while shown as sent: when Fluux gets the same session back, it sends the messages your server did not receive, and each reaches the other person once',
         'Large contact lists open and filter faster in Contacts, the command palette, recipient picker and room mentions. Suggestions prioritize exact matches and show how many results are hidden; type more to narrow them. Names and usernames take priority over category words in the command palette. Contacts keeps the full list scrollable and its search field in place while you scroll',
         'People whose server name starts with chat., muc., rooms., conference. or groupchat. are no longer mistaken for rooms: their contact requests now appear, and their first messages arrive under Message requests like anyone else\'s',
