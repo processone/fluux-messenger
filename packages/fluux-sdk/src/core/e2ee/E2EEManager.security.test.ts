@@ -295,3 +295,23 @@ describe('E2EEManager identities, decisions and events', () => {
     expect(seen).toHaveLength(3)
   })
 })
+
+// Intent: FLM-426 — the manager's plaintext rule for each aggregate trust reading, with a mocked
+// plugin. Whether the real OMEMO plugin produces these readings is owned by its own trust tests,
+// which compose the real plugin with this manager. This rule guards the no-strategy path; a failed
+// encryption by a selected plugin is rethrown by Chat, never sent as plaintext.
+describe('E2EEManager.assertPlaintextPermitted for aggregate trust readings', () => {
+  it.each([
+    ['tofu', true],
+    ['untrusted', true],
+    ['unknown', false],
+  ] as const)('a peer reading %s blocks plaintext: %s', async (trust, blocked) => {
+    const dummy = new DummyPlaintextPlugin()
+    vi.spyOn(dummy, 'getPeerTrust').mockResolvedValue(trust as TrustState)
+    const { manager } = await setup(dummy)
+    expect(await manager.hasEstablishedTrust(PEER)).toBe(blocked)
+    const attempt = manager.assertPlaintextPermitted(target)
+    if (blocked) await expect(attempt).rejects.toThrow()
+    else await expect(attempt).resolves.toBeUndefined()
+  })
+})

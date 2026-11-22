@@ -423,16 +423,13 @@ export class E2EEManager {
 
   /**
    * True if any registered plugin reports an *established* trust state for
-   * this peer — `verified`, `introduced`, or `tofu`. These all mean "we hold
-   * a pinned key for this peer", so plaintext is an implicit per-peer downgrade
-   * and must be blocked even under the opportunistic global policy. `untrusted`
-   * and `unknown` are excluded: the former is a deliberate not-trusted marker
-   * (forward-looking — the OpenPGP plugin never reports `untrusted` for peer
-   * trust: a contact whose keys all wait for a decision or were all refused
-   * reports `tofu`, and encrypt() throws peer-keys-awaiting-decision,
-   * peer-keys-trust-pending or peer-keys-distrusted), the latter means we
-   * have never seen a key
-   * (legitimate first contact).
+   * this peer: `verified`, `introduced`, `tofu` or `untrusted`. All mean "we
+   * hold a key for this peer", so plaintext is an implicit per-peer downgrade
+   * and must be blocked even under the opportunistic global policy. For OMEMO
+   * a contact with a usable device reads `tofu` from first contact, and one
+   * with a refused or waiting device reads `untrusted`; neither may fall back
+   * to plaintext when no strategy is selected. Only `unknown` is excluded: we have never seen a usable key
+   * (legitimate first contact, or a device whose bundle cannot be fetched).
    *
    * Plugin trust-check errors are treated as not-established (fail-open) so a
    * transient plugin fault never permanently blocks the send path.
@@ -441,7 +438,7 @@ export class E2EEManager {
     for (const plugin of this.plugins.values()) {
       try {
         const trust = await plugin.getPeerTrust(peer)
-        if (trust === 'verified' || trust === 'introduced' || trust === 'tofu') {
+        if (trust === 'verified' || trust === 'introduced' || trust === 'tofu' || trust === 'untrusted') {
           return true
         }
       } catch {
@@ -462,8 +459,8 @@ export class E2EEManager {
    * Priority order:
    * 1. Forced-plaintext override always passes — explicit user consent.
    * 2. Strict global send policy blocks all plaintext.
-   * 3. A direct peer with established trust (verified / introduced / tofu) blocks plaintext (implicit per-peer strict).
-   * 4. Opportunistic policy with an unverified peer → allowed.
+   * 3. A direct peer with established trust (verified / introduced / tofu / untrusted) blocks plaintext (implicit per-peer strict), for every plugin.
+   * 4. Opportunistic policy with a peer whose trust is unknown → allowed.
    */
   async assertPlaintextPermitted(target: ConversationTarget): Promise<void> {
     if (this.isForcedPlaintext(target)) return

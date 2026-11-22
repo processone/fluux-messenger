@@ -1206,13 +1206,13 @@ describe('assertPlaintextPermitted — sticky established trust', () => {
     ).resolves.toBeUndefined()
   })
 
-  it('permits plaintext to an untrusted peer in opportunistic mode', async () => {
+  it('blocks plaintext to an untrusted peer in opportunistic mode (a refused or waiting OMEMO device never downgrades the contact)', async () => {
     const { mgr, plugin } = makeManagerWithPlugin()
     await mgr.register(plugin)
     vi.spyOn(plugin, 'getPeerTrust').mockResolvedValue('untrusted')
     await expect(
       mgr.assertPlaintextPermitted({ kind: 'direct', peer: 'bob@example.com' }),
-    ).resolves.toBeUndefined()
+    ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
   })
 })
 
