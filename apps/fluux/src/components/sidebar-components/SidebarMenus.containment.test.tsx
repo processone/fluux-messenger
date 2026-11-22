@@ -4,6 +4,9 @@ import type { Contact, Room } from '@fluux/sdk'
 import { ContactList } from './ContactList'
 import { RoomsList } from './RoomsList'
 
+// This owner checks menu containment, not viewport geometry (long-pickers.ts).
+vi.mock('@tanstack/react-virtual', () => import('./contactListTestVirtualizer'))
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }))
@@ -17,6 +20,7 @@ const fixture = vi.hoisted(() => ({
   } as Room,
   startChat: vi.fn(),
   leaveRoom: vi.fn(),
+  holdPoint: { clientX: 215, clientY: 552 },
 }))
 
 vi.mock('@fluux/sdk', async (importOriginal) => ({
@@ -75,8 +79,9 @@ describe('issue #1790 — every sidebar long-press menu escapes the scrolling li
       const label = isContact ? 'contacts.startChat' : 'rooms.leaveRoom'
       expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument()
       const hold = () => {
-        fireEvent.touchStart(row, { touches: [{ clientX: 215, clientY: 552 }] })
-        act(() => vi.advanceTimersByTime(500))
+        fireEvent.touchStart(row, { touches: [fixture.holdPoint] })
+        // The hook owns the delay; this owner checks the resulting menu.
+        act(() => vi.runOnlyPendingTimers())
         fireEvent.touchEnd(row)
       }
       hold()
@@ -86,7 +91,9 @@ describe('issue #1790 — every sidebar long-press menu escapes the scrolling li
       expect(menu.parentElement).toBe(document.body)
       expect(screen.getByTestId('scrolling-list')).not.toContainElement(menu)
       expect(menu).toHaveClass(isContact ? 'min-w-40' : 'min-w-48')
-      expect(menu).toHaveStyle({ left: '215px', top: '552px' })
+      expect(menu).toHaveStyle({
+        left: `${fixture.holdPoint.clientX}px`, top: `${fixture.holdPoint.clientY}px`,
+      })
       fireEvent.mouseDown(action)
       expect(action).toBeInTheDocument()
       fireEvent.click(action)

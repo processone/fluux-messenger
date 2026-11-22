@@ -20,7 +20,8 @@ const mockConversations = [
 ]
 
 // Mock SDK hooks
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@fluux/sdk')>(),
   useRoster: () => ({
     contacts: mockContacts,
   }),
@@ -29,13 +30,6 @@ vi.mock('@fluux/sdk', () => ({
     getState: () => ({
       conversations: new Map(mockConversations.map((c) => [c.id, c])),
     }),
-  },
-  // JID utilities moved from app to SDK
-  matchNameOrJid: (name: string, jid: string, query: string) => {
-    const lowerQuery = query.toLowerCase()
-    const nameMatch = name.toLowerCase().includes(lowerQuery)
-    const usernameMatch = jid.split('@')[0].toLowerCase().includes(lowerQuery)
-    return nameMatch || usernameMatch
   },
 }))
 
@@ -535,7 +529,7 @@ describe('ContactSelector', () => {
         typeValue(input, 'tea')
       })
       // A new chat sorts ahead of the entry the person is looking at.
-      rerender(selector([{ jid: 'a-team@example.org', name: 'A team' }, room]))
+      rerender(selector([{ jid: 'a-team@example.org', name: 'Tea assembly' }, room]))
       fireEvent.keyDown(input, { key: 'Enter' })
 
       expect(mockOnSelectionChange).toHaveBeenCalledExactlyOnceWith([room.jid])
@@ -569,7 +563,7 @@ describe('ContactSelector', () => {
       leave(input)
       fireEvent.keyDown(input, { key: 'Enter' })
 
-      expect(mockOnSelectionChange).toHaveBeenCalledExactlyOnceWith(['charlie@example.com'])
+      expect(mockOnSelectionChange).toHaveBeenCalledExactlyOnceWith([query ? 'alice@example.com' : 'charlie@example.com'])
     })
 
     it('should navigate down with ArrowDown', () => {
@@ -584,12 +578,12 @@ describe('ContactSelector', () => {
       fireEvent.focus(input)
       fireEvent.change(input, { target: { value: 'a' } }) // Matches Alice, Charlie, Diana (names contain 'a')
 
-      // First item is highlighted by default (Charlie - most recent)
+      // First item is Alice (prefix match), ahead of the recent substring match Charlie
       // Press down to highlight next item
       fireEvent.keyDown(input, { key: 'ArrowDown' })
       fireEvent.keyDown(input, { key: 'Enter' })
 
-      expect(mockOnSelectionChange).toHaveBeenCalledWith(['alice@example.com'])
+      expect(mockOnSelectionChange).toHaveBeenCalledWith(['charlie@example.com'])
     })
 
     it('should navigate up with ArrowUp', () => {
@@ -626,7 +620,7 @@ describe('ContactSelector', () => {
       fireEvent.keyDown(input, { key: 'Tab' })
       fireEvent.keyDown(input, { key: 'Enter' })
 
-      expect(mockOnSelectionChange).toHaveBeenCalledWith(['alice@example.com'])
+      expect(mockOnSelectionChange).toHaveBeenCalledWith(['charlie@example.com'])
     })
 
     it('should cycle backward with Shift+Tab', () => {
@@ -690,7 +684,7 @@ describe('ContactSelector', () => {
 
       const input = screen.getByPlaceholderText('Search contacts...')
       fireEvent.focus(input)
-      fireEvent.change(input, { target: { value: 'a' } }) // 3 matches: Charlie, Alice, Diana (sorted by activity)
+      fireEvent.change(input, { target: { value: 'a' } }) // 3 matches: Alice (prefix), Charlie (recent substring), Diana
 
       // Navigate past the end (3 times down should wrap to first)
       fireEvent.keyDown(input, { key: 'ArrowDown' })
@@ -698,7 +692,7 @@ describe('ContactSelector', () => {
       fireEvent.keyDown(input, { key: 'ArrowDown' })
       fireEvent.keyDown(input, { key: 'Enter' })
 
-      expect(mockOnSelectionChange).toHaveBeenCalledWith(['charlie@example.com'])
+      expect(mockOnSelectionChange).toHaveBeenCalledWith(['alice@example.com'])
     })
 
     it('should clear search with Escape', () => {

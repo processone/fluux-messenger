@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Viser {{shown}} af {{total}}. Skriv mere for at indsnævre",
         "cancel": "Annuller",
         "save": "Gem",
         "saving": "Gemmer...",
@@ -1674,6 +1675,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Flere resultater",
         "open": "Åbn kommandopalet",
         "placeholder": "Gå til...",
         "noResults": "Ingen resultater fundet",

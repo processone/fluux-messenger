@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Näytetään {{shown}}/{{total}}. Rajaa kirjoittamalla lisää",
         "cancel": "Peruuta",
         "save": "Tallenna",
         "saving": "Tallennetaan...",
@@ -1674,6 +1675,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Lisää osumia",
         "open": "Avaa komentopaletti",
         "placeholder": "Siirry...",
         "noResults": "Tuloksia ei löytynyt",

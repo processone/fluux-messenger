@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Zobrazených {{shown}} z {{total}}. Spresnite vyhľadávanie ďalším písaním",
         "cancel": "Zrušiť",
         "save": "Uložiť",
         "saving": "Ukladá sa...",
@@ -1679,6 +1680,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Ďalšie výsledky",
         "open": "Otvoriť paletu príkazov",
         "placeholder": "Prejsť na...",
         "noResults": "Žiadne výsledky sa nenašli",

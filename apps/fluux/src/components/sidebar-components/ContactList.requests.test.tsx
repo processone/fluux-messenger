@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ContactList } from './ContactList'
 
+vi.mock('@tanstack/react-virtual', () => import('./contactListTestVirtualizer'))
+
 const acceptSubscription = vi.fn()
 const rejectSubscription = vi.fn()
 

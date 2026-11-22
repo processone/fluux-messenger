@@ -328,15 +328,30 @@ describe('CommandPalette', () => {
       expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument()
     })
 
-    it('should filter items by keywords', () => {
+    it('keeps category matches below actual names across entity sections', () => {
+      mockRooms = [...defaultRooms, { jid: 'tools@conference.example.com', name: 'Muc Tools', joined: true }]
+      mockContacts = [...defaultContacts, { jid: 'muc-helper@example.com', name: 'Muc Helper' }]
       render(<CommandPalette {...defaultProps} />)
       const input = screen.getByPlaceholderText('Go to...')
-
-      // 'muc' is a keyword for rooms
+      // Category words still find rooms and actions, below genuine name matches.
       fireEvent.change(input, { target: { value: 'muc' } })
 
+      expect(screen.getByText('Join Room')).toBeInTheDocument()
       expect(screen.getByText('Development')).toBeInTheDocument()
+      const categoryRoom = screen.getByText('Development').closest('button')!
+      for (const name of ['Muc Tools', 'Muc Helper']) {
+        expect(screen.getByText(name).closest('button')!.compareDocumentPosition(categoryRoom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      }
       expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument()
+    })
+
+    it.each([
+      ['room', 'Development'], ['muc', 'Development'], ['group', 'Development'],
+      ['chat', 'Alice Smith'], ['contact', 'Charlie Brown'], ['roster', 'Diana Prince'],
+    ])('keeps %s as an entity-category fallback', (query, name) => {
+      render(<CommandPalette {...defaultProps} />)
+      fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: query } })
+      expect(screen.getByText(name)).toBeInTheDocument()
     })
 
     it('should show search gateway when nothing matches by name', () => {
@@ -1479,19 +1494,18 @@ describe('CommandPalette', () => {
       expect(screen.getByRole('button', { name: /Babette Martin/ })).toBeInTheDocument()
     })
 
-    it('preserves section and conversation order without duplicating the open contact', () => {
+    it('ranks identity ahead of body matches without duplicating the open contact', () => {
       render(<CommandPalette {...defaultProps} />)
       fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: 'bab' } })
       const rows = within(screen.getByRole('dialog')).getAllByRole('button')
       expect(rows.slice(0, 4).map(row => row.textContent)).toEqual([
-        expect.stringContaining('Other Person'),
         expect.stringContaining('Babetteperson42'),
         expect.stringContaining('Babette Martin'),
+        expect.stringContaining('Other Person'),
         expect.stringContaining('Babette Dupont'),
       ])
       expect(screen.getAllByText('person42@example.test')).toHaveLength(1)
       expect(screen.getByText('Babette Dupont').closest('button')!.parentElement).toHaveTextContent('Contacts')
-      fireEvent.keyDown(screen.getByPlaceholderText('Go to...'), { key: 'ArrowDown' })
       fireEvent.keyDown(screen.getByPlaceholderText('Go to...'), { key: 'Enter' })
       expect(mockSetActiveConversation).toHaveBeenCalledWith('person42@example.test')
     })

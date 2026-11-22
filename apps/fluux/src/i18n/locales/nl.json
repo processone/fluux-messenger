@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "{{shown}} van {{total}} getoond. Typ verder om te verfijnen",
         "cancel": "Annuleren",
         "save": "Opslaan",
         "saving": "Opslaan...",
@@ -1674,6 +1675,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Meer resultaten",
         "open": "Opdrachtenpalet openen",
         "placeholder": "Ga naar...",
         "noResults": "Geen resultaten gevonden",

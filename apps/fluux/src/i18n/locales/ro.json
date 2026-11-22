@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Se afișează {{shown}} din {{total}}. Continuați să tastați pentru a restrânge",
         "cancel": "Anulare",
         "save": "Salvare",
         "saving": "Se salvează...",
@@ -1678,6 +1679,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Mai multe rezultate",
         "open": "Deschide paleta de comenzi",
         "placeholder": "Mergi la...",
         "noResults": "Niciun rezultat găsit",

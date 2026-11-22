@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "{{shown}} résultats sur {{total}}, précisez votre recherche",
         "cancel": "Annuler",
         "save": "Enregistrer",
         "saving": "Enregistrement...",
@@ -1677,6 +1678,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Autres résultats",
         "open": "Ouvrir la palette de commandes",
         "placeholder": "Aller à...",
         "noResults": "Aucun résultat",

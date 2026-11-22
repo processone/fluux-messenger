@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { TextInput } from './ui/TextInput'
+import { SuggestionLimitHint } from './ui/SuggestionLimitHint'
+import { suggestionMatchRank } from '@/utils/suggestionMatchRank'
 import { useTranslation } from 'react-i18next'
 import { useRoster, matchNameOrJid, chatStore } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { X } from 'lucide-react'
-import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
+import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS, MAX_SUGGESTIONS } from '@/constants/ui'
 import { anchorMenuToTrigger } from '@/hooks/useAnchoredMenu'
 import { getFloatingViewport, limitFloatingHeight } from '@/hooks/floatingViewport'
 
@@ -58,6 +60,7 @@ export interface ContactSelectorProps {
 interface UnifiedContact {
   jid: string
   name: string
+  matchRank: number
   isExtra?: boolean
   presence?: string
   unavailableNote?: string
@@ -140,9 +143,12 @@ export function ContactSelector({
   // - Append extra suggestions not already in roster (dedupe by JID)
   // - Exclude already selected and excluded JIDs
   // - Filter by search if provided (match on name or username, not domain)
-  // - Sort: roster contacts by recent activity first, then extra suggestions alphabetically
+  // - Rank exact and prefix matches first, then recent roster activity or extra suggestion names
   // - Move contacts who cannot be chosen after everyone else, keeping that order
-  const filteredContacts = (() => {
+  const { contacts: filteredContacts, total: matchingContactCount } = (() => {
+    const compareMatches = (a: UnifiedContact, b: UnifiedContact) =>
+      Number(!!a.unavailableNote) - Number(!!b.unavailableNote) ||
+      a.matchRank - b.matchRank
     // Map roster contacts to unified type
     const rosterEntries: UnifiedContact[] = contacts
       .filter(contact => {
@@ -155,6 +161,7 @@ export function ContactSelector({
       .map(contact => ({
         jid: contact.jid,
         name: contact.name,
+        matchRank: suggestionMatchRank(search, contact.name, contact.jid),
         presence: contact.presence,
         unavailableNote: getUnavailableNote?.(contact.jid),
       }))
@@ -163,8 +170,7 @@ export function ContactSelector({
     rosterEntries.sort((a, b) => {
       const aTime = recentActivityMap.get(a.jid) || 0
       const bTime = recentActivityMap.get(b.jid) || 0
-      if (aTime !== bTime) return bTime - aTime
-      return a.name.localeCompare(b.name)
+      return compareMatches(a, b) || bTime - aTime || a.name.localeCompare(b.name)
     })
 
     // Map and filter extra suggestions (dedupe against roster)
@@ -180,28 +186,38 @@ export function ContactSelector({
       .map(s => ({
         jid: s.jid,
         name: s.name || s.jid,
+        matchRank: suggestionMatchRank(search, s.name || s.jid, s.jid),
         isExtra: true,
         unavailableNote: getUnavailableNote?.(s.jid),
       }))
 
-    // Sort extra entries alphabetically by name
-    extraEntries.sort((a, b) => a.name.localeCompare(b.name))
-
-    const entries = [...rosterEntries, ...extraEntries]
     const typedBareJid = searchJidNormalized.split('/')[0]
-    if (typedUnavailableNote && !entries.some(entry => entry.jid.toLowerCase().split('/')[0] === typedBareJid)) {
-      entries.push({
+    if (typedUnavailableNote && ![...rosterEntries, ...extraEntries].some(entry => entry.jid.toLowerCase().split('/')[0] === typedBareJid)) {
+      extraEntries.push({
         jid: searchJidNormalized,
         name: searchJidNormalized,
+        matchRank: suggestionMatchRank(search, searchJidNormalized, searchJidNormalized),
         isExtra: true,
         isTypedAddress: true,
         unavailableNote: typedUnavailableNote,
       })
     }
-    return [
-      ...entries.filter(entry => !entry.unavailableNote),
-      ...entries.filter(entry => entry.unavailableNote),
-    ]
+    extraEntries.sort((a, b) => compareMatches(a, b) || a.name.localeCompare(b.name))
+
+    // Each source gets its own space: the roster must not crowd rooms, non-roster
+    // chats or room members out of the opening suggestions.
+    const cap = (entries: UnifiedContact[]) => {
+      const visible = entries.slice(0, MAX_SUGGESTIONS)
+      const typedUnavailable = typedUnavailableNote
+        ? entries.find(entry => entry.jid.toLowerCase().split('/')[0] === typedBareJid)
+        : undefined
+      if (typedUnavailable && !visible.includes(typedUnavailable)) visible[visible.length - 1] = typedUnavailable
+      return visible
+    }
+    return {
+      contacts: [...cap(rosterEntries), ...cap(extraEntries)].sort(compareMatches),
+      total: rosterEntries.length + extraEntries.length,
+    }
   })()
 
   // A highlighted address that leaves the list highlights nothing until the user chooses again.
@@ -522,6 +538,7 @@ export function ContactSelector({
             {/* Keyboard-highlighted contacts */}
             {filteredContacts.length > 0 && (
               <>
+                <SuggestionLimitHint shown={filteredContacts.length} total={matchingContactCount} />
                 {filteredContacts.map((contact, index) => {
                   const presenceColor = contact.isExtra
                     ? 'bg-fluux-muted/50'

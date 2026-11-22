@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Visar {{shown}} av {{total}}. Skriv mer för att begränsa",
         "cancel": "Avbryt",
         "save": "Spara",
         "saving": "Sparar...",
@@ -1674,6 +1675,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Fler träffar",
         "open": "Öppna kommandopaletten",
         "placeholder": "Gå till...",
         "noResults": "Inga resultat hittades",

@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Showing {{shown}} of {{total}}, type to narrow",
         "cancel": "Cancel",
         "save": "Save",
         "saving": "Saving...",
@@ -1674,6 +1675,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "More matches",
         "open": "Open command palette",
         "placeholder": "Go to...",
         "noResults": "No results found",

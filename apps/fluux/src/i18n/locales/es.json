@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Mostrando {{shown}} de {{total}}. Escribe más para acotar",
         "cancel": "Cancelar",
         "save": "Guardar",
         "saving": "Guardando...",
@@ -1678,6 +1679,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Más resultados",
         "open": "Abrir la paleta de comandos",
         "placeholder": "Ir a...",
         "noResults": "No se encontraron resultados",

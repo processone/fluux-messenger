@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Prikazano {{shown}} od {{total}}. Upišite više za sužavanje pretrage",
         "cancel": "Odustani",
         "save": "Spremi",
         "saving": "Spremanje...",
@@ -1676,6 +1677,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Više rezultata",
         "open": "Otvori paletu naredbi",
         "placeholder": "Idi na...",
         "noResults": "Rezultati nisu pronađeni",

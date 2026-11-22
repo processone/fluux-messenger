@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "{{shown}} von {{total}} angezeigt. Zum Eingrenzen weitertippen",
         "cancel": "Abbrechen",
         "save": "Speichern",
         "saving": "Speichern...",
@@ -1676,6 +1677,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Weitere Treffer",
         "open": "Befehlspalette öffnen",
         "placeholder": "Gehe zu...",
         "noResults": "Keine Ergebnisse gefunden",

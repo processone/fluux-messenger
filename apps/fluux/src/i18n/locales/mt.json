@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "Qed jintwerew {{shown}} minn {{total}}. Ikteb aktar biex tillimita t-tfittxija",
         "cancel": "Ikkanċella",
         "save": "Issejvja",
         "saving": "Qed jissejvja...",
@@ -1682,6 +1683,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Aktar riżultati",
         "open": "Iftaħ il-palett tal-kmandi",
         "placeholder": "Mur għand...",
         "noResults": "Ma nstabux riżultati",

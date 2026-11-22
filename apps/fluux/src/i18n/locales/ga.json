@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "{{shown}} as {{total}} á dtaispeáint. Clóscríobh tuilleadh chun an cuardach a chúngú",
         "cancel": "Cealaigh",
         "save": "Sábháil",
         "saving": "Ag sábháil...",
@@ -1680,6 +1681,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "Tuilleadh torthaí",
         "open": "Oscail an phailéad orduithe",
         "placeholder": "Téigh go...",
         "noResults": "Níor aimsíodh torthaí",

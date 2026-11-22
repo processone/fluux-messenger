@@ -1,5 +1,6 @@
 {
     "common": {
+        "suggestionLimit": "מוצגות {{shown}} מתוך {{total}} תוצאות. הקלידו עוד כדי לצמצם",
         "cancel": "בטל",
         "save": "שמור",
         "saving": "שומר...",
@@ -1676,6 +1677,7 @@
         }
     },
     "commandPalette": {
+        "moreMatches": "תוצאות נוספות",
         "open": "פתיחת לוח הפקודות",
         "placeholder": "עבור אל...",
         "noResults": "לא נמצאו תוצאות",

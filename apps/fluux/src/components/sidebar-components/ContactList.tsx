@@ -1,4 +1,5 @@
-import React, { useState, useRef, useLayoutEffect, memo } from 'react'
+import React, { useState, useRef, useLayoutEffect, useMemo, memo } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { useContextMenu, useTypeToFocus, useListKeyboardNav } from '@/hooks'
@@ -24,6 +25,12 @@ interface ContactListProps {
   activeContactJid?: string | null
 }
 
+type ListRow =
+  | { kind: 'requests'; key: string }
+  | { kind: 'header'; key: string; title: string }
+  | { kind: 'empty'; key: string; hasContacts: boolean }
+  | { kind: 'contact'; key: string; jid: string; group: 'online' | 'offline' | 'errored'; lastInGroup: boolean }
+
 export function ContactList({ onStartChat, onSelectContact, onManageUser, activeContactJid }: ContactListProps) {
   detectRenderLoop('ContactList')
   const { t } = useTranslation()
@@ -43,6 +50,12 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const [searchQuery, setSearchQuery] = useState('')
+  const [renamingJid, setRenamingJid] = useState<string | null>(null)
+  const renamingContact = useRosterStore((state) => renamingJid ? state.contacts.get(renamingJid) : undefined)
+  // Removal ends this edit session, even if the same address is added later.
+  useLayoutEffect(() => {
+    if (renamingJid && !renamingContact) setRenamingJid(null)
+  }, [renamingJid, renamingContact])
   const searchInputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const zoneRef = useSidebarZone()
@@ -52,40 +65,34 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
 
   // Search matches name (from identity-only data, presence-stable) or the local part.
   const query = searchQuery.trim().toLowerCase()
-  const matchesQuery = (jid: string) => {
-    if (!query) return true
-    const name = identities.get(jid)?.name ?? ''
-    return matchNameOrJid(name, jid, query)
-  }
-
-  // Decode entries into display sections (jids). When disconnected (forceOffline),
-  // every non-errored contact shows in the offline section. flatJids is the flat
-  // top-to-bottom order used for keyboard navigation.
-  const online: string[] = []
-  const offline: string[] = []
-  const errored: string[] = []
-  const flatJids: string[] = []
-  for (const entry of entries) {
-    const sep = entry.indexOf(' ')
-    const group = entry.slice(0, sep)
-    const jid = entry.slice(sep + 1)
-    if (!matchesQuery(jid)) continue
-    flatJids.push(jid)
-    if (group === 'errored') errored.push(jid)
-    else if (forceOffline || group === 'offline') offline.push(jid)
-    else online.push(jid)
-  }
-  const jidToIndex = new Map(flatJids.map((jid, i) => [jid, i]))
+  const { online, offline, errored, flatJids } = useMemo(() => {
+    const online: string[] = []
+    const offline: string[] = []
+    const errored: string[] = []
+    const flatJids: string[] = []
+    for (const entry of entries) {
+      const sep = entry.indexOf(' ')
+      const group = entry.slice(0, sep)
+      const jid = entry.slice(sep + 1)
+      if (query && !matchNameOrJid(identities.get(jid)?.name ?? '', jid, query)) continue
+      flatJids.push(jid)
+      if (group === 'errored') errored.push(jid)
+      else if (forceOffline || group === 'offline') offline.push(jid)
+      else online.push(jid)
+    }
+    return { online, offline, errored, flatJids }
+  }, [entries, identities, query, forceOffline])
+  const jidToIndex = useMemo(() => new Map(flatJids.map((jid, i) => [jid, i])), [flatJids])
 
   // Mount-scoped handlers keep row props stable. Publish the latest actions
   // after commit, so an abandoned render cannot change a visible row's actions.
-  const latestRef = useRef({ onSelectContact, onStartChat, removeContact, renameContact, onManageUser })
-  useLayoutEffect(() => { latestRef.current = { onSelectContact, onStartChat, removeContact, renameContact, onManageUser } })
+  const latestRef = useRef({ onSelectContact, onStartChat, removeContact, onManageUser })
+  useLayoutEffect(() => { latestRef.current = { onSelectContact, onStartChat, removeContact, onManageUser } })
   const [rowHandlers] = useState(() => ({
     onSelect: (contact: Contact) => latestRef.current.onSelectContact?.(contact),
     onStartChat: (contact: Contact) => latestRef.current.onStartChat?.(contact),
     onRemove: (jid: string) => latestRef.current.removeContact(jid),
-    onRename: (jid: string, name: string) => latestRef.current.renameContact(jid, name),
+    onRename: (contact: Contact) => setRenamingJid(contact.jid),
     onManageUser: (jid: string) => latestRef.current.onManageUser?.(jid),
   }))
   const onManageUserStable = onManageUser ? rowHandlers.onManageUser : undefined
@@ -112,8 +119,69 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
   const activeJid = activeContactJid ?? null
   const selectedJid = selectedIndex >= 0 ? (flatJids[selectedIndex] ?? null) : null
 
+  // Headers and requests share the contact scroll surface, so they participate
+  // in the same measured window rather than shifting its offsets externally.
+  const hasRequests = subscriptionRequests.length > 0
+  const rows = useMemo(() => {
+    const rows: ListRow[] = []
+    if (hasRequests) rows.push({ kind: 'requests', key: 'requests' })
+    for (const [group, title, jids] of [
+      ['online', t('contacts.online'), online],
+      ['offline', t('contacts.offline'), offline],
+      ['errored', t('contacts.error'), errored],
+    ] as const) {
+      if (jids.length === 0) continue
+      rows.push({ kind: 'header', key: `header:${group}`, title: `${title} — ${jids.length}` })
+      jids.forEach((jid, index) => rows.push({ kind: 'contact', key: jid, jid, group, lastInGroup: index === jids.length - 1 }))
+    }
+    if (flatJids.length === 0) rows.push({ kind: 'empty', key: 'empty', hasContacts: entries.length > 0 })
+    return rows
+  }, [hasRequests, online, offline, errored, flatJids.length, entries.length, t])
+  const rowIndexByJid = useMemo(() => new Map(rows.flatMap((row, index) => row.kind === 'contact' ? [[row.jid, index] as const] : [])), [rows])
+  const selectedRowIndex = selectedJid ? rowIndexByJid.get(selectedJid) : undefined
+
+  const renderRow = (row: ListRow) => {
+    if (row.kind === 'requests') return (
+      <div className="pb-2">
+        <h3 className="text-xs font-semibold text-fluux-muted uppercase px-2 mb-2 mt-2">
+          {t('contacts.requestsHeading')} — {subscriptionRequests.length}
+        </h3>
+        {subscriptionRequests.map((request) => (
+          <SubscriptionRequestItem
+            key={request.id}
+            request={request}
+            onAccept={() => acceptSubscription(request.from)}
+            onReject={() => rejectSubscription(request.from)}
+            onBlock={() => handleBlockRequest(request.from)}
+          />
+        ))}
+      </div>
+    )
+    if (row.kind === 'empty') return <ListEmpty icon={row.hasContacts ? Search : Users} title={t(row.hasContacts ? 'contacts.noContactsFound' : 'contacts.noContacts')} />
+    if (row.kind === 'header') return <h3 className="px-2 pb-1 text-xs font-semibold text-fluux-muted uppercase">{row.title}</h3>
+    const itemProps = getItemProps(jidToIndex.get(row.jid) ?? -1)
+    return (
+      <div data-contact-group={row.group} style={{ paddingBottom: row.lastInGroup ? 16 : 2 }}>
+        <ContactItem
+          jid={row.jid}
+          isActive={row.jid === activeJid}
+          isSelected={row.jid === selectedJid}
+          isKeyboardNav={isKeyboardNav}
+          onSelect={rowHandlers.onSelect}
+          onStartChat={rowHandlers.onStartChat}
+          onRemove={rowHandlers.onRemove}
+          onRename={rowHandlers.onRename}
+          onManageUser={onManageUserStable}
+          onMouseEnter={itemProps.onMouseEnter}
+          onMouseMove={itemProps.onMouseMove}
+          forceOffline={forceOffline}
+        />
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Search input */}
       <div className="px-2 pt-2 pb-3">
         <TextInput
@@ -134,149 +202,80 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
       </div>
 
       {/* Contact list */}
-      <div ref={listRef} className="flex-1 overflow-y-auto px-2 pb-2" {...getContainerProps()}>
-        {subscriptionRequests.length > 0 && (
-          <div className="mb-2">
-            <h3 className="text-xs font-semibold text-fluux-muted uppercase px-2 mb-2 mt-2">
-              {t('contacts.requestsHeading')} — {subscriptionRequests.length}
-            </h3>
-            {subscriptionRequests.map((request) => (
-              <SubscriptionRequestItem
-                key={request.id}
-                request={request}
-                onAccept={() => acceptSubscription(request.from)}
-                onReject={() => rejectSubscription(request.from)}
-                onBlock={() => handleBlockRequest(request.from)}
-              />
-            ))}
-          </div>
-        )}
-        {entries.length === 0 ? (
-          <ListEmpty icon={Users} title={t('contacts.noContacts')} />
-        ) : flatJids.length === 0 ? (
-          <ListEmpty icon={Search} title={t('contacts.noContactsFound')} />
-        ) : (
-          <>
-            {online.length > 0 && (
-              <ContactGroup
-                title={`${t('contacts.online')} — ${online.length}`}
-                jids={online}
-                activeJid={activeJid}
-                selectedJid={selectedJid}
-                isKeyboardNav={isKeyboardNav}
-                jidToIndex={jidToIndex}
-                onSelect={rowHandlers.onSelect}
-                onStartChat={rowHandlers.onStartChat}
-                onRemove={rowHandlers.onRemove}
-                onRename={rowHandlers.onRename}
-                onManageUser={onManageUserStable}
-                getItemProps={getItemProps}
-                forceOffline={forceOffline}
-              />
-            )}
-            {offline.length > 0 && (
-              <ContactGroup
-                title={`${t('contacts.offline')} — ${offline.length}`}
-                jids={offline}
-                activeJid={activeJid}
-                selectedJid={selectedJid}
-                isKeyboardNav={isKeyboardNav}
-                jidToIndex={jidToIndex}
-                onSelect={rowHandlers.onSelect}
-                onStartChat={rowHandlers.onStartChat}
-                onRemove={rowHandlers.onRemove}
-                onRename={rowHandlers.onRename}
-                onManageUser={onManageUserStable}
-                getItemProps={getItemProps}
-                forceOffline={forceOffline}
-              />
-            )}
-            {errored.length > 0 && (
-              <ContactGroup
-                title={`${t('contacts.error')} — ${errored.length}`}
-                jids={errored}
-                activeJid={activeJid}
-                selectedJid={selectedJid}
-                isKeyboardNav={isKeyboardNav}
-                jidToIndex={jidToIndex}
-                onSelect={rowHandlers.onSelect}
-                onStartChat={rowHandlers.onStartChat}
-                onRemove={rowHandlers.onRemove}
-                onRename={rowHandlers.onRename}
-                onManageUser={onManageUserStable}
-                getItemProps={getItemProps}
-                forceOffline={forceOffline}
-              />
-            )}
-          </>
-        )}
-      </div>
+      <ContactListWindow
+        rows={rows}
+        listRef={listRef}
+        containerProps={getContainerProps()}
+        selectedJid={selectedJid}
+        selectedRowIndex={selectedRowIndex}
+        isKeyboardNav={isKeyboardNav}
+        renderRow={renderRow}
+      />
+      {renamingContact && (
+        <RenameContactModal
+          contact={renamingContact}
+          onRename={async (name) => {
+            // Recheck at the write boundary as well as hiding the dialog on removal.
+            if (rosterStore.getState().contacts.has(renamingContact.jid)) {
+              await renameContact(renamingContact.jid, name)
+            }
+          }}
+          onClose={() => setRenamingJid(null)}
+        />
+      )}
     </div>
   )
 }
 
-interface ContactGroupProps {
-  title: string
-  jids: string[]
-  activeJid: string | null
+// TanStack's mutable instance cannot be memoized by React Compiler. Keep all
+// instance reads/commands here; the required ContactList stays compiled and only
+// passes immutable row data, selection and its renderer across this boundary.
+function ContactListWindow({ rows, listRef, containerProps, selectedJid, selectedRowIndex, isKeyboardNav, renderRow }: {
+  rows: ListRow[]
+  listRef: React.RefObject<HTMLDivElement | null>
+  containerProps: React.HTMLAttributes<HTMLDivElement>
   selectedJid: string | null
+  selectedRowIndex: number | undefined
   isKeyboardNav: boolean
-  jidToIndex: Map<string, number>
-  onSelect: (contact: Contact) => void
-  onStartChat: (contact: Contact) => void
-  onRemove: (jid: string) => void
-  onRename: (jid: string, name: string) => Promise<void>
-  onManageUser?: (jid: string) => void
-  getItemProps: (index: number) => {
-    'data-selected': boolean
-    onMouseEnter: (e: React.MouseEvent) => void
-    onMouseMove: (e: React.MouseEvent) => void
-  }
-  forceOffline: boolean
-}
+  renderRow: (row: ListRow) => React.ReactNode
+}) {
+  const getRowKey = useMemo(() => (index: number) => rows[index].key, [rows])
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => listRef.current,
+    getItemKey: getRowKey,
+    estimateSize: (index) => rows[index].kind === 'header' ? 20 : 60,
+    overscan: 6,
+  })
+  // The shared navigation hook targets mounted nodes synchronously. A keyboard
+  // move outside the window has no node yet, so reveal it after selection commits.
+  // Track identity rather than position to avoid jumping on a presence reorder.
+  const lastKeyboardJid = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    if (!isKeyboardNav) {
+      lastKeyboardJid.current = null
+      return
+    }
+    if (selectedJid === lastKeyboardJid.current) return
+    lastKeyboardJid.current = selectedJid
+    if (selectedRowIndex !== undefined) virtualizer.scrollToIndex(selectedRowIndex, { align: 'auto' })
+  }, [selectedJid, isKeyboardNav, selectedRowIndex, virtualizer])
 
-function ContactGroup({
-  title,
-  jids,
-  activeJid,
-  selectedJid,
-  isKeyboardNav,
-  jidToIndex,
-  onSelect,
-  onStartChat,
-  onRemove,
-  onRename,
-  onManageUser,
-  getItemProps,
-  forceOffline,
-}: ContactGroupProps) {
   return (
-    <div className="mb-4">
-      <h3 className="px-2 mb-1 text-xs font-semibold text-fluux-muted uppercase">
-        {title}
-      </h3>
-      <div className="space-y-0.5">
-        {jids.map((jid) => {
-          const flatIndex = jidToIndex.get(jid) ?? -1
-          const itemProps = getItemProps(flatIndex)
-          return (
-            <ContactItem
-              key={jid}
-              jid={jid}
-              isActive={jid === activeJid}
-              isSelected={jid === selectedJid}
-              isKeyboardNav={isKeyboardNav}
-              onSelect={onSelect}
-              onStartChat={onStartChat}
-              onRemove={onRemove}
-              onRename={onRename}
-              onManageUser={onManageUser}
-              onMouseEnter={itemProps.onMouseEnter}
-              onMouseMove={itemProps.onMouseMove}
-              forceOffline={forceOffline}
-            />
-          )
-        })}
+    // Own the host node so its ref attaches before this component's layout
+    // effects connect the virtualizer, including a non-replaying release mount.
+    <div ref={listRef} className="sidebar-scroll flex-1 min-h-0 overflow-y-auto px-2 pb-2" {...containerProps}>
+      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+        {virtualizer.getVirtualItems().map((item) => (
+          <div
+            key={item.key}
+            ref={virtualizer.measureElement}
+            data-index={item.index}
+            style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${item.start}px)` }}
+          >
+            {renderRow(rows[item.index])}
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -290,7 +289,7 @@ interface ContactItemProps {
   onSelect: (contact: Contact) => void
   onStartChat: (contact: Contact) => void
   onRemove: (jid: string) => void
-  onRename: (jid: string, name: string) => Promise<void>
+  onRename: (contact: Contact) => void
   onManageUser?: (jid: string) => void
   onMouseEnter?: (e: React.MouseEvent) => void
   onMouseMove?: (e: React.MouseEvent) => void
@@ -313,7 +312,6 @@ const ContactItem = memo(function ContactItem({
 }: ContactItemProps) {
   const { t } = useTranslation()
   const menu = useContextMenu()
-  const [showRenameModal, setShowRenameModal] = useState(false)
   // Focused permission hook — useAdmin() subscribes to ~15 admin store
   // values; ContactItem only needs these three. Each ContactItem instance
   // gets its own subscription, so narrower selectors mean fewer rows
@@ -349,7 +347,7 @@ const ContactItem = memo(function ContactItem({
 
   const handleRename = () => {
     menu.close()
-    setShowRenameModal(true)
+    onRename(contact)
   }
 
   const handleManage = () => {
@@ -455,15 +453,6 @@ const ContactItem = memo(function ContactItem({
             <span>{t('contacts.removeContact')}</span>
           </button>
         </SidebarMenuPortal>
-      )}
-
-      {/* Rename Modal */}
-      {showRenameModal && (
-        <RenameContactModal
-          contact={contact}
-          onRename={(name) => onRename(contact.jid, name)}
-          onClose={() => setShowRenameModal(false)}
-        />
       )}
     </>
   )
