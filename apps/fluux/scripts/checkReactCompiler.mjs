@@ -9,6 +9,8 @@ const app = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const hotComponents = {
   'components/conversation/MessageList.tsx': ['MessageList'],
   'components/conversation/MessageBubble.tsx': ['MessageBubble'],
+  'components/conversation/ConversationThread.tsx': ['ConversationThread'],
+  'hooks/useConversationThread.ts': ['useConversationThread'],
   'components/ChatView.tsx': ['ChatView'],
   'components/RoomView.tsx': ['RoomView', 'RoomMessageList'],
   'components/MessageComposer.tsx': ['MessageComposer'],

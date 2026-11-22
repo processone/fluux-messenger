@@ -11,7 +11,7 @@ interface UseDragAndDropOptions {
   onFileDropRejected?: () => void
 }
 
-interface DragHandlers {
+export interface DragHandlers {
   onDragEnter: (e: React.DragEvent) => void
   onDragLeave: (e: React.DragEvent) => void
   onDragOver: (e: React.DragEvent) => void
