@@ -51,6 +51,28 @@ enum NotificationContent {
     static func transportBody(_ body: String, encrypted: Bool?, activity: String) -> String {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         let placeholder = ["This message is encrypted", "[OpenPGP-encrypted message]", "[Encrypted message: could not decrypt]"].contains(trimmed)
-        return encrypted == true || trimmed.isEmpty || (encrypted != false && placeholder) ? activity : body
+        return encrypted == true || trimmed.isEmpty || (encrypted != false && placeholder) ? activity : previewText(body)
+    }
+
+    /// Twin of `stripQuotedLines` in the SDK: drop every line starting with `>` outside a code
+    /// fence. A text made only of quote lines keeps its quote, `>` included.
+    static func previewText(_ text: String) -> String {
+        guard text.contains(">") else { return text }
+        var kept: [Substring] = []
+        var inFence = false
+        var dropped = false
+        // CRLF is one Character in Swift and lone CR separates lines too: normalize first.
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        for line in normalized.split(separator: "\n", omittingEmptySubsequences: false) {
+            if !inFence && line.hasPrefix(">") { dropped = true; continue }
+            if (line.components(separatedBy: "```").count - 1) % 2 == 1 { inFence.toggle() }
+            kept.append(line)
+        }
+        guard dropped else { return text }
+        // Trim whole blank lines only, so filtering twice (Rust, then Swift) gives the same text.
+        let first = kept.firstIndex { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? kept.endIndex
+        let joined = kept[first...].joined(separator: "\n")
+        let remaining = String(joined.reversed().drop(while: { $0.isWhitespace || $0.isNewline }).reversed())
+        return remaining.isEmpty ? normalized.trimmingCharacters(in: .whitespacesAndNewlines) : remaining
     }
 }

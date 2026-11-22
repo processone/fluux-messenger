@@ -20,7 +20,7 @@ No executable formatter is shared between Swift and TypeScript.
 
 | Input | App-generated notification | Web push | iOS remote push |
 | --- | --- | --- | --- |
-| Plain body | SDK preview text | Transport body | Transport body, or selected archived plain body |
+| Plain body | SDK preview text | Transport body, quotes dropped | Transport body or selected archived plain body, quotes dropped |
 | Decrypted and accepted body | SDK preview text | Already-rendered transport body only | Verified, opted-in OX archive body |
 | Pending decryption/verification, failed or rejected content | Silent; the existing arrival may be reconsidered once on recovery | Generic `New message` when marked encrypted | Generic localized `New activity` unless an opted-in preview succeeds |
 | Unsupported encryption | Localized named or unnamed unsupported-method notice; never the sender's fallback | Keep an already-rendered notice when supplied as plain content | Keep an already-rendered plain notice even when the archive lookup is unknown |
@@ -32,11 +32,17 @@ No executable formatter is shared between Swift and TypeScript.
 
 The app uses `isNotificationMessageReady` before `formatLocalizedPreview`, so a
 recoverable encrypted fallback cannot be mistaken for content. An attachment,
-poll or unsupported-method notice may be previewable without a body. Styling and
-reply quotes are stripped by the app's SDK preview formatter. The SW and NSE do
-not run that formatter: server/plain archive text retains styling and reply
-quotes. The NSE's bounded engine supplies bodies and typed mutation events, not
-SDK attachment/poll objects. These are intentional differences.
+poll or unsupported-method notice may be previewable without a body. Styling is stripped by the app's SDK preview formatter. The SW and NSE do not run that
+formatter: server/plain archive text retains styling. Quoted text is previewed the same on
+every surface: every line starting with `>` outside a code fence is dropped, so the preview
+shows the comment, not what it quotes. A message made only of quote lines keeps its quote,
+`>` included, so it never previews as the sender's own words (and is never blank). The rule
+applies to conversation and room rows, app notifications, web push and iOS push (transport
+and archive bodies); the SDK owns it in `stripQuotedLines` (`previewQuotes.ts`), the SW imports that
+dependency-free file, and the NSE has a Swift twin, `NotificationContent.previewText`.
+Reply cards inside a chat keep their nested quotes and copied messages stay verbatim. The
+NSE's bounded engine supplies bodies and typed mutation events, not SDK attachment/poll
+objects. Other differences are intentional.
 
 ## Transport fallback and privacy
 

@@ -7,6 +7,8 @@
 
 import { webTag } from './notificationNavigation'
 import { newMessagesText } from './swMessages'
+// Dependency-free by design: the service worker must not import the SDK entry point.
+import { stripQuotedLines } from '../../../../packages/fluux-sdk/src/utils/previewQuotes'
 
 /** Parsed push payload (server JSON, or `{ body }` from a plain-text push). */
 export interface PushPayloadData {
@@ -55,7 +57,7 @@ function pushBody(payload: PushPayloadData): string {
   const body = payload.body
   if (payload.encrypted === true || typeof body !== 'string' || !body.trim()
     || (payload.encrypted !== false && ENCRYPTED_FALLBACKS.has(body.trim()))) return DEFAULT_BODY
-  return body
+  return stripQuotedLines(body)
 }
 
 /**

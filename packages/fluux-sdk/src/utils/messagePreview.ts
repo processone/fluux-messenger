@@ -5,6 +5,7 @@
  */
 
 import { forwardedCopyQuoteRange } from './forwardedCopyQuote'
+import { stripQuotedLines } from './previewQuotes'
 import type { BaseMessage, FileAttachment, ReplyInfo } from '../core/types'
 
 /**
@@ -251,6 +252,9 @@ export function stripReplyQuote(body: string): string {
  * sender didn't use XEP-0428 fallback indication).
  *
  * @param message - Any message object with body, optional attachment, and optional replyTo
+ * @param options - `dropQuotes` drops every `>` line outside code fences (conversation,
+ *   room, notification previews); a quote-only message keeps its quote. Without it, only a
+ *   leading quote of a reply is removed, which reply cards inside a chat rely on.
  * @returns Formatted preview string
  *
  * @example
@@ -266,7 +270,10 @@ export function stripReplyQuote(body: string): string {
  * // 'My reply'
  * ```
  */
-export function formatMessagePreview(message: Pick<BaseMessage, 'body' | 'attachment' | 'replyTo' | 'forwarded' | 'poll' | 'pollClosed'>): string {
+export function formatMessagePreview(
+  message: Pick<BaseMessage, 'body' | 'attachment' | 'replyTo' | 'forwarded' | 'poll' | 'pollClosed'>,
+  options: { dropQuotes?: boolean } = {},
+): string {
   // Poll messages: show title with poll emoji
   if (message.poll) {
     return `📊 ${message.poll.title}`
@@ -286,7 +293,9 @@ export function formatMessagePreview(message: Pick<BaseMessage, 'body' | 'attach
     ? `${body.slice(0, marked.begin).trimEnd()}\n${body.slice(marked.end).trimStart()}`.trim()
     : body
   let previewBody = visibleBody || message.forwarded?.text || ''
-  if (replyTo && previewBody.startsWith('> ')) {
+  if (options.dropQuotes) {
+    previewBody = stripQuotedLines(previewBody)
+  } else if (replyTo && previewBody.startsWith('> ')) {
     previewBody = stripReplyQuote(previewBody)
   }
 
