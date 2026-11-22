@@ -7,7 +7,7 @@
  * by tests/fixtures/notification-content.json.
  *
  * Rule: drop every line starting with `>` that is outside a code fence, then trim.
- * A text made only of quote lines keeps its quote, `>` included, so the preview
+ * The rule is idempotent. A text made only of quote lines keeps its quote, `>` included, so the preview
  * shows what was sent instead of reading as the sender's own words.
  */
 export function stripQuotedLines(text: string): string {
@@ -28,6 +28,9 @@ export function stripQuotedLines(text: string): string {
   }
   if (!dropped) return text
 
-  const remaining = kept.join('\n').trim()
+  // Trim whole blank lines, never the first line's indent: removing it could turn an indented
+  // `  > x` into a `>` line, and filtering twice (Rust, then Swift) must give the same text.
+  while (kept.length && !kept[0].trim()) kept.shift()
+  const remaining = kept.join('\n').trimEnd()
   return remaining ? remaining : text.trim()
 }

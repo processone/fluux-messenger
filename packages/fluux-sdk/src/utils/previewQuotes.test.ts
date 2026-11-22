@@ -12,9 +12,17 @@ describe('stripQuotedLines', () => {
     ['quote-only with blank lines', '> one\n\n> two', '> one\n\n> two'],
     ['quote inside a fence is code', 'x\n```\n> keep\n```\n> drop\ny', 'x\n```\n> keep\n```\ny'],
     ['fence closed on one line', '```a```\n> drop\nz', '```a```\nz'],
+    ['indented quote is not a quote line', '> old\n  > keep\nreply', '  > keep\nreply'],
     ['empty', '', ''],
   ])('%s', (_name, input, expected) => {
     expect(stripQuotedLines(input)).toBe(expected)
+  })
+})
+
+describe('stripQuotedLines idempotence', () => {
+  it.each(['> old\n  > keep\nreply', '> a\n> b', 'x\n> q\n\n y', '\n\n> q\n z'])('%j', input => {
+    const once = stripQuotedLines(input)
+    expect(stripQuotedLines(once)).toBe(once)
   })
 })
 

@@ -318,8 +318,12 @@ fn strip_quoted_lines(text: &str) -> String {
     if !dropped {
         return text;
     }
+    // Whole blank lines only, so filtering again downstream gives the same text.
+    while kept.first().is_some_and(|l| l.trim().is_empty()) {
+        kept.remove(0);
+    }
     let remaining = kept.join("\n");
-    let remaining = remaining.trim();
+    let remaining = remaining.trim_end();
     if remaining.is_empty() { text.trim().to_string() } else { remaining.to_string() }
 }
 fn preview_text(text: &str) -> String {
@@ -347,6 +351,9 @@ mod tests {
         assert_eq!(preview_text(&format!("{quote}My comment")), "My comment");
         assert_eq!(preview_text("> old\r\nMy reply"), "My reply");
         assert_eq!(preview_text("Before\r> old\rAfter"), "Before\nAfter");
+        let once = preview_text("> old\n  > keep\nreply");
+        assert_eq!(once, "  > keep\nreply");
+        assert_eq!(preview_text(&once), once, "filtering again must not change it");
         assert_eq!(preview_text("> only\n> quote"), "> only\n> quote");
         assert_eq!(preview_text("```\n> code\n```\n> q\nok"), "```\n> code\n```\nok");
     }
