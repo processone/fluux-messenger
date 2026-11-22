@@ -159,8 +159,12 @@ function runBaseTests(root, base, files, unableToCompare) {
         }
         if (failed.length === 0) continue
         const editsExpect = diffEditsExpectation(
-          git(['diff', '-U0', '-M', base, c.head, '--', c.oldPath, c.newPath, c.snapOld, c.snapNew]),
-        )
+          git(['diff', '-U0', '-M', base, c.head, '--', c.oldPath, c.newPath]),
+        ) ||
+          // A removed snapshot line is an edited expectation too.
+          git(['diff', '-U0', '-M', base, c.head, '--', c.snapOld, c.snapNew])
+            .split('\n')
+            .some((l) => l.startsWith('-') && !l.startsWith('---'))
         for (const a of failed) (editsExpect ? rewritten : setup).push({ file: c.newPath, test: a.fullName ?? a.title })
       }
     } finally {
@@ -221,7 +225,8 @@ function main() {
     }
     if (status === 'D') continue
 
-    const before = show(baseSha, oldPath)
+    // A new file has no main version: compare it with an empty one, never replay it.
+    const before = status === 'A' ? '' : show(baseSha, oldPath)
     const after = show(head, newPath)
     if (before === null || after === null) continue
 
@@ -229,8 +234,11 @@ function main() {
       const [b, a] = [countTestCases(before), countTestCases(after)]
       if (a < b) removed.push(`fewer test cases in \`${newPath}\`: ${b} to ${a}`)
     }
-    if (isUnitTest(newPath) && before !== after) {
-      if (WORKSPACES.some((ws) => newPath.startsWith(`${ws}/`))) modifiedTests.push({ oldPath, newPath, head })
+    if (isUnitTest(newPath) && before !== after && status !== 'A') {
+      // Manual tests are excluded by the workspaces and can write tracked fixtures:
+      // never run a copy of one.
+      if (/\.manual\.test\./.test(newPath)) unableToCompare.push(`${newPath}: a manual test, so main's version was not run`)
+      else if (WORKSPACES.some((ws) => newPath.startsWith(`${ws}/`))) modifiedTests.push({ oldPath, newPath, head })
       else unableToCompare.push(`${newPath}: not in a unit test workspace, so main's version was not run`)
     }
     if (before !== after) {
