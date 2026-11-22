@@ -372,6 +372,70 @@ describe('SmPersistence', () => {
       sm.settleResumed('session-1', 5)
 
       expect(taken(sm)).toEqual(['lost'])
+      sm.settleUnconfirmed(JID, 'lost', true)
+      expect(sessionStorage.getItem(KEY)).toBeNull()
+    })
+
+    it('keeps a reported message until its mark is saved, so a second reload reports it again', () => {
+      const first = reloaded(4, [chat('lost')])
+      first.settleNewSession()
+      expect(taken(first)).toEqual(['lost'])
+
+      const second = new SmPersistence(createDeps())
+      second.restoreUnconfirmed(JID)
+
+      expect(taken(second)).toEqual(['lost'])
+    })
+
+    it('reports a message again on the next connection when its mark could not be saved', () => {
+      const sm = reloaded(4, [chat('lost')])
+      sm.settleNewSession()
+      expect(taken(sm)).toEqual(['lost'])
+
+      sm.settleUnconfirmed(JID, 'lost', false)
+
+      expect(taken(sm)).toEqual(['lost'])
+      sm.settleUnconfirmed(JID, 'lost', true)
+      expect(taken(sm)).toEqual([])
+      expect(sessionStorage.getItem(KEY)).toBeNull()
+    })
+
+    it('keeps the latest attempt of a retried message, so a count covering the first one does not clear it', () => {
+      const sm = reloaded(4, [chat('retried'), chat('retried')])
+
+      sm.settleResumed('session-1', 5)
+
+      expect(taken(sm)).toEqual(['retried'])
+    })
+
+    it('reports nothing when the count covers the latest attempt of a retried message', () => {
+      const sm = reloaded(4, [chat('retried'), chat('retried')])
+
+      sm.settleResumed('session-1', 6)
+
+      expect(taken(sm)).toEqual([])
+    })
+
+    it('replaces a known-lost record with the position of its retry', () => {
+      const sm = reloaded(4, [chat('retried')])
+      sm.settleNewSession()
+
+      sm.saveUnconfirmed(JID, client('session-2', 0, [chat('retried')]))
+
+      expect(JSON.parse(sessionStorage.getItem(KEY)!)).toEqual([
+        { id: 'retried', to: 'bob@example.com', session: 'session-2', sequence: 1 },
+      ])
+    })
+
+    it('forgets a message once the server counts a retry of it', () => {
+      const sm = reloaded(4, [chat('retried')])
+      sm.settleNewSession()
+      expect(taken(sm)).toEqual(['retried'])
+      sm.settleUnconfirmed(JID, 'retried', false)
+
+      sm.confirmUnconfirmed(JID, chat('retried').stanza)
+
+      expect(taken(sm)).toEqual([])
       expect(sessionStorage.getItem(KEY)).toBeNull()
     })
 

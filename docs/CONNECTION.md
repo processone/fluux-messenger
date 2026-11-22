@@ -123,8 +123,10 @@ the conversation shows the message as not delivered, with a Retry button that
 reuses its id. Across a reload only each message's id, address and position in
 the session are kept, in session storage: when the session resumes, the server's
 `h` says which of them arrived. When it does not resume, all of them are marked,
-and an archived copy of a message that did arrive removes the mark. A manual
-disconnect marks nothing.
+and an archived copy of a message that did arrive removes the mark. A message
+whose saved copy already has an archive id or a server's own error keeps it. Each
+record stays in session storage until the mark is saved in the history, so another
+reload or a failed write reports it again. A manual disconnect marks nothing.
 
 ### Stream Management resumption window
 

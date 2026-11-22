@@ -38,7 +38,6 @@ import {
 import { findLastNonIgnoredMessage } from '../stores/shared/lastMessageUtils'
 import { recordMessageIngress } from '../stores/shared/messageIngress'
 import { isMarkerDebugEnabled, markerDebugLog } from '../utils/markerDebug'
-import { isUnconfirmedDelivery } from '../utils/xmppError'
 import { getBareJid, getLocalPart } from '../core/jid'
 
 const OCCUPANT_FLUSH_DELAY_MS = 16
@@ -293,15 +292,11 @@ export function createStoreBindings(
 
   on('chat:message-error', ({ conversationId, messageId, error }) => {
     const stores = getStores()
-    if (!isUnconfirmedDelivery(error)) {
-      stores.chat.updateMessage(conversationId, messageId, { deliveryError: error })
-      return
-    }
-    // A row with an archive id reached the server, and a server's own error says more than this one.
-    const current = stores.chat.getMessage(conversationId, messageId)
-    if (current?.stanzaId || current?.deliveryError) return
-    // After a page reload the row may be only in the saved history: a full target reaches it there.
-    stores.chat.updateMessage(conversationId, { id: messageId, stanzaId: undefined, originId: messageId }, { deliveryError: error })
+    stores.chat.updateMessage(conversationId, messageId, { deliveryError: error })
+  })
+
+  on('chat:message-unconfirmed', ({ conversationId, messageId, onSettled }) => {
+    void getStores().chat.markUnconfirmedDelivery(conversationId, messageId).then(onSettled, () => onSettled(false))
   })
 
   on('chat:animation', ({ conversationId, animation, senderJid }) => {

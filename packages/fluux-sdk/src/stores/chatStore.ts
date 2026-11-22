@@ -1,5 +1,6 @@
 import { badgeMessageKey } from '../diagnostics/badgeIdentity'
 import { reactionUpdate } from '../utils/reactions'
+import { isUnconfirmedDelivery, UNCONFIRMED_DELIVERY_ERROR } from '../utils/xmppError'
 import { handoffMessageUpdate, messageUpdateFields } from './shared/messageUpdateHandoff'
 import { clearMessageIngressVersions } from './shared/messageIngress'
 import { createStore } from 'zustand/vanilla'
@@ -232,6 +233,36 @@ function withChatMessageWindow(
   }
 
   return written.messages || written.windowAtLiveEdge || written.mamQueryStates ? written : null
+}
+
+/** Apply an already-persisted update to the resident row and the sidebar preview it feeds. */
+function withResidentMessageUpdate(
+  state: ChatState,
+  conversationId: string,
+  target: StoredMessage,
+  patch: Partial<StoredMessage>,
+  accountScope: string | null,
+): ChatState | Partial<ChatState> {
+  const rows = state.messages.get(conversationId) ?? []
+  const index = findChatMessageIndex(rows, target)
+  if (index === -1 || rows[index].isRetracted) return state
+  const applicable = resolveCorrectionUpdates(rows[index], patch, accountScope)
+  if (!applicable) return state
+  const updated = { ...rows[index], ...applicable }
+  const messages = [...rows]
+  messages[index] = updated
+  const window = withChatMessageWindow(state, conversationId, { messages })
+  const preview = state.conversationMeta.get(conversationId)?.lastMessage
+  const draft = draftConversationMaps(state)
+  if (preview && matchesCorrectionTarget(preview, updated)) {
+    draft.patchMeta(conversationId, { lastMessage: { ...preview, ...applicable } })
+  }
+  return { ...window, ...draft.commit() }
+}
+
+/** The server already answered for this row, or it no longer shows: "not confirmed" must not replace that. */
+function deliveryAlreadySettled(row: Pick<Message, 'stanzaId' | 'deliveryError' | 'isRetracted'>): boolean {
+  return !!row.stanzaId || !!row.isRetracted || (!!row.deliveryError && !isUnconfirmedDelivery(row.deliveryError))
 }
 
 function reconcileCachedChatRows(resident: Message[], cached: Message[]): Message[] {
@@ -615,6 +646,13 @@ interface ChatState {
     onCorrectionMissing?: () => void,
     onCorrectionResolved?: (message: StoredMessage, isCurrent: () => boolean) => void
   ) => void
+  /**
+   * Show a sent message as not delivered because the server can no longer confirm
+   * it, in the resident rows and the saved history, in order with cache hydration.
+   * A row with an archive id or a server's own error keeps what it has.
+   * @returns whether this is settled: false means retry, because the saved row was not updated
+   */
+  markUnconfirmedDelivery: (conversationId: string, messageId: string) => Promise<boolean>
   clearMessageStanzaId: (conversationId: string, stanzaId: string) => void
   /**
    * Hard-remove a message from the conversation, the search index, and the
@@ -2272,23 +2310,8 @@ export const chatStore = createStore<ChatState>()(
       },
 
       updateMessage: (conversationId, selectedTarget, updates, retractionReference, correctionActor, onCorrectionMissing, onCorrectionResolved) => {
-        const applyResidentUpdate = (target: StoredMessage, patch: Partial<StoredMessage>, accountScope: string | null) => set(state => {
-          const rows = state.messages.get(conversationId) ?? []
-          const index = findChatMessageIndex(rows, target)
-          if (index === -1 || rows[index].isRetracted) return state
-          const applicable = resolveCorrectionUpdates(rows[index], patch, accountScope)
-          if (!applicable) return state
-          const updated = { ...rows[index], ...applicable }
-          const messages = [...rows]
-          messages[index] = updated
-          const window = withChatMessageWindow(state, conversationId, { messages })
-          const preview = state.conversationMeta.get(conversationId)?.lastMessage
-          const draft = draftConversationMaps(state)
-          if (preview && matchesCorrectionTarget(preview, updated)) {
-            draft.patchMeta(conversationId, { lastMessage: { ...preview, ...applicable } })
-          }
-          return { ...window, ...draft.commit() }
-        })
+        const applyResidentUpdate = (target: StoredMessage, patch: Partial<StoredMessage>, accountScope: string | null) =>
+          set(state => withResidentMessageUpdate(state, conversationId, target, patch, accountScope))
         if (!correctionActor && Object.keys(updates).length === 1 && 'linkPreview' in updates) {
           const scope = captureStorageScope()
           const isCurrent = captureChatCacheRead(conversationId)
@@ -2492,6 +2515,44 @@ export const chatStore = createStore<ChatState>()(
         })
 
         if (recountNeeded) void get().recomputeUnreadForConversation(conversationId)
+      },
+
+      markUnconfirmedDelivery: async (conversationId, messageId) => {
+        const target = { id: messageId, stanzaId: undefined, originId: messageId }
+        const updates = { deliveryError: UNCONFIRMED_DELIVERY_ERROR }
+        const scope = captureStorageScope()
+        const isCurrent = captureChatCacheRead(conversationId)
+        // The cache reports failures by returning nothing: only reading the row back proves a write.
+        const noCache = () => typeof indexedDB === 'undefined'
+        let saved: StoredMessage | null = null
+        let settled = false
+        await handoffMessageUpdate<StoredMessage>('chat', conversationId, isCurrent, async () => {
+          const state = get()
+          const rows = state.messages.get(conversationId) ?? []
+          const resident = rows[findChatMessageIndex(rows, target)]
+          const preview = state.conversationMeta.get(conversationId)?.lastMessage
+          saved = await messageCache.getMessage('chat', conversationId, messageId, target)
+          const known = [resident, saved, preview && findChatMessageIndex([preview], target) === 0 ? preview : undefined]
+          if (known.some(row => row && deliveryAlreadySettled(row))) { settled = true; return null }
+          if (!saved) {
+            // Nothing durable to mark, unless the cache could not be read at all.
+            const read = noCache() ? null : await messageCache.readMessages('chat', conversationId, { limit: 1, latest: true })
+            settled = read?.status !== 'unavailable'
+          }
+          return saved ?? resident ?? null
+        }, async row => {
+          if (!saved) return
+          await messageCache.updateMessage('chat', conversationId, row.id, updates, row.from, scope.jid, row)
+          const written = await messageCache.getMessage('chat', conversationId, row.id, row)
+          settled = noCache() || isUnconfirmedDelivery(written?.deliveryError)
+        }, row => set(state => {
+          const rows = state.messages.get(conversationId) ?? []
+          const current = rows[findChatMessageIndex(rows, row)]
+          return current && deliveryAlreadySettled(current)
+            ? state
+            : withResidentMessageUpdate(state, conversationId, row, updates, scope.jid)
+        }))
+        return settled
       },
 
       clearMessageStanzaId: (conversationId, stanzaId) => {

@@ -478,7 +478,7 @@ describe('stream management resumption against a controlled XMPP server', { time
     ['the traditional handshake', false],
     ['SASL 2 with Bind 2', true],
   ])('a message the server never received, over %s', (_handshake, inline) => {
-    const notDelivered: Array<{ conversationId: string; messageId: string; condition: string }> = []
+    const notDelivered: Array<{ conversationId: string; messageId: string }> = []
     const held = new Map<string, string>()
     const SAVED_KEY = 'fluux:session-unconfirmed:alice@example.com'
 
@@ -486,8 +486,9 @@ describe('stream management resumption against a controlled XMPP server', { time
     const openPage = async (storage: StorageAdapter) => {
       client = new XMPPClient({ debug: false, streamManagementMaxSeconds: 600, storageAdapter: storage })
       bindStoresForTesting(client, createMockStores())
-      client.subscribe('chat:message-error', ({ conversationId, messageId, error }) => {
-        notDelivered.push({ conversationId, messageId, condition: error.condition })
+      client.subscribe('chat:message-unconfirmed', ({ conversationId, messageId, onSettled }) => {
+        notDelivered.push({ conversationId, messageId })
+        onSettled(true)
       })
       await client.connect({
         jid: 'alice@example.com', password: 'secret', server: `ws://localhost:${server.port}`,
@@ -502,7 +503,7 @@ describe('stream management resumption against a controlled XMPP server', { time
       server.drop()
       await sleep(150)
     }
-    const expected = (messageId: string) => [{ conversationId: 'bob@example.com', messageId, condition: 'unconfirmed-delivery' }]
+    const expected = (messageId: string) => [{ conversationId: 'bob@example.com', messageId }]
 
     beforeEach(() => {
       server.inline = inline

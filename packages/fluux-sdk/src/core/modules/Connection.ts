@@ -1,5 +1,5 @@
 import type { DiscoveryDiagnostics } from '../../utils/websocketDiscovery'
-import { installOrderTolerantErrors, UNCONFIRMED_DELIVERY_ERROR } from '../../utils/xmppError'
+import { installOrderTolerantErrors } from '../../utils/xmppError'
 import type { DiscoveryFailure, SmResumptionState } from '../types/connection'
 import { client, Client, Element, xml } from '@xmpp/client'
 import { getMechanism } from '@xmpp/client/lib/createOnAuthenticate.js'
@@ -2219,15 +2219,16 @@ export class Connection extends BaseModule {
 
   /** Show as not delivered the messages the server can no longer confirm. */
   private reportUnconfirmedMessages(): void {
-    if (!this.credentials?.jid) return
-    const messages = this.smPersistence.takeUnconfirmed(this.credentials.jid)
+    const jid = this.credentials?.jid
+    if (!jid) return
+    const messages = this.smPersistence.takeUnconfirmed(jid)
     if (messages.length === 0) return
     this.stores.console.addEvent(`${messages.length} sent message(s) not confirmed by the server`, 'sm')
     for (const { id, to } of messages) {
-      this.deps.emitSDK('chat:message-error', {
+      this.deps.emitSDK('chat:message-unconfirmed', {
         conversationId: to,
         messageId: id,
-        error: UNCONFIRMED_DELIVERY_ERROR,
+        onSettled: settled => this.smPersistence.settleUnconfirmed(jid, id, settled),
       })
     }
   }
@@ -2311,6 +2312,10 @@ export class Connection extends BaseModule {
           this.stores.console.addEvent(`SM stanza send failed: ${stanzaStr}`, 'sm')
         }
         // Note: xmpp.js will fall back to new session and emit 'online'
+      })
+
+      sm.on('ack', (stanza: { name?: string; attrs?: { id?: string } }) => {
+        if (this.credentials?.jid) this.smPersistence.confirmUnconfirmed(this.credentials.jid, stanza)
       })
 
       // SASL2 inline SM resumption: the <resumed> is embedded inside <success> so xmpp.js

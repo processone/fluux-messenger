@@ -96,9 +96,10 @@ function unconfirmedMessagesIn(session: string, items: readonly unknown[], acked
   return messages
 }
 
-function uniqueById(messages: readonly SmUnconfirmedMessage[]): SmUnconfirmedMessage[] {
+/** One record per message, oldest to newest in: a Retry reuses the id, and its latest attempt decides. */
+function latestById(messages: readonly SmUnconfirmedMessage[]): SmUnconfirmedMessage[] {
   const byId = new Map<string, SmUnconfirmedMessage>()
-  for (const message of messages) if (!byId.has(message.id)) byId.set(message.id, message)
+  for (const message of messages) byId.set(message.id, message)
   return [...byId.values()]
 }
 
@@ -136,6 +137,8 @@ export class SmPersistence {
   private unacknowledged: SmUnacknowledged | null = null
   /** Messages restored from storage, and those now known to be unconfirmed (no `session`). */
   private unconfirmed: SmUnconfirmedMessage[] = []
+  /** Ids handed over by `takeUnconfirmed` whose result has not come back yet. */
+  private reportingUnconfirmed = new Set<string>()
   private deps: SmPersistenceDeps
 
   constructor(deps: SmPersistenceDeps) {
@@ -201,7 +204,7 @@ export class SmPersistence {
     const kept = this.unacknowledged
       ? unconfirmedMessagesIn(this.unacknowledged.id, this.unacknowledged.items, this.unacknowledged.acked)
       : []
-    this.writeUnconfirmed(jid, uniqueById([...this.unconfirmed, ...live, ...kept]))
+    this.writeUnconfirmed(jid, latestById([...this.unconfirmed, ...kept, ...live]))
   }
 
   /** Read back what the previous page load saved. */
@@ -209,7 +212,7 @@ export class SmPersistence {
     try {
       const stored: unknown = JSON.parse(sessionStorage.getItem(unconfirmedStorageKey(jid)) ?? '[]')
       if (!Array.isArray(stored)) return
-      this.unconfirmed = uniqueById([...this.unconfirmed, ...stored.filter(isStoredUnconfirmed)])
+      this.unconfirmed = latestById([...stored.filter(isStoredUnconfirmed), ...this.unconfirmed])
     } catch {
       // Storage errors are non-fatal
     }
@@ -237,15 +240,36 @@ export class SmPersistence {
       ? unconfirmedMessagesIn(this.unacknowledged.id, this.unacknowledged.items, this.unacknowledged.acked)
       : []
     this.unacknowledged = null
-    this.unconfirmed = uniqueById([...this.unconfirmed, ...kept]).map(({ id, to }) => ({ id, to }))
+    this.unconfirmed = latestById([...this.unconfirmed, ...kept]).map(({ id, to }) => ({ id, to }))
   }
 
-  /** Hand over the messages known to be unconfirmed, once, and update storage. */
+  /**
+   * Hand over the messages known to be unconfirmed. Each stays recorded, in memory
+   * and in storage, until `settleUnconfirmed` says its mark was saved, so a reload
+   * or a failed write in between cannot lose it.
+   */
   takeUnconfirmed(jid: string): SmUnconfirmedMessage[] {
-    const taken = this.unconfirmed.filter((message) => message.session === undefined)
-    this.unconfirmed = this.unconfirmed.filter((message) => message.session !== undefined)
+    const taken = this.unconfirmed.filter(
+      (message) => message.session === undefined && !this.reportingUnconfirmed.has(message.id),
+    )
+    for (const { id } of taken) this.reportingUnconfirmed.add(id)
     this.writeUnconfirmed(jid, this.unconfirmed)
     return taken
+  }
+
+  /** The result of a handed-over message: settled forgets it, otherwise the next connection reports it again. */
+  settleUnconfirmed(jid: string, id: string, settled: boolean): void {
+    if (!this.reportingUnconfirmed.delete(id) || !settled) return
+    this.unconfirmed = this.unconfirmed.filter((message) => message.id !== id || message.session !== undefined)
+    this.writeUnconfirmed(jid, this.unconfirmed)
+  }
+
+  /** The server counted this stanza. A Retry reuses the id, so an earlier record of the message no longer holds. */
+  confirmUnconfirmed(jid: string, stanza: { name?: string; attrs?: { id?: string } }): void {
+    const id = stanza.attrs?.id
+    if (stanza.name !== 'message' || !id || !this.unconfirmed.some((message) => message.id === id)) return
+    this.unconfirmed = this.unconfirmed.filter((message) => message.id !== id)
+    this.writeUnconfirmed(jid, this.unconfirmed)
   }
 
   private writeUnconfirmed(jid: string, messages: readonly SmUnconfirmedMessage[]): void {
@@ -333,6 +357,7 @@ export class SmPersistence {
     this.cache = null
     this.unacknowledged = null
     this.unconfirmed = []
+    this.reportingUnconfirmed.clear()
   }
 
   /**
