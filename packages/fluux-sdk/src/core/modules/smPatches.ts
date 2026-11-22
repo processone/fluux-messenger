@@ -65,6 +65,7 @@
 
 import type { Client, Element, SmOutboundQueueItem, StreamManagement } from '@xmpp/client'
 import { xml } from '@xmpp/client'
+import { parse as parseXml } from 'ltx'
 
 const NS_SM = 'urn:xmpp:sm:3'
 const DEBOUNCE_MS = 250
@@ -238,6 +239,35 @@ export function patchSmInboundCount(xmppClient: Client): void {
     inboundBefore.delete(element)
     if (sm.inbound === before) sm.inbound += 1
   })
+}
+
+/**
+ * Report the stanzas of a raw XML write to xmpp.js, as its own send() does after
+ * writing an element. `client.write()` skips that step, while the server still
+ * counts each stanza in its `h`; without this, an acknowledgement of a raw stanza
+ * would release the next queued stanza instead.
+ *
+ * The caller's bytes are already on the wire, so they stay exactly as typed. Only
+ * iq, message and presence are reported: the server does not count anything else.
+ * Malformed XML reports nothing, because the server ends the stream and its
+ * session on it.
+ *
+ * Guard: only real xmpp.js clients — test mocks (which lack outbound_q) are left
+ * untouched.
+ */
+export function reportRawStanzasSent(xmppClient: Client, rawXml: string): void {
+  if (!Array.isArray(xmppClient.streamManagement?.outbound_q)) return
+  let written: Element
+  try {
+    written = parseXml(`<raw>${rawXml}</raw>`) as unknown as Element
+  } catch {
+    return
+  }
+  // `emit` is not on the SDK-facing declaration; this is the event send() emits.
+  const emitter = xmppClient as unknown as { emit: (event: 'send', element: Element) => void }
+  for (const child of written.children) {
+    if (typeof child !== 'string' && COUNTED_STANZAS.has(child.name)) emitter.emit('send', child)
+  }
 }
 
 /**

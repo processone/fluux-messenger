@@ -46,6 +46,7 @@ import { consoleStore } from '../stores/consoleStore'
 import { ignoreStore } from '../stores/ignoreStore'
 import { detectPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
+import { reportRawStanzasSent } from './modules/smPatches'
 import { RequestTimeoutError } from './errors'
 import { getBareJid, getDomain } from './jid'
 import { routeStanza } from './stanzaRouting'
@@ -1826,6 +1827,9 @@ export class XMPPClient {
    * This is primarily intended for the XMPP console/debugging feature.
    * For normal operations, use the module APIs instead.
    *
+   * The text goes out unchanged. Each iq, message or presence in it is counted
+   * by Stream Management and logged as sent, like any other outgoing stanza.
+   *
    * @example
    * ```typescript
    * await client.sendRawXml('<presence/>')
@@ -1838,6 +1842,7 @@ export class XMPPClient {
     } catch (err) {
       this.repairAndRethrowSendError(err)
     }
+    reportRawStanzasSent(xmpp, xmlString)
   }
 
   /**
