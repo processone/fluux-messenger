@@ -16,11 +16,11 @@
  * or after either. The conversation stages read the stores once, so starting
  * on MAM discovery alone snapshots an empty store on a cold profile.
  *
- * Uses client events to distinguish fresh-session bulk sync from SM resumption.
+ * Uses the session phase the lifecycle engine announces to distinguish fresh-session bulk sync from SM resumption.
  * Resume only seeds rooms whose archives are not caught up to live — including
  * rooms that join after the resume event, which the one-shot predicate cannot
- * see. A synthetic post-resume `online` can then upgrade the same transport to
- * fresh setup.
+ * see. A fresh phase flagged `afterResume` can then upgrade the same transport to
+ * full setup.
  *
  * @module Core/BackgroundSync
  */
@@ -73,7 +73,7 @@ import {
  * 4. **Room catch-up** (delayed): After a delay to let rooms finish joining,
  *    populate full message history for all MAM-enabled rooms (concurrency=2).
  *
- * On SM resumption (`'resumed'` event), rooms already caught up to live rely on
+ * On SM resumption (the `resumed` phase), rooms already caught up to live rely on
  * replayed stanzas. Only joined, inactive rooms that still need archive coverage
  * receive a resume seed query. The public catch-up aggregate includes a bounded
  * unknown-target replay wait. Actual targeted ingestion owns its local scopes
@@ -361,7 +361,7 @@ export function setupBackgroundSyncSideEffects(
    * Give one room its single resume seed, re-checking the resume predicate at
    * call time.
    *
-   * The `'resumed'` handler evaluates `selectRoomsNeedingResumeSeed` once,
+   * The `resumed` phase handler evaluates `selectRoomsNeedingResumeSeed` once,
    * synchronously, against the rooms joined at that instant. Rooms that join
    * later in the same session — `handleSmResumption` re-fetches bookmarks after
    * a long disconnect and joins everything not currently joined — were never
@@ -784,7 +784,7 @@ export function setupBackgroundSyncSideEffects(
         cancelRoomCatchUpTimer()
         endResumeReplay()
       }
-      // A resumed session already ran its 'resumed' handler: nothing to prepare.
+      // A resumed session already ran its `resumed` phase handler: nothing to prepare.
       // Every other way online retains preparation until sync takes over: a
       // reconnect, and a saved session restored by a new client. A status that
       // flips straight from 'disconnected' to 'online' made no connection

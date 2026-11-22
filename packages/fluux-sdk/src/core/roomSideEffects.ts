@@ -105,7 +105,7 @@ export function setupRoomSideEffects(
     )
   }
 
-  // Epoch ms of the current fresh session's connection (set on 'online'). Used as
+  // Epoch ms of the current fresh session's connection (set on a fresh phase). Used as
   // the forward catch-up cursor boundary so a live message arriving during catch-up
   // can't poison the cursor and silently skip the offline gap.
   let sessionStartTime: number | undefined

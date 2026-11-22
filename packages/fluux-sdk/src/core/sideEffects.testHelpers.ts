@@ -144,9 +144,10 @@ export const sessionPhase = {
 
 /**
  * Simulate a fresh session whose setup completed: set store status to
- * 'online', emit 'online', then 'freshSessionInputsReady'. In the real flow,
- * Connection.ts does the first two in handleConnectionSuccess and the session
- * lifecycle emits the third once the roster and conversation list are in.
+ * 'online', announce a fresh phase, then 'freshSessionInputsReady'. In the real
+ * flow the session lifecycle engine announces the phase first thing in
+ * handleConnectionSuccess and emits the readiness signal once the roster and
+ * conversation list are in.
  * Tests that need the window between the two emit them separately.
  */
 export function simulateFreshSession(
@@ -160,8 +161,8 @@ export function simulateFreshSession(
 }
 
 /**
- * Simulate an SM resumption: set store status to 'online' and emit 'resumed' event.
- * In the real flow, Connection.ts does both in handleConnectionSuccess.
+ * Simulate an SM resumption: set store status to 'online' and announce a
+ * resumed phase, as the session lifecycle engine does in handleConnectionSuccess.
  */
 export function simulateSmResumption(client: ReturnType<typeof createMockClient>) {
   connectionStore.getState().setStatus('online')

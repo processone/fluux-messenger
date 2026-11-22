@@ -5,7 +5,7 @@
  * 1. IndexedDB cache loading (immediate)
  * 2. Background MAM fetch for catch-up (when connected)
  *
- * Uses client events (`'online'` for fresh sessions) so SM resumptions
+ * Uses the session phase (`fresh`) so SM resumptions
  * skip MAM queries entirely — no guard needed.
  *
  * @module Core/ChatSideEffects
@@ -52,7 +52,7 @@ export function setupChatSideEffects(
   // Track whether we've initiated a fetch for each conversation
   const fetchInitiated = new Set<string>()
 
-  // Epoch ms of the current fresh session's connection (set on 'online'). Forward
+  // Epoch ms of the current fresh session's connection (set on a fresh phase). Forward
   // catch-up cursor excludes messages received this session so a live message
   // can't poison it and silently skip the offline gap (parity with rooms / Bug A).
   let sessionStartTime: number | undefined
@@ -96,7 +96,7 @@ export function setupChatSideEffects(
     const endUpdate = connectionStore.getState().beginUpdate([`chat:${conversationId}`, 'messages'])
     try {
       // Load IndexedDB cache first to ensure we have the latest messages
-      // before deciding the MAM query direction. Without this, the 'online'
+      // before deciding the MAM query direction. Without this, the fresh-phase
       // handler races with the conversation subscriber's cache load, and
       // messages may be empty — causing a backward query instead of a
       // forward catch-up from the newest cached message.

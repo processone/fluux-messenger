@@ -92,7 +92,7 @@ export function simulateDisconnect(
 
 /**
  * Simulate the full SM resumption flow as XMPPClient.handleSmResumption does:
- * 1. Emit 'resumed' event (side effects mark fetchInitiated)
+ * 1. Announce the resumed phase (side effects mark fetchInitiated)
  * 2. Leave room state intact — SM preserves MUC membership server-side; the
  *    client trusts its existing in-memory (or hydrated-from-storage) state.
  *
@@ -108,7 +108,7 @@ export async function simulateSmResumptionWithRejoin(
 
 /**
  * Simulate the full fresh session flow:
- * 1. Emit 'online' (reset fetch tracking and require confirmed joins)
+ * 1. Announce a fresh phase (reset fetch tracking and require confirmed joins)
  * 2. markAllRoomsNotJoined()
  * 3. Re-join specified rooms and emit room:joined
  * 4. Foreground MAM may start only after step 3
