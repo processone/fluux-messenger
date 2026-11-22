@@ -1819,7 +1819,7 @@ describe('live cache-only chat corrections', () => {
   })
 })
 
-function deferCorrectionCompletion(kind: Kind) {
+function deferCorrectionCompletion() {
   const started = deferred(), release = deferred()
   const wrap = <A extends unknown[], R extends Promise<unknown>>(apply: (...args: A) => R) => (...args: A) => {
     const work = (async () => {
@@ -1859,7 +1859,7 @@ describe.each<Kind>(['chat', 'room'])('%s correction completion ownership', kind
       })
     const loading = loadWindow(kind)
     await readStarted.promise
-    const completion = deferCorrectionCompletion(kind)
+    const completion = deferCorrectionCompletion()
     const c2 = { id: 'c2', body: 'second correction', at: T1 }
     const work = source === 'live' ? h.live(c2) : h.archive([c2])
     await completion.started.promise
@@ -1888,7 +1888,7 @@ describe.each<Kind>(['chat', 'room'])('%s correction completion ownership', kind
     activate(kind)
     const base = original(kind)
     await save(kind, base); await searchIndex.indexMessage(base)
-    const completion = deferCorrectionCompletion(kind)
+    const completion = deferCorrectionCompletion()
     const work = h.live({ id: 'c2', body: 'corrected cached secret' })
     await completion.started.promise
     const other = confirmedOriginal(kind, {
@@ -1927,7 +1927,7 @@ describe.each<Kind>(['chat', 'room'])('%s correction completion ownership', kind
     const h = harness(kind)
     setStorageScopeJid(SELF)
     await save(kind, original(kind))
-    const completion = deferCorrectionCompletion(kind)
+    const completion = deferCorrectionCompletion()
     const work = h.live({ id: 'c2', body: 'initiating account secret' })
     await completion.started.promise
     try {
@@ -1958,7 +1958,7 @@ describe.each<Kind>(['chat', 'room'])('%s correction completion ownership', kind
     activate(kind)
     const base = { ...indexedBase(kind, true), encryptedPayload: 'baseline ciphertext' }
     await save(kind, base); seedPreview(kind, base)
-    const completion = deferCorrectionCompletion(kind)
+    const completion = deferCorrectionCompletion()
     const work = h.live({ id: 'c2', body: 'older pending correction', at: T1 })
     await completion.started.promise
     try {
@@ -2108,7 +2108,7 @@ describe.each<Kind>(['chat', 'room'])('%s delayed durable search completion', ki
   it('indexes the current cache revision when another cache-only edit completed first', async () => {
     const h = harness(kind)
     await save(kind, indexedBase(kind, true))
-    const completion = deferCorrectionCompletion(kind)
+    const completion = deferCorrectionCompletion()
     const work = h.live({ id: 'c2', body: 'second archived content', at: T1 })
     await completion.started.promise
     try {
@@ -2170,7 +2170,7 @@ describe.each<Kind>(['chat', 'room'])('%s correction identity and older activati
     await read.promise
     await h.live({ id: 'c1', body: 'first completed edit', at: T1 })
     expect(resident(kind)).toBeUndefined()
-    const completion = deferCorrectionCompletion(kind)
+    const completion = deferCorrectionCompletion()
     const work = h.live({ id: 'c2', body: 'second completed edit', at: T1 })
     await completion.started.promise
     try {
@@ -2197,7 +2197,7 @@ describe.each<Kind>(['chat', 'room'])('%s correction identity and older activati
     activate(kind)
     const base = indexedBase(kind, true)
     await save(kind, base); seedPreview(kind, base)
-    const completion = deferCorrectionCompletion(kind)
+    const completion = deferCorrectionCompletion()
     const edit = { id: 'c2', body: 'locked correction', locked: true, omitOriginId: true, at: T2 }
     const work = h.live({ ...edit, omitStanzaId: true })
     await completion.started.promise
@@ -2514,7 +2514,7 @@ describe.each<Kind>(['chat', 'room'])('%s durable live predecessor selection', k
     activate(kind)
     const base = indexedBase(kind, true)
     await save(kind, base); seed(kind, [base]); seedPreview(kind, base)
-    const completion = deferCorrectionCompletion(kind)
+    const completion = deferCorrectionCompletion()
     const work = h.live({ id: 'c2', body: 'completed edit' })
     await completion.started.promise
     try {
