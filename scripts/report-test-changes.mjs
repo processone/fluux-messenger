@@ -8,7 +8,8 @@
 //
 //   1. Rewritten expectations: the main version of each modified unit test file
 //      is run against the change's code. A test that fails there and whose file
-//      diff edits or removes an `expect` is a rewritten expectation; any other
+//      diff edits or removes an `expect`, or removes a line of its companion
+//      snapshot, is a rewritten expectation; any other
 //      failure is test setup updated.
 //   2. Removed protection: a test file deleted and not moved, fewer test cases
 //      in a file, a new unconditional skip/fixme, a new eslint-disable,
@@ -186,8 +187,8 @@ export function buildReport({ rewritten, setup, removed, grown, unableToCompare,
     if (items.length > MAX_LISTED) shown.push(`- and ${items.length - MAX_LISTED} more`)
     L.push(...(items.length ? shown : ['- none']), '')
   }
-  section('Rewritten expectations (main\'s test fails on this code and its file edits an expect)', rewritten.map((r) => `\`${r.file}\`: ${r.test}`))
-  section('Test setup updated (main\'s test fails on this code, no expect edited)', setup.map((r) => `\`${r.file}\`: ${r.test}`))
+  section('Rewritten expectations (main\'s test fails on this code and its file edits an expect or its snapshot)', rewritten.map((r) => `\`${r.file}\`: ${r.test}`))
+  section('Test setup updated (main\'s test fails on this code, no expect or snapshot edited)', setup.map((r) => `\`${r.file}\`: ${r.test}`))
   section('Removed protection', removed)
   section(`Large files that grew (${LARGE_FILE_LINES}+ lines on main, +${GROWTH_LINES} or more)`, grown)
   if (unableToCompare.length) {
