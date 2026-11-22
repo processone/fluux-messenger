@@ -95,8 +95,9 @@ jobs:
   # it exists on main the report says it could not compare.
   report:
     name: Test change report (informational)
+    # No scope condition: a baseline-only or Rust-test-only change skips the
+    # light check but still has protection to report.
     needs: changes
-    if: needs.changes.outputs.js == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     continue-on-error: true

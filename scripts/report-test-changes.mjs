@@ -25,20 +25,24 @@
 // Run it with the change checked out: HEAD's code is what main's tests run on.
 //
 import { execFileSync, spawnSync } from 'node:child_process'
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const LARGE_FILE_LINES = 2000
 const GROWTH_LINES = 100
-const VITEST_TIMEOUT_MS = 150_000
+// All test runs together stay inside this budget, under the workflow's own limit.
+const TOTAL_BUDGET_MS = 170_000
+const STARTED = Date.now()
 const MAX_LISTED = 15
-const WORKSPACES = ['packages/fluux-sdk', 'apps/fluux']
+const WORKSPACES = ['packages/fluux-sdk', 'apps/fluux', 'packages/omemo', 'packages/omemo-plugin', 'packages/openpgp-plugin']
 
 const isUnitTest = (p) => /\.test\.tsx?$/.test(p)
+// Any file that protects behavior: Vitest, Node and shell tests, browser tests, Rust tests.
 const isAnyTest = (p) =>
-  isUnitTest(p) || /(^|\/)(e2e|tests?|__tests__)\//.test(p) || /\.spec\.tsx?$/.test(p)
+  /\.test\.(tsx?|jsx?|mjs|cjs|sh)$/.test(p) || /(^|\/)(e2e|tests?|__tests__)\//.test(p) || /\.spec\.tsx?$/.test(p)
+const hasTestCases = (p) => /\.(tsx?|jsx?|mjs|cjs)$/.test(p)
 const isLintConfig = (p) =>
   p === 'docs/anomaly-baseline.json' || /(^|\/)(eslint\.config\.[cm]?[jt]s|\.eslintrc[^/]*)$/.test(p)
 
@@ -70,8 +74,9 @@ function show(ref, path) {
   }
 }
 
-function addedLines(base, head, path) {
-  return git(['diff', '-U0', '--no-renames', base, head, '--', path])
+// Both paths, with rename detection: a moved file only "adds" what it really adds.
+function addedLines(base, head, oldPath, newPath) {
+  return git(['diff', '-U0', '-M', base, head, '--', oldPath, newPath])
     .split('\n')
     .filter((l) => l.startsWith('+') && !l.startsWith('+++'))
     .map((l) => l.slice(1))
@@ -93,6 +98,10 @@ function runBaseTests(root, base, files, unableToCompare) {
   for (const ws of WORKSPACES) {
     const inWs = files.filter((f) => f.newPath.startsWith(`${ws}/`))
     if (inWs.length === 0) continue
+    if (Date.now() - STARTED >= TOTAL_BUDGET_MS) {
+      unableToCompare.push(`${ws}: out of time before its tests ran`)
+      continue
+    }
     const temp = mkdtempSync(join(tmpdir(), 'report-test-changes-'))
     const copies = []
     try {
@@ -105,14 +114,30 @@ function runBaseTests(root, base, files, unableToCompare) {
         // Next to the real file so relative imports still resolve.
         const copy = f.newPath.replace(/\.test\.(tsx?)$/, '.__main.test.$1')
         writeFileSync(join(root, copy), content)
-        copies.push({ ...f, copy })
+        // Main's snapshot file travels with the copy, under the copy's name.
+        const snapOld = f.oldPath.replace(/([^/]+)$/, '__snapshots__/$1.snap')
+        const snapCopy = copy.replace(/([^/]+)$/, '__snapshots__/$1.snap')
+        const snap = show(base, snapOld)
+        if (snap !== null) {
+          mkdirSync(dirname(join(root, snapCopy)), { recursive: true })
+          writeFileSync(join(root, snapCopy), snap)
+        }
+        copies.push({ ...f, copy, snapCopy, snapOld, snapNew: f.newPath.replace(/([^/]+)$/, '__snapshots__/$1.snap'), hadSnap: snap !== null })
       }
       if (copies.length === 0) continue
       const outFile = join(temp, 'result.json')
       const run = spawnSync(
         'npx',
         ['vitest', 'run', '--reporter=json', `--outputFile=${outFile}`, ...copies.map((c) => c.copy.slice(ws.length + 1))],
-        { cwd: join(root, ws), encoding: 'utf8', timeout: VITEST_TIMEOUT_MS, maxBuffer: 256 * 1024 * 1024 },
+        {
+          cwd: join(root, ws),
+          encoding: 'utf8',
+          timeout: Math.max(5_000, TOTAL_BUDGET_MS - (Date.now() - STARTED)),
+          killSignal: 'SIGKILL',
+          maxBuffer: 256 * 1024 * 1024,
+          // CI mode: a missing snapshot fails instead of being written.
+          env: { ...process.env, CI: 'true' },
+        },
       )
       let result
       try {
@@ -134,12 +159,15 @@ function runBaseTests(root, base, files, unableToCompare) {
         }
         if (failed.length === 0) continue
         const editsExpect = diffEditsExpectation(
-          git(['diff', '-U0', '-M', base, c.head, '--', c.oldPath, c.newPath]),
+          git(['diff', '-U0', '-M', base, c.head, '--', c.oldPath, c.newPath, c.snapOld, c.snapNew]),
         )
         for (const a of failed) (editsExpect ? rewritten : setup).push({ file: c.newPath, test: a.fullName ?? a.title })
       }
     } finally {
-      for (const c of copies) rmSync(join(root, c.copy), { force: true })
+      for (const c of copies) {
+        rmSync(join(root, c.copy), { force: true })
+        rmSync(join(root, c.snapCopy), { force: true })
+      }
       rmSync(temp, { recursive: true, force: true })
     }
   }
@@ -188,30 +216,34 @@ function main() {
   for (const e of entries) {
     const { status, oldPath, newPath } = e
     if (status === 'D' && isAnyTest(oldPath)) removed.push(`test file deleted: \`${oldPath}\``)
-    if (isLintConfig(newPath) && status !== 'D') removed.push(`lint or anomaly baseline edited: \`${newPath}\``)
+    if (isLintConfig(oldPath) || isLintConfig(newPath)) {
+      removed.push(`lint or anomaly baseline ${status === 'D' ? 'deleted' : 'edited'}: \`${newPath}\``)
+    }
     if (status === 'D') continue
 
-    if (isUnitTest(newPath) && (status === 'M' || status === 'R')) {
-      const before = show(baseSha, oldPath)
-      const after = show(head, newPath)
-      if (before !== null && after !== null) {
-        const [b, a] = [countTestCases(before), countTestCases(after)]
-        if (a < b) removed.push(`fewer test cases in \`${newPath}\`: ${b} to ${a}`)
-        if (status === 'M' || before !== after) modifiedTests.push({ oldPath, newPath, head })
-      }
+    const before = show(baseSha, oldPath)
+    const after = show(head, newPath)
+    if (before === null || after === null) continue
+
+    if (isAnyTest(newPath) && hasTestCases(newPath)) {
+      const [b, a] = [countTestCases(before), countTestCases(after)]
+      if (a < b) removed.push(`fewer test cases in \`${newPath}\`: ${b} to ${a}`)
     }
-    if (isAnyTest(newPath)) {
-      if (addedLines(baseSha, head, newPath).some((l) => UNCONDITIONAL_SKIP.test(l))) removed.push(`new skip or fixme in \`${newPath}\``)
-    } else if (/\.(tsx?|jsx?|mjs|cjs)$/.test(newPath) && status !== 'R') {
-      if (addedLines(baseSha, head, newPath).some((l) => SUPPRESSION.test(l))) removed.push(`new lint or type suppression in \`${newPath}\``)
+    if (isUnitTest(newPath) && before !== after) {
+      if (WORKSPACES.some((ws) => newPath.startsWith(`${ws}/`))) modifiedTests.push({ oldPath, newPath, head })
+      else unableToCompare.push(`${newPath}: not in a unit test workspace, so main's version was not run`)
+    }
+    if (before !== after) {
+      const added = addedLines(baseSha, head, oldPath, newPath)
+      if (isAnyTest(newPath)) {
+        if (added.some((l) => UNCONDITIONAL_SKIP.test(l))) removed.push(`new skip or fixme in \`${newPath}\``)
+      } else if (/\.(tsx?|jsx?|mjs|cjs)$/.test(newPath) && added.some((l) => SUPPRESSION.test(l))) {
+        removed.push(`new lint or type suppression in \`${newPath}\``)
+      }
     }
     if (/\.tsx?$/.test(newPath) && !isAnyTest(newPath)) {
-      const before = show(baseSha, oldPath)
-      const after = show(head, newPath)
-      if (before !== null && after !== null) {
-        const [b, a] = [countLines(before), countLines(after)]
-        if (b >= LARGE_FILE_LINES && a - b >= GROWTH_LINES) grown.push(`\`${newPath}\`: ${b} to ${a} lines (+${a - b})`)
-      }
+      const [b, a] = [countLines(before), countLines(after)]
+      if (b >= LARGE_FILE_LINES && a - b >= GROWTH_LINES) grown.push(`\`${newPath}\`: ${b} to ${a} lines (+${a - b})`)
     }
   }
 
