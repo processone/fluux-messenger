@@ -642,12 +642,12 @@ describe('searchIndex', () => {
       _resetDBForTesting()
 
       await initSearchIndex('test@example.com')
-      expect(await docIndexNames()).toEqual(['conversationId', 'identityKeys'])
+      expect(await docIndexNames()).toEqual(['conversationId', 'docNo', 'identityKeys'])
     })
 
     it('creates no timestamp index on a fresh docs store', async () => {
       await initSearchIndex('test@example.com')
-      expect(await docIndexNames()).toEqual(['conversationId', 'identityKeys'])
+      expect(await docIndexNames()).toEqual(['conversationId', 'docNo', 'identityKeys'])
     })
   })
 

@@ -42,10 +42,16 @@ import {
 } from './messageIdentity'
 
 const DB_NAME = 'fluux-search-index'
-const DB_VERSION = 4
+const DB_VERSION = 5
 const TOKENS_STORE = 'search-tokens'
 const DOCS_STORE = 'search-docs'
 const META_STORE = 'search-meta'
+/** Time-sorted rows keyed `[token, -timestamp, docNo]`: negative time makes ascending keys newest first. */
+const POSTINGS_STORE = 'search-postings'
+/** Meta keys of the time-sorted index. */
+const NEXT_DOC_NO_KEY = 'next-doc-no'
+const POSTINGS_READY_KEY = 'postings-ready'
+const POSTINGS_CURSOR_KEY = 'postings-cursor'
 const pendingMutations = new Map<string | null, Promise<void>>()
 const pendingMaintenance = new Map<string | null, Promise<unknown>>()
 
@@ -107,6 +113,11 @@ interface DocEntry {
   receivedAt?: number
   /** Derived room-scoped lookup keys; older room documents receive them on upgrade. */
   identityKeys?: string[]
+  /**
+   * Short unique number naming this document in {@link POSTINGS_STORE} rows.
+   * Absent until the background copy or a write numbers the document.
+   */
+  docNo?: number
 }
 
 interface MetaEntry {
@@ -125,7 +136,12 @@ interface SearchIndexSchema extends DBSchema {
     indexes: {
       conversationId: string
       identityKeys: string
+      docNo: number
     }
+  }
+  [POSTINGS_STORE]: {
+    key: [string, number, number]
+    value: 1
   }
   [META_STORE]: {
     key: string
@@ -244,6 +260,12 @@ function getDB(
       if (!db.objectStoreNames.contains(META_STORE)) {
         db.createObjectStore(META_STORE, { keyPath: 'key' })
       }
+      // Created before the early return below, or an upgrading database skips them.
+      if (!db.objectStoreNames.contains(POSTINGS_STORE)) db.createObjectStore(POSTINGS_STORE)
+      const numberedDocs = tx.objectStore(DOCS_STORE)
+      if (!numberedDocs.indexNames.contains('docNo')) numberedDocs.createIndex('docNo', 'docNo', { unique: true })
+      // A brand-new database has nothing to copy, so it starts ready.
+      if (oldVersion === 0) void tx.objectStore(META_STORE).put({ key: POSTINGS_READY_KEY, value: '1' })
       // Guarded: a later version bump re-runs this callback on a store that
       // already has the index, and re-creating it throws ConstraintError,
       // which aborts the upgrade and leaves search unable to open.
@@ -577,6 +599,7 @@ function createDocEntry(
 
 function sameIndexDocument(a: DocEntry, b: DocEntry): boolean {
   return (Object.keys({ ...a, ...b }) as Array<keyof DocEntry>).every(key => {
+    if (key === 'docNo') return true
     if (key === 'tokens' || key === 'identityKeys') {
       const left = a[key] ?? []
       const right = b[key] ?? []
@@ -584,6 +607,65 @@ function sameIndexDocument(a: DocEntry, b: DocEntry): boolean {
     }
     return a[key] === b[key]
   })
+}
+
+type SearchWriteTx = IDBPTransaction<
+  SearchIndexSchema,
+  ['search-tokens', 'search-docs', 'search-postings', 'search-meta'],
+  'readwrite'
+>
+
+type PostingKey = [string, number, number]
+
+function postingKeys(doc: DocEntry): PostingKey[] {
+  return doc.docNo === undefined ? [] : doc.tokens.map(token => [token, -doc.timestamp, doc.docNo as number])
+}
+
+const postingKeyId = (key: PostingKey) => `${key[0]}\u0000${key[1]}\u0000${key[2]}`
+
+/**
+ * The one place that changes a document inside a write transaction. It keeps the
+ * time-sorted rows (`search-postings`) and the document in step, so no caller can
+ * change one without the other. The old posting lists stay the caller's job until
+ * they are removed.
+ */
+function createDocumentWriter(tx: SearchWriteTx) {
+  const docs = tx.objectStore(DOCS_STORE)
+  const rows = tx.objectStore(POSTINGS_STORE)
+  const meta = tx.objectStore(META_STORE)
+  let next: number | undefined
+  const allocate = async (): Promise<number> => {
+    if (next === undefined) next = Number((await meta.get(NEXT_DOC_NO_KEY))?.value ?? 1)
+    return next++
+  }
+  return {
+    /** Store a document, numbering it if needed and replacing the rows of the one it overwrites. */
+    async put(doc: DocEntry): Promise<void> {
+      const previous = await docs.get(doc.indexId)
+      const numbered: DocEntry = { ...doc, docNo: doc.docNo ?? previous?.docNo ?? await allocate() }
+      const keys = postingKeys(numbered)
+      if (previous) {
+        const kept = new Set(keys.map(postingKeyId))
+        for (const key of postingKeys(previous)) if (!kept.has(postingKeyId(key))) await rows.delete(key)
+      }
+      await docs.put(numbered)
+      for (const key of keys) await rows.put(1, key)
+    },
+    /** Delete a stored document and its rows. */
+    async delete(doc: DocEntry): Promise<void> {
+      await docs.delete(doc.indexId)
+      for (const key of postingKeys(doc)) await rows.delete(key)
+    },
+    /** Change a document's id only: it keeps its docNo, so its rows stay. */
+    async relocate(doc: DocEntry, indexId: string): Promise<void> {
+      await docs.delete(doc.indexId)
+      await docs.put({ ...doc, indexId })
+    },
+    /** Persist the next free number; call once before the transaction completes. */
+    async flush(): Promise<void> {
+      if (next !== undefined) await meta.put({ key: NEXT_DOC_NO_KEY, value: String(next) })
+    },
+  }
 }
 
 /** The retraction scope a message belongs to. */
@@ -773,10 +855,11 @@ async function writeIndexBatch(
       const owner = chatOwners[i]
       return owner ? [[doc.indexId, createDocEntry(owner.message, doc.indexId, doc.tokens)] as const] : []
     }))
-    const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readwrite')
+    const tx = db.transaction([TOKENS_STORE, DOCS_STORE, POSTINGS_STORE, META_STORE], 'readwrite')
     void tx.done.catch(() => {})
     const tokensStore = tx.objectStore(TOKENS_STORE)
     const docsStore = tx.objectStore(DOCS_STORE)
+    const writer = createDocumentWriter(tx)
     const postings = new Map<string, { before: string[]; after: Set<string> }>()
     const getPostings = async (token: string): Promise<Set<string>> => {
       let entry = postings.get(token)
@@ -788,7 +871,7 @@ async function writeIndexBatch(
       return entry.after
     }
     const remove = (message: Message | RoomMessage, closure?: RoomIdentityClosure | ChatIdentityClosure, source?: Message | RoomMessage, keep?: DocEntry) =>
-      removeMessageEntries(tx, message, getPostings, ownedChatDocs, closure, source, keep)
+      removeMessageEntries(tx, writer, message, getPostings, ownedChatDocs, closure, source, keep)
     try {
       if (transition) {
         const { previous, current } = transition
@@ -797,10 +880,10 @@ async function writeIndexBatch(
           const oldId = getIndexId(before)
           const doc = await docsStore.get(oldId)
           if (!doc || !docBelongsToChat(doc, before)) continue
-          await docsStore.delete(oldId)
+          await writer.delete(doc)
           for (const token of doc.tokens) (await getPostings(token)).delete(oldId)
           if (current.isRetracted || isNoLocalStore(current) || await docsStore.get(nextId)) continue
-          await docsStore.put({ ...doc, indexId: nextId, messageId: current.id,
+          await writer.put({ ...doc, indexId: nextId, messageId: current.id,
             stanzaId: current.stanzaId, originId: current.originId, timestamp: current.timestamp.getTime() })
           for (const token of doc.tokens) (await getPostings(token)).add(nextId)
         }
@@ -815,8 +898,7 @@ async function writeIndexBatch(
         if (message.type === 'groupchat' && collision && !docBelongsToRoom(collision, message)) {
           if (getRoomModerationId(message) && !getRoomModerationId(roomDocumentIdentity(collision))) {
             const relocatedId = roomCollisionIndexId(roomDocumentIdentity(collision))
-            await docsStore.put({ ...collision, indexId: relocatedId })
-            await docsStore.delete(indexId)
+            await writer.relocate(collision, relocatedId)
             for (const token of collision.tokens) {
               const posting = await getPostings(token)
               posting.delete(indexId)
@@ -832,7 +914,7 @@ async function writeIndexBatch(
         if (!doc) continue
         const existing = await docsStore.get(indexId)
         if (existing) continue
-        await docsStore.put(doc)
+        await writer.put(doc)
         for (const token of doc.tokens) (await getPostings(token)).add(indexId)
       }
       for (const [token, { before, after }] of postings) {
@@ -840,6 +922,7 @@ async function writeIndexBatch(
         if (after.size) await tokensStore.put({ token, postings: [...after] })
         else await tokensStore.delete(token)
       }
+      await writer.flush()
       await tx.done
     } catch (error) {
       try { tx.abort() } catch {
@@ -887,16 +970,17 @@ export async function removeConversation(
   const isRoom = kind === 'room'
   await mutateIndex(scopeJid, async () => {
     const db = await getDB(scopeJid)
-    const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readwrite')
+    const tx = db.transaction([TOKENS_STORE, DOCS_STORE, POSTINGS_STORE, META_STORE], 'readwrite')
     void tx.done.catch(() => {})
     const tokensStore = tx.objectStore(TOKENS_STORE)
     const docsStore = tx.objectStore(DOCS_STORE)
+    const writer = createDocumentWriter(tx)
     try {
       const docs = (await docsStore.index('conversationId').getAll(conversationId))
         .filter(doc => doc.isRoom === isRoom)
       const dropped = new Map<string, Set<string>>()
       for (const doc of docs) {
-        await docsStore.delete(doc.indexId)
+        await writer.delete(doc)
         for (const token of doc.tokens) {
           let ids = dropped.get(token)
           if (!ids) dropped.set(token, ids = new Set())
@@ -922,7 +1006,8 @@ export async function removeConversation(
 }
 
 async function removeMessageEntries(
-  tx: IDBPTransaction<SearchIndexSchema, ['search-tokens', 'search-docs'], 'readwrite'>,
+  tx: SearchWriteTx,
+  writer: ReturnType<typeof createDocumentWriter>,
   message: Message | RoomMessage,
   getPostings: (token: string) => Promise<Set<string>>,
   ownedChatDocs: ReadonlyMap<string, DocEntry>,
@@ -966,8 +1051,8 @@ async function removeMessageEntries(
     if (keep && sameIndexDocument(doc, keep)) return
     for (const token of doc.tokens) (await getPostings(token)).delete(indexId)
 
-    // Remove the document
-    await docsStore.delete(indexId)
+    // Remove the document and its rows
+    await writer.delete(doc)
   }
 
   if (message.type === 'chat') {
@@ -1280,6 +1365,102 @@ export async function backfillFromMessageCache(): Promise<void> {
   })
 }
 
+// =============================================================================
+// Time-sorted index copy
+// =============================================================================
+
+/** Documents numbered and given rows per transaction. */
+const POSTINGS_COPY_BATCH_SIZE = 200
+/** Pause between batches so the interface keeps its frames. */
+const POSTINGS_COPY_PAUSE_MS = 16
+
+function isStorageFull(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'QuotaExceededError'
+}
+
+/**
+ * One copy transaction: read the cursor, number the unnumbered documents after
+ * it, write their rows, then advance the cursor. A document and its rows change
+ * in the same transaction, so a document retracted or deleted meanwhile cannot
+ * come back through its rows. Resolves to how many documents it read.
+ */
+async function copyPostingsBatch(scopeJid: string | null): Promise<number> {
+  const db = await getDB(scopeJid)
+  const tx = db.transaction([TOKENS_STORE, DOCS_STORE, POSTINGS_STORE, META_STORE], 'readwrite')
+  void tx.done.catch(() => {})
+  try {
+    const meta = tx.objectStore(META_STORE)
+    if (await meta.get(POSTINGS_READY_KEY)) { await tx.done; return 0 }
+    const cursor = (await meta.get(POSTINGS_CURSOR_KEY))?.value
+    const batch = await tx.objectStore(DOCS_STORE).getAll(
+      cursor === undefined ? undefined : IDBKeyRange.lowerBound(cursor, true),
+      POSTINGS_COPY_BATCH_SIZE,
+    )
+    if (batch.length === 0) { await tx.done; return 0 }
+    const writer = createDocumentWriter(tx)
+    for (const doc of batch) if (doc.docNo === undefined) await writer.put(doc)
+    await writer.flush()
+    await meta.put({ key: POSTINGS_CURSOR_KEY, value: batch[batch.length - 1].indexId })
+    await tx.done
+    return batch.length
+  } catch (error) {
+    try { tx.abort() } catch { /* Already finished. */ }
+    await tx.done.catch(() => {})
+    throw error
+  }
+}
+
+/** Set the ready marker once no document is left after the cursor. */
+async function markPostingsReady(scopeJid: string | null): Promise<void> {
+  const db = await getDB(scopeJid)
+  const tx = db.transaction([DOCS_STORE, META_STORE], 'readwrite')
+  void tx.done.catch(() => {})
+  const meta = tx.objectStore(META_STORE)
+  const cursor = (await meta.get(POSTINGS_CURSOR_KEY))?.value
+  const rest = await tx.objectStore(DOCS_STORE).getAll(
+    cursor === undefined ? undefined : IDBKeyRange.lowerBound(cursor, true), 1)
+  if (rest.length === 0) await meta.put({ key: POSTINGS_READY_KEY, value: '1' })
+  await tx.done
+}
+
+/**
+ * Copy the stored search documents into the time-sorted index, in the background.
+ *
+ * Reads the stored documents only, never the message cache: a document known only
+ * from server search exists nowhere else. Resumable: the cursor lives in the
+ * database, so a quit continues where it stopped, and two windows serialize on
+ * the transaction. The loop checks the account between batches, so an account
+ * switch ends it. A full disk ends it quietly and the next login retries. Search
+ * keeps using the old lists; nothing here changes what it returns.
+ */
+export async function migrateSearchPostings(): Promise<void> {
+  if (!isIndexedDBAvailable()) return
+  const scope = captureStorageScope()
+  await maintainIndex(scope.jid, async () => {
+    try {
+      for (;;) {
+        scope.assertCurrent()
+        if (await copyPostingsBatch(scope.jid) > 0) {
+          await new Promise(resolve => setTimeout(resolve, POSTINGS_COPY_PAUSE_MS))
+          continue
+        }
+        scope.assertCurrent()
+        await markPostingsReady(scope.jid)
+        if (await isPostingsReady(scope.jid)) return
+      }
+    } catch (error) {
+      if (!isStorageFull(error)) throw error
+      console.warn('[searchIndex] Not enough storage to build the time-sorted index; retrying at next login')
+    }
+  })
+}
+
+/** Whether the time-sorted index holds every document. */
+export async function isPostingsReady(scopeJid: string | null = getStorageScopeJid()): Promise<boolean> {
+  const db = await getDB(scopeJid)
+  return (await db.get(META_STORE, POSTINGS_READY_KEY)) !== undefined
+}
+
 /**
  * Progress info emitted during index rebuild.
  */
@@ -1360,10 +1541,13 @@ export async function clearSearchIndex(): Promise<void> {
 async function clearIndexData(scopeJid: string | null): Promise<void> {
   await mutateIndex(scopeJid, async () => {
     const db = await getDB(scopeJid)
-    const tx = db.transaction([TOKENS_STORE, DOCS_STORE, META_STORE], 'readwrite')
+    const tx = db.transaction([TOKENS_STORE, DOCS_STORE, POSTINGS_STORE, META_STORE], 'readwrite')
     await tx.objectStore(TOKENS_STORE).clear()
     await tx.objectStore(DOCS_STORE).clear()
+    await tx.objectStore(POSTINGS_STORE).clear()
     await tx.objectStore(META_STORE).clear()
+    // An empty index has nothing to copy: whatever is written next numbers itself.
+    await tx.objectStore(META_STORE).put({ key: POSTINGS_READY_KEY, value: '1' })
     await tx.done
   })
 }
