@@ -1,4 +1,4 @@
-import type { MessageRowRef } from '@fluux/sdk'
+import type { MessageListHandle } from './messageListBoundary'
 /**
  * Registry for the currently-mounted conversation message list, so code outside the
  * list (message-target helpers and ChatLayout's Escape handler) can reach the active
@@ -7,7 +7,7 @@ import type { MessageRowRef } from '@fluux/sdk'
  * Why this exists: positioning ownership lives with the active message list. Callers such as reply
  * quotes, poll banners, and find-on-page submit a semantic target through `requestMessageTarget`;
  * they must not start independent DOM/rAF scroll implementations outside the generation-aware
- * positioning controller. `scrollToBottom` is registered for ChatLayout's conversation-level
+ * positioning controller. `scrollToBottom` is used by ChatLayout's conversation-level
  * Escape handling.
  *
  * There is a single active conversation list at a time (ChatView / RoomView render one), so a
@@ -19,14 +19,8 @@ import type { MessageRowRef } from '@fluux/sdk'
  * so registering them would make routing depend on render order. Callers rendered inside any list
  * route by containment through `messageTargetContext` instead.
  */
-export interface ActiveMessageListController {
-  /** Submit an explicit message target to the active list's positioning controller. */
-  requestMessageTarget(id: string | MessageRowRef): void
-  /** Scroll the active list to the newest message (same action as the ⌘/Ctrl+↓ shortcut
-   *  and the scroll-to-bottom FAB). */
-  scrollToBottom(): void
-  observeKeyboardNavigation(conversationId: string): void
-}
+/** The list registers its own command handle (see messageListBoundary); callers outside it need only these two commands. */
+export type ActiveMessageListController = Pick<MessageListHandle, 'requestMessageTarget' | 'scrollToBottom'>
 
 let active: ActiveMessageListController | null = null
 

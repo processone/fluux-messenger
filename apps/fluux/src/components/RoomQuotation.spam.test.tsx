@@ -13,7 +13,7 @@ vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }) }))
 vi.mock('./conversation', async importOriginal => ({
   ...await importOriginal<typeof import('./conversation')>(),
-  MessageList: ({ messages, renderMessage }: { messages: RoomMessage[]; renderMessage: (message: RoomMessage, index: number, group: RoomMessage[], marker: boolean, onMediaLoad: () => void) => React.ReactNode }) =>
+  MessageList: ({ timeline: { messages }, renderMessage }: { timeline: { messages: RoomMessage[] }; renderMessage: (message: RoomMessage, index: number, group: RoomMessage[], marker: boolean, onMediaLoad: () => void) => React.ReactNode }) =>
     <div>{messages.map((message, index) => <article key={message.id}>{renderMessage(message, index, messages, false, () => {})}</article>)}</div>,
 }))
 
@@ -32,7 +32,7 @@ const room: Room = {
 }
 
 function Quotation({ view }: { view: 'timeline' | 'search' }) {
-  const shared = { messages: [reply], scrollerRef: { current: null }, isAtBottomRef: { current: true }, contactsByJid: new Map() }
+  const shared = { messages: [reply], listHandleRef: { current: null }, contactsByJid: new Map() }
   return view === 'search'
     ? <SearchContextMessageList {...shared} conversationId="preview" messageConversationId={roomJid} isRoom highlightedMessage={reply} onHighlightedClick={vi.fn()} />
     : <RoomMessageList {...shared} room={room} onLiveEdgeMeasured={vi.fn()} sendReaction={vi.fn()} votePoll={vi.fn()} closePoll={vi.fn()}

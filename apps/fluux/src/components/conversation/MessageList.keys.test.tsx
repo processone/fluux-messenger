@@ -19,7 +19,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // the virtualized render is covered by MessageList.virtualized.test.tsx + unit tests.
 vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render } from '@testing-library/react'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import type { BaseMessage, RoomMessage } from '@fluux/sdk'
 import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { findMessageRowElement, messageRowId } from './messageRowIdentity'

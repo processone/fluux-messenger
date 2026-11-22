@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import type { BaseMessage, RoomMessage } from '@fluux/sdk'
 import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { findMessageRowElement, messageRowId } from './messageRowIdentity'

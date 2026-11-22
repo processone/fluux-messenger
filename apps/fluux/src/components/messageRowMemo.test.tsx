@@ -109,8 +109,7 @@ const stubRoom = {
 const CHAT_PROPS = {
   contactsByJid: new Map(),
   typingUsers: [] as string[],
-  scrollerRef: { current: null },
-  isAtBottomRef: { current: true },
+  listHandleRef: { current: null },
   conversationId: 'alice@example.com',
   conversationType: 'chat' as const,
   sendReaction: vi.fn(),
@@ -145,8 +144,7 @@ const CHAT_PROPS = {
 }
 
 const ROOM_PROPS = {
-  scrollerRef: { current: null },
-  isAtBottomRef: { current: true },
+  listHandleRef: { current: null },
   room: stubRoom,
   contactsByJid: new Map(),
   ownAvatar: null,

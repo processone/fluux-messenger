@@ -15,10 +15,11 @@
  * issues that repaint after a send. jsdom has no compositor, so we can't observe the paint itself;
  * instead we count the forced-reflow reads of `offsetHeight`, which only forceRepaint performs here.
  */
-import React from 'react'
+import React, { createRef } from 'react'
+import type { MessageListHandle } from './messageListBoundary'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render } from '@testing-library/react'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import type { BaseMessage } from '@fluux/sdk'
 import { appliedWrite } from './scrollWriteTestDoubles'
 
@@ -116,9 +117,9 @@ describe('MessageList — pin forces a repaint after a programmatic scroll (WebK
   const sent: BaseMessage = { id: 'sent-1', stanzaId: undefined, originId: undefined, from: 'me@example.com', body: 'hi', timestamp: new Date(2024, 0, 1, 13, 0), isOutgoing: true, type: 'chat' }
 
   it('forces a repaint (overflow toggle) after the send pin scrolls to the bottom', () => {
-    const isAtBottomRef = { current: true }
+    const handleRef = createRef<MessageListHandle>()
     const { container, rerender } = render(
-      <MessageList messages={makeMessages(50)} conversationId="conv-repaint" isAtBottomRef={isAtBottomRef} {...props} />,
+      <MessageList messages={makeMessages(50)} conversationId="conv-repaint" handleRef={handleRef} {...props} />,
     )
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
     instrumentScroller(scroller)
@@ -129,7 +130,7 @@ describe('MessageList — pin forces a repaint after a programmatic scroll (WebK
 
     // SEND — an outgoing message grows the content and triggers the new-message pin.
     geo.scrollHeight = 2040
-    rerender(<MessageList messages={[...makeMessages(50), sent]} conversationId="conv-repaint" isAtBottomRef={isAtBottomRef} {...props} />)
+    rerender(<MessageList messages={[...makeMessages(50), sent]} conversationId="conv-repaint" handleRef={handleRef} {...props} />)
     flush(3)
 
     // The pin scrolled to the bottom AND forced a repaint after doing so.
@@ -146,10 +147,10 @@ describe('MessageList — pin forces a repaint after a programmatic scroll (WebK
   // saturated the main thread. The burst coalescer suppresses the intermediate repaints (position is
   // still written) and forces ONE trailing repaint on settle — a burst of N collapses to ~1–2 toggles.
   it('coalesces a burst of new messages into far fewer forced repaints', () => {
-    const isAtBottomRef = { current: true }
+    const handleRef = createRef<MessageListHandle>()
     const base = makeMessages(50)
     const { container, rerender } = render(
-      <MessageList messages={base} conversationId="conv-burst" isAtBottomRef={isAtBottomRef} {...props} />,
+      <MessageList messages={base} conversationId="conv-burst" handleRef={handleRef} {...props} />,
     )
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
     instrumentScroller(scroller)
@@ -167,7 +168,7 @@ describe('MessageList — pin forces a repaint after a programmatic scroll (WebK
       })
       geo.scrollHeight = 2000 + (i + 1) * 40
       rerender(
-        <MessageList messages={[...base, ...burst]} conversationId="conv-burst" isAtBottomRef={isAtBottomRef} {...props} />,
+        <MessageList messages={[...base, ...burst]} conversationId="conv-burst" handleRef={handleRef} {...props} />,
       )
       flush(2)
     }

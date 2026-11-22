@@ -79,8 +79,7 @@ const stubRoom: Room = {
 
 // Stable props shared across renders — mirrors the ROOM_PROPS shape in messageRowMemo.test.tsx.
 const ROOM_PROPS = {
-  scrollerRef: { current: null },
-  isAtBottomRef: { current: true },
+  listHandleRef: { current: null },
   contactsByJid: new Map(),
   ownAvatar: null,
   sendReaction: vi.fn(),

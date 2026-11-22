@@ -1,7 +1,7 @@
 import React from 'react'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import { createTestMessages } from './MessageList.test-utils'
 import { getActiveMessageListController, setActiveMessageListController } from './activeMessageListController'
 import { getScrollShadowSnapshot, resetScrollShadowDiagnostics } from './scrollPositionShadow'

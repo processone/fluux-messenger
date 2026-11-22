@@ -10,6 +10,7 @@ import {
   _resetViewportScrollerRegistryForTesting,
   registerViewportScroller,
 } from '../../utils/viewportScroller'
+import { measureElementViewport } from '../../utils/viewportMetrics'
 import {
   _resetViewportRegistryForTesting,
   registerViewportBottomRef,
@@ -287,7 +288,7 @@ describe('browserWorld readings', () => {
     Object.defineProperty(el, 'clientHeight', { value: 500, configurable: true })
     el.scrollTop = 480
     document.body.appendChild(el)
-    registerViewportScroller('conversation', ACTIVE.id, { current: el })
+    registerViewportScroller('conversation', ACTIVE.id, { current: { measureViewport: () => measureElementViewport(el) } })
 
     const w = browserWorld(
       () => ACTIVE,

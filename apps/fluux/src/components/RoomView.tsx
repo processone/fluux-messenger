@@ -1,6 +1,5 @@
 import { iosHaptic } from '@/platform/ios/haptics'
 import { editableForward } from '../utils/forwardMessage'
-import { getActiveMessageListController } from './conversation/activeMessageListController'
 import { isSpamModerated } from '@/utils/spamModeration'
 import { SpamModerationOption } from './SpamModerationOption'
 import type { GapInterval, MessageRowRef } from '@fluux/sdk'
@@ -12,7 +11,7 @@ import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { getRoomModerationId, archiveReference, senderReference, useRoomActive, usePolls, useRoomModeration, useRoomManagement, useRoomEntity, useContactIdentities, getBareJid, generateConsistentColorHexSync, createMessageLookup, useReferencedMessage, useRoomMessageSnapshots, resolveRoomMessageSnapshot, isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, getStorageScopeJid, currentViewportGeneration, reportViewport, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData, type ViewportEvidenceKey } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
-import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, useRoomOccupantCountBelow, isSmallScreen } from '@/hooks'
+import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, useRoomOccupantCountBelow, isSmallScreen } from '@/hooks'
 import { MessageBubble, MessageList, RoomSystemLine, shouldShowAvatar, groupHeaderIndex, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, decideChatStateRoute, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
@@ -61,8 +60,8 @@ import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 import { auroraSenderColor, nickColorSeed } from '@/utils/senderColor'
-import { useViewportBottom } from '@/hooks/useViewportBottom'
-import { registerViewportScroller } from '@/utils/viewportScroller'
+import { useMessageListHandle } from '@/hooks/useMessageListHandle'
+import type { MessageListHandle } from './conversation/messageListBoundary'
 import { ReactionMentions } from './conversation/ReactionMentions'
 import { messageRowId, messageRowRefFromRowId } from './conversation/messageRowIdentity'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
@@ -307,22 +306,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     [isUploading, progress, uploadError, clearUploadError]
   )
 
-  // Scroll ref for programmatic scrolling and keyboard navigation
-  const scrollRef = useRef<HTMLElement>(null)
-  // Whether the viewport is showing the newest message — owned by useViewportBottom, which also
-  // publishes it so the global focus handler can tell a reader who is genuinely looking at the
-  // newest message from a view merely parked at the live edge (issue #1076).
-  const { ref: isAtBottomRef, assume: assumeViewportBottom } = useViewportBottom('room', activeRoomJid)
-
-  // Publish the scroll element too. Unlike the ref above this is not consumed in
-  // release builds; it exists so a dev-only check can measure the viewport WITHOUT
-  // going through the scroll hook's own at-bottom state, which is exactly the value
-  // under suspicion when the list and its affordances disagree.
-  useEffect(() => {
-    if (!__FLUUX_ANOMALY__) return
-    if (!activeRoomJid) return
-    return registerViewportScroller('room', activeRoomJid, scrollRef)
-  }, [activeRoomJid])
+  // The command handle to the message list (keyboard navigation, hover scoping). The hook also
+  // publishes whether the viewport shows the newest message, so the global focus handler can tell
+  // a reader who is genuinely looking at it from a view merely parked at the live edge (#1076).
+  const listHandleRef = useMessageListHandle('room', activeRoomJid)
 
   // Composer handle ref for focusing after staging attachment
   const composerHandleRef = useRef<MessageComposerHandle>(null)
@@ -336,21 +323,13 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     clearSelection,
     handleMouseMove,
     handleMouseLeave,
-  } = useMessageSelection(displayMessages, scrollRef, {
+  } = useMessageSelection(displayMessages, listHandleRef, {
     getRowId: messageRowId,
     onReachedFirstMessage: fetchOlderHistory,
     isLoadingOlder: activeHistoryState?.isLoading,
     isHistoryComplete: activeRoom?.supportsMAM === false || activeHistoryState?.isHistoryComplete,
     onEnterPressed: (id: string) => useExpandedMessagesStore.getState().toggle(id),
-    onKeyboardNavigate: () => assumeViewportBottom(false),
-    onKeyboardScrolled: () => {
-      const id = activeRoom?.jid
-      if (id) getActiveMessageListController()?.observeKeyboardNavigation(id)
-    },
   })
-
-  // Format copied messages with sender headers
-  useMessageCopy(scrollRef)
 
   // Reply targets are resolved reactively per-row via useReferencedMessage (in
   // RoomMessageBubbleWrapper), so the list holds no render-time lookup map
@@ -652,8 +631,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                 loadedMessageCount={activeMessages.length}
                 messageIngressVersion={activeMessageIngressVersion}
                 interiorPlacementVersion={interiorPlacementVersion}
-                scrollerRef={scrollRef}
-                isAtBottomRef={isAtBottomRef}
+                listHandleRef={listHandleRef}
                 onLiveEdgeMeasured={reportLiveEdge}
                 room={stableRoom ?? activeRoom}
               unreadCount={activeRoom.unreadCount}
@@ -984,8 +962,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   loadedMessageCount: suppliedLoadedMessageCount,
   messageIngressVersion,
   interiorPlacementVersion = 0,
-  scrollerRef,
-  isAtBottomRef,
+  listHandleRef,
   onLiveEdgeMeasured,
   room,
   unreadCount,
@@ -1041,8 +1018,8 @@ export const RoomMessageList = memo(function RoomMessageList({
   loadedMessageCount?: number
   messageIngressVersion?: number
   interiorPlacementVersion?: number
-  scrollerRef: React.RefObject<HTMLElement | null>
-  isAtBottomRef: React.MutableRefObject<boolean>
+  /** Holds the list's command handle; filled in while the list is mounted. */
+  listHandleRef: RefObject<MessageListHandle | null>
   onLiveEdgeMeasured?: (atEdge: boolean) => void
   room: Room
   // Read fresh off `activeRoom` (NOT `room`/`stableRoom`): the stable room memo
@@ -1105,7 +1082,7 @@ export const RoomMessageList = memo(function RoomMessageList({
 
   // Selection-aware, hover-intent toolbar hover state (stable handler identities)
   const { hoveredMessageId, handleMessageHover, handleMessageLeave } =
-    useMessageHoverState({ scrollRef: scrollerRef, resetKey: room.jid })
+    useMessageHoverState({ list: listHandleRef, resetKey: room.jid })
 
   // Set of original poll message IDs that have been closed (a poll-closed message references them).
   // Used to disable the "Close poll" button on already-closed polls. Each row receives a
@@ -1345,41 +1322,40 @@ export const RoomMessageList = memo(function RoomMessageList({
       // scroll state — the @tanstack virtualizer's measurement/offset cache above all — bleeds
       // between rooms. Restoration survives via scrollStateManager (keyed by room jid).
       key={room.jid}
-      messages={messages}
-      messageIngressVersion={messageIngressVersion}
-      interiorPlacementVersion={interiorPlacementVersion}
       conversationId={room.jid}
-      firstNewMessageRow={firstNewMessageRow}
-      firstNewMessageIsProvisional={firstNewMessageIsProvisional}
-      firstNewMessageCount={firstNewMessageCount}
-      readPointerRow={readPointerRow}
-      unreadCount={unreadCount}
-      targetMessageId={targetMessageId}
-      onTargetMessageConsumed={clearTargetMessageId}
-      clearFirstNewMessageId={clearFirstNewMessageId}
-      onMessageSeen={onMessageSeen}
-      scrollerRef={scrollerRef}
-      isAtBottomRef={isAtBottomRef}
-      onLiveEdgeMeasured={onLiveEdgeMeasured}
-      typingUsers={typingUsers}
-      isLoading={isInitialLoading}
-      loadingState={loadingState}
-      emptyState={emptyState}
-      extraContent={extraContent}
-      onScrollToTop={onScrollToTop}
-      onLoadAround={onLoadAround}
-      isLoadingOlder={isLoadingOlder}
-      onLoadNewer={onLoadNewer}
-      windowAtLiveEdge={windowAtLiveEdge}
-      onJumpToLatest={onJumpToLatest}
-      isHistoryComplete={isHistoryComplete}
-      historyUnavailable={historyUnavailable}
+      timeline={{
+        messages,
+        ingressVersion: messageIngressVersion,
+        interiorPlacementVersion,
+        history: {
+          onLoadOlder: onScrollToTop,
+          isLoadingOlder,
+          isComplete: isHistoryComplete,
+          unavailable: historyUnavailable,
+          onLoadAround,
+        },
+        window: { atLiveEdge: windowAtLiveEdge, onLoadNewer, onJumpToLatest },
+        gaps: { intervals: gaps, onCatchUp: onCatchUpHistory, isCatchingUp },
+      }}
+      readMarkers={{
+        firstNewRow: firstNewMessageRow,
+        firstNewIsProvisional: firstNewMessageIsProvisional,
+        firstNewCount: firstNewMessageCount,
+        readPointerRow,
+        unreadCount,
+        onSeen: onMessageSeen,
+        onClear: clearFirstNewMessageId,
+        onLiveEdgeMeasured,
+      }}
+      target={{ id: targetMessageId, onConsumed: clearTargetMessageId }}
+      handleRef={listHandleRef}
+      typing={{ users: typingUsers }}
       renderMessage={renderMessage}
       formatMessageForCopy={formatMessageForCopy}
       lastSentMessageId={lastSentMessageId}
-      gaps={gaps}
-      onCatchUpHistory={onCatchUpHistory}
-      isCatchingUp={isCatchingUp}
+      loading={loadingState}
+      emptyState={emptyState}
+      extraContent={extraContent}
     />
   )
 })

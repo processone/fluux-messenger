@@ -432,7 +432,7 @@ describe('scrollToMessage', () => {
   it('delegates the exact reference to the active list target owner', () => {
     const requestMessageTarget = vi.fn()
     const scrollToBottom = vi.fn()
-    setActiveMessageListController({ requestMessageTarget, scrollToBottom, observeKeyboardNavigation: vi.fn() })
+    setActiveMessageListController({ requestMessageTarget, scrollToBottom })
 
     scrollToMessage('stanza+/id=123')
 

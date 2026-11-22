@@ -4,8 +4,10 @@
  * Provides the pure scroll/pointer helpers, a message factory, and keyboard
  * and mouse event factories used by the MessageList test suites.
  */
-import { vi } from 'vitest'
+import { vi, type Mock } from 'vitest'
 import type { BaseMessage } from '@fluux/sdk'
+import { lastVisibleRowId } from './messageRowIdentity'
+import type { MessageListHandle } from './messageListBoundary'
 
 // ============================================================================
 // Pure Functions (extracted for easy testing)
@@ -137,4 +139,31 @@ export function createMockMouseEvent(options: MockMouseEventOptions): React.Mous
     preventDefault: vi.fn(),
     stopPropagation: vi.fn(),
   } as unknown as React.MouseEvent
+}
+
+/**
+ * A list command handle over a plain element, for suites that exercise a view-side hook without
+ * mounting the list. `lastVisibleRowId` and `contains` are the real implementations over
+ * `getElement()`; the commands are spies, so a suite can assert what the hook asked of its list.
+ */
+export function listHandleOver(
+  getElement: () => HTMLElement | null = () => null,
+): { current: ListHandleSpies } {
+  return {
+    current: {
+      requestMessageTarget: vi.fn<MessageListHandle['requestMessageTarget']>(),
+      scrollToBottom: vi.fn<MessageListHandle['scrollToBottom']>(),
+      noteKeyboardNavigation: vi.fn<MessageListHandle['noteKeyboardNavigation']>(),
+      isAtBottom: () => false,
+      lastVisibleRowId: () => lastVisibleRowId(getElement()),
+      contains: node => !!node && !!getElement()?.contains(node),
+      measureViewport: () => null,
+    },
+  }
+}
+
+type ListHandleSpies = Omit<MessageListHandle, 'requestMessageTarget' | 'scrollToBottom' | 'noteKeyboardNavigation'> & {
+  requestMessageTarget: Mock<MessageListHandle['requestMessageTarget']>
+  scrollToBottom: Mock<MessageListHandle['scrollToBottom']>
+  noteKeyboardNavigation: Mock<MessageListHandle['noteKeyboardNavigation']>
 }

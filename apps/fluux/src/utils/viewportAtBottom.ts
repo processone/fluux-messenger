@@ -6,9 +6,9 @@
  * window is built. It is therefore NOT evidence that the user saw anything.
  *
  * The only real evidence is the scroll viewport: is the newest message actually on
- * screen? That truth lives in `isAtBottomRef`, a ref owned by ChatView/RoomView and
+ * screen? That truth lives in the message list's at-bottom flag, owned by `MessageList` and
  * maintained by `useMessageListScroll`. `useWindowVisibility` is a global hook with
- * no access to it, so the views register their ref here and it reads it on focus
+ * no access to it, so the views register their list handle here and it reads it on focus
  * regain — mirroring Gajim's `view_is_at_bottom()` gate on the same transition.
  *
  * The ref OBJECT is registered, not its value: the scroll hook mutates

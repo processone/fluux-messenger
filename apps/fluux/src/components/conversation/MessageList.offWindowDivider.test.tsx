@@ -33,10 +33,11 @@
  * mirrors MessageList.pinBottomBehavior.test.tsx. `virt.ready` models the item
  * set being built after entry.
  */
-import React from 'react'
+import React, { createRef } from 'react'
+import type { MessageListHandle } from './messageListBoundary'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render } from '@testing-library/react'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import { appliedWrite } from './scrollWriteTestDoubles'
 import { getScrollShadowSnapshot, resetScrollShadowDiagnostics } from './scrollPositionShadow'
 import type { BaseMessage } from '@fluux/sdk'
@@ -134,23 +135,23 @@ describe('MessageList — unread divider outside the resident window', () => {
   /** Entry with the cached slice already resident — what the reported trace shows
    *  (`enterConversation ... messageCount: 100`). */
   function enterWithSlice(conversationId: string, extra: Record<string, unknown>) {
-    const isAtBottomRef = { current: true }
+    const handleRef = createRef<MessageListHandle>()
     virt.ready = true
     geo.scrollHeight = CACHED * ROW
     const view = render(
-      <MessageList messages={makeMessages(CACHED)} conversationId={conversationId} isAtBottomRef={isAtBottomRef} {...extra} {...props} />,
+      <MessageList messages={makeMessages(CACHED)} conversationId={conversationId} handleRef={handleRef} {...extra} {...props} />,
     )
     const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
     instrumentScroller(scroller)
     flush(120)
-    return { scroller, isAtBottomRef }
+    return { scroller, handleRef }
   }
 
   /** Entry before the cache read resolves, slice lands afterwards. */
   function enterThenLoadSlice(conversationId: string, extra: Record<string, unknown>) {
-    const isAtBottomRef = { current: true }
+    const handleRef = createRef<MessageListHandle>()
     const view = render(
-      <MessageList messages={[]} conversationId={conversationId} isAtBottomRef={isAtBottomRef} {...extra} {...props} />,
+      <MessageList messages={[]} conversationId={conversationId} handleRef={handleRef} {...extra} {...props} />,
     )
     const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
     instrumentScroller(scroller)
@@ -159,32 +160,32 @@ describe('MessageList — unread divider outside the resident window', () => {
     virt.ready = true
     geo.scrollHeight = CACHED * ROW
     view.rerender(
-      <MessageList messages={makeMessages(CACHED)} conversationId={conversationId} isAtBottomRef={isAtBottomRef} {...extra} {...props} />,
+      <MessageList messages={makeMessages(CACHED)} conversationId={conversationId} handleRef={handleRef} {...extra} {...props} />,
     )
     flush(120)
-    return { scroller, isAtBottomRef }
+    return { scroller, handleRef }
   }
 
   const offWindow = { firstNewMessageRow: { id: 'archive-id-not-in-slice' }, unreadCount: 13 }
 
   it('falls back to the live edge when the divider is outside an already-resident window', () => {
-    const { scroller, isAtBottomRef } = enterWithSlice('room-off-window-resident', offWindow)
+    const { scroller, handleRef } = enterWithSlice('room-off-window-resident', offWindow)
 
     expect(scroller.scrollTop).toBe(bottom())
-    expect(isAtBottomRef.current).toBe(true)
+    expect(handleRef.current?.isAtBottom()).toBe(true)
   })
 
   it('falls back to the live edge when the divider is outside a slice that lands after entry', () => {
-    const { scroller, isAtBottomRef } = enterThenLoadSlice('room-off-window-late-slice', offWindow)
+    const { scroller, handleRef } = enterThenLoadSlice('room-off-window-late-slice', offWindow)
 
     expect(scroller.scrollTop).toBe(bottom())
-    expect(isAtBottomRef.current).toBe(true)
+    expect(handleRef.current?.isAtBottom()).toBe(true)
   })
 
   it('still reaches the live edge when entry carries no divider', () => {
-    const { scroller, isAtBottomRef } = enterThenLoadSlice('room-no-divider', {})
+    const { scroller, handleRef } = enterThenLoadSlice('room-no-divider', {})
 
     expect(scroller.scrollTop).toBe(bottom())
-    expect(isAtBottomRef.current).toBe(true)
+    expect(handleRef.current?.isAtBottom()).toBe(true)
   })
 })

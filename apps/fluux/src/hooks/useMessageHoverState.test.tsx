@@ -2,12 +2,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useMessageHoverState } from './useMessageHoverState'
+import { listHandleOver } from '@/components/conversation/MessageList.test-utils'
 
 describe('useMessageHoverState', () => {
   let container: HTMLDivElement
   let messageEl: HTMLDivElement
   let toolbarButton: HTMLButtonElement
-  let scrollRef: { current: HTMLElement | null }
+  let scrollRef: ReturnType<typeof listHandleOver>
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -22,7 +23,7 @@ describe('useMessageHoverState', () => {
     toolbar.appendChild(toolbarButton)
     container.appendChild(toolbar)
     document.body.appendChild(container)
-    scrollRef = { current: container }
+    scrollRef = listHandleOver(() => container)
     // These tests exercise the mouse hover toolbar, so default to a hovering
     // pointer (the shared test-setup stub reports matches:false for every query,
     // which would otherwise read as a touch device and suppress hover).
@@ -55,7 +56,7 @@ describe('useMessageHoverState', () => {
   function setup(resetKey = 'conv-1') {
     return renderHook(
       ({ key }: { key: string }) =>
-        useMessageHoverState({ scrollRef, resetKey: key }),
+        useMessageHoverState({ list: scrollRef, resetKey: key }),
       { initialProps: { key: resetKey } }
     )
   }
