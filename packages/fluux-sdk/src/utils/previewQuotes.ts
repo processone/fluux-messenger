@@ -16,7 +16,8 @@ export function stripQuotedLines(text: string): string {
   const kept: string[] = []
   let inFence = false
   let dropped = false
-  for (const line of text.split('\n')) {
+  // CRLF and lone CR separate lines too.
+  for (const line of text.split(/\r\n|\r|\n/)) {
     if (!inFence && line.startsWith('>')) {
       dropped = true
       continue

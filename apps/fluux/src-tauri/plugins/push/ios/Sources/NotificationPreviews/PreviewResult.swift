@@ -61,13 +61,15 @@ enum NotificationContent {
         var kept: [Substring] = []
         var inFence = false
         var dropped = false
-        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+        // CRLF is one Character in Swift and lone CR separates lines too: normalize first.
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        for line in normalized.split(separator: "\n", omittingEmptySubsequences: false) {
             if !inFence && line.hasPrefix(">") { dropped = true; continue }
             if (line.components(separatedBy: "```").count - 1) % 2 == 1 { inFence.toggle() }
             kept.append(line)
         }
         guard dropped else { return text }
         let remaining = kept.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        return remaining.isEmpty ? text.trimmingCharacters(in: .whitespacesAndNewlines) : remaining
+        return remaining.isEmpty ? normalized.trimmingCharacters(in: .whitespacesAndNewlines) : remaining
     }
 }
