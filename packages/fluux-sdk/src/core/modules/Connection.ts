@@ -18,6 +18,7 @@ import {
   patchSmAckQueue,
   patchSmInboundCount,
   patchSmOutboundCount,
+  patchSmResumeQueue,
   flushSmAckDebounce,
   clearSmAckDebounce,
   setSmAckImmediate,
@@ -2105,6 +2106,7 @@ export class Connection extends BaseModule {
       patchSmAckQueue(sm)
       patchSmInboundCount(xmppClient)
       patchSmOutboundCount(xmppClient)
+      patchSmResumeQueue(xmppClient)
     }
 
     // Intercept <stream:features> before middleware to strip <sm> when SM was
@@ -2241,6 +2243,13 @@ export class Connection extends BaseModule {
     // on an empty in-memory outbound_q — avoiding the crash on `item.stanza`
     // that otherwise required the patchSmAckQueue sentinel workaround.
     sm.outbound = smState.outbound
+    // Stanzas the previous client sent without an acknowledgement come along, so
+    // patchSmResumeQueue can resend the messages the server turns out not to have.
+    const unacknowledged = this.smPersistence.getUnacknowledged(smState.id)
+    if (unacknowledged && Array.isArray(sm.outbound_q)) {
+      sm.outbound = unacknowledged.acked
+      sm.outbound_q.push(...unacknowledged.items)
+    }
     this.stores.console.addEvent(
       `Attempting SM session resumption (id: ${smState.id.slice(0, 8)}..., h_in: ${smState.inbound}, h_out: ${smState.outbound})`,
       'sm'
@@ -2337,7 +2346,7 @@ export class Connection extends BaseModule {
         const previd = nonza.attrs.previd as string
         const smLive = this.xmpp?.streamManagement
         const inbound = smLive ? smLive.inbound : 0
-        // xmpp.js resumed() already processed ackQueue(h) and spliced outbound_q,
+        // patchSmResumeQueue already applied h and left only the messages to resend,
         // so sm.outbound + sm.outbound_q.length reflects the new total sent count.
         const outbound = smLive ? (smLive.outbound || 0) + (Array.isArray(smLive.outbound_q) ? smLive.outbound_q.length : 0) : 0
         this.stores.console.addEvent(`Stream Management session resumed (id: ${previd.slice(0, 8)}...)`, 'sm')
@@ -2622,6 +2631,7 @@ export class Connection extends BaseModule {
         this.onDisconnect?.()
 
         const clientToClean = this.xmpp
+        this.smPersistence.keepUnacknowledged(clientToClean)
         this.xmpp = null
         clearSmAckDebounce(this.smPatchState)
 
@@ -2790,6 +2800,7 @@ export class Connection extends BaseModule {
 
         // Capture SM state into cache BEFORE nulling the client reference.
         this.smPersistence.getState(this.xmpp)
+        this.smPersistence.keepUnacknowledged(this.xmpp)
         this.smPersistence.markInterrupted()
 
         // Null the client reference synchronously to prevent race conditions:
@@ -3201,6 +3212,8 @@ export class Connection extends BaseModule {
     }
 
     logInfo('cleanupClient: stopping old client')
+
+    this.smPersistence.keepUnacknowledged(clientToClean)
 
     // Null the reference FIRST to prevent race conditions
     this.xmpp = null
