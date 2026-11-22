@@ -803,6 +803,19 @@ A later migration is incomplete until each in-scope owner either routes through 
 explicitly documented as an isolated, non-competing context. New controller code must replace and
 delete old owners rather than wrap them indefinitely.
 
+### Library lock and the scroll bench
+
+`@tanstack/react-virtual` is pinned to one exact version in `apps/fluux/package.json` and
+`renovate.json` opens its updates without automerge. Fluux relies on ten members `virtual-core` does
+not declare for consumers; `tanstackVirtualBridge.ts` is the only file that reaches them, and
+`tanstackVirtualBridge.test.ts` runs the installed library through each one. A library update that
+renames one fails that test instead of degrading the adapter silently.
+
+`scrollBench/` runs the real list, controller, browser adapters, virtualizer adapter and installed
+library over a scripted scroller with no fake scroll geometry in the test. Each replay in it is a past
+fix and fails when that fix is reverted; `replays*.test.tsx` name the fix beside each replay. A scroll
+bug is reproduced there first, as a replay, and then fixed.
+
 ### Virtualizer and native scroll ownership
 
 `@tanstack/virtual-core` keeps its own pending-scroll reconciler: every `scrollToIndex` /
