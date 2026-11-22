@@ -176,7 +176,7 @@
         "manage": "Hantera",
         "searchContacts": "Sök kontakter...",
         "addMoreContacts": "Lägg till fler kontakter...",
-        "keyboardHint": "Tab/↑↓ för att navigera, Enter för att välja",
+        "keyboardHint": "Tab/↑↓ för att navigera, Enter för att välja, Esc för att stänga",
         "noContactsFound": "Inga kontakter hittades",
         "pressEnterToAdd": "Tryck Enter för att lägga till",
         "blockUser": "Blockera användare",

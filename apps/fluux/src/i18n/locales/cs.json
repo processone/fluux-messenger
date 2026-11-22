@@ -178,7 +178,7 @@
         "manage": "Spravovat",
         "searchContacts": "Hledat kontakty...",
         "addMoreContacts": "Přidat další kontakty...",
-        "keyboardHint": "Tab/↑↓ pro navigaci, Enter pro výběr",
+        "keyboardHint": "Tab/↑↓ pro navigaci, Enter pro výběr, Esc pro zavření",
         "noContactsFound": "Žádné kontakty nenalezeny",
         "pressEnterToAdd": "Stiskněte Enter pro přidání",
         "blockUser": "Zablokovat uživatele",

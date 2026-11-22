@@ -176,7 +176,7 @@
         "manage": "Hallitse",
         "searchContacts": "Hae yhteystietoja...",
         "addMoreContacts": "Lisää yhteystietoja...",
-        "keyboardHint": "Tab/↑↓ navigointiin, Enter valintaan",
+        "keyboardHint": "Tab/↑↓ navigointiin, Enter valintaan, Esc sulkemiseen",
         "noContactsFound": "Yhteystietoja ei löytynyt",
         "pressEnterToAdd": "Paina Enter lisätäksesi",
         "blockUser": "Estä käyttäjä",

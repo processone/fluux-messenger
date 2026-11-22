@@ -178,7 +178,7 @@
         "manage": "Verwalten",
         "searchContacts": "Kontakte suchen...",
         "addMoreContacts": "Weitere Kontakte hinzufügen...",
-        "keyboardHint": "Tab/Pfeiltasten zur Navigation, Enter zum Auswählen",
+        "keyboardHint": "Tab/Pfeiltasten zur Navigation, Enter zum Auswählen, Esc zum Schließen",
         "noContactsFound": "Keine Kontakte gefunden",
         "pressEnterToAdd": "Enter drücken zum Hinzufügen",
         "blockUser": "Benutzer blockieren",

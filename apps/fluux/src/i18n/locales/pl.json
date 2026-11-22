@@ -178,7 +178,7 @@
         "manage": "Zarządzaj",
         "searchContacts": "Szukaj kontaktów...",
         "addMoreContacts": "Dodaj więcej kontaktów...",
-        "keyboardHint": "Tab/strzałki do nawigacji, Enter aby wybrać",
+        "keyboardHint": "Tab/strzałki do nawigacji, Enter aby wybrać, Esc aby zamknąć",
         "noContactsFound": "Nie znaleziono kontaktów",
         "pressEnterToAdd": "Naciśnij Enter, aby dodać",
         "blockUser": "Zablokuj użytkownika",

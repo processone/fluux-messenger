@@ -181,7 +181,7 @@
         "manage": "관리",
         "searchContacts": "연락처 검색...",
         "addMoreContacts": "연락처 더 추가...",
-        "keyboardHint": "Tab/↑↓ 탐색, Enter 선택",
+        "keyboardHint": "Tab/↑↓ 탐색, Enter 선택, Esc 닫기",
         "noContactsFound": "연락처를 찾을 수 없습니다",
         "pressEnterToAdd": "Enter를 눌러 추가",
         "encryption": {

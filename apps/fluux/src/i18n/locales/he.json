@@ -180,7 +180,7 @@
         "manage": "ניהול",
         "searchContacts": "חיפוש אנשי קשר...",
         "addMoreContacts": "הוסף אנשי קשר נוספים...",
-        "keyboardHint": "Tab/↑↓ לניווט, Enter לבחירה",
+        "keyboardHint": "Tab/↑↓ לניווט, Enter לבחירה, Esc לסגירה",
         "noContactsFound": "לא נמצאו אנשי קשר",
         "pressEnterToAdd": "לחץ Enter להוספה",
         "encryption": {
