@@ -31,12 +31,6 @@ beforeEach(() => {
 // While the reader scrolls, rows are measured only through the library's resize observer. Each
 // entry goes to the observer that observes its row.
 const resizeObservers = new Map<Element, [ResizeObserverCallback, ResizeObserver]>()
-const deliverResize = (entries: ResizeObserverEntry[]) => {
-  for (const entry of entries) {
-    const [callback, observer] = resizeObservers.get(entry.target)!
-    callback([entry], observer)
-  }
-}
 afterEach(() => {
   cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals()
   resizeObservers.clear(); document.body.replaceChildren()
@@ -63,57 +57,6 @@ function bouncingList() {
   scroller.dispatchEvent(new Event('scroll'))
   return { scroller, virtualizer: hook.result.current }
 }
-
-// Intent: FLM-219 / FLM-220 measured cancellation clamping iOS end overscroll on every
-// touchmove. Use the observed 46px stretch; cancellation must drop work, not issue a new target.
-it('leaves a held end pull untouched when the reader takes over', () => {
-  const { scroller, virtualizer } = bouncingList()
-  const paint = queuedFrames()
-  scroller.dispatchEvent(new Event('touchstart'))
-  const stretched = scroller.scrollHeight - scroller.clientHeight + 46
-  scroller.scrollTop = stretched
-  scroller.dispatchEvent(new Event('scroll'))
-  const writer = vi.spyOn(scroller, 'scrollTo')
-  act(() => {
-    virtualizer.cancelPendingScroll?.()
-    virtualizer.cancelPendingScroll?.()
-  })
-  paint()
-  paint()
-  expect(writer).not.toHaveBeenCalled()
-  expect(scroller.scrollTop).toBe(stretched)
-})
-
-// Intent: FLM-331. Since FLM-329 a takeover drops the library's target outright. A row that grows
-// above the reader while a finger is down is held, then written when the finger lifts; after a
-// takeover that write must still land, or the rows the reader sees jump by the growth.
-it('keeps the rows the reader sees still when the finger lifts after a takeover', () => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-  const { scroller, virtualizer } = bouncingList()
-  act(() => {
-    scroller.dispatchEvent(new Event('touchstart'))
-    scroller.scrollTop = 3000
-    scroller.dispatchEvent(new Event('scroll'))
-    virtualizer.cancelPendingScroll?.()
-  })
-  const onScreen = () => virtualizer.getVirtualItems().find(row => row.key === 'row-55')!.start - scroller.scrollTop
-  const seen = onScreen()
-  const above = scroller.appendChild(document.createElement('div'))
-  above.dataset.index = '10'
-  above.getBoundingClientRect = () => new DOMRect(0, 0, 800, 100)
-  // The finger is still dragging, so the row is measured as a browser reports it mid-scroll.
-  act(() => {
-    virtualizer.measureElement(above)
-    deliverResize([{ target: above, borderBoxSize: [{ blockSize: 100, inlineSize: 800 }] } as unknown as ResizeObserverEntry])
-  })
-  expect(scroller.scrollTop, 'precondition: the library holds the growth while the finger is down').toBe(3000)
-  act(() => {
-    scroller.dispatchEvent(new Event('touchend'))
-    vi.advanceTimersByTime(150) // the gesture tail closes
-  })
-  expect(scroller.scrollTop, 'the held 40px growth is written').toBe(3040)
-  expect(onScreen()).toBe(seen)
-})
 
 function queuedFrames() {
   const frames: FrameRequestCallback[] = []

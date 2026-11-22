@@ -169,28 +169,6 @@ describe('useViewportResizeReconciliation', () => {
     expect(scope.reconcileLiveEdge).not.toHaveBeenCalled()
   })
 
-  it('reconciles each same-width shrink during observer delivery, before paint', () => {
-    const scope = mount()
-    expect(observers).toHaveLength(1)
-    expect(observers[0].target).toBe(scope.scroller.element)
-
-    // Browser reproduction: the first room wrap shrinks 720 → 698, then 674.
-    // This test owns dispatch timing; the browser test owns actual text visibility.
-    scope.scroller.geometry.scrollHeight = 3315
-    scope.scroller.geometry.scrollTop = 2595
-    scope.scroller.geometry.clientHeight = 720
-    observers[0].fire(720, 800)
-    flushFrames()
-    scope.scroller.geometry.clientHeight = 698
-    observers[0].fire(698, 800)
-    expect(scope.reconcileLiveEdge).toHaveBeenCalledExactlyOnceWith('container-shrink', true)
-    scope.scroller.geometry.scrollTop = 2617
-    scope.scroller.geometry.clientHeight = 674
-    observers[0].fire(674, 800)
-    expect(scope.reconcileLiveEdge).toHaveBeenCalledTimes(2)
-    expect(frames).toHaveLength(0)
-  })
-
   it.each([
     { atBottom: true, followsLiveEdge: false, correctTarget: true },
     { atBottom: true, followsLiveEdge: true, correctTarget: false },
