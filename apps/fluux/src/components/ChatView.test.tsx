@@ -523,14 +523,14 @@ describe('ChatView', () => {
       const composing = flip % 2 === 0
       act(() => composerCallbacks().onComposingChange(composing))
       expect(container.querySelector('.composer-active') !== null).toBe(composing)
-      expect(listProps().clearFirstNewMessageId).toBe(initial.clearFirstNewMessageId)
-      expect(listProps().onMessageSeen).toBe(initial.onMessageSeen)
+      expect(listProps().readMarkers?.onClear).toBe(initial.readMarkers?.onClear)
+      expect(listProps().readMarkers?.onSeen).toBe(initial.readMarkers?.onSeen)
       expect(composerCallbacks().onEncryptionClick).toBe(initialEncryptionClick)
     }
     const rowId = messageRowId(mockActiveMessages[0])!
     act(() => {
-      listProps().clearFirstNewMessageId?.()
-      listProps().onMessageSeen?.(rowId)
+      listProps().readMarkers?.onClear?.()
+      listProps().readMarkers?.onSeen?.(rowId)
     })
     expect(mockClearFirstNewMessageId).toHaveBeenLastCalledWith('alice@example.com')
     expect(mockAdvanceReadPointer).toHaveBeenLastCalledWith('alice@example.com', expect.objectContaining({ id: 'message', stanzaId: 'archive-one' }))
@@ -543,12 +543,12 @@ describe('ChatView', () => {
     mockActiveConversation = { id: 'bob@example.com', name: 'Bob', type: 'chat', unreadCount: 0 }
     mockEncryptionState = { kind: 'encrypted', protocolId: 'openpgp', displayName: 'OpenPGP', fingerprint: 'BBBB', trust: 'tofu', canVerify: true }
     rerender(<ChatView />)
-    expect(listProps().clearFirstNewMessageId).not.toBe(initial.clearFirstNewMessageId)
-    expect(listProps().onMessageSeen).not.toBe(initial.onMessageSeen)
+    expect(listProps().readMarkers?.onClear).not.toBe(initial.readMarkers?.onClear)
+    expect(listProps().readMarkers?.onSeen).not.toBe(initial.readMarkers?.onSeen)
     expect(composerCallbacks().onEncryptionClick).not.toBe(initialEncryptionClick)
     act(() => {
-      listProps().clearFirstNewMessageId?.()
-      listProps().onMessageSeen?.(rowId)
+      listProps().readMarkers?.onClear?.()
+      listProps().readMarkers?.onSeen?.(rowId)
     })
     expect(mockClearFirstNewMessageId).toHaveBeenLastCalledWith('bob@example.com')
     expect(mockAdvanceReadPointer).toHaveBeenLastCalledWith('bob@example.com', expect.objectContaining({ id: 'message', stanzaId: 'archive-one' }))

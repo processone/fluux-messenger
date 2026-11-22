@@ -19,7 +19,7 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, fireEvent, act, waitFor } from '@testing-library/react'
-import { MessageList, type MessageListProps } from './MessageList'
+import { FlatMessageList as MessageList, type FlatMessageListProps } from './MessageList.flat-test-utils'
 import type { BaseMessage, RoomMessage } from '@fluux/sdk'
 import { scrollStateManager } from '@/utils/scrollStateManager'
 import { scrollToMessage } from './messageGrouping'
@@ -169,7 +169,7 @@ function seedSavedAnchor(conversationId: string, messageId: string, fraction = 0
   scrollStateManager.saveScrollPosition(conversationId, 200, 5000, 500, { messageId, fraction })
 }
 
-function renderList(props: Partial<MessageListProps<BaseMessage>> = {}) {
+function renderList(props: Partial<FlatMessageListProps<BaseMessage>> = {}) {
   return render(
     <MessageList
       messages={makeMessages(50)}

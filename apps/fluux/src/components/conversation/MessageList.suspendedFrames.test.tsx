@@ -17,10 +17,11 @@
  * Harness (mocked virtualizer, fake rAF queue, instrumented scroller geometry)
  * mirrors MessageList.pinBottomBehavior.test.tsx.
  */
-import React from 'react'
+import React, { createRef } from 'react'
+import type { MessageListHandle } from './messageListBoundary'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render } from '@testing-library/react'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import type { BaseMessage } from '@fluux/sdk'
 import { appliedWrite } from './scrollWriteTestDoubles'
 
@@ -104,10 +105,10 @@ describe('MessageList — live-edge follow with frames suspended', () => {
   const props = { renderMessage: (m: BaseMessage) => <div>{m.body}</div>, onScrollToTop: vi.fn(), isHistoryComplete: false }
 
   it('keeps the live edge while messages arrive and no frame is delivered', () => {
-    const isAtBottomRef = { current: true }
+    const handleRef = createRef<MessageListHandle>()
     let messages = makeMessages(RESIDENT)
     const view = render(
-      <MessageList messages={messages} conversationId="conv-suspended-frames" isAtBottomRef={isAtBottomRef} {...props} />,
+      <MessageList messages={messages} conversationId="conv-suspended-frames" handleRef={handleRef} {...props} />,
     )
     const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
     instrumentScroller(scroller)
@@ -122,7 +123,7 @@ describe('MessageList — live-edge follow with frames suspended', () => {
       }]
       geo.scrollHeight += ROW
       view.rerender(
-        <MessageList messages={messages} conversationId="conv-suspended-frames" isAtBottomRef={isAtBottomRef} {...props} />,
+        <MessageList messages={messages} conversationId="conv-suspended-frames" handleRef={handleRef} {...props} />,
       )
     }
 
@@ -131,11 +132,11 @@ describe('MessageList — live-edge follow with frames suspended', () => {
     // follow is ever moved into the rAF loop.
     expect(rafQueue.length).toBeGreaterThan(0)
     expect(scroller.scrollTop).toBe(bottom())
-    expect(isAtBottomRef.current).toBe(true)
+    expect(handleRef.current?.isAtBottom()).toBe(true)
 
     // Frames resume: the backlog settles without moving the view off the edge.
     flush(70)
     expect(scroller.scrollTop).toBe(bottom())
-    expect(isAtBottomRef.current).toBe(true)
+    expect(handleRef.current?.isAtBottom()).toBe(true)
   })
 })

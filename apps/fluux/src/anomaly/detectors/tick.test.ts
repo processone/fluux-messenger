@@ -8,6 +8,7 @@ import {
 } from '../../utils/anomalySignal'
 import {
   _resetViewportScrollerRegistryForTesting,
+  measureElementViewport,
   registerViewportScroller,
 } from '../../utils/viewportScroller'
 import {
@@ -287,7 +288,7 @@ describe('browserWorld readings', () => {
     Object.defineProperty(el, 'clientHeight', { value: 500, configurable: true })
     el.scrollTop = 480
     document.body.appendChild(el)
-    registerViewportScroller('conversation', ACTIVE.id, { current: el })
+    registerViewportScroller('conversation', ACTIVE.id, { current: { measureViewport: () => measureElementViewport(el) } })
 
     const w = browserWorld(
       () => ACTIVE,

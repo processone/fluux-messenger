@@ -12,11 +12,16 @@ import { latestJumpVisible } from './fabVisibility'
  * Scroll behavior is handled by useMessageListScroll under
  * docs/2026-07-23-scroll-positioning-contract.md.
  */
-import { findMessageRowIndex, type MessageRowRef } from '@fluux/sdk'
-import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from 'react'
+import { findMessageRowIndex } from '@fluux/sdk'
+import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, useImperativeHandle, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { BaseMessage, GapInterval } from '@fluux/sdk'
+import type { BaseMessage } from '@fluux/sdk'
 import { useMessageCopyFormatter, useMessageRangeSelection } from '@/hooks'
+import { useMessageCopy } from '@/hooks/useMessageCopy'
+import { markUserScrollIntent } from '@/utils/scrollbarReveal'
+import { measureElementViewport } from '@/utils/viewportScroller'
+import { useStaticContextLanding } from './useStaticContextLanding'
+import type { MessageListHandle, MessageListProps } from './messageListBoundary'
 import { useViewportObserver } from '@/hooks/useViewportObserver'
 import { useRenderCostProbe } from '@/hooks/useRenderCostProbe'
 import { countAnomalyMetric } from '@/utils/anomalyMetric'
@@ -38,7 +43,6 @@ import { formatUnreadCount } from '@/utils/formatUnreadCount'
 import { MessageWidthProvider } from './messageWidthContext'
 import { isFeatureEnabled } from '@/utils/featureFlags'
 import { useSettingsStore } from '@/stores/settingsStore'
-import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { fabAnimationClass } from './fabAnimationClass'
 import { FloatingDateHeader } from './FloatingDateHeader'
@@ -71,139 +75,19 @@ import { VirtualRowSizeHistory } from './virtualRowGrowth'
 import { Loader2, ChevronUp, ChevronDown, MessageCircle } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
-import { findResidentRowIndex, messageRowId, messageRowKey, messageRowKeys } from './messageRowIdentity'
+import { findResidentRowIndex, lastVisibleRowId, messageRowId, messageRowKey, messageRowKeys } from './messageRowIdentity'
 import { useArrivalJump } from './useArrivalJump'
 import { ForwardMessageProvider } from './forwardMessageContext'
 
 // Selection is row-identified; an id-less row falls back to its client id.
+const EMPTY_TYPING_USERS: string[] = []
 const getMessageId = (message: BaseMessage) => messageRowId(message) ?? message.id
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-export interface MessageListProps<T extends BaseMessage> {
-  /** Messages to display */
-  messages: T[]
-  /** Unique identifier for this conversation/room */
-  conversationId: string
-  /** SDK message-event progress; remains unchanged during local read/scroll work. */
-  messageIngressVersion?: number
-  interiorPlacementVersion?: number
-  /** Row reference of the first unread message (for the new-message marker). */
-  firstNewMessageRow?: MessageRowRef
-  /** Divider derived while a synced XEP-0490 read position is still unresolved — rendered muted */
-  firstNewMessageIsProvisional?: boolean
-  /**
-   * How many messages sit under the divider (`firstNewMessageCount` from `useRoomActive` /
-   * `useChatActive`). Labels the divider and the jump-to-last-read pill, which point at the same
-   * rows. Undefined falls back to `unreadCount`.
-   */
-  firstNewMessageCount?: number
-  /** ID of a specific message to scroll to (e.g., from activity log click) */
-  targetMessageId?: string | MessageRowRef | null
-  /** Called after scrolling to target message (to clear the store value) */
-  onTargetMessageConsumed?: () => void
-  /** Callback to clear the first-new row marker (used by the viewport observer). */
-  clearFirstNewMessageId?: () => void
-  /** Persisted read pointer for this conversation — the badge counts unread below it. */
-  readPointerRow?: MessageRowRef
-  /**
-   * The ONE canonical unread count (the store's pointer-derived
-   * `unreadCount` — `meta.unreadCount` / `room.unreadCount`), shown by the FAB badge through the
-   * shared `formatUnreadCount`. The divider and jump-to-last-read pill use `firstNewMessageCount`
-   * and fall back to this count when it is undefined. No surface recomputes its own count from
-   * the resident message array or the viewport — scrolling is navigation, not read state.
-   * Undefined behaves like 0 (no badge, generic un-counted divider label) for callers that don't
-   * track unread (e.g. read-only preview lists).
-   */
-  unreadCount?: number
-  /** Users currently typing */
-  typingUsers?: string[]
-  /** Format function for typing user display */
-  formatTypingUser?: (user: string) => string
-  /**
-   * Render function for each message.
-   * The onMediaLoad callback should be passed to image/video components to enable
-   * batched scroll correction when media loads.
-   */
-  renderMessage: (message: T, index: number, groupMessages: T[], showNewMarker: boolean, onMediaLoad: () => void) => ReactNode
-  /** Extra content to render after all messages */
-  extraContent?: ReactNode
-  /** Content to show when messages array is empty */
-  emptyState?: ReactNode
-  /** If true, show a placeholder while loading */
-  isLoading?: boolean
-  /** Content to show while loading */
-  loadingState?: ReactNode
-  /** Ref to the scroll container element (for keyboard navigation) */
-  scrollerRef?: React.RefObject<HTMLElement | null>
-  /** Ref to track if scroll is at bottom (shared with keyboard navigation) */
-  isAtBottomRef?: React.MutableRefObject<boolean>
-  /**
-   * Reports live-edge evidence from real measured geometry, or revokes previous
-   * follow-edge evidence when a deliberate interaction holds the view. A true
-   * report is never an assumed default — see the scroll hook's callback contract. The
-   * caller (ChatView/RoomView) forwards this straight to
-   * `reportViewport(key, generation, ...)`, closing over the activation
-   * generation captured for that render.
-   */
-  onLiveEdgeMeasured?: (atEdge: boolean) => void
-  /** Callback when user scrolls to top (for lazy loading older messages) */
-  onScrollToTop?: () => void
-  /**
-   * Hydrate the resident message window with the cache slice CONTAINING a specific message.
-   * Used by scroll-position restore (and search/target navigation) when the saved anchor / target
-   * is older than the latest-N slice loaded on activation, so the existing anchor restore can land.
-   */
-  onLoadAround?: (anchorRow: MessageRowRef, signal?: AbortSignal) => Promise<unknown> | void
-  /** If true, show loading indicator at top while fetching older messages */
-  isLoadingOlder?: boolean
-  /** Sliding window: load the next-newer cache slice when the reader scrolls back down to the
-   *  bottom of a slid-up window. Fired only when windowAtLiveEdge is false. */
-  onLoadNewer?: () => void
-  /** If true, a newer-slice load is already in flight (throttles the load-newer trigger) */
-  isLoadingNewer?: boolean
-  /** Sliding window: whether the resident window includes the newest message. false = slid up
-   *  (enables the load-newer trigger); absent/true = at the live edge (unchanged behavior). */
-  windowAtLiveEdge?: boolean
-  /** Sliding window: reset the resident window to the newest slice (jump-to-latest). Invoked by the
-   *  scroll-to-bottom FAB when the window is slid up, before scrolling to the bottom. */
-  onJumpToLatest?: () => Promise<unknown> | void
-  /** If true, all history has been fetched - disable scroll-to-top trigger */
-  isHistoryComplete?: boolean
-  /**
-   * Set when the last archive fetch failed. Shown at the top of the list, above
-   * the retry button, so a reader who scrolls up learns the thread may be
-   * missing messages rather than assuming it starts there.
-   */
-  historyUnavailable?: boolean
-  /** Callback when the bottom-most visible row changes; receives its row handle. */
-  onMessageSeen?: (rowId: string) => void
-  /** Disables all auto-scroll behaviors. Used by read-only preview views
-   *  (search context, activity context) that manage their own scroll positioning. */
-  staticMode?: boolean
-  /** Static previews may override row handles, React keys and deduplication.
-   *  The returned ID must be unique within the preview and match its scroll targets. */
-  getStaticMessageId?: (message: T) => string
-  /** ID of the last message sent by the user (for send animation) */
-  lastSentMessageId?: string | null
-  /** Recorded history gaps, oldest first. One marker is shown per gap whose
-   *  upper edge this window holds. */
-  gaps?: readonly GapInterval[]
-  /** Load the missing messages of the gap starting at `gapStart` */
-  onCatchUpHistory?: (gapStart: number) => void
-  /** If true, show loading indicator on the gap marker */
-  isCatchingUp?: boolean
-  /**
-   * Maps a message to its clipboard metadata, faithful to the rendered bubble (the
-   * caller resolves the display name / time the same way it builds each row). Only
-   * consumed on the virtualized path: a multi-message copy is reconstructed from the
-   * in-memory array so the rows carry correct dates/names (the virtualized DOM splits
-   * date separators into separate windowed items the pure-DOM copy can't follow).
-   */
-  formatMessageForCopy?: (message: T) => CopyMessageMeta
-}
+export type { MessageListProps } from './messageListBoundary'
 
 /**
  * Tag a conversation's cached heights with the real content width they were measured at, in
@@ -221,46 +105,56 @@ function noteRealWidthBucket(conversationId: string, realWidthPx: number | undef
 // ============================================================================
 
 export function MessageList<T extends BaseMessage>({
-  messages,
-  getStaticMessageId,
   conversationId,
-  messageIngressVersion,
-  interiorPlacementVersion = 0,
-  firstNewMessageRow,
-  firstNewMessageIsProvisional = false,
-  firstNewMessageCount,
-  clearFirstNewMessageId,
-  readPointerRow,
-  unreadCount,
-  targetMessageId,
-  onTargetMessageConsumed,
-  typingUsers = [],
-  formatTypingUser,
+  timeline,
+  readMarkers,
+  target,
+  handleRef,
   renderMessage,
-  extraContent,
-  emptyState,
-  isLoading,
-  loadingState,
-  scrollerRef: externalScrollerRef,
-  isAtBottomRef: externalIsAtBottomRef,
-  onLiveEdgeMeasured,
-  onScrollToTop,
-  onLoadAround,
-  isLoadingOlder,
-  onLoadNewer,
-  isLoadingNewer,
-  windowAtLiveEdge,
-  onJumpToLatest,
-  isHistoryComplete,
-  historyUnavailable,
-  onMessageSeen,
-  staticMode,
-  lastSentMessageId,
-  gaps,
-  onCatchUpHistory,
-  isCatchingUp,
   formatMessageForCopy,
+  typing,
+  lastSentMessageId,
+  loading: loadingState,
+  emptyState,
+  extraContent,
+  staticRows,
 }: MessageListProps<T>) {
+  const {
+    messages,
+    ingressVersion: messageIngressVersion,
+    interiorPlacementVersion = 0,
+  } = timeline
+  const {
+    onLoadOlder: onScrollToTop,
+    isLoadingOlder,
+    isComplete: isHistoryComplete,
+    unavailable: historyUnavailable,
+    onLoadAround,
+  } = timeline.history ?? {}
+  const {
+    atLiveEdge: windowAtLiveEdge,
+    onLoadNewer,
+    isLoadingNewer,
+    onJumpToLatest,
+  } = timeline.window ?? {}
+  const { intervals: gaps, onCatchUp: onCatchUpHistory, isCatchingUp } = timeline.gaps ?? {}
+  const {
+    firstNewRow: firstNewMessageRow,
+    firstNewIsProvisional: firstNewMessageIsProvisional = false,
+    firstNewCount: firstNewMessageCount,
+    readPointerRow,
+    unreadCount,
+    onSeen: onMessageSeen,
+    onClear: clearFirstNewMessageId,
+    onLiveEdgeMeasured,
+  } = readMarkers ?? {}
+  const { id: targetMessageId, onConsumed: onTargetMessageConsumed } = target ?? {}
+  const typingUsers = typing?.users ?? EMPTY_TYPING_USERS
+  const formatTypingUser = typing?.format
+  const staticMode = !!staticRows
+  const getStaticMessageId = staticRows?.getId
+  // The loading placeholder replaces the list only while the first load runs.
+  const isLoading = !!loadingState
   // Detect render loops before they freeze the UI
   detectRenderLoop('MessageList', messageIngressVersion)
 
@@ -364,7 +258,7 @@ export function MessageList<T extends BaseMessage>({
   // VIRTUALIZATION (behind the enableMessageVirtualization flag, default ON)
   // --------------------------------------------------------------------------
 
-  const showLoading = !!(isLoading && loadingState)
+  const showLoading = isLoading
   const showEmpty = !showLoading && messages.length === 0
   const hasContent = !showLoading && !showEmpty
   const showHeader = hasContent && (!!isHistoryComplete || !!onScrollToTop)
@@ -658,6 +552,8 @@ export function MessageList<T extends BaseMessage>({
     scrollToMarker,
     lastUserInputAt,
     observeKeyboardNavigation,
+    isAtBottom,
+    assumeAwayFromBottomForKeyboard,
     reassertUnreadMarker,
   } = useMessageListScroll({
     conversationId,
@@ -670,8 +566,6 @@ export function MessageList<T extends BaseMessage>({
     clearFirstNewMessageId,
     targetMessageId,
     onTargetMessageConsumed,
-    externalScrollerRef,
-    externalIsAtBottomRef,
     onLiveEdgeMeasured,
     onScrollToTop,
     onLoadAround,
@@ -738,6 +632,34 @@ export function MessageList<T extends BaseMessage>({
     }
   }, [requestMessageTarget, scrollToBottom, observeKeyboardNavigation, staticMode])
 
+  // The command handle the owning view holds. It answers from live refs, so it stays one stable
+  // object per mounted list however often the callbacks below change identity.
+  const handleLatestRef = useRef({
+    requestMessageTarget, scrollToBottom, observeKeyboardNavigation, isAtBottom,
+    assumeAwayFromBottomForKeyboard, conversationId, staticMode,
+  })
+  handleLatestRef.current = {
+    requestMessageTarget, scrollToBottom, observeKeyboardNavigation, isAtBottom,
+    assumeAwayFromBottomForKeyboard, conversationId, staticMode,
+  }
+  useImperativeHandle(handleRef, (): MessageListHandle => ({
+    requestMessageTarget: id => handleLatestRef.current.requestMessageTarget(id),
+    scrollToBottom: () => handleLatestRef.current.scrollToBottom(),
+    noteKeyboardNavigation: (phase = 'start') => {
+      const latest = handleLatestRef.current
+      if (phase === 'scrolled') {
+        latest.observeKeyboardNavigation(latest.conversationId)
+        return
+      }
+      markUserScrollIntent(scrollContainerRef.current)
+      latest.assumeAwayFromBottomForKeyboard()
+    },
+    isAtBottom: () => handleLatestRef.current.isAtBottom(),
+    lastVisibleRowId: () => lastVisibleRowId(scrollContainerRef.current),
+    contains: node => !!node && !!scrollContainerRef.current?.contains(node),
+    measureViewport: () => measureElementViewport(scrollContainerRef.current),
+  }), [handleRef])
+
   useArrivalJump({
     conversationId,
     messages: deduplicatedMessages,
@@ -797,6 +719,12 @@ export function MessageList<T extends BaseMessage>({
     messages: virtualized ? deduplicatedMessages : undefined,
     formatForCopy: virtualized ? formatMessageForCopy : undefined,
   })
+
+  // Multi-message copy with sender headers. Live lists only: previews keep the browser's copy.
+  useMessageCopy(scrollContainerRef, !staticMode)
+
+  // A static preview lands its target row itself, outside the positioning controller.
+  useStaticContextLanding(scrollContainerRef, staticRows?.landOn)
 
   // Virtualization-friendly bulk copy: Cmd/Ctrl+A selects the whole loaded conversation,
   // Shift-click defines a range; copy reconstructs from the in-memory array via the caller's

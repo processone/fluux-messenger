@@ -8,8 +8,7 @@ import { RoomMessageList } from './RoomView'
 vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 
 const props = {
-  scrollerRef: { current: null },
-  isAtBottomRef: { current: true },
+  listHandleRef: { current: null },
   contactsByJid: new Map(),
   sendReaction: vi.fn(),
   votePoll: vi.fn(),

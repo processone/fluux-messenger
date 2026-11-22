@@ -15,7 +15,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act, fireEvent } from '@testing-library/react'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import type { BaseMessage } from '@fluux/sdk'
 
 // Mock useTranslation with full i18n object

@@ -40,7 +40,6 @@ vi.mock('@/hooks', () => ({
 // The read-only list is the search preview's own and is tested there: stand in for it here.
 vi.mock('./SearchContextView', () => ({
   chatSearchContextRowId: (m: { id: string }) => m.id,
-  useScrollToContextTarget: vi.fn(),
   SearchContextMessageList: (props: { messages: { id: string; body: string }[]; highlightedMessage: { id: string; stanzaId?: string }; onHighlightedClick: () => void; isHistoryComplete?: boolean }) => (
     <div data-testid="context-list" data-highlighted={props.highlightedMessage.id} data-highlighted-stanza={props.highlightedMessage.stanzaId} data-history-complete={String(!!props.isHistoryComplete)}>
       {props.messages.map((m) => <p key={m.id}>{m.body}</p>)}

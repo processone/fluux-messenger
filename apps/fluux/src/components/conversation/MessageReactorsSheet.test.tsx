@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, createEvent, within } from '@testing-library/react'
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { MessageReactorsSheet } from './MessageReactorsSheet'
 import { useMessageSelection } from '@/hooks/useMessageSelection'
 import { useTypeToFocus } from '@/hooks/useTypeToFocus'
 import { messageTargetRowId } from './messageRowIdentity'
+import { listHandleOver } from './MessageList.test-utils'
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('../Avatar', () => ({
@@ -31,7 +32,15 @@ function ConversationFixture({ onEnterPressed, onKeyboardNavigate, onKeyboardScr
   useTypeToFocus(composerRef)
   const [open, setOpen] = useState(false)
   const rows = empty ? [] : messages
-  const selection = useMessageSelection(rows, scrollRef, { onEnterPressed, onKeyboardNavigate, onKeyboardScrolled, onReachedFirstMessage })
+  const list = useMemo(() => {
+    const handle = listHandleOver(() => scrollRef.current)
+    handle.current.noteKeyboardNavigation.mockImplementation((phase?: string) => {
+      if (phase === 'scrolled') onKeyboardScrolled()
+      else onKeyboardNavigate()
+    })
+    return handle
+  }, [onKeyboardNavigate, onKeyboardScrolled])
+  const selection = useMessageSelection(rows, list, { onEnterPressed, onReachedFirstMessage })
   return (
     <div ref={scrollRef} tabIndex={0} onKeyDown={selection.handleKeyDown} data-testid="conversation">
       <output data-testid="selection">{selection.selectedMessageId ?? 'none'}</output>

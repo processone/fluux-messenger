@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useMessageSelection } from './useMessageSelection'
 import { messageRowId } from '@/components/conversation/messageRowIdentity'
+import { listHandleOver } from '@/components/conversation/MessageList.test-utils'
 
 interface MockMessage {
   id: string
@@ -19,12 +20,14 @@ describe('useMessageSelection', () => {
       body: `Message ${i}`,
     }))
 
-  let mockScrollRef: { current: HTMLDivElement | null }
+  let scrollEl: HTMLElement | null
+  let mockScrollRef: ReturnType<typeof listHandleOver>
 
   beforeEach(() => {
     vi.useFakeTimers()
     vi.stubGlobal('CSS', { escape: (value: string) => value.replaceAll('\\', '\\\\').replaceAll('"', '\\"') })
-    mockScrollRef = { current: null }
+    scrollEl = null
+    mockScrollRef = listHandleOver(() => scrollEl)
   })
 
   afterEach(() => {
@@ -222,9 +225,10 @@ describe('useMessageSelection', () => {
       element.dataset.messageId = 'msg-1'
       element.scrollIntoView = () => { events.push('scroll') }
       document.body.append(element)
-      const { result, unmount } = renderHook(() => useMessageSelection(createMessages(2), mockScrollRef, {
-        onKeyboardScrolled: () => { events.push('input-end') },
-      }))
+      mockScrollRef.current.noteKeyboardNavigation.mockImplementation((phase?: string) => {
+        if (phase === 'scrolled') events.push('input-end')
+      })
+      const { result, unmount } = renderHook(() => useMessageSelection(createMessages(2), mockScrollRef))
       act(() => result.current.handleKeyDown({
         key: 'ArrowDown', altKey: false, preventDefault: vi.fn(), stopPropagation: vi.fn(),
       } as unknown as React.KeyboardEvent))
@@ -284,7 +288,7 @@ describe('useMessageSelection', () => {
       container = document.createElement('div')
       container.getBoundingClientRect = () => ({ top: 0, bottom: 100 } as DOMRect)
       document.body.appendChild(container)
-      mockScrollRef.current = container
+      scrollEl = container
     })
 
     afterEach(() => container.remove())

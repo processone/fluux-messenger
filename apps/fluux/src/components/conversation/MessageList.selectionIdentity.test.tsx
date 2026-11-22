@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { BaseMessage } from '@fluux/sdk'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import { messageRowId } from './messageRowIdentity'
 
 // Source: the accepted getMessageId stabilization. Observe the hook boundary

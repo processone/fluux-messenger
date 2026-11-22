@@ -19,8 +19,7 @@ vi.mock('./Avatar', () => ({
 }))
 
 const props = {
-  scrollerRef: { current: null },
-  isAtBottomRef: { current: true },
+  listHandleRef: { current: null },
   contactsByJid: new Map<string, ContactIdentity>(),
   sendReaction: vi.fn(), votePoll: vi.fn(), closePoll: vi.fn(), onReply: vi.fn(), onEdit: vi.fn(),
   lastOutgoingMessageId: null, lastMessageId: null, typingUsers: [], activeReactionPickerMessageId: null,

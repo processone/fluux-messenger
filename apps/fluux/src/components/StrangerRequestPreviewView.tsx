@@ -5,7 +5,7 @@
  * with a bottom action banner (Accept / Ignore / Block) and no composer.
  * Modelled on ActivityContextView / SearchContextView.
  */
-import { useRef, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   useEvents,
@@ -49,10 +49,6 @@ export function StrangerRequestPreviewView({
 
   // Contact identities for sender resolution
   const contactsByJid = useContactIdentities()
-
-  // Scroll refs
-  const scrollRef = useRef<HTMLElement>(null)
-  const isAtBottomRef = useRef(false)
 
   // Map StrangerMessage → Message for SearchContextMessageList
   const messages = useMemo<Message[]>(() => {
@@ -126,8 +122,6 @@ export function StrangerRequestPreviewView({
           ownNickname={ownNickname}
           isDarkMode={isDarkMode}
           highlightTerms={[]}
-          scrollerRef={scrollRef}
-          isAtBottomRef={isAtBottomRef}
           isLoading={false}
           isHistoryComplete={true}
         />

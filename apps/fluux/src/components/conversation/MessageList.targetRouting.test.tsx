@@ -19,7 +19,7 @@ import { memo } from 'react'
 import { messageRowRef, type MessageRowRef } from '@fluux/sdk'
 import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { render, fireEvent, waitFor } from '@testing-library/react'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import { createTestMessages } from './MessageList.test-utils'
 import { useRequestMessageTarget } from './messageTargetContext'
 import {
