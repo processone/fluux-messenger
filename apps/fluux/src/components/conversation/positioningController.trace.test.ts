@@ -781,7 +781,9 @@ const savedScenarios: Scenario[] = [
   }],
   ['saved position: anchor outside the window loads around once, then positions', async (t) => {
     const executor = savedExecutor(t, [savedFrame(false)], {
-      reachability: [absent('available'), absent('loading'), mounted],
+      // Entry preflight reads the first fact, the drive the second (which starts the load), the
+      // redrive after the load the third.
+      reachability: [absent('available'), absent('available'), mounted],
       loadAround: () => Promise.resolve(),
     })
     const request = t.controller.beginSavedPositionEntry({ conversationId: room, entryFacts: savedFacts, executor })
@@ -797,7 +799,7 @@ const savedScenarios: Scenario[] = [
       conversationId: room,
       entryFacts: savedFacts,
       executor: savedExecutor(t, [savedFrame(false)], {
-        reachability: [absent('available'), absent('exhausted')],
+        reachability: [absent('available'), absent('available'), absent('exhausted')],
         loadAround: () => null,
       }),
     })
@@ -805,7 +807,7 @@ const savedScenarios: Scenario[] = [
   }],
   ['saved position: load around fails, anchor stays absent, falls back', async (t) => {
     const executor = savedExecutor(t, [savedFrame(false)], {
-      reachability: [absent('available'), absent('exhausted')],
+      reachability: [absent('available'), absent('available'), absent('exhausted')],
       loadAround: () => Promise.reject(new Error('network')),
     })
     const request = t.controller.beginSavedPositionEntry({ conversationId: room, entryFacts: savedFacts, executor })
@@ -823,7 +825,7 @@ const savedScenarios: Scenario[] = [
   }],
   ['saved position: live-edge fallback needs a recenter, which is requested', (t) => {
     let version = 'v1'
-    const live = liveExecutor(t, [liveFrame(true, false)], { reachability: [liveRecenter, liveTail], recenter: ['requested'], recenterVersion: () => version })
+    const live = liveExecutor(t, [liveFrame(true, false)], { reachability: [liveRecenter, liveRecenter, liveTail], recenter: ['requested'], recenterVersion: () => version })
     t.controller.beginSavedPositionEntry({
       conversationId: room,
       entryFacts: savedFacts,
@@ -1144,7 +1146,8 @@ const targetScenarios: Scenario[] = [
   }],
   ['message target: outside the window loads around, then positions', async (t) => {
     const executor = targetExecutor(t, [targetFrame(true, 400)], {
-      reachability: [absent('available'), absent('loading'), mounted],
+      // Preflight, then the drive that starts the load, then the redrive after it.
+      reachability: [absent('available'), absent('available'), mounted],
       loadAround: () => Promise.resolve(),
     })
     const request = t.controller.beginExplicitTarget({ conversationId: room, messageId: 'target-a', executor })
@@ -1157,7 +1160,7 @@ const targetScenarios: Scenario[] = [
       conversationId: room,
       messageId: 'target-a',
       executor: targetExecutor(t, [targetFrame(true)], {
-        reachability: [absent('available'), absent('exhausted')],
+        reachability: [absent('available'), absent('available'), absent('exhausted')],
         loadAround: () => null,
       }),
     })
@@ -1165,7 +1168,8 @@ const targetScenarios: Scenario[] = [
   }],
   ['message target: no load around, target not indexed, waits', (t) => {
     const executor = targetExecutor(t, [targetFrame(true, 400)], {
-      reachability: [absent('unavailable'), mounted],
+      // Preflight, the drive that finds the target not indexed, then the refresh that finds it.
+      reachability: [absent('unavailable'), absent('unavailable'), mounted],
       loadAround: null,
     })
     const request = t.controller.beginExplicitTarget({ conversationId: room, messageId: 'target-a', executor })
@@ -1643,6 +1647,28 @@ describe('positioning controller frame-by-frame trace', () => {
     }
     expect(NEVER).toBe('\u0000')
     await expect(out.join('\n')).toMatchFileSnapshot('./__traces__/positioningController.trace.txt')
+  })
+
+  it('exercises the loads and recenters its scenarios are named for', async () => {
+    const expectations: Array<[string, string[]]> = [
+      ['saved position: anchor outside the window loads around once, then positions', ['saved.loadAround', 'saved.reachability anchor loadAround=exhausted -> available', 'saved.complete applied']],
+      ['saved position: load around returns nothing and is exhausted', ['saved.loadAround', 'loadAround=exhausted']],
+      ['saved position: load around fails, anchor stays absent, falls back', ['saved.loadAround', 'loadAround=exhausted']],
+      ['saved position: live-edge fallback needs a recenter, which is requested', ['live.recenter -> requested']],
+      ['message target: no load around, target not indexed, waits', ['target.reachability message loadAround=unavailable -> target-absent', 'pending:target-not-indexed']],
+      ['message target: outside the window loads around, then positions', ['target.loadAround', 'target.reachability message loadAround=exhausted -> available']],
+      ['message target: load around returns nothing, target not indexed', ['target.loadAround', 'loadAround=exhausted']],
+    ]
+    for (const [name, needles] of expectations) {
+      const scenario = scenarios.find(([title]) => title === name)
+      expect(scenario, name).toBeDefined()
+      resetScrollShadowDiagnostics()
+      const t = new Trace(name)
+      enterLive(t)
+      await scenario![1](t)
+      const text = t.lines.join('\n')
+      for (const needle of needles) expect(text, `${name}: ${needle}`).toContain(needle)
+    }
   })
 
   it('covers each of the seven paths', () => {

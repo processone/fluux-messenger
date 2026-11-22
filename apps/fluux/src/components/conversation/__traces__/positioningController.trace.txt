@@ -1164,9 +1164,13 @@ end | settled anchor entry/saved-position g2
 entered conversation | settled live-edge ambient-live-edge/geometry-rearm g1
 saved.reachability anchor loadAround=available -> target-absent | settled live-edge ambient-live-edge/geometry-rearm g1
 saved.reachability anchor loadAround=available -> target-absent | loading-around:saved-message anchor entry/saved-position g2
-pending=true | pending:around-load anchor entry/saved-position g2
-microtasks flushed | pending:around-load anchor entry/saved-position g2
-saved.reachability anchor loadAround=available -> available | pending:around-load anchor entry/saved-position g2
+saved.loadAround saved-message | loading-around:saved-message anchor entry/saved-position g2
+pending=true | loading-around:saved-message anchor entry/saved-position g2
+saved.reachability anchor loadAround=exhausted -> available | loading-around:saved-message anchor entry/saved-position g2
+saved.positionFrame anchor current=true -> {"kind":"positioned","scrollTop":400,"reassert":false} | reconciling anchor entry/saved-position g2
+saved.complete applied | position-applied anchor entry/saved-position g2
+microtasks flushed | settled anchor entry/saved-position g2
+saved.reachability anchor loadAround=exhausted -> available | settled anchor entry/saved-position g2
 saved.positionFrame anchor current=true -> {"kind":"positioned","scrollTop":400,"reassert":false} | reconciling anchor entry/saved-position g2
 saved.complete applied | position-applied anchor entry/saved-position g2
 refresh -> true | settled anchor entry/saved-position g2
@@ -1176,6 +1180,8 @@ end | settled anchor entry/saved-position g2
 entered conversation | settled live-edge ambient-live-edge/geometry-rearm g1
 saved.reachability anchor loadAround=available -> target-absent | settled live-edge ambient-live-edge/geometry-rearm g1
 saved.reachability anchor loadAround=available -> target-absent | loading-around:saved-message anchor entry/saved-position g2
+saved.loadAround saved-message | loading-around:saved-message anchor entry/saved-position g2
+saved.reachability anchor loadAround=exhausted -> target-absent | loading-around:saved-message anchor entry/saved-position g2
 saved.reachability legacy-offset loadAround=exhausted -> target-absent | resolving legacy-offset fallback/saved-position-unavailable g3
 saved.positionFrame legacy-offset current=true -> {"kind":"positioned","scrollTop":400,"reassert":false} | reconciling legacy-offset fallback/saved-position-unavailable g3
 saved.complete applied | position-applied legacy-offset fallback/saved-position-unavailable g3
@@ -1185,6 +1191,8 @@ end | settled legacy-offset fallback/saved-position-unavailable g3
 entered conversation | settled live-edge ambient-live-edge/geometry-rearm g1
 saved.reachability anchor loadAround=available -> target-absent | settled live-edge ambient-live-edge/geometry-rearm g1
 saved.reachability anchor loadAround=available -> target-absent | loading-around:saved-message anchor entry/saved-position g2
+saved.loadAround saved-message | loading-around:saved-message anchor entry/saved-position g2
+saved.reachability anchor loadAround=exhausted -> target-absent | loading-around:saved-message anchor entry/saved-position g2
 saved.reachability legacy-offset loadAround=exhausted -> target-absent | resolving legacy-offset fallback/saved-position-unavailable g3
 saved.positionFrame legacy-offset current=true -> {"kind":"positioned","scrollTop":400,"reassert":false} | reconciling legacy-offset fallback/saved-position-unavailable g3
 saved.complete applied | position-applied legacy-offset fallback/saved-position-unavailable g3
@@ -1210,9 +1218,8 @@ saved.reachability legacy-offset loadAround=exhausted -> available | resolving l
 saved.positionFrame legacy-offset current=true -> {"kind":"unavailable"} | reconciling legacy-offset fallback/saved-position-unavailable g3
 live.reachability global-live-edge | reconciling legacy-offset fallback/saved-position-unavailable g3
 live.reachability global-live-edge | recentering-live-edge live-edge fallback/saved-position-unavailable g4
-live.positionFrame current=true -> {"kind":"positioned","scrollTop":1000,"atLiveEdge":true,"wrote":true,"reassert":false} | reconciling live-edge fallback/saved-position-unavailable g4
-live.complete settled | position-applied live-edge fallback/saved-position-unavailable g4
-end | settled live-edge fallback/saved-position-unavailable g4
+live.recenter -> requested | recentering-live-edge live-edge fallback/saved-position-unavailable g4
+end | recentering-live-edge live-edge fallback/saved-position-unavailable g4
 
 ## saved position: fallback live edge that cannot position cancels quietly
 entered conversation | settled live-edge ambient-live-edge/geometry-rearm g1
@@ -4599,10 +4606,11 @@ target.reachability message loadAround=available -> target-absent | settled live
 onUserNavigation room@example.test | settled live-edge ambient-live-edge/geometry-rearm g1
 onMessageTargetOwnership true | loading-around:target-a message user-navigation/message-target g2
 target.reachability message loadAround=available -> target-absent | loading-around:target-a message user-navigation/message-target g2
-microtasks flushed | pending:around-load message user-navigation/message-target g2
-target.reachability message loadAround=available -> available | pending:around-load message user-navigation/message-target g2
+target.loadAround target-a | loading-around:target-a message user-navigation/message-target g2
+target.reachability message loadAround=exhausted -> available | loading-around:target-a message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
 target.loop.schedule | reconciling message user-navigation/message-target g2
+microtasks flushed | reconciling message user-navigation/message-target g2
 refresh -> true | reconciling message user-navigation/message-target g2
 frame 1 | reconciling message user-navigation/message-target g2
 target.observeGeometry reset=undefined | reconciling message user-navigation/message-target g2
@@ -4638,6 +4646,8 @@ target.reachability message loadAround=available -> target-absent | settled live
 onUserNavigation room@example.test | settled live-edge ambient-live-edge/geometry-rearm g1
 onMessageTargetOwnership true | loading-around:target-a message user-navigation/message-target g2
 target.reachability message loadAround=available -> target-absent | loading-around:target-a message user-navigation/message-target g2
+target.loadAround target-a | loading-around:target-a message user-navigation/message-target g2
+target.reachability message loadAround=exhausted -> target-absent | loading-around:target-a message user-navigation/message-target g2
 end | pending:target-not-indexed message user-navigation/message-target g2
 
 ## message target: no load around, target not indexed, waits
@@ -4645,10 +4655,11 @@ entered conversation | settled live-edge ambient-live-edge/geometry-rearm g1
 target.reachability message loadAround=unavailable -> target-absent | settled live-edge ambient-live-edge/geometry-rearm g1
 onUserNavigation room@example.test | settled live-edge ambient-live-edge/geometry-rearm g1
 onMessageTargetOwnership true | pending:target-not-indexed message user-navigation/message-target g2
+target.reachability message loadAround=unavailable -> target-absent | pending:target-not-indexed message user-navigation/message-target g2
+request=accepted | pending:target-not-indexed message user-navigation/message-target g2
 target.reachability message loadAround=unavailable -> available | pending:target-not-indexed message user-navigation/message-target g2
 target.beginLoop budget=30 current=true | reconciling message user-navigation/message-target g2
 target.loop.schedule | reconciling message user-navigation/message-target g2
-request=accepted | reconciling message user-navigation/message-target g2
 refresh -> true | reconciling message user-navigation/message-target g2
 frame 1 | reconciling message user-navigation/message-target g2
 target.observeGeometry reset=undefined | reconciling message user-navigation/message-target g2
