@@ -7,7 +7,7 @@ import { reconcileHistoryMessages } from '../../utils/messageCache'
 import { getStorageScopeJid } from '../../utils/storageScope'
 import { moderationMetadata } from '../../utils/moderation'
 
-type Row = StoredMessage | StoredRoomMessage
+export type Row = StoredMessage | StoredRoomMessage
 
 export function matchesCorrectionTarget(held: Row, incoming: Row): boolean {
   if (held.type !== incoming.type || (held.type === 'chat' ? chatArchiveConflict : archiveIdentityConflict)(held, incoming)) return false
