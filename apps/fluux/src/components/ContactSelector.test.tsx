@@ -765,7 +765,7 @@ describe('ContactSelector', () => {
       it.each([
         { way: 'ArrowDown', reopen: (input: HTMLElement) => fireEvent.keyDown(input, { key: 'ArrowDown' }) },
         { way: 'ArrowUp', reopen: (input: HTMLElement) => fireEvent.keyDown(input, { key: 'ArrowUp' }) },
-        { way: 'typing', reopen: (input: HTMLElement) => fireEvent.change(input, { target: { value: 'a' } }) },
+        { way: 'typing', reopen: (input: HTMLElement) => fireEvent.change(input, { target: { value: 'c' } }) },
         { way: 'a click', reopen: (input: HTMLElement) => fireEvent.click(input) },
       ])('shows a closed list again with $way, at its first entry', ({ reopen }) => {
         const input = openInModal()
