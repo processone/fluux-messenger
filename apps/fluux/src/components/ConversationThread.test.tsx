@@ -507,13 +507,20 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
       expect(screen.queryByTitle(/Next match/)).toBeNull()
     })
 
-    it('hands the list the terms to highlight', () => {
+    it('marks the matching text in every row and moves the current match', () => {
       const ref = React.createRef<FindOnPageHandle>()
       kind.mount({ findOnPageRef: ref })
       act(() => ref.current!.open())
-      fireEvent.change(document.querySelector('input')!, { target: { value: 'body m1' } })
-      expect(listProps().timeline.messages.length).toBe(3)
-      expect(document.querySelector('input')).toHaveValue('body m1')
+      fireEvent.change(document.querySelector('input')!, { target: { value: 'body' } })
+      const marks = () => Array.from(document.querySelectorAll('.search-match'))
+      const currentRow = () => document.querySelector('.search-match-current')!.closest('[data-message-row-id]')!.getAttribute('data-message-row-id')
+      expect(marks()).toHaveLength(3)
+      expect(document.querySelectorAll('.search-match-current')).toHaveLength(1)
+      const first = currentRow()
+      fireEvent.click(screen.getByTitle(/Next match/))
+      expect(document.querySelectorAll('.search-match-current')).toHaveLength(1)
+      expect(currentRow()).not.toBe(first)
+      expect(marks()).toHaveLength(3)
     })
   })
 
