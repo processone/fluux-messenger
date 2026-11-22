@@ -991,7 +991,7 @@ describe('messageCache', () => {
   describe('Room Messages', () => {
     const roomJid = 'room@conference.example.com'
 
-    describe('saveRoomMessage', () => {
+    describe('roomSaveMessage', () => {
       it('should save a room message to IndexedDB', async () => {
         const message = createMockRoomMessage(roomJid, { id: 'room-1' })
 
@@ -1017,7 +1017,7 @@ describe('messageCache', () => {
 
     })
 
-    describe('saveRoomMessages', () => {
+    describe('roomSaveMessages', () => {
       it('should save multiple room messages at once', async () => {
         const messages = [
           createMockRoomMessage(roomJid, { id: 'room-batch-1' }),
@@ -1055,7 +1055,7 @@ describe('messageCache', () => {
       })
     })
 
-    describe('getRoomMessages', () => {
+    describe('roomGetMessages', () => {
       it('should retrieve messages for a room', async () => {
         const messages = [
           createMockRoomMessage(roomJid, { id: 'room-get-1', timestamp: new Date('2024-01-01T10:00:00Z') }),
@@ -1099,7 +1099,7 @@ describe('messageCache', () => {
       })
     })
 
-    describe('updateRoomMessage', () => {
+    describe('roomUpdateMessage', () => {
       it('should update an existing room message', async () => {
         const message = createMockRoomMessage(roomJid, { id: 'room-update', body: 'Original' })
         await messageCache.saveMessage('room', message)
@@ -1115,7 +1115,7 @@ describe('messageCache', () => {
       })
     })
 
-    describe('getRoomMessagesAround', () => {
+    describe('roomGetMessagesAround', () => {
       const around = (i: number) => new Date(`2024-03-01T10:0${i}:00Z`)
       async function seedTen() {
         await messageCache.saveMessages(
@@ -1387,7 +1387,7 @@ describe('messageCache', () => {
   // The reported bug: the room's MAM catch-up `start` is derived from the newest
   // cached message (selectCatchUpQuery). When the newest cached row was a blank
   // leftover, the cursor anchored on it. This composes the two real units —
-  // getRoomMessages (read-side prune) feeding selectCatchUpQuery (cursor) — to
+  // roomGetMessages (read-side prune) feeding selectCatchUpQuery (cursor) — to
   // prove the blank row can no longer poison the cursor.
   describe('catch-up cursor composition (blank row must not anchor the cursor)', () => {
     const cursorRoomJid = 'cursor-room@conference.example.com'
@@ -1421,7 +1421,7 @@ const rrow = (over: Partial<StoredRoomMessage> = {}): StoredRoomMessage => {
 }
 const both = (a: StoredRoomMessage, b: StoredRoomMessage) => [mergeRows('room', a, b), mergeRows('room', b, a)]
 
-describe('mergeRoomRows — commutative, associative, field-complete', () => {
+describe('mergeRows (room) — commutative, associative, field-complete', () => {
   it('retains incomparable revisions and converges after archive evidence in every save order', () => {
     const rows = [
       rrow({ isEdited: true, body: 'zulu', correctionRevision: { ids: ['id:a'], supersedes: ['id:before-a'], afterArchiveTimestamp: 4000 } }),
@@ -1481,7 +1481,7 @@ describe('mergeRoomRows — commutative, associative, field-complete', () => {
   // non-mentioning row as content owner in BOTH orders (contentOwner's rank
   // comparison is symmetric) — a naive `...owner` read would drop the mention
   // in both directions, which is exactly what an owner-sourced bug would do.
-  // Checked in both orders because mergeRoomRows is required to be commutative.
+  // Checked in both orders because mergeRows (room) is required to be commutative.
   it('keeps isMention true from either row, in both merge orders (monotonic)', () => {
     const mentioning = rrow({ id: 'm1', isMention: true, unsupportedEncryption: { kind: 'x' } as never, body: '' })
     const mam = rrow({ id: 'm1', body: 'hi' })
@@ -1536,7 +1536,7 @@ describe('mergeRoomRows — commutative, associative, field-complete', () => {
   // Direct contract check on the tiebreak's serialized input. The associativity test above
   // can't discriminate the projection from a whole-row serialization — its fixture's
   // isEdited:true row dominates by rank at every grouping, so the tiebreak is never reached.
-  // This asserts the CONTRACT contentProjection relies on directly: every field mergeRoomRows
+  // This asserts the CONTRACT contentProjection relies on directly: every field mergeRows (room)
   // computes separately must be absent (those fields change value during a merge, which is
   // exactly what would break associativity if they leaked into the tiebreak serialization),
   // and representative immutable content fields must remain present.
@@ -1641,7 +1641,7 @@ describe('v4 migration — identity-resolving canonicalization (streaming)', () 
     expect(mine[0].timestamp.getTime()).toBe(2000)
     expect(await messageCache.getMessage('room', ROOM, 'client-1')).not.toBeNull()
     expect(await messageCache.getMessage('room', ROOM, 'server-9')).not.toBeNull()
-    // Room-scoped getRoomMessageByStanzaId(roomJid, stanzaId): the merged row
+    // Room-scoped roomGetMessageByStanzaId(roomJid, stanzaId): the merged row
     // stays resolvable by its stanzaId within its own room.
     expect(await messageCache.getMessageByStanzaId('room', ROOM, 'S')).not.toBeNull()
   })
@@ -1693,18 +1693,18 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     expect(await messageCache.getMessage('room', ROOM, 'server-9')).not.toBeNull()
     expect(await messageCache.getMessageByStanzaId('room', ROOM, 'S')).not.toBeNull()
   })
-  it('updateRoomMessage that ADDS a stanzaId re-keys and merges with any matching row', async () => {
+  it('roomUpdateMessage that ADDS a stanzaId re-keys and merges with any matching row', async () => {
     // A separate MAM copy already carries stanzaId S and NO originId — so it shares
     // no identity tier with the optimistic echo (originId O, id client-1) and the two
     // stay SEPARATE at save time. If the MAM copy also carried originId O they would
-    // merge on save, making updateRoomMessage a no-op and the re-key branch untested.
+    // merge on save, making roomUpdateMessage a no-op and the re-key branch untested.
     await messageCache.saveMessage('room', mk({ id: 'server-9', stanzaId: 'S', originId: undefined }))
     // ...and the optimistic row is only now confirmed via an identity-adding update.
     await messageCache.saveMessage('room', mk()) // optimistic: originId O, no stanzaId
     await messageCache.updateMessage('room', ROOM, 'client-1', { stanzaId: 'S', originId: 'O' })
     expect((await messageCache.getMessages('room', ROOM, {})).filter((m) => m.originId === 'O')).toHaveLength(1)
   })
-  it('updateRoomMessage that ADDS an originId (canonical key UNCHANGED) still merges a row already at that originId', async () => {
+  it('roomUpdateMessage that ADDS an originId (canonical key UNCHANGED) still merges a row already at that originId', async () => {
     // Row 1 has stanzaId S, no originId → canonical key stanzaId:S.
     await messageCache.saveMessage('room', mk({ id: 'a1', stanzaId: 'S', originId: undefined }))
     // Row 2 is a separate copy already carrying originId O (no stanzaId).
@@ -1735,24 +1735,24 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     expect(await messageCache.getMessage('room', ROOM, 'client-1')).not.toBeNull()
     expect(await messageCache.getMessages('room', ROOM, {})).toHaveLength(1)
   })
-  it('updateRoomMessageReactions resolves a pre-merge id and is authoritative (does not un-remove)', async () => {
+  it('roomUpdateMessageReactions resolves a pre-merge id and is authoritative (does not un-remove)', async () => {
     await messageCache.saveMessage('room', mk()); await messageCache.saveMessage('room', mk({ id: 'server-9', stanzaId: 'S' }))
     await messageCache.updateMessageReactions('room', ROOM, 'client-1', 'r@c/bob', ['👍'])
     expect((await messageCache.getMessage('room', ROOM, 'server-9'))!.reactions?.['👍']).toContain('r@c/bob')
     await messageCache.updateMessageReactions('room', ROOM, 'client-1', 'r@c/bob', []) // removal
     expect((await messageCache.getMessage('room', ROOM, 'server-9'))!.reactions?.['👍'] ?? []).not.toContain('r@c/bob')
   })
-  it('updateRoomMessageReactions resolves an origin id', async () => {
+  it('roomUpdateMessageReactions resolves an origin id', async () => {
     await messageCache.saveMessage('room', mk({ id: 'origin-reaction-target', originId: 'reaction-origin' }))
     const found = await messageCache.updateMessageReactions('room', ROOM, 'reaction-origin', 'r@c/bob', ['👍'])
     expect(found).toBe(true)
     expect((await messageCache.getMessage('room', ROOM, 'origin-reaction-target'))!.reactions?.['👍']).toContain('r@c/bob')
   })
-  it('getRoomMessagesAround returns each logical message once', async () => {
+  it('roomGetMessagesAround returns each logical message once', async () => {
     await messageCache.saveMessage('room', mk({ stanzaId: 'S' }))
     expect((await messageCache.getMessagesAround('room', ROOM, { id: 'client-1' }, { before: 5, after: 5 })).filter((m) => m.originId === 'O')).toHaveLength(1)
   })
-  it('updateRoomMessageReactions on a stanza-id fallback is room-scoped — a same-stanzaId message in another room is untouched', async () => {
+  it('roomUpdateMessageReactions on a stanza-id fallback is room-scoped — a same-stanzaId message in another room is untouched', async () => {
     // Two DIFFERENT rooms each cache a message under the SAME server-assigned
     // stanzaId (stanzaIds are per-archive, so this collision is routine). Neither
     // row is reachable via the `ids` index for this reaction (the reaction only
@@ -1774,7 +1774,7 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     expect(roomAMsg!.reactions?.['🔥']).toContain('r@c/bob')
     expect(roomBMsg!.reactions).toBeUndefined()
   })
-  it('updateRoomMessageReactions is room-scoped on the CLIENT-id path — a same-id message in another room is untouched', async () => {
+  it('roomUpdateMessageReactions is room-scoped on the CLIENT-id path — a same-id message in another room is untouched', async () => {
     // Two rooms each cache a message under the SAME client id (ids collide across
     // rooms just like stanzaIds). Here the reaction references that client id, so
     // it resolves through the store-wide `ids` index — which must be filtered to
@@ -1796,7 +1796,7 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     expect(roomAMsg!.reactions?.['🔥']).toContain('r@c/bob')
     expect(roomBMsg!.reactions).toBeUndefined()
   })
-  it('getRoomMessage is room-scoped — a same-id message in another room is not returned', async () => {
+  it('roomGetMessage is room-scoped — a same-id message in another room is not returned', async () => {
     // Same client id in two rooms; the store-wide `ids` index must be filtered to
     // the requested room. ROOM_B sorts before ROOM by cacheKey, so an unscoped
     // index `get` would return ROOM_B's row for a ROOM lookup.
@@ -1809,7 +1809,7 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     expect((await messageCache.getMessage('room', ROOM, 'SAME'))!.from).toBe(FROM)
     expect((await messageCache.getMessage('room', ROOM_B, 'SAME'))!.from).toBe(`${ROOM_B}/carol`)
   })
-  it('getRoomMessage uses occupant evidence for a colliding room id and nick', async () => {
+  it('roomGetMessage uses occupant evidence for a colliding room id and nick', async () => {
     await messageCache.saveMessage('room', mk({
       id: 'SAME',
       originId: undefined,
@@ -1866,10 +1866,10 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
 
     expect(await messageCache.areRetractedInCache([newcomer])).toEqual([false])
   })
-  it('updateRoomMessage is room-scoped — a same-id message in another room is not mutated', async () => {
+  it('roomUpdateMessage is room-scoped — a same-id message in another room is not mutated', async () => {
     // A retraction (non-identity update) targeting ROOM must not land on ROOM_B's
     // same-id message. The assertions read each room through the room-scoped
-    // getRoomMessages cursor, independent of the id resolver under test.
+    // roomGetMessages cursor, independent of the id resolver under test.
     const ROOM_B = 'other-room@c'
     await messageCache.saveMessage('room', mk({ id: 'SAME', originId: undefined }))
     await messageCache.saveMessage('room', {
@@ -1884,7 +1884,7 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     expect(a!.isRetracted).toBe(true)
     expect(b!.isRetracted).toBeFalsy()
   })
-  it('deleteRoomMessage is room-scoped — a same-id message in another room survives', async () => {
+  it('roomDeleteMessage is room-scoped — a same-id message in another room survives', async () => {
     const ROOM_B = 'other-room@c'
     await messageCache.saveMessage('room', mk({ id: 'SAME', originId: undefined }))
     await messageCache.saveMessage('room', {
@@ -1897,7 +1897,7 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     expect((await messageCache.getMessages('room', ROOM_B, {})).some((m) => m.id === 'SAME')).toBe(true)
     expect((await messageCache.getMessages('room', ROOM, {})).some((m) => m.id === 'SAME')).toBe(false)
   })
-  it('getRoomMessagesAround resolves the anchor in the REQUESTED room, not a same-id decoy elsewhere', async () => {
+  it('roomGetMessagesAround resolves the anchor in the REQUESTED room, not a same-id decoy elsewhere', async () => {
     // ROOM holds the real anchor (t=1000) plus later fillers. ROOM_B holds a same-id
     // decoy far in the future (t=10000) whose cacheKey sorts first. An unscoped anchor
     // lookup builds the window around t=10000, dropping the real anchor at t=1000.
@@ -1917,7 +1917,7 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
 })
 
 // =============================================================================
-// Archive count primitive (countUnreadInArchive / countRoomUnreadInArchive)
+// Archive count primitive (countUnreadInArchive / roomCountUnreadInArchive)
 // =============================================================================
 
 describe('countUnreadInArchive (chat)', () => {
@@ -2028,7 +2028,7 @@ describe('countUnreadInArchive (chat)', () => {
   })
 })
 
-describe('countRoomUnreadInArchive (room)', () => {
+describe('roomCountUnreadInArchive (room)', () => {
   const ROOM = 'room@conference.example.com'
   beforeEach(() => { globalThis.indexedDB = new IDBFactory(); messageCache._resetDBForTesting(); _resetStorageScopeForTesting() })
 

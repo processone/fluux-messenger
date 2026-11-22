@@ -8,7 +8,7 @@
  * occupants (`from`) are two distinct cache positions, not one.
  *
  * Unlike roomStore.test.ts / roomStore.internal.mds.test.ts, this file does NOT fully
- * mock `../utils/messageCache` — `countRoomUnreadInArchive` and
+ * mock `../utils/messageCache` — `roomCountUnreadInArchive` and
  * `resolveArchivePosition` run for REAL against fake-indexeddb (wrapped in
  * `vi.fn(actual)` only so the latest-wins test can control resolution order
  * for one call). Everything else in messageCache is the real implementation.
@@ -390,7 +390,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // The count is re-derived from the archive (u1, u2, u3), not left
     // at the stale 99 a guard that still exempted the active room would
     // produce. The recount is fire-and-forget (cache read, coverage resolve,
-    // and countRoomUnreadInArchive are all real async calls against
+    // and roomCountUnreadInArchive are all real async calls against
     // fake-indexeddb) — poll for the derived value instead of guessing a tick
     // count, which under full-suite load can resolve before the recount lands.
     await vi.waitFor(() => {

@@ -51,17 +51,17 @@ Object.defineProperty(globalThis, 'localStorage', {
 // Mock messageCache to verify IndexedDB operations
 vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
-  const getRoomMessages = vi.fn().mockResolvedValue([])
+  const roomGetMessages = vi.fn().mockResolvedValue([])
   return {
     ...actual,
     isMessageCacheAvailable: vi.fn().mockReturnValue(true),
     saveMessage: vi.fn().mockResolvedValue(undefined),
     saveMessageWithResult: vi.fn().mockResolvedValue(true),
     saveMessages: vi.fn().mockResolvedValue(true),
-    getMessages: getRoomMessages,
-    // The typed read serves what getRoomMessages is mocked to return, as a readable cache.
+    getMessages: roomGetMessages,
+    // The typed read serves what roomGetMessages is mocked to return, as a readable cache.
     readMessages: vi.fn((...args: Parameters<typeof actual.readMessages>) =>
-      getRoomMessages(...args).then((value: RoomMessage[]) => ({ status: 'ok' as const, value }))),
+      roomGetMessages(...args).then((value: RoomMessage[]) => ({ status: 'ok' as const, value }))),
     getMessagesAround: vi.fn().mockResolvedValue([]),
     updateMessage: vi.fn().mockResolvedValue(undefined),
     deleteConversationMessages: vi.fn().mockResolvedValue(undefined),
@@ -120,7 +120,7 @@ describe('roomStore', () => {
     })
     vi.clearAllMocks()
     // clearAllMocks does NOT reset implementations: a test that mocks a
-    // rejecting/false-resolving saveRoomMessages would leak it into every
+    // rejecting/false-resolving roomSaveMessages would leak it into every
     // later test. Re-assert the factory default here so ordering can't matter.
     vi.mocked(messageCache.saveMessages).mockResolvedValue(true)
     // A failed save poisons the per-room chain by design — drop it between tests.
@@ -3216,7 +3216,7 @@ describe('roomStore', () => {
       }
       roomStore.getState().mergeRoomMAMMessages(jid, [below, mid], {}, false, 'backward')
       // Clearance is deferred until the page is durably cached (crash-window
-      // safety); the mocked saveRoomMessages resolves immediately, so waitFor.
+      // safety); the mocked roomSaveMessages resolves immediately, so waitFor.
       await vi.waitFor(() => {
         expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
       })
@@ -3224,7 +3224,7 @@ describe('roomStore', () => {
 
     it('backward CLEARANCE with persistable messages is deferred until the page is durably cached', async () => {
       // Crash window: the gap deletion is persisted (localStorage) while
-      // saveRoomMessages to IndexedDB is fire-and-forget. A crash in between
+      // roomSaveMessages to IndexedDB is fire-and-forget. A crash in between
       // leaves cache [old][HOLE][new] with no marker. The deletion must wait
       // for the durable write.
       roomStore.getState().addRoom(createRoom(jid))
@@ -6948,7 +6948,7 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
     })
     vi.clearAllMocks()
     // clearAllMocks does NOT reset implementations: a test that mocks a
-    // rejecting/false-resolving saveRoomMessages would leak it into every
+    // rejecting/false-resolving roomSaveMessages would leak it into every
     // later test. Re-assert the factory default here so ordering can't matter.
     vi.mocked(messageCache.saveMessages).mockResolvedValue(true)
     // A failed save poisons the per-room chain by design — drop it between tests.
@@ -7506,7 +7506,7 @@ describe('roomStore parity drift regressions', () => {
       // The backfill rides the merge's DURABLE archive write, not a
       // fire-and-forget update: a coverage bottom may name this row, so its
       // write has to be the one the gap/coverage commit gates on.
-      // saveRoomMessages upserts by identity, so the row stays findable by the
+      // roomSaveMessages upserts by identity, so the row stays findable by the
       // archive id it just gained.
       expect(messageCache.saveMessages).toHaveBeenCalledWith(
         'room',

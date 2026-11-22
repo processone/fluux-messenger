@@ -1499,9 +1499,9 @@ describe('retraction propagates to the cache and the search index', () => {
     it('settles a room pending record in the account where the probe started', async () => {
       const message = roomMessage({ stanzaId: 'archive-switch', occupantId: 'occ-alice' })
       await messageCache.saveMessage('room', message)
-      const updateRoomMessage = forward(messageCache.updateMessage)
+      const roomUpdateMessage = forward(messageCache.updateMessage)
       vi.spyOn(messageCache, 'updateMessage').mockImplementationOnce(async (...args) => {
-        await updateRoomMessage(...args)
+        await roomUpdateMessage(...args)
         setStorageScopeJid(OTHER_SCOPE)
       })
 
