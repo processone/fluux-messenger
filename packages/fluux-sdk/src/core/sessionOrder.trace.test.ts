@@ -42,6 +42,8 @@ const OWN = 'me@example.com'
 const MARKER = `fluux:cache-marker:${OWN}/web`
 const PEER = 'alice@example.com'
 const ROOM = 'team@conference.example.com'
+/** A joined room the user is not looking at: the one a resume seeds from the archive. */
+const OTHER_ROOM = 'lounge@conference.example.com'
 
 describe('session order trace', () => {
   let trace: string[]
@@ -134,6 +136,11 @@ describe('session order trace', () => {
       timestamp: new Date('2026-10-16T07:00:00Z'), isOutgoing: false,
     } as RoomMessage])
     roomStore.getState().setActiveRoom(ROOM)
+    roomStore.getState().addRoom({
+      jid: OTHER_ROOM, name: 'Lounge', nickname: 'me', joined: true, isBookmarked: true, supportsMAM: true,
+      occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set(),
+      isQuickChat: false,
+    } as Room)
 
     client = createMockClient()
     const watch = (label: string, mock: ReturnType<typeof vi.fn>, result?: unknown) =>
