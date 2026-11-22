@@ -52,7 +52,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.js == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Usually 10 to 14 minutes, and about 16 on a slow runner. This leaves room
+    # for a slow runner and still stops a hung run.
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v7
