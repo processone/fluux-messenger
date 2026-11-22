@@ -23,6 +23,9 @@
  * @module Utils/ViewportScroller
  */
 import type { ViewportKind } from './viewportAtBottom'
+import type { ViewportMetrics } from './viewportMetrics'
+
+export type { ViewportMetrics }
 
 /** What the registry needs from a list: an independent geometry reading of its viewport. */
 interface ViewportMeasurer {
@@ -53,35 +56,6 @@ export function registerViewportScroller(
   return () => {
     // Only drop it if we still own the slot — a remount may have replaced it.
     if (scrollers.get(k) === ref) scrollers.delete(k)
-  }
-}
-
-/** One independent measurement of a view's scroll viewport. */
-export interface ViewportMetrics {
-  /** Pixels between the viewport bottom and the content bottom. */
-  distFromBottom: number
-  scrollHeight: number
-  scrollTop: number
-  clientHeight: number
-}
-
-/**
- * Measure a scroll element, right now.
- *
- * @returns `null` when there is no element, or when it has been detached from the
- * document. A detached element reports zeros for every metric, which would read as
- * "pinned to the bottom" — a confident wrong answer, and worse than admitting we cannot see.
- */
-export function measureElementViewport(element: HTMLElement | null | undefined): ViewportMetrics | null {
-  if (!element || !element.isConnected) return null
-  const scrollHeight = element.scrollHeight
-  const scrollTop = element.scrollTop
-  const clientHeight = element.clientHeight
-  return {
-    distFromBottom: scrollHeight - scrollTop - clientHeight,
-    scrollHeight,
-    scrollTop,
-    clientHeight,
   }
 }
 

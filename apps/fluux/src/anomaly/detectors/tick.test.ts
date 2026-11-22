@@ -8,9 +8,9 @@ import {
 } from '../../utils/anomalySignal'
 import {
   _resetViewportScrollerRegistryForTesting,
-  measureElementViewport,
   registerViewportScroller,
 } from '../../utils/viewportScroller'
+import { measureElementViewport } from '../../utils/viewportMetrics'
 import {
   _resetViewportRegistryForTesting,
   registerViewportBottomRef,

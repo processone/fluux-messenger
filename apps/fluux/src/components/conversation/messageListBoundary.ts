@@ -1,7 +1,7 @@
 import type { ReactNode, Ref } from 'react'
 import type { BaseMessage, GapInterval, MessageRowRef } from '@fluux/sdk'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
-import type { ViewportMetrics } from '@/utils/viewportScroller'
+import type { ViewportMetrics } from '@/utils/viewportMetrics'
 
 /**
  * The boundary between a conversation view and the message list.

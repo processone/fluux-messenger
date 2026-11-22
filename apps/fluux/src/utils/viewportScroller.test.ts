@@ -2,11 +2,10 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   _resetViewportScrollerRegistryForTesting,
-  measureElementViewport,
   measureViewport,
   registerViewportScroller,
-  type ViewportMetrics,
 } from './viewportScroller'
+import { measureElementViewport, type ViewportMetrics } from './viewportMetrics'
 
 /** A scroller with settable metrics — jsdom gives every element zeros otherwise. */
 function makeScroller(metrics: {
