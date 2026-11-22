@@ -7,6 +7,7 @@ import { vi, type Mock } from 'vitest'
 import { connectionStore } from '../stores/connectionStore'
 import type { E2EEWarmupHost, SideEffectHost } from './sideEffectHost'
 import type { SyncedConversation } from './modules/ConversationSync'
+import type { SessionPhase } from './types'
 
 // Mock localStorage for tests that need it
 export const localStorageMock = (() => {
@@ -128,11 +129,25 @@ export function createMockClient(): MockSideEffectClient & SideEffectHost {
   return client as MockSideEffectClient & SideEffectHost
 }
 
+let phaseGeneration = 0
+
+/**
+ * The phases the session lifecycle engine hands the side effects, with the
+ * generation it would give them: each phase starts a new generation.
+ */
+export const sessionPhase = {
+  fresh: (afterResume = false): SessionPhase => ({ kind: 'fresh', generation: ++phaseGeneration, afterResume }),
+  resumed: (): SessionPhase => ({ kind: 'resumed', generation: ++phaseGeneration }),
+  /** The generation of the latest phase, as the engine stamps it on its readiness signals. */
+  current: (): number => phaseGeneration,
+}
+
 /**
  * Simulate a fresh session whose setup completed: set store status to
- * 'online', emit 'online', then 'freshSessionInputsReady'. In the real flow,
- * Connection.ts does the first two in handleConnectionSuccess and the session
- * lifecycle emits the third once the roster and conversation list are in.
+ * 'online', announce a fresh phase, then 'freshSessionInputsReady'. In the real
+ * flow the session lifecycle engine announces the phase first thing in
+ * handleConnectionSuccess and emits the readiness signal once the roster and
+ * conversation list are in.
  * Tests that need the window between the two emit them separately.
  */
 export function simulateFreshSession(
@@ -140,16 +155,16 @@ export function simulateFreshSession(
   serverConversations: SyncedConversation[] = [],
 ) {
   connectionStore.getState().setStatus('online')
-  client._emit('online')
+  client._emit('sessionPhase', sessionPhase.fresh())
   client._emit('conversationListReady', serverConversations)
-  client._emit('freshSessionInputsReady')
+  client._emit('freshSessionInputsReady', sessionPhase.current())
 }
 
 /**
- * Simulate an SM resumption: set store status to 'online' and emit 'resumed' event.
- * In the real flow, Connection.ts does both in handleConnectionSuccess.
+ * Simulate an SM resumption: set store status to 'online' and announce a
+ * resumed phase, as the session lifecycle engine does in handleConnectionSuccess.
  */
 export function simulateSmResumption(client: ReturnType<typeof createMockClient>) {
   connectionStore.getState().setStatus('online')
-  client._emit('resumed')
+  client._emit('sessionPhase', sessionPhase.resumed())
 }

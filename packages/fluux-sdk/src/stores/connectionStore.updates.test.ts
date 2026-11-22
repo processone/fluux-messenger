@@ -100,7 +100,7 @@ describe('single owner of scoped retrieval state', () => {
   })
 
   it('does not create a local scope for unknown global preparation or a scheduled wait', () => {
-    const end = state().beginCatchUp()
+    const end = state().beginUpdate([])
     vi.advanceTimersByTime(10_000)
     expect(state().updates).toEqual({})
     end()

@@ -104,12 +104,6 @@ interface ConnectionState {
   // Actions - state setters only (connect/disconnect moved to hooks)
   setStatus: (status: ConnectionStatus) => void
   setIsVerifying: (isVerifying: boolean) => void
-  /**
-   * Compatibility alias for beginUpdate([]), with no local presentation scope.
-   * Producers register once with beginUpdate(scopes); its handles also derive
-   * isCatchingUp and catchUpStartedAt. Old callers retain the same lifecycle.
-   */
-  beginCatchUp: () => () => void
   /** Drop every owner (the connection left online). */
   resetCatchUp: () => void
   setJid: (jid: string | null) => void
@@ -266,7 +260,6 @@ export const connectionStore = createStore<ConnectionState>()(
     set({ status })
   },
   setIsVerifying: (isVerifying) => set({ isVerifying }),
-  beginCatchUp: () => get().beginUpdate([]),
   resetCatchUp: () => {
     clearUpdateTimers()
     set({

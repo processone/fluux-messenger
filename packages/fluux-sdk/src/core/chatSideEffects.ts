@@ -5,13 +5,14 @@
  * 1. IndexedDB cache loading (immediate)
  * 2. Background MAM fetch for catch-up (when connected)
  *
- * Uses client events (`'online'` for fresh sessions) so SM resumptions
+ * Uses the session phase (`fresh`) so SM resumptions
  * skip MAM queries entirely — no guard needed.
  *
  * @module Core/ChatSideEffects
  */
 
 import type { SideEffectHost } from './sideEffectHost'
+import type { SessionPhase } from './types'
 import { chatStore } from '../stores/chatStore'
 import { catchUpSeed } from '../stores/shared/messageTimeline'
 import { connectionStore } from '../stores/connectionStore'
@@ -51,7 +52,7 @@ export function setupChatSideEffects(
   // Track whether we've initiated a fetch for each conversation
   const fetchInitiated = new Set<string>()
 
-  // Epoch ms of the current fresh session's connection (set on 'online'). Forward
+  // Epoch ms of the current fresh session's connection (set on a fresh phase). Forward
   // catch-up cursor excludes messages received this session so a live message
   // can't poison it and silently skip the offline gap (parity with rooms / Bug A).
   let sessionStartTime: number | undefined
@@ -95,7 +96,7 @@ export function setupChatSideEffects(
     const endUpdate = connectionStore.getState().beginUpdate([`chat:${conversationId}`, 'messages'])
     try {
       // Load IndexedDB cache first to ensure we have the latest messages
-      // before deciding the MAM query direction. Without this, the 'online'
+      // before deciding the MAM query direction. Without this, the fresh-phase
       // handler races with the conversation subscriber's cache load, and
       // messages may be empty — causing a backward query instead of a
       // forward catch-up from the newest cached message.
@@ -166,13 +167,25 @@ export function setupChatSideEffects(
     { fireImmediately: false }
   )
 
-  // Whether the current session is fresh (set by 'online' event, cleared on disconnect)
-  let isFreshSession = false
+  // The phase the current session entered; undefined while disconnected.
+  let phase: SessionPhase | undefined
 
-  // Fresh session: catch up MAM for the active conversation.
-  // 'online' fires only on fresh sessions (not SM resumption).
-  const unsubscribeOnline = client.internal.on('online', () => {
-    isFreshSession = true
+  // Fresh session: catch up MAM for the active conversation. A resumed session
+  // needs no MAM catch-up: the server replays undelivered stanzas.
+  const unsubscribePhase = client.internal.on('sessionPhase', (next) => {
+    phase = next
+    if (next.kind === 'resumed') {
+      if (debug) console.log('[SideEffects] Chat: SM resumption — skipping MAM catchup')
+
+      // Mark active conversation as already fetched so switching away and back
+      // doesn't trigger a redundant MAM query (SM already caught us up)
+      const activeConversationId = chatStore.getState().activeConversationId
+      if (activeConversationId) {
+        fetchInitiated.add(activeConversationId)
+      }
+      return
+    }
+
     sessionStartTime = Date.now()
 
     const activeConversationId = chatStore.getState().activeConversationId
@@ -184,19 +197,6 @@ export function setupChatSideEffects(
 
       // Trigger MAM catch-up for the active conversation
       void fetchMAMForConversation(activeConversationId)
-    }
-  })
-
-  // SM resumption: no MAM catchup needed — server replays undelivered stanzas
-  const unsubscribeResumed = client.internal.on('resumed', () => {
-    isFreshSession = false
-    if (debug) console.log('[SideEffects] Chat: SM resumption — skipping MAM catchup')
-
-    // Mark active conversation as already fetched so switching away and back
-    // doesn't trigger a redundant MAM query (SM already caught us up)
-    const activeConversationId = chatStore.getState().activeConversationId
-    if (activeConversationId) {
-      fetchInitiated.add(activeConversationId)
     }
   })
 
@@ -214,7 +214,7 @@ export function setupChatSideEffects(
       if (status !== 'online' && previousStatus === 'online') {
         if (debug) console.log('[SideEffects] Chat: Going offline, clearing typing states')
         chatStore.getState().clearAllTyping()
-        isFreshSession = false
+        phase = undefined
         fetchInitiated.clear()
       }
 
@@ -235,8 +235,8 @@ export function setupChatSideEffects(
       if (hasMAMSupport && !hadMAMSupport) {
         hadMAMSupport = hasMAMSupport
 
-        // Only trigger on fresh sessions (isFreshSession is false on SM resumption)
-        if (!isFreshSession) return
+        // Only trigger on fresh sessions
+        if (phase?.kind !== 'fresh') return
 
         const activeConversationId = chatStore.getState().activeConversationId
         if (activeConversationId && !fetchInitiated.has(activeConversationId)) {
@@ -251,8 +251,7 @@ export function setupChatSideEffects(
 
   return () => {
     unsubscribeConversation()
-    unsubscribeOnline()
-    unsubscribeResumed()
+    unsubscribePhase()
     unsubscribeConnection()
     unsubscribeServerInfo()
   }

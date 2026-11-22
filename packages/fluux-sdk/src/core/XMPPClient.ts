@@ -813,8 +813,9 @@ export class XMPPClient {
       sendStanza: (stanza) => this.sendStanza(stanza),
       emitSDK: moduleDeps.emitSDK,
       emitOnline: () => this.emit('online'),
-      emitFreshSessionInputsReady: () => this.emit('freshSessionInputsReady'),
-      emitFreshSessionDiscoverySettled: () => this.emit('freshSessionDiscoverySettled'),
+      emitSessionPhase: (phase) => this.emit('sessionPhase', phase),
+      emitFreshSessionInputsReady: (generation) => this.emit('freshSessionInputsReady', generation),
+      emitFreshSessionDiscoverySettled: (generation) => this.emit('freshSessionDiscoverySettled', generation),
       emitConversationListReady: (conversations) => this.emit('conversationListReady', conversations),
       connectPresence: () => this.presenceActor.send({ type: 'CONNECT' }),
     })

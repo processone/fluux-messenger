@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 
 // Mock localStorage before importing stores
-import { localStorageMock } from './sideEffects.testHelpers'
+import { localStorageMock, sessionPhase } from './sideEffects.testHelpers'
 
 Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
@@ -230,8 +230,8 @@ describe('setupConversationSyncSideEffects', () => {
   it('waits for a server baseline while archive discovery changes the local list', async () => {
     cleanup = setupConversationSyncSideEffects(mockClient)
     connectionStore.getState().setStatus('online')
-    mockClient._emit('online')
-    mockClient._emit('freshSessionInputsReady')
+    mockClient._emit('sessionPhase', sessionPhase.fresh())
+    mockClient._emit('freshSessionInputsReady', sessionPhase.current())
     chatStore.getState().addConversation({
       id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0,
     })
@@ -253,7 +253,7 @@ describe('setupConversationSyncSideEffects', () => {
       id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0,
     })
     await vi.advanceTimersByTimeAsync(1_000)
-    mockClient._emit('online')
+    mockClient._emit('sessionPhase', sessionPhase.fresh())
     chatStore.getState().archiveConversation('alice@example.com')
     await vi.advanceTimersByTimeAsync(4_000)
     expect(mockClient.internal.conversationSync.publishConversations).not.toHaveBeenCalled()
@@ -279,7 +279,7 @@ describe('setupConversationSyncSideEffects', () => {
     chatStore.getState().addConversation({ id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0 })
     cleanup = setupConversationSyncSideEffects(mockClient)
     connectionStore.getState().setStatus('online')
-    mockClient._emit('online')
+    mockClient._emit('sessionPhase', sessionPhase.fresh())
     await vi.advanceTimersByTimeAsync(5_000)
     expect(mockClient.internal.conversationSync.publishConversations).not.toHaveBeenCalled()
     mockClient._emit('conversationListReady', [])
@@ -348,8 +348,8 @@ describe('setupConversationSyncSideEffects', () => {
       startSessionWithAlice()
       connectionStore.getState().setStatus('disconnected')
       connectionStore.getState().setStatus('online')
-      mockClient._emit('online')
-      mockClient._emit('resumed')
+      mockClient._emit('sessionPhase', sessionPhase.fresh())
+      mockClient._emit('sessionPhase', sessionPhase.resumed())
 
       chatStore.getState().archiveConversation('alice@example.com')
       await vi.advanceTimersByTimeAsync(3_000)
@@ -362,7 +362,7 @@ describe('setupConversationSyncSideEffects', () => {
       cleanup = setupConversationSyncSideEffects(mockClient)
 
       simulateSmResumption(mockClient)
-      mockClient._emit('online')
+      mockClient._emit('sessionPhase', sessionPhase.fresh())
       await vi.advanceTimersByTimeAsync(0)
 
       expect(refresh()).not.toHaveBeenCalled()
