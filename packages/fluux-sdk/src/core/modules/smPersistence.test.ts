@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { xml } from '@xmpp/client'
 import { SmPersistence, type SmPersistenceDeps } from './smPersistence'
 import type { StorageAdapter, SessionState } from '../types'
 
@@ -324,6 +325,157 @@ describe('SmPersistence', () => {
 
       expect(sessionStorage.getItem(sessionKey)).toBeNull()
     })
+  })
+
+  describe('messages the server did not confirm', () => {
+    const JID = 'user@example.com'
+    const KEY = `fluux:session-unconfirmed:${JID}`
+    const chat = (id: string, text = 'private words') => ({
+      stanza: xml('message', { to: 'bob@example.com', type: 'chat', id },
+        xml('body', {}, text),
+        xml('origin-id', { xmlns: 'urn:xmpp:sid:0', id })),
+      stamp: '2026-11-22T10:00:00.000Z',
+    })
+    const client = (id: string, outbound: number, outbound_q: unknown[]) =>
+      ({ streamManagement: { id, inbound: 0, outbound, outbound_q } })
+    const taken = (sm: SmPersistence) => sm.takeUnconfirmed(JID).map(message => message.id)
+    /** A page that saved `items` as unacknowledged, then reloaded. */
+    const reloaded = (acked: number, items: unknown[]) => {
+      new SmPersistence(createDeps()).saveUnconfirmed(JID, client('session-1', acked, items))
+      const sm = new SmPersistence(createDeps())
+      sm.restoreUnconfirmed(JID)
+      return sm
+    }
+
+    afterEach(() => sessionStorage.removeItem(KEY))
+
+    it('saves the id, address and position of a message, and never its text', () => {
+      new SmPersistence(createDeps()).saveUnconfirmed(JID, client('session-1', 4, [chat('m1')]))
+
+      const stored = sessionStorage.getItem(KEY)!
+      expect(JSON.parse(stored)).toEqual([{ id: 'm1', to: 'bob@example.com', session: 'session-1', sequence: 5 }])
+      expect(stored).not.toContain('private words')
+    })
+
+    it('saves only conversation messages', () => {
+      const request = { stanza: xml('iq', { type: 'get', id: 'q1' }) }
+      const room = { stanza: xml('message', { to: 'room@conference.example.com', type: 'groupchat', id: 'r1' }, xml('origin-id', { xmlns: 'urn:xmpp:sid:0', id: 'r1' })) }
+      const typing = { stanza: xml('message', { to: 'bob@example.com', type: 'chat', id: 't1' }, xml('composing', { xmlns: 'http://jabber.org/protocol/chatstates' })) }
+      new SmPersistence(createDeps()).saveUnconfirmed(JID, client('session-1', 0, [request, room, typing, chat('m1')]))
+
+      expect(JSON.parse(sessionStorage.getItem(KEY)!)).toEqual([{ id: 'm1', to: 'bob@example.com', session: 'session-1', sequence: 4 }])
+    })
+
+    it('after a reload, reports only the messages past the count of the resumed session', () => {
+      const sm = reloaded(4, [chat('received'), chat('lost')])
+
+      sm.settleResumed('session-1', 5)
+
+      expect(taken(sm)).toEqual(['lost'])
+      expect(sessionStorage.getItem(KEY)).toBeNull()
+    })
+
+    it('reports nothing when the resumed session received everything, and forgets the saved list', () => {
+      const sm = reloaded(4, [chat('m1')])
+
+      sm.settleResumed('session-1', 5)
+
+      expect(taken(sm)).toEqual([])
+      expect(sessionStorage.getItem(KEY)).toBeNull()
+    })
+
+    it('does not compare positions with a different session', () => {
+      const sm = reloaded(4, [chat('m1')])
+
+      sm.settleResumed('session-2', 99)
+
+      expect(taken(sm)).toEqual(['m1'])
+    })
+
+    it('after a reload, reports every message when a new session starts', () => {
+      const sm = reloaded(4, [chat('m1'), chat('m2')])
+
+      sm.settleNewSession()
+
+      expect(taken(sm)).toEqual(['m1', 'm2'])
+    })
+
+    it('keeps the list until the connection settles, so a second reload does not lose it', () => {
+      const sm = reloaded(4, [chat('m1')])
+      sm.saveUnconfirmed(JID, null)
+
+      const again = new SmPersistence(createDeps())
+      again.restoreUnconfirmed(JID)
+      again.settleResumed('session-1', 4)
+
+      expect(taken(again)).toEqual(['m1'])
+    })
+
+    it('saves what a discarded client left, for a reload during the reconnect', () => {
+      const sm = new SmPersistence(createDeps())
+      sm.keepUnacknowledged(client('session-1', 2, [chat('m1')]) as never)
+
+      sm.saveUnconfirmed(JID, null)
+
+      expect(JSON.parse(sessionStorage.getItem(KEY)!)).toEqual([{ id: 'm1', to: 'bob@example.com', session: 'session-1', sequence: 3 }])
+    })
+
+    it('does not report stanzas kept in memory when the session resumes: they are being resent', () => {
+      const sm = new SmPersistence(createDeps())
+      sm.keepUnacknowledged(client('session-1', 2, [chat('m1')]) as never)
+
+      sm.settleResumed('session-1', 2)
+      sm.updateCache('session-1', 0, 2)
+
+      expect(taken(sm)).toEqual([])
+    })
+
+    it.each([
+      ['a refused resumption', (sm: SmPersistence) => sm.beginSession('session-2', 0, undefined)],
+      ['a new session without Stream Management', (sm: SmPersistence) => sm.settleNewSession()],
+      ['a resumption window that ran out', (sm: SmPersistence) => { sm.abandonResumption(); sm.settleNewSession() }],
+    ])('reports stanzas kept in memory after %s', (_case, endSession) => {
+      const sm = new SmPersistence(createDeps())
+      sm.updateCache('session-1', 0, 2)
+      sm.keepUnacknowledged(client('session-1', 2, [chat('m1')]) as never)
+
+      endSession(sm)
+
+      expect(taken(sm)).toEqual(['m1'])
+    })
+
+    it('reports a message once', () => {
+      const sm = reloaded(4, [chat('m1')])
+      sm.settleNewSession()
+
+      expect(taken(sm)).toEqual(['m1'])
+      expect(taken(sm)).toEqual([])
+    })
+
+    it('a sign-out forgets everything, in memory and in storage', async () => {
+      const sm = reloaded(4, [chat('m1')])
+      sm.keepUnacknowledged(client('session-1', 2, [chat('m2')]) as never)
+
+      sm.clearCache()
+      await sm.clear(JID)
+      sm.settleNewSession()
+
+      expect(taken(sm)).toEqual([])
+      expect(sessionStorage.getItem(KEY)).toBeNull()
+    })
+
+    it.each(['not json', '{"id":"m1"}', '[{"id":"m1"}]', '[{"id":"m1","to":"bob@example.com","session":"s"}]'])(
+      'ignores a saved list it cannot read: %s',
+      (stored) => {
+        sessionStorage.setItem(KEY, stored)
+        const sm = new SmPersistence(createDeps())
+
+        sm.restoreUnconfirmed(JID)
+        sm.settleNewSession()
+
+        expect(taken(sm)).toEqual([])
+      },
+    )
   })
 
   describe('load', () => {

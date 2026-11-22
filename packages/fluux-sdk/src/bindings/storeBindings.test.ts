@@ -1,3 +1,4 @@
+import { UNCONFIRMED_DELIVERY_ERROR } from '../utils/xmppError'
 import { AvatarStateOwner, invalidateAllAvatarVersions, captureOccupantAvatar, registerAvatarStateOwner } from '../utils/avatarState'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createStoreBindings, StoreRefs } from './storeBindings'
@@ -149,6 +150,42 @@ describe('createStoreBindings', () => {
       expect(mockStores.chat.updateMessage).toHaveBeenCalledWith(
         'bob@example.com', 'msg1', { body: 'Edited message' }
       )
+    })
+
+    it('marks a server error on the message it names', () => {
+      const error = { type: 'cancel' as const, condition: 'service-unavailable' }
+      mockClient.emit('chat:message-error', { conversationId: 'bob@example.com', messageId: 'msg1', error })
+      expect(mockStores.chat.updateMessage).toHaveBeenCalledWith('bob@example.com', 'msg1', { deliveryError: error })
+    })
+
+    it('marks an unconfirmed message through a target that also reaches the saved history', () => {
+      mockStores.chat.getMessage = vi.fn().mockReturnValue(undefined)
+      mockClient.emit('chat:message-error', {
+        conversationId: 'bob@example.com', messageId: 'msg1', error: UNCONFIRMED_DELIVERY_ERROR,
+      })
+      expect(mockStores.chat.updateMessage).toHaveBeenCalledWith(
+        'bob@example.com',
+        { id: 'msg1', stanzaId: undefined, originId: 'msg1' },
+        { deliveryError: UNCONFIRMED_DELIVERY_ERROR },
+      )
+    })
+
+    it('does not mark as unconfirmed a message that already has its archive id', () => {
+      mockStores.chat.getMessage = vi.fn().mockReturnValue({ id: 'msg1', stanzaId: 'archive-1' })
+      mockClient.emit('chat:message-error', {
+        conversationId: 'bob@example.com', messageId: 'msg1', error: UNCONFIRMED_DELIVERY_ERROR,
+      })
+      expect(mockStores.chat.updateMessage).not.toHaveBeenCalled()
+    })
+
+    it('keeps an error the server returned when the message is also unconfirmed', () => {
+      mockStores.chat.getMessage = vi.fn().mockReturnValue({
+        id: 'msg1', deliveryError: { type: 'cancel', condition: 'service-unavailable' },
+      })
+      mockClient.emit('chat:message-error', {
+        conversationId: 'bob@example.com', messageId: 'msg1', error: UNCONFIRMED_DELIVERY_ERROR,
+      })
+      expect(mockStores.chat.updateMessage).not.toHaveBeenCalled()
     })
 
     it('should handle message:security-updated by patching securityContext', () => {
