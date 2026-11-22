@@ -15,6 +15,7 @@
  */
 
 import type { SideEffectHost } from './sideEffectHost'
+import type { SessionPhase } from './types'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { roomStore } from '../stores/roomStore'
 import { catchUpSeed } from '../stores/shared/messageTimeline'
@@ -67,13 +68,13 @@ export function setupRoomSideEffects(
   }
   const roomFetchOwners = new Map<string, RoomFetchOwner>()
   const freshSessionJoinedRooms = new Set<string>()
-  let freshSessionRequiresJoinConfirmation = false
-  let uninterruptedResumeMayEmitSyntheticOnline = false
+  // The phase of the latest session; kept across a disconnect.
+  let phase: SessionPhase | undefined
   let disposed = false
 
   function hasConfirmedJoinForCurrentSession(roomJid: string): boolean {
     return (
-      !freshSessionRequiresJoinConfirmation ||
+      phase?.kind !== 'fresh' ||
       freshSessionJoinedRooms.has(roomJid)
     )
   }
@@ -323,32 +324,9 @@ export function setupRoomSideEffects(
   )
 
   // Fresh sessions require a self-presence confirmation before room MAM starts.
-  // A missing-marker upgrade can also emit a synthetic 'online' after 'resumed';
-  // that uninterrupted path must retain resume-seeded fetch tracking.
-  const unsubscribeOnline = client.internal.on('online', () => {
-    const followsUninterruptedResume = uninterruptedResumeMayEmitSyntheticOnline
-    freshSessionRequiresJoinConfirmation = true
-    if (!followsUninterruptedResume) {
-      sessionStartTime = Date.now()
-      invalidateRoomMemberships(client)
-      resetRoomMamForegroundCoverage(client)
-      freshSessionJoinedRooms.clear()
-      fetchInitiated.clear()
-      resumeArchiveHeldRooms.clear()
-      for (const roomJid of roomFetchOwners.keys()) {
-        roomStore.getState().setRoomMAMLoading(roomJid, false)
-      }
-      roomFetchOwners.clear()
-    }
-    uninterruptedResumeMayEmitSyntheticOnline = false
-
-    if (debug) {
-      console.log(
-        '[SideEffects] Room: Fresh session — waiting for confirmed room joins before MAM',
-      )
-    }
-  })
-
+  // A resumed stream upgraded to a fresh session (`afterResume`) must retain
+  // resume-seeded fetch tracking.
+  //
   // SM resumption: no MAM catch-up needed for rooms we already hold — the server
   // replays undelivered stanzas via the SM queue, and we don't re-issue
   // presence/joinRoom so there are no spurious room:joined events. We seed
@@ -363,12 +341,30 @@ export function setupRoomSideEffects(
   // after a reconnect" bug). hasQueried (set on any completed MAM query, even an
   // empty result) is the durable signal; it's separate from "has resident
   // messages" so a room caught up via live delivery is still covered.
-  const unsubscribeResumed = client.internal.on('resumed', () => {
-    // A missing cache marker upgrades this same transport session to full fresh
-    // setup, which emits a synthetic online only after room rejoins can finish.
-    // Keep that next online distinguishable from a later fresh transport session.
-    uninterruptedResumeMayEmitSyntheticOnline = true
-    freshSessionRequiresJoinConfirmation = false
+  const unsubscribePhase = client.internal.on('sessionPhase', (next) => {
+    phase = next
+    if (next.kind === 'fresh') {
+      if (!next.afterResume) {
+        sessionStartTime = Date.now()
+        invalidateRoomMemberships(client)
+        resetRoomMamForegroundCoverage(client)
+        freshSessionJoinedRooms.clear()
+        fetchInitiated.clear()
+        resumeArchiveHeldRooms.clear()
+        for (const roomJid of roomFetchOwners.keys()) {
+          roomStore.getState().setRoomMAMLoading(roomJid, false)
+        }
+        roomFetchOwners.clear()
+      }
+
+      if (debug) {
+        console.log(
+          '[SideEffects] Room: Fresh session — waiting for confirmed room joins before MAM',
+        )
+      }
+      return
+    }
+
     freshSessionJoinedRooms.clear()
     sessionStartTime = Date.now()
 
@@ -399,7 +395,6 @@ export function setupRoomSideEffects(
     (state) => state.status,
     (status) => {
       if (status !== 'online' && previousStatus === 'online') {
-        uninterruptedResumeMayEmitSyntheticOnline = false
         releaseInFlightRoomMamForegroundCoverage(client)
         for (const roomJid of roomFetchOwners.keys()) {
           roomStore.getState().setRoomMAMLoading(roomJid, false)
@@ -481,8 +476,7 @@ export function setupRoomSideEffects(
     fetchInitiated.clear()
     resumeArchiveHeldRooms.clear()
     unsubscribe()
-    unsubscribeOnline()
-    unsubscribeResumed()
+    unsubscribePhase()
     unsubscribeConnection()
     unsubscribeRoomMAMSupport()
     unsubscribeRoomJoined()

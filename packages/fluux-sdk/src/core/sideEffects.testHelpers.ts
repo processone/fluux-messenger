@@ -7,6 +7,7 @@ import { vi, type Mock } from 'vitest'
 import { connectionStore } from '../stores/connectionStore'
 import type { E2EEWarmupHost, SideEffectHost } from './sideEffectHost'
 import type { SyncedConversation } from './modules/ConversationSync'
+import type { SessionPhase } from './types'
 
 // Mock localStorage for tests that need it
 export const localStorageMock = (() => {
@@ -128,6 +129,19 @@ export function createMockClient(): MockSideEffectClient & SideEffectHost {
   return client as MockSideEffectClient & SideEffectHost
 }
 
+let phaseGeneration = 0
+
+/**
+ * The phases the session lifecycle engine hands the side effects, with the
+ * generation it would give them: each phase starts a new generation.
+ */
+export const sessionPhase = {
+  fresh: (afterResume = false): SessionPhase => ({ kind: 'fresh', generation: ++phaseGeneration, afterResume }),
+  resumed: (): SessionPhase => ({ kind: 'resumed', generation: ++phaseGeneration }),
+  /** The generation of the latest phase, as the engine stamps it on its readiness signals. */
+  current: (): number => phaseGeneration,
+}
+
 /**
  * Simulate a fresh session whose setup completed: set store status to
  * 'online', emit 'online', then 'freshSessionInputsReady'. In the real flow,
@@ -140,9 +154,9 @@ export function simulateFreshSession(
   serverConversations: SyncedConversation[] = [],
 ) {
   connectionStore.getState().setStatus('online')
-  client._emit('online')
+  client._emit('sessionPhase', sessionPhase.fresh())
   client._emit('conversationListReady', serverConversations)
-  client._emit('freshSessionInputsReady')
+  client._emit('freshSessionInputsReady', sessionPhase.current())
 }
 
 /**
@@ -151,5 +165,5 @@ export function simulateFreshSession(
  */
 export function simulateSmResumption(client: ReturnType<typeof createMockClient>) {
   connectionStore.getState().setStatus('online')
-  client._emit('resumed')
+  client._emit('sessionPhase', sessionPhase.resumed())
 }

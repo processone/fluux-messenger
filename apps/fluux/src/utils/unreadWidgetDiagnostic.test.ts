@@ -33,7 +33,7 @@ describe('closed widget diagnostic observations', () => {
   })
   it('samples real replay/catch-up store flags; replay holds the write, catch-up does not', async () => {
     const endReplay = connectionStore.getState().beginReplay()
-    const endCatchUp = connectionStore.getState().beginCatchUp()
+    const endCatchUp = connectionStore.getState().beginUpdate([])
     startUnreadWidgetPublisher(() => 0)
     await vi.advanceTimersByTimeAsync(600)
     expect(context()).toMatchObject({ online: true, verifying: false, catchingUp: true, replaying: true,

@@ -24,7 +24,7 @@ Object.defineProperty(globalThis, 'localStorage', {
 
 import { SessionLifecycleEngine, type SessionLifecycleDeps } from './sessionLifecycle'
 import { createMockStores } from './test-utils'
-import type { StoreBindings } from './types'
+import type { SessionPhase, StoreBindings } from './types'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
@@ -95,7 +95,6 @@ describe('session order trace', () => {
    * is gone); anything else is a fresh stream.
    */
   async function startSession(resume: boolean, disconnectDurationMs?: number): Promise<void> {
-    client._emit(resume ? 'resumed' : 'online')
     await engine.handleConnectionSuccess(resume, undefined, disconnectDurationMs)
   }
 
@@ -185,9 +184,10 @@ describe('session order trace', () => {
       ensureE2EEManager: vi.fn(() => { trace.push('ensureE2EEManager') }),
       sendStanza: vi.fn().mockResolvedValue(undefined),
       emitSDK: vi.fn(),
-      emitOnline: () => client._emit('online'),
-      emitFreshSessionInputsReady: () => { trace.push('freshSessionInputsReady'); client._emit('freshSessionInputsReady') },
-      emitFreshSessionDiscoverySettled: () => { trace.push('freshSessionDiscoverySettled'); client._emit('freshSessionDiscoverySettled') },
+      emitOnline: vi.fn(),
+      emitSessionPhase: (phase: SessionPhase) => client._emit('sessionPhase', phase),
+      emitFreshSessionInputsReady: (generation: number) => { trace.push('freshSessionInputsReady'); client._emit('freshSessionInputsReady', generation) },
+      emitFreshSessionDiscoverySettled: (generation: number) => { trace.push('freshSessionDiscoverySettled'); client._emit('freshSessionDiscoverySettled', generation) },
       emitConversationListReady: (list: unknown) => { trace.push('conversationListReady'); client._emit('conversationListReady', list) },
       connectPresence: vi.fn(() => { trace.push('presence.connect') }),
     } as unknown as SessionLifecycleDeps)

@@ -171,6 +171,7 @@ export type {
   StoreBindings,
   XMPPClientEvents,
   InternalClientEvents,
+  SessionPhase,
   ClientEvents,
   PresenceOptions,
   PrivacyOptions,

@@ -14,7 +14,7 @@ import { connectionStore } from '../stores/connectionStore'
 import { roomStore } from '../stores/roomStore'
 import * as messageCache from '../utils/messageCache'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
-import { localStorageMock } from './sideEffects.testHelpers'
+import { localStorageMock, sessionPhase } from './sideEffects.testHelpers'
 import type { Message, Room, RoomMessage } from './types'
 
 Object.defineProperty(globalThis, 'localStorage', {
@@ -166,7 +166,7 @@ describe('mdsSideEffects real IndexedDB cache integration', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: OWN_JID } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.waitFor(() => {
       expect(client.internal.mds.fetchAllDisplayedResult).toHaveBeenCalledTimes(1)
     })

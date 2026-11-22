@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { setupMdsSideEffects } from './mdsSideEffects'
-import { localStorageMock } from './sideEffects.testHelpers'
+import { localStorageMock, sessionPhase } from './sideEffects.testHelpers'
 import { roomStore } from '../stores/roomStore'
 import { connectionStore } from '../stores/connectionStore'
 import { createRoom } from '../stores/roomStore.testHelpers'
@@ -39,7 +39,7 @@ function startPublisher() {
     publishDisplayed: vi.fn().mockResolvedValue(undefined), retractDisplayed: vi.fn().mockResolvedValue(undefined) }
   const client = { subscribe, internal: { on: subscribe, mds } }
   cleanup = setupMdsSideEffects(client as never)
-  handlers.get('online')?.forEach(handler => handler())
+  handlers.get('sessionPhase')?.forEach(handler => handler(sessionPhase.fresh()))
   return { ...mds, emit: (event: string, payload: unknown) => handlers.get(event)?.forEach(handler => handler(payload)) }
 }
 
