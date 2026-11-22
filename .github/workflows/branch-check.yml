@@ -1,0 +1,149 @@
+name: Branch check
+
+# The light check for a task branch: build, typecheck, lint and unit tests,
+# plus Rust only when Rust changed. The browser suites run later, on the
+# batch pull request (ci.yml and platform-native.yml).
+#
+# Only inf/** branches match. Batch branches (infinitary-batch/**) must not:
+# their pull request already runs the full suite.
+on:
+  push:
+    branches: ['inf/**']
+
+# A newer push to the same branch makes the older run stale.
+concurrency:
+  group: branch-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect changed scopes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      js: ${{ steps.classify.outputs.js }}
+      rust: ${{ steps.classify.outputs.rust }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The merge base with main needs history.
+          fetch-depth: 0
+
+      # A failed fetch, diff or classifier fails this job, so the check jobs are
+      # skipped and the run is visibly red. A diff that lists nothing makes the
+      # classifier run every scope. --no-renames lists both sides of a move, so
+      # moving source into an ignored path (docs/) still selects its scope.
+      - name: Classify files changed since main
+        id: classify
+        shell: bash
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git diff --no-renames --name-only origin/main...HEAD > changed-files.txt
+          echo "Changed files ($(wc -l < changed-files.txt)):"
+          sed 's/^/  /' changed-files.txt
+          scripts/ci-changed-scopes.sh < changed-files.txt | tee -a "$GITHUB_OUTPUT"
+
+  light:
+    name: Light check (build, typecheck, lint, unit tests)
+    needs: changes
+    if: needs.changes.outputs.js == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # The OMEMO plugin resolves the library through its built output, so
+      # the type check needs it built first (ci.yml does the same).
+      - name: Build OMEMO library
+        run: npm run build --workspace=@fluux/omemo
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: SDK unit tests
+        run: npm run test:run --workspace=@fluux/sdk
+
+      - name: App unit tests
+        run: npm run test:run --workspace=@xmpp/fluux
+
+  rust:
+    name: Light check (Rust)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Compute apt package cache key
+        id: apt-cache-key
+        run: echo "key=apt-debs-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      - name: Restore apt package cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.apt-debs
+          key: ${{ steps.apt-cache-key.outputs.key }}
+          restore-keys: |
+            apt-debs-
+
+      - name: Install system dependencies
+        env:
+          CI_RETRY_CLEANUP: scripts/ci-apt-cleanup.sh
+        run: |
+          if [ -d "$HOME/.apt-debs" ]; then
+            sudo cp "$HOME"/.apt-debs/*.deb /var/cache/apt/archives/ 2>/dev/null || true
+          fi
+          scripts/ci-apt-prepare.sh
+          sudo --preserve-env=CI_RETRY_CLEANUP scripts/ci-retry.sh 3 300 bash -c '
+            apt-get update &&
+            apt-get install -y \
+              libwebkit2gtk-4.1-dev \
+              libayatana-appindicator3-dev \
+              librsvg2-dev \
+              patchelf \
+              libxss-dev \
+              libdbus-1-dev \
+              desktop-file-utils
+          '
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/fluux/src-tauri
+          # Only main saves its cache; task branches only restore it.
+          save-if: false
+
+      - name: Run tests
+        working-directory: apps/fluux/src-tauri
+        run: cargo test --locked
+
+      - name: Clippy
+        working-directory: apps/fluux/src-tauri
+        run: cargo clippy --locked -- -D warnings
