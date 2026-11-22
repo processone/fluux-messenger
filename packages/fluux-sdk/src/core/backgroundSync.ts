@@ -16,16 +16,17 @@
  * or after either. The conversation stages read the stores once, so starting
  * on MAM discovery alone snapshots an empty store on a cold profile.
  *
- * Uses client events to distinguish fresh-session bulk sync from SM resumption.
+ * Uses the session phase the lifecycle engine announces to distinguish fresh-session bulk sync from SM resumption.
  * Resume only seeds rooms whose archives are not caught up to live — including
  * rooms that join after the resume event, which the one-shot predicate cannot
- * see. A synthetic post-resume `online` can then upgrade the same transport to
- * fresh setup.
+ * see. A fresh phase flagged `afterResume` can then upgrade the same transport to
+ * full setup.
  *
  * @module Core/BackgroundSync
  */
 
 import type { SideEffectHost } from './sideEffectHost'
+import type { SessionPhase } from './types'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
@@ -72,7 +73,7 @@ import {
  * 4. **Room catch-up** (delayed): After a delay to let rooms finish joining,
  *    populate full message history for all MAM-enabled rooms (concurrency=2).
  *
- * On SM resumption (`'resumed'` event), rooms already caught up to live rely on
+ * On SM resumption (the `resumed` phase), rooms already caught up to live rely on
  * replayed stanzas. Only joined, inactive rooms that still need archive coverage
  * receive a resume seed query. The public catch-up aggregate includes a bounded
  * unknown-target replay wait. Actual targeted ingestion owns its local scopes
@@ -90,12 +91,14 @@ export function setupBackgroundSyncSideEffects(
 
   // Track whether background sync has been triggered this connection cycle
   let backgroundSyncDone = false
-  // Whether the current session is fresh (set by 'online' event, cleared on disconnect)
-  let isFreshSession = false
-  // Whether the current session came up via SM resumption (set by 'resumed',
-  // cleared on 'online' and on disconnect). Distinct from `!isFreshSession`,
-  // which is also true while the transport is down.
-  let isResumedSession = false
+  // The phase the current session entered; undefined while disconnected.
+  // Whether the session is fresh or resumed, and which generation it is, is the
+  // session lifecycle engine's decision — never rederived here.
+  let phase: SessionPhase | undefined
+  const isFreshSession = () => phase?.kind === 'fresh'
+  const isResumedSession = () => phase?.kind === 'resumed'
+  /** The generation of the current phase: work started under another one is stale. */
+  const currentGeneration = () => phase?.generation ?? -1
   // Rooms already given a resume seed this session, so a room that joins,
   // leaves, and rejoins can't re-query the archive repeatedly.
   const resumeSeededRooms = new Set<string>()
@@ -131,12 +134,10 @@ export function setupBackgroundSyncSideEffects(
   // catch-up cursor boundary so live messages arriving during the 10s room
   // catch-up window can't poison the cursor and silently skip the offline gap.
   let sessionStartTime: number | undefined
-  let sessionGeneration = 0
-  let uninterruptedResumeMayEmitSyntheticOnline = false
   const freshSessionJoinedRooms = new Set<string>()
-  // Generation whose `freshSessionInputsReady` has arrived. The lifecycle emits
-  // it after `online` in the same session, so a generation mismatch means the
-  // signal belongs to a session that is already gone.
+  // Generation whose `freshSessionInputsReady` has arrived. The signal carries
+  // the generation it belongs to, so a mismatch with the current phase means it
+  // belongs to a session that is already gone.
   let inputsReadyGeneration = -1
   // Discovery can settle without serverInfo (failure or an unusable response).
   let discoverySettledGeneration = -1
@@ -153,14 +154,14 @@ export function setupBackgroundSyncSideEffects(
   }
 
   function needsServerDiscovery(generation: number): boolean {
-    return generation === sessionGeneration && isFreshSession && !backgroundSyncDone
+    return generation === currentGeneration() && isFreshSession() && !backgroundSyncDone
       && inputsReadyGeneration === generation
       && connectionStore.getState().status === 'online' && client.isConnected()
       && !connectionStore.getState().serverInfo?.features
   }
 
   function scheduleServerDiscoveryRetry(): void {
-    const generation = sessionGeneration
+    const generation = currentGeneration()
     if (discoveryRetryTimer !== undefined || discoveryRetryAttempt || !needsServerDiscovery(generation)) return
     // Keep preparation owned while capability knowledge is missing, so archive sync is not skipped.
     const delay = Math.min(SERVER_DISCOVERY_RETRY_DELAY_MS * 2 ** discoveryRetryCount, SERVER_DISCOVERY_RETRY_MAX_DELAY_MS)
@@ -210,10 +211,10 @@ export function setupBackgroundSyncSideEffects(
     const state = roomStore.getState()
     const room = state.rooms.get(roomJid)
     return !!(
-      generation === sessionGeneration &&
+      generation === currentGeneration() &&
       getRoomMembershipEpoch(client, roomJid) === membershipEpoch &&
       !hasRoomMamForegroundCoverage(client, roomJid, membershipEpoch) &&
-      isFreshSession &&
+      isFreshSession() &&
       freshSessionJoinedRooms.has(roomJid) &&
       state.activeRoomJid !== roomJid &&
       room?.joined &&
@@ -274,7 +275,7 @@ export function setupBackgroundSyncSideEffects(
       )
       if (
         !caughtUp ||
-        generation !== sessionGeneration ||
+        generation !== currentGeneration() ||
         getRoomMembershipEpoch(client, roomJid) !== reservation.membershipEpoch
       ) {
         return false
@@ -302,7 +303,7 @@ export function setupBackgroundSyncSideEffects(
     const pendingHandoff = pendingRoomHandoffs.get(roomJid)
     if (!pendingHandoff) return
     if (
-      pendingHandoff.generation !== sessionGeneration ||
+      pendingHandoff.generation !== currentGeneration() ||
       pendingHandoff.membershipEpoch !==
         getRoomMembershipEpoch(client, roomJid)
     ) {
@@ -360,7 +361,7 @@ export function setupBackgroundSyncSideEffects(
    * Give one room its single resume seed, re-checking the resume predicate at
    * call time.
    *
-   * The `'resumed'` handler evaluates `selectRoomsNeedingResumeSeed` once,
+   * The `resumed` phase handler evaluates `selectRoomsNeedingResumeSeed` once,
    * synchronously, against the rooms joined at that instant. Rooms that join
    * later in the same session — `handleSmResumption` re-fetches bookmarks after
    * a long disconnect and joins everything not currently joined — were never
@@ -378,7 +379,7 @@ export function setupBackgroundSyncSideEffects(
     roomJid: string,
     generation: number,
   ): Promise<void> {
-    if (!isResumedSession || generation !== sessionGeneration) return
+    if (!isResumedSession() || generation !== currentGeneration()) return
     if (resumeSeededRooms.has(roomJid)) return
     if (connectionStore.getState().status !== 'online' || !client.isConnected()) {
       return
@@ -557,7 +558,7 @@ export function setupBackgroundSyncSideEffects(
     })()
 
     // Stage 4: Room catch-up + member discovery (delayed to let rooms finish joining and discover MAM)
-    const syncGeneration = sessionGeneration
+    const syncGeneration = currentGeneration()
     endRoomTimerOwner = endRoomCatchUp
     roomCatchUpTimer = setTimeout(() => {
       roomCatchUpTimer = undefined
@@ -590,14 +591,14 @@ export function setupBackgroundSyncSideEffects(
           // Silently ignore MAM catch-up errors
         }
         try {
-          if (syncGeneration !== sessionGeneration) return
+          if (syncGeneration !== currentGeneration()) return
           initialRoomPassDone = true
           await reconcileFreshSessionRooms(syncGeneration)
         } finally {
           endListUpdate()
           endRoomCatchUp()
         }
-        if (syncGeneration !== sessionGeneration) return
+        if (syncGeneration !== currentGeneration()) return
         // Same rationale as the 1:1 catch-up retry above: room messages stashed
         // during this delayed pass (encrypted MUC history fetched after a mid-sync
         // key unlock) would otherwise wait until the next launch. Re-run once room
@@ -631,8 +632,8 @@ export function setupBackgroundSyncSideEffects(
    * keeps it to one start per session.
    */
   function maybeTriggerBackgroundSync(): void {
-    if (!isFreshSession || backgroundSyncDone) return
-    if (inputsReadyGeneration !== sessionGeneration) return
+    if (!isFreshSession() || backgroundSyncDone) return
+    if (inputsReadyGeneration !== currentGeneration()) return
     if (connectionStore.getState().status !== 'online' || !client.isConnected()) return
     const features = connectionStore.getState().serverInfo?.features
     const supportsMAM = features?.includes(NS_MAM) ?? false
@@ -640,7 +641,7 @@ export function setupBackgroundSyncSideEffects(
       if (features) {
         cancelServerDiscoveryRetry()
         endSessionPreparation()
-      } else if (discoverySettledGeneration === sessionGeneration) {
+      } else if (discoverySettledGeneration === currentGeneration()) {
         scheduleServerDiscoveryRetry()
       }
       return
@@ -649,19 +650,25 @@ export function setupBackgroundSyncSideEffects(
     triggerBackgroundSync()
   }
 
-  // A transport 'online' starts a fresh session. An uninterrupted resume can
-  // also be followed by a synthetic 'online' when cache integrity forces full
-  // setup; preserve the resume boundary and confirmed joins on that upgrade.
-  const unsubscribeOnline = client.internal.on('online', () => {
+  const unsubscribeInputsReady = client.internal.on('freshSessionInputsReady', (generation) => {
+    inputsReadyGeneration = generation
+    logInfo('Background sync: session inputs ready')
+    maybeTriggerBackgroundSync()
+  })
+
+  const unsubscribeDiscoverySettled = client.internal.on('freshSessionDiscoverySettled', (generation) => {
+    discoverySettledGeneration = generation
+    maybeTriggerBackgroundSync()
+  })
+
+  // A fresh session resets the session state. A resumed stream upgraded to a
+  // fresh session (`afterResume`, because cache integrity forces full setup)
+  // preserves the resume boundary and confirmed joins.
+  function beginFreshSession(afterResume: boolean): void {
     cancelServerDiscoveryRetry()
-    const followsUninterruptedResume = uninterruptedResumeMayEmitSyntheticOnline
-    uninterruptedResumeMayEmitSyntheticOnline = false
-    sessionGeneration += 1
     backgroundSyncDone = false
-    isFreshSession = true
-    isResumedSession = false
     resumeSeededRooms.clear()
-    if (!followsUninterruptedResume) {
+    if (!afterResume) {
       sessionStartTime = Date.now()
       invalidateRoomMemberships(client)
       freshSessionJoinedRooms.clear()
@@ -671,7 +678,7 @@ export function setupBackgroundSyncSideEffects(
     // A cache-cleared resume upgraded to full setup: status is already online
     // (no transition to start preparation) and the resume pass may have
     // released its handles, so retain preparation until fresh sync takes over.
-    if (followsUninterruptedResume && !endSessionPrep && connectionStore.getState().status === 'online') {
+    if (afterResume && !endSessionPrep && connectionStore.getState().status === 'online') {
       endSessionPrep = connectionStore.getState().beginUpdate([])
     }
 
@@ -683,20 +690,9 @@ export function setupBackgroundSyncSideEffects(
     // Warm the E2EE plugin cache for all known conversations. Independent of
     // MAM — these are PEP queries that don't require server-side MAM support.
     triggerE2EEWarmup()
-  })
+  }
 
-  const unsubscribeInputsReady = client.internal.on('freshSessionInputsReady', () => {
-    inputsReadyGeneration = sessionGeneration
-    logInfo('Background sync: session inputs ready')
-    maybeTriggerBackgroundSync()
-  })
-
-  const unsubscribeDiscoverySettled = client.internal.on('freshSessionDiscoverySettled', () => {
-    discoverySettledGeneration = sessionGeneration
-    maybeTriggerBackgroundSync()
-  })
-
-  // SM resumption: the server replays undelivered stanzas, so no bulk MAM sync is
+  // Resumed phase: the server replays undelivered stanzas, so no bulk MAM sync is
   // needed for rooms already caught up to live. But the delayed fresh-session room
   // pass (Stage 4) never runs here, so a room NOT caught up to live this
   // session — an autojoined room the user never opened, or one whose forward
@@ -706,12 +702,8 @@ export function setupBackgroundSyncSideEffects(
   // is a `{ before: '' }` fetch-latest that populates the archive and sets the
   // preview; a gap-open room forward-fills from its recorded gap). Caught-up rooms
   // are skipped, so this stays out of SM's "server replays, no MAM" path.
-  const unsubscribeResumed = client.internal.on('resumed', () => {
+  function beginResumedSession(): void {
     cancelServerDiscoveryRetry()
-    sessionGeneration += 1
-    uninterruptedResumeMayEmitSyntheticOnline = true
-    isFreshSession = false
-    isResumedSession = true
     sessionStartTime = Date.now()
     freshSessionJoinedRooms.clear()
     resumeSeededRooms.clear()
@@ -738,7 +730,7 @@ export function setupBackgroundSyncSideEffects(
     releaseResumeReplay = release
     client.internal.waitForReplayIngested(RESUME_REPLAY_LIMIT_MS).then(release, release)
 
-    const resumeGeneration = sessionGeneration
+    const resumeGeneration = currentGeneration()
     const state = roomStore.getState()
     const eligible = selectRoomsNeedingResumeSeed(
       state.joinedRooms(),
@@ -766,6 +758,12 @@ export function setupBackgroundSyncSideEffects(
         endListUpdate()
       }
     })()
+  }
+
+  const unsubscribePhase = client.internal.on('sessionPhase', (next) => {
+    phase = next
+    if (next.kind === 'fresh') beginFreshSession(next.afterResume)
+    else beginResumedSession()
   })
 
   // When going offline, cancel any pending room catch-up timer.
@@ -777,19 +775,16 @@ export function setupBackgroundSyncSideEffects(
     (status) => {
       if (status !== 'online' && previousStatus === 'online') {
         cancelServerDiscoveryRetry()
-        sessionGeneration += 1
+        phase = undefined
         endSessionPrep = undefined
         connectionStore.getState().resetCatchUp()
-        uninterruptedResumeMayEmitSyntheticOnline = false
-        isFreshSession = false
-        isResumedSession = false
         freshSessionJoinedRooms.clear()
         resumeSeededRooms.clear()
         resetRoomRetryState()
         cancelRoomCatchUpTimer()
         endResumeReplay()
       }
-      // A resumed session already ran its 'resumed' handler: nothing to prepare.
+      // A resumed session already ran its `resumed` phase handler: nothing to prepare.
       // Every other way online retains preparation until sync takes over: a
       // reconnect, and a saved session restored by a new client. A status that
       // flips straight from 'disconnected' to 'online' made no connection
@@ -800,7 +795,7 @@ export function setupBackgroundSyncSideEffects(
       // status. It would never get the online signal that releases its owner,
       // and the leaked owner would hold isCatchingUp true for the whole
       // session.
-      if (status === 'online' && previousStatus !== 'online' && previousStatus !== 'disconnected' && !isResumedSession && client.isConnected()) {
+      if (status === 'online' && previousStatus !== 'online' && previousStatus !== 'disconnected' && !isResumedSession() && client.isConnected()) {
         endSessionPreparation()
         endSessionPrep = connectionStore.getState().beginUpdate([])
       }
@@ -823,16 +818,16 @@ export function setupBackgroundSyncSideEffects(
 
       // A resumed session has no initial pass to wait for; its seed is per-room
       // and the same disco race applies, so cover it here too.
-      if (isResumedSession) {
+      if (isResumedSession()) {
         for (const room of roomStore.getState().joinedRooms()) {
           if (!room.supportsMAM || room.isQuickChat) continue
-          void seedResumeRoomOnce(room.jid, sessionGeneration)
+          void seedResumeRoomOnce(room.jid, currentGeneration())
         }
         return
       }
 
       // Only retry after the initial pass; before it, the pass will cover them.
-      if (!initialRoomPassDone || !isFreshSession) return
+      if (!initialRoomPassDone || !isFreshSession()) return
 
       const activeRoomJid = roomStore.getState().activeRoomJid
       for (const room of roomStore.getState().joinedRooms()) {
@@ -842,7 +837,7 @@ export function setupBackgroundSyncSideEffects(
         // The active room is handled by roomSideEffects' own supportsMAM watcher.
         if (room.jid === activeRoomJid) continue
         logInfo(`Background sync: late MAM-ready room — catching up ${room.jid}`)
-        void catchUpFreshSessionRoomOnce(room.jid, sessionGeneration)
+        void catchUpFreshSessionRoomOnce(room.jid, currentGeneration())
       }
     }
   )
@@ -860,18 +855,18 @@ export function setupBackgroundSyncSideEffects(
       }
       recordRoomMembership(client, roomJid, true)
       freshSessionJoinedRooms.add(roomJid)
-      if (isResumedSession) {
+      if (isResumedSession()) {
         // Joined after the one-shot resume seed already ran — SM never replayed
         // this room's history, so it needs the seed the predicate couldn't offer.
-        void seedResumeRoomOnce(roomJid, sessionGeneration)
+        void seedResumeRoomOnce(roomJid, currentGeneration())
         return
       }
-      if (!initialRoomPassDone || !isFreshSession) return
+      if (!initialRoomPassDone || !isFreshSession()) return
       if (mamHandledRooms.has(roomJid)) return
       const room = roomStore.getState().rooms.get(roomJid)
       if (!room?.supportsMAM || room.isQuickChat) return
       if (roomStore.getState().activeRoomJid === roomJid) return
-      void catchUpFreshSessionRoomOnce(roomJid, sessionGeneration)
+      void catchUpFreshSessionRoomOnce(roomJid, currentGeneration())
     },
   )
 
@@ -886,12 +881,12 @@ export function setupBackgroundSyncSideEffects(
         }
         return
       }
-      if (!isFreshSession) return
+      if (!isFreshSession()) return
       if (membershipEpoch !== getRoomMembershipEpoch(client, roomJid)) {
         return
       }
       pendingRoomHandoffs.set(roomJid, {
-        generation: sessionGeneration,
+        generation: currentGeneration(),
         membershipEpoch,
       })
       if (!initialRoomPassDone) {
@@ -950,13 +945,12 @@ export function setupBackgroundSyncSideEffects(
 
   return () => {
     cancelServerDiscoveryRetry()
-    sessionGeneration += 1
+    phase = undefined
     mamInFlightRooms.clear()
     pendingRoomHandoffs.clear()
-    unsubscribeOnline()
+    unsubscribePhase()
     unsubscribeInputsReady()
     unsubscribeDiscoverySettled()
-    unsubscribeResumed()
     unsubscribeConnection()
     unsubscribeServerInfo()
     unsubscribeRoomMAM()

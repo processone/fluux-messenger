@@ -19,7 +19,7 @@ Object.defineProperty(globalThis, 'localStorage', {
 
 import { SessionLifecycleEngine, type SessionLifecycleDeps } from './sessionLifecycle'
 import { createMockClientWithSDKEvents, createMockRoom, createMockStoreRefs, createMockStores, type MockStoreBindings } from './test-utils'
-import type { Contact, StoreBindings } from './types'
+import type { Contact, SessionPhase, StoreBindings } from './types'
 import { createStoreBindings } from '../bindings/storeBindings'
 import { eventsStore } from '../stores/eventsStore'
 import { roomStore } from '../stores/roomStore'
@@ -73,6 +73,7 @@ describe('SessionLifecycleEngine', () => {
   let engine: SessionLifecycleEngine
   let ensureE2EEManager: ReturnType<typeof vi.fn>
   let emitOnline: ReturnType<typeof vi.fn>
+  let emitSessionPhase: ReturnType<typeof vi.fn<(phase: SessionPhase) => void>>
   let emitFreshSessionInputsReady: ReturnType<typeof vi.fn>
   let emitFreshSessionDiscoverySettled: ReturnType<typeof vi.fn>
   let connectPresence: ReturnType<typeof vi.fn>
@@ -97,6 +98,7 @@ describe('SessionLifecycleEngine', () => {
     modules.muc.queueRoomJoin.mockImplementation(jid => vi.fn(queueOwner.queueRoomJoin(jid)))
     ensureE2EEManager = vi.fn()
     emitOnline = vi.fn()
+    emitSessionPhase = vi.fn<(phase: SessionPhase) => void>()
     emitFreshSessionInputsReady = vi.fn()
     emitFreshSessionDiscoverySettled = vi.fn()
     connectPresence = vi.fn()
@@ -109,6 +111,7 @@ describe('SessionLifecycleEngine', () => {
       sendStanza: vi.fn().mockResolvedValue(undefined),
       emitSDK: client.emit,
       emitOnline,
+      emitSessionPhase,
       emitFreshSessionInputsReady,
       emitFreshSessionDiscoverySettled,
       emitConversationListReady: vi.fn(),
@@ -566,14 +569,14 @@ describe('SessionLifecycleEngine', () => {
       const cleanup = setupBackgroundSyncSideEffects(client)
       try {
         connectionStore.getState().setStatus('online')
-        client._emit('online')
+        emitSessionPhase.mockImplementation((phase) => client._emit('sessionPhase', phase))
         connectionStore.getState().setServerInfo({ identities: [], domain: 'example.com', features: [NS_MAM] })
         const seen = vi.fn()
         client.internal.mam.catchUpAllConversations.mockImplementation(async () => {
           seen([...chatStore.getState().conversationEntities.keys()])
         })
         stores.chat.mergeServerConversations.mockImplementation(batch => chatStore.getState().mergeServerConversations(batch))
-        emitFreshSessionInputsReady.mockImplementation(() => client._emit('freshSessionInputsReady'))
+        emitFreshSessionInputsReady.mockImplementation((generation) => client._emit('freshSessionInputsReady', generation))
         modules.roster.fetchRoster.mockImplementation(failAfter(15_000, 'roster timeout'))
         modules.conversationSync.fetchConversations.mockImplementation(after(2_000, [
           { jid: 'alice@example.com', archived: false },

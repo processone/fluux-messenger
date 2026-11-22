@@ -11,7 +11,7 @@ import { setStorageScopeJid } from '../utils/storageScope'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock localStorage before importing stores (chatStore persist middleware).
-import { localStorageMock } from './sideEffects.testHelpers'
+import { localStorageMock, sessionPhase } from './sideEffects.testHelpers'
 
 Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
@@ -302,7 +302,7 @@ describe('setupMdsSideEffects', () => {
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
 
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync() // let the async seed settle
 
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
@@ -342,7 +342,7 @@ describe('setupMdsSideEffects', () => {
     )
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     patchMeta(cid, { readPointer: makeReadPointer(messages[4], 'chat') })
     await vi.advanceTimersByTimeAsync(2_000)
@@ -374,7 +374,7 @@ describe('setupMdsSideEffects', () => {
     client.internal.mds.publishDisplayed.mockRejectedValue(new Error('timeout'))
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     patchMeta(cid, { readPointer: makeReadPointer(messages[4], 'chat') })
     await vi.advanceTimersByTimeAsync(2_000)
@@ -408,7 +408,7 @@ describe('setupMdsSideEffects', () => {
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
     seedMeta(cid, 'm1')
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     chatStore.setState({
       activeConversationId: cid,
@@ -450,7 +450,7 @@ describe('setupMdsSideEffects', () => {
       .fn()
       .mockResolvedValue([{ conversationJid: cid, stanzaId: 's2' }])
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m1' })
@@ -471,7 +471,7 @@ describe('setupMdsSideEffects', () => {
     })
 
     let cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     patchMeta(cid, { readPointer: makeReadPointer(msg('m2', 's2'), 'chat') })
     await vi.advanceTimersByTimeAsync(2_000)
@@ -482,7 +482,7 @@ describe('setupMdsSideEffects', () => {
       .fn()
       .mockResolvedValue([{ conversationJid: cid, stanzaId: 's2' }])
     cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toEqual({ id:'m1' })
@@ -494,7 +494,7 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     seedMessages(cid, [msg('m1', undefined)])
@@ -520,7 +520,7 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     // 1:1 sends are never reflected back, so ours carries no stanza-id — ever.
@@ -541,7 +541,7 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     // Every candidate at-or-behind is our own, unarchived: nothing to fall back
@@ -560,7 +560,7 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     // m3 arrived AFTER our own m2 and has NOT been read. The fallback walks
@@ -581,7 +581,7 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     // IndexedDB orders equal-timestamp chat messages by id. The pointer names
@@ -609,7 +609,7 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     seedMessages(cid, [msg('m1', 's1'), msg('m3', 's3'), ownMsg('m4', undefined)])
@@ -631,7 +631,7 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     // The resident window is a NEWER slice; the pointed-at message was evicted.
@@ -651,7 +651,7 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     seedMessages(cid, [msg('m1', 's1'), ownMsg('m2', undefined)])
@@ -675,7 +675,7 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     // Our own groupchat message, momentarily before the room reflects it back.
@@ -712,7 +712,7 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     seedMessages(cid, [msg('m1', 's1')])
@@ -740,7 +740,7 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid, 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync() // let the async seed settle
 
     // A live remote marker for s2 arrives from a peer device (PubSub emits
@@ -773,7 +773,7 @@ describe('setupMdsSideEffects', () => {
     seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)], 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync() // let the async seed settle
 
     roomStore.getState().advanceReadPointer(ROOM, { id: 'm2' })
@@ -796,7 +796,7 @@ describe('setupMdsSideEffects', () => {
     seedRoom(ROOM, [departed, newcomer])
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     roomStore.setState((state) => {
@@ -840,7 +840,7 @@ describe('setupMdsSideEffects', () => {
     seedRoom(ROOM, [ambiguous, departed, newcomer])
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     roomStore.setState((state) => {
@@ -882,7 +882,7 @@ describe('setupMdsSideEffects', () => {
     seedRoom(ROOM, [ambiguous])
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     roomStore.setState((state) => {
@@ -935,7 +935,7 @@ describe('setupMdsSideEffects', () => {
     })
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     await vi.advanceTimersByTimeAsync(2_000)
 
@@ -956,7 +956,7 @@ describe('setupMdsSideEffects', () => {
     seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)], 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m2')
@@ -977,7 +977,7 @@ describe('setupMdsSideEffects', () => {
     seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)], 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
@@ -994,7 +994,7 @@ describe('setupMdsSideEffects', () => {
     seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)], 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s9')
 
@@ -1017,7 +1017,7 @@ describe('setupMdsSideEffects', () => {
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)])
     seedRoom('other@conference.example', [])
@@ -1039,7 +1039,7 @@ describe('setupMdsSideEffects', () => {
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync() // settle the async seed
 
     // Room unknown at seed time → marker routed to chat (no-op), so the room's
@@ -1075,7 +1075,7 @@ describe('setupMdsSideEffects', () => {
     seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)], 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync() // settle the async seed
 
     // A live remote marker for s2 arrives from a peer device. Mirror the binding:
@@ -1111,7 +1111,7 @@ describe('setupMdsSideEffects', () => {
     })
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync() // settle the async seed
 
     // Mark-all-read on a backgrounded room: the pointer advances to the newest
@@ -1156,7 +1156,7 @@ describe('setupMdsSideEffects', () => {
     seedRoom(ROOM, [rmsg(ROOM, 'm9', 's9', 9)])
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     // Advance the pointer locally: consider() resolves s9 and buffers it in
@@ -1193,7 +1193,7 @@ describe('setupMdsSideEffects', () => {
     chatStore.setState({ activeConversationId: cid })
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     patchMeta(cid, { readPointer: pointerAt('m2') })
@@ -1222,7 +1222,7 @@ describe('setupMdsSideEffects', () => {
     roomStore.setState({ activeRoomJid: ROOM })
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     roomStore.setState((s) => {
@@ -1267,7 +1267,7 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid, 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
@@ -1310,7 +1310,7 @@ describe('setupMdsSideEffects', () => {
     seedMessages(cid, [msg('m2', undefined)])
 
     const stopFirst = setupMdsSideEffects(first as never)
-    first._emit('online')
+    first._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     patchMeta(cid, { readPointer: pointerAt('m2') })
@@ -1332,7 +1332,7 @@ describe('setupMdsSideEffects', () => {
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
     const stopSecond = setupMdsSideEffects(second as never)
-    second._emit('online')
+    second._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     await vi.advanceTimersByTimeAsync(2_000)
 
@@ -1364,7 +1364,7 @@ describe('setupMdsSideEffects', () => {
     chatStore.setState({ activeConversationId: cid })
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     await vi.advanceTimersByTimeAsync(2_000)
 
@@ -1408,7 +1408,7 @@ describe('setupMdsSideEffects', () => {
     seedRoom(ROOM, messages, 'm2')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     await vi.advanceTimersByTimeAsync(2_000)
 
@@ -1444,7 +1444,7 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid, 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     await vi.advanceTimersByTimeAsync(2_000)
 
@@ -1503,7 +1503,7 @@ describe('setupMdsSideEffects', () => {
     )
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     await vi.advanceTimersByTimeAsync(2_000)
 
@@ -1517,7 +1517,7 @@ describe('setupMdsSideEffects', () => {
       jids.map((cid) => ({ conversationJid: cid, stanzaId: `${cid}-s2` }))
     )
     const restarted = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     await vi.advanceTimersByTimeAsync(2_000)
 
@@ -1534,7 +1534,7 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid, 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
@@ -1549,7 +1549,7 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid)
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.advanceTimersByTimeAsync(0)
 
     chatStore.getState().advanceReadPointer(cid, { id: 'm1' })
@@ -1559,7 +1559,7 @@ describe('setupMdsSideEffects', () => {
     connectionStore.setState({ status: 'offline' } as never)
     client.internal.mds.fetchAllDisplayed = vi.fn().mockRejectedValue(new Error('timeout'))
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.advanceTimersByTimeAsync(0)
 
     chatStore.getState().advanceReadPointer(cid, { id: 'm2' })
@@ -1577,7 +1577,7 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid, 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.advanceTimersByTimeAsync(0)
 
     chatStore.getState().applyRemoteDisplayed(cid, 's9')
@@ -1601,13 +1601,13 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid, 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.advanceTimersByTimeAsync(2_000)
     expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
 
     connectionStore.setState({ status: 'offline' } as never)
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
@@ -1629,7 +1629,7 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid, 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.advanceTimersByTimeAsync(0)
 
     chatStore.getState().applyRemoteDisplayed(cid, 's9')
@@ -1647,7 +1647,7 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync() // seed completes → syncEnabled true, baseline built
 
     // a conversation exists (in conversationEntities), then is deleted
@@ -1664,7 +1664,7 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     addConversation('a@x')
@@ -1690,7 +1690,7 @@ describe('setupMdsSideEffects', () => {
     addConversation(cid)
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
@@ -1717,7 +1717,7 @@ describe('setupMdsSideEffects', () => {
     })
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(
@@ -1747,7 +1747,7 @@ describe('setupMdsSideEffects', () => {
     addConversation(cid)
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(
@@ -1770,7 +1770,7 @@ describe('setupMdsSideEffects', () => {
     addConversation(cid)
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1) // the failed migration
@@ -1809,7 +1809,7 @@ describe('setupMdsSideEffects', () => {
     seedMeta(cid, 'm5')
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     chatStore.setState({
       activeConversationId: cid,
@@ -1832,7 +1832,7 @@ describe('setupMdsSideEffects', () => {
     addConversation(cid)
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     await vi.advanceTimersByTimeAsync(2_000)
 
@@ -1849,7 +1849,7 @@ describe('setupMdsSideEffects', () => {
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     // Unknown JID at seed time (bookmarks not loaded, no conversation entity):
@@ -1915,7 +1915,7 @@ describe('setupMdsSideEffects catch-up gate', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
     seedMeta(cid, 'm1')

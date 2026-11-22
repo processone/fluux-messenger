@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 
 // Mock localStorage before importing stores
-import { localStorageMock } from './sideEffects.testHelpers'
+import { localStorageMock, sessionPhase } from './sideEffects.testHelpers'
 
 Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
@@ -368,7 +368,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       cleanup = setupBackgroundSyncSideEffects(mockClient)
 
       connectionStore.getState().setStatus('online')
-      mockClient._emit('online')
+      mockClient._emit('sessionPhase', sessionPhase.fresh())
       connectionStore.getState().setServerInfo(mamServerInfo)
 
       await settle()
@@ -379,7 +379,7 @@ describe('setupBackgroundSyncSideEffects', () => {
         { id: 'alice@example.com', name: 'alice', type: 'chat', archived: false },
         { id: 'bob@example.com', name: 'bob', type: 'chat', archived: false },
       ])
-      mockClient._emit('freshSessionInputsReady')
+      mockClient._emit('freshSessionInputsReady', sessionPhase.current())
 
       await vi.waitFor(() => {
         expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
@@ -392,14 +392,14 @@ describe('setupBackgroundSyncSideEffects', () => {
       cleanup = setupBackgroundSyncSideEffects(mockClient)
 
       connectionStore.getState().setStatus('online')
-      mockClient._emit('online')
+      mockClient._emit('sessionPhase', sessionPhase.fresh())
       connectionStore.getState().setServerInfo(mamServerInfo)
 
       await settle()
       expect(mockClient.internal.mam.discoverNewConversationsFromRoster).not.toHaveBeenCalled()
       expect(localStorageMock.getItem(ROSTER_DISCOVERY_KEY)).toBeNull()
 
-      mockClient._emit('freshSessionInputsReady')
+      mockClient._emit('freshSessionInputsReady', sessionPhase.current())
 
       await vi.waitFor(() => {
         expect(mockClient.internal.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
@@ -433,19 +433,19 @@ describe('setupBackgroundSyncSideEffects', () => {
       cleanup = setupBackgroundSyncSideEffects(mockClient)
 
       connectionStore.getState().setStatus('online')
-      mockClient._emit('online')
+      mockClient._emit('sessionPhase', sessionPhase.fresh())
       // The setup chain outlives the session: its IQs settle after the
       // transport is gone. Liveness is the transport's answer, not the chain's.
       connectionStore.getState().setStatus('disconnected')
-      mockClient._emit('freshSessionInputsReady')
+      mockClient._emit('freshSessionInputsReady', sessionPhase.current())
       await settle()
       expect(mockClient.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
 
       connectionStore.getState().setStatus('online')
-      mockClient._emit('online')
+      mockClient._emit('sessionPhase', sessionPhase.fresh())
       await settle()
       expect(mockClient.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
-      mockClient._emit('freshSessionInputsReady')
+      mockClient._emit('freshSessionInputsReady', sessionPhase.current())
 
       await vi.waitFor(() => {
         expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
@@ -461,10 +461,10 @@ describe('setupBackgroundSyncSideEffects', () => {
       await settle()
       expect(mockClient.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
 
-      mockClient._emit('online')
+      mockClient._emit('sessionPhase', sessionPhase.fresh())
       await settle()
       expect(mockClient.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
-      mockClient._emit('freshSessionInputsReady')
+      mockClient._emit('freshSessionInputsReady', sessionPhase.current())
 
       await vi.waitFor(() => {
         expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
@@ -472,7 +472,7 @@ describe('setupBackgroundSyncSideEffects', () => {
 
       // Neither a later server-info refresh nor a repeated signal starts it again.
       connectionStore.getState().setServerInfo({ ...mamServerInfo, features: [NS_MAM, 'some:other:feature'] })
-      mockClient._emit('freshSessionInputsReady')
+      mockClient._emit('freshSessionInputsReady', sessionPhase.current())
       await settle()
       expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
     })
@@ -483,15 +483,15 @@ describe('setupBackgroundSyncSideEffects', () => {
       cleanup = setupBackgroundSyncSideEffects(mockClient)
 
       simulateSmResumption(mockClient)
-      mockClient._emit('freshSessionInputsReady')
+      mockClient._emit('freshSessionInputsReady', sessionPhase.current())
       connectionStore.getState().setStatus('disconnected')
 
       connectionStore.getState().setStatus('online')
-      mockClient._emit('online')
+      mockClient._emit('sessionPhase', sessionPhase.fresh())
       await settle()
       expect(mockClient.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
 
-      mockClient._emit('freshSessionInputsReady')
+      mockClient._emit('freshSessionInputsReady', sessionPhase.current())
       await vi.waitFor(() => {
         expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
@@ -922,8 +922,8 @@ describe('setupBackgroundSyncSideEffects', () => {
       vi.setSystemTime(1_754_000_005_000)
       // The cache-cleared upgrade emits its synthetic 'online', runs fresh
       // setup, then reports the inputs ready.
-      mockClient._emit('online')
-      mockClient._emit('freshSessionInputsReady')
+      mockClient._emit('sessionPhase', sessionPhase.fresh(true))
+      mockClient._emit('freshSessionInputsReady', sessionPhase.current())
       await vi.advanceTimersByTimeAsync(10_000)
 
       await vi.waitFor(() => {
@@ -2206,7 +2206,7 @@ describe('E2EE capability warm-up on fresh session', () => {
     cleanup = setupBackgroundSyncSideEffects(mockClient)
     // SM resumption fires 'resumed', not 'online'
     connectionStore.getState().setStatus('online')
-    mockClient._emit('resumed')
+    mockClient._emit('sessionPhase', sessionPhase.resumed())
     await vi.runAllTimersAsync()
 
     expect(canEncryptTo).not.toHaveBeenCalled()
@@ -2319,7 +2319,7 @@ describe('deferred E2EE decryption triggers', () => {
   it('calls retryPendingDecrypts when the session is resumed (XEP-0198)', () => {
     cleanup = setupBackgroundSyncSideEffects(mockClient)
 
-    mockClient._emit('resumed')
+    mockClient._emit('sessionPhase', sessionPhase.resumed())
 
     expect(mockClient.retryPendingDecrypts).toHaveBeenCalledTimes(1)
   })
@@ -2407,11 +2407,11 @@ describe('catch-up owners (Updating step)', () => {
     simulateSmResumption(mockClient) // nothing to resume-seed: releases its owners
     await vi.advanceTimersByTimeAsync(0)
     expect(caughtUp()).toBe(false)
-    mockClient._emit('online') // cache integrity forces full setup; status stays online
+    mockClient._emit('sessionPhase', sessionPhase.fresh(true)) // cache integrity forces full setup; status stays online
     expect(caughtUp()).toBe(true)
     // The fresh sync takes over without a gap, then ends.
     mockClient._emit('conversationListReady', [])
-    mockClient._emit('freshSessionInputsReady')
+    mockClient._emit('freshSessionInputsReady', sessionPhase.current())
     await vi.advanceTimersByTimeAsync(MAM_ROOM_CATCHUP_DELAY_MS)
     expect(caughtUp()).toBe(false)
   })
@@ -2669,9 +2669,9 @@ describe('catch-up owners (Updating step)', () => {
 
   it('records when the catch-up began and keeps it while owners overlap', () => {
     vi.setSystemTime(1_000)
-    const first = connectionStore.getState().beginCatchUp()
+    const first = connectionStore.getState().beginUpdate([])
     vi.setSystemTime(5_000)
-    const second = connectionStore.getState().beginCatchUp()
+    const second = connectionStore.getState().beginUpdate([])
     expect(connectionStore.getState().catchUpStartedAt).toBe(1_000)
     first()
     first() // idempotent

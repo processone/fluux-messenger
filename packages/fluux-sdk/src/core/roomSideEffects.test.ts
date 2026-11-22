@@ -8,7 +8,7 @@
  * - On reconnection for the active room
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { localStorageMock } from './sideEffects.testHelpers'
+import { localStorageMock, sessionPhase } from './sideEffects.testHelpers'
 import type { RoomMessage } from './types'
 
 Object.defineProperty(globalThis, 'localStorage', {
@@ -1223,7 +1223,7 @@ describe('setupRoomSideEffects', () => {
       simulateSmResumption(mockClient)
       roomStore.getState().markAllRoomsNotJoined()
       confirmRoomJoin()
-      mockClient._emit('online')
+      mockClient._emit('sessionPhase', sessionPhase.fresh(true))
 
       mockClient._emitSDK('room:joined', { roomJid: ROOM, joined: true })
       expect(mockClient.internal.mam.catchUpRoomHistory).not.toHaveBeenCalled()
@@ -1265,7 +1265,7 @@ describe('setupRoomSideEffects', () => {
       // Its rejoin self-presence arrives before SessionLifecycle emits synthetic online.
       confirmRoomJoin()
       expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(true)
-      mockClient._emit('online')
+      mockClient._emit('sessionPhase', sessionPhase.fresh(true))
 
       cache.resolve([])
 
@@ -1331,7 +1331,7 @@ describe('setupRoomSideEffects', () => {
       roomStore.getState().resetRoomMAMStates()
       roomStore.getState().markAllRoomsNotJoined()
       confirmRoomJoin()
-      mockClient._emit('online')
+      mockClient._emit('sessionPhase', sessionPhase.fresh(true))
 
       roomStore.getState().setActiveRoom(null)
       roomStore.getState().setActiveRoom(ROOM)
@@ -1366,7 +1366,7 @@ describe('setupRoomSideEffects', () => {
       simulateSmResumption(mockClient)
       confirmRoomJoin()
       nowSpy.mockReturnValue(1_754_000_005_000)
-      mockClient._emit('online')
+      mockClient._emit('sessionPhase', sessionPhase.fresh(true))
       cache.resolve([])
 
       await vi.waitFor(() => {

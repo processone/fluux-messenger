@@ -113,7 +113,12 @@ export function setupConversationSyncSideEffects(
     { equalityFn: shallow }
   )
 
-  const unsubscribeOnline = client.internal.on('online', () => {
+  const unsubscribeListReady = client.internal.on('conversationListReady', (conversations) => {
+    baseline = { snapshot: buildSnapshot(conversations) }
+    schedulePublish()
+  })
+
+  function startFreshSession(): void {
     baseline = undefined
     suspendedBaseline = undefined
     pendingListRefresh = undefined
@@ -121,20 +126,15 @@ export function setupConversationSyncSideEffects(
       clearTimeout(debounceTimer)
       debounceTimer = undefined
     }
-  })
-
-  const unsubscribeListReady = client.internal.on('conversationListReady', (conversations) => {
-    baseline = { snapshot: buildSnapshot(conversations) }
-    schedulePublish()
-  })
+  }
 
   // A resumed stream replays the list notifications sent while it was
   // disconnected (XEP-0198), so the session's baseline still holds and the
   // changes made meanwhile are published against it. A resumption without one
   // (the process restarted) fetches the list instead, unless the session
-  // lifecycle turns it into a fresh session ('online') in the same turn, as it
+  // lifecycle turns it into a fresh session in the same turn, as it
   // does when the local cache was cleared: that session fetches the list itself.
-  const unsubscribeResumed = client.internal.on('resumed', () => {
+  function resumeSession(): void {
     baseline = suspendedBaseline
     suspendedBaseline = undefined
     if (baseline) {
@@ -150,6 +150,11 @@ export function setupConversationSyncSideEffects(
         // Best-effort — the next live list or fresh session sets a baseline
       })
     })
+  }
+
+  const unsubscribePhase = client.internal.on('sessionPhase', (phase) => {
+    if (phase.kind === 'fresh') startFreshSession()
+    else resumeSession()
   })
 
   // On disconnect: disable sync and cancel pending timer
@@ -174,9 +179,8 @@ export function setupConversationSyncSideEffects(
     suspendedBaseline = undefined
     pendingListRefresh = undefined
     unsubscribeStore()
-    unsubscribeOnline()
+    unsubscribePhase()
     unsubscribeListReady()
-    unsubscribeResumed()
     unsubscribeConnection()
     if (debounceTimer) {
       clearTimeout(debounceTimer)

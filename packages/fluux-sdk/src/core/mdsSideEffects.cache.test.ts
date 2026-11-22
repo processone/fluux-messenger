@@ -19,7 +19,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock localStorage before importing stores (chatStore persist middleware).
-import { localStorageMock } from './sideEffects.testHelpers'
+import { localStorageMock, sessionPhase } from './sideEffects.testHelpers'
 
 Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
@@ -262,7 +262,7 @@ async function armedPublisher() {
   const client = makeClient()
   connectionStore.setState({ status: 'online', jid: OWN_JID } as never)
   const cleanup = setupMdsSideEffects(client as never)
-  client._emit('online')
+  client._emit('sessionPhase', sessionPhase.fresh())
   await vi.runOnlyPendingTimersAsync()
   return { client, cleanup }
 }
@@ -530,7 +530,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     // against the OLD session's node state must not be published into the new one.
     connectionStore.setState({ status: 'disconnected' } as never)
     connectionStore.setState({ status: 'online', jid: OWN_JID } as never)
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     await vi.runOnlyPendingTimersAsync()
 
     gate.resolve([cachedMsg('m7', 's7')])
@@ -552,7 +552,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
 
     connectionStore.setState({ status: 'disconnected' } as never)
     connectionStore.setState({ status: 'online', jid: OWN_JID } as never)
-    client._emit('resumed')
+    client._emit('sessionPhase', sessionPhase.resumed())
 
     gate.resolve([cachedMsg('m7', 's7')])
     await vi.advanceTimersByTimeAsync(2_000)
@@ -575,7 +575,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
 
     connectionStore.setState({ status: 'disconnected' } as never)
     connectionStore.setState({ status: 'online', jid: OWN_JID } as never)
-    client._emit('resumed')
+    client._emit('sessionPhase', sessionPhase.resumed())
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(getMessages).toHaveBeenCalledTimes(2)

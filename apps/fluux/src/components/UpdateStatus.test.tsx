@@ -22,7 +22,7 @@ describe('read-only scoped update display', () => {
   const chat = <UpdateStatus scope="chat:emma@fluux.chat" target="Emma">Online</UpdateStatus>
 
   it('preserves presence for other-target and unknown work', () => {
-    connectionStore.getState().beginCatchUp()
+    connectionStore.getState().beginUpdate([])
     connectionStore.getState().beginUpdate(['room:team@conference.fluux.chat', 'rooms'])
     render(chat)
     act(() => vi.advanceTimersByTime(5000))
