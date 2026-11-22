@@ -63,6 +63,7 @@ enum NotificationPresentation {
             if let subtitle = sender.subtitle { content.subtitle = subtitle }
             if content.threadIdentifier.isEmpty, let bare = bareJid(from) { content.threadIdentifier = bare }
         }
+        content.body = NotificationContent.previewText(content.body)
         content.sound = nil
         content.badge = nil
         content.interruptionLevel = .passive

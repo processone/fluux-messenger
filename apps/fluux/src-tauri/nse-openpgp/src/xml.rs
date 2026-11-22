@@ -300,9 +300,38 @@ pub(crate) fn ox_event(bytes: &[u8], account: &str) -> Result<EventKind> {
 pub(crate) fn valid_id(value: &str) -> bool {
     !value.is_empty() && value.len() <= 512 && !value.chars().any(char::is_control)
 }
+/// Same rule as `stripQuotedLines` (SDK) and `NotificationContent.previewText` (Swift),
+/// applied before the 240-character cap so a long quote cannot crowd out the comment.
+fn strip_quoted_lines(text: &str) -> String {
+    let text = text.replace("\r\n", "\n").replace('\r', "\n");
+    let (mut kept, mut in_fence, mut dropped) = (Vec::new(), false, false);
+    for line in text.split('\n') {
+        if !in_fence && line.starts_with('>') {
+            dropped = true;
+            continue;
+        }
+        if line.matches("```").count() % 2 == 1 {
+            in_fence = !in_fence;
+        }
+        kept.push(line);
+    }
+    if !dropped {
+        return text;
+    }
+    // Whole blank lines only, so filtering again downstream gives the same text.
+    let first = kept.iter().position(|l| !l.trim().is_empty()).unwrap_or(kept.len());
+    let remaining = kept[first..].join("\n");
+    let remaining = remaining.trim_end();
+    if remaining.is_empty() { text.trim().to_string() } else { remaining.to_string() }
+}
 fn preview_text(text: &str) -> String {
-    text.chars()
-        .filter(|c| !c.is_control() || *c == '\n')
+    // Quote lines are recognized on the original text, like every other surface. Control
+    // characters then become spaces, never disappear: a removed tab or control byte in front
+    // of `>` would turn a kept line into a quote line for the Swift pass that filters again.
+    let text = text.replace("\r\n", "\n").replace('\r', "\n");
+    strip_quoted_lines(&text)
+        .chars()
+        .map(|c| if c.is_control() && c != '\n' { ' ' } else { c })
         .take(240)
         .collect()
 }
@@ -317,6 +346,25 @@ pub(crate) fn ox_body(bytes: &[u8], account: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quotes_are_dropped_before_the_240_character_cap() {
+        let quote = format!("> {}\n", "q".repeat(300));
+        assert_eq!(preview_text(&format!("{quote}My comment")), "My comment");
+        assert_eq!(preview_text("> old\r\nMy reply"), "My reply");
+        assert_eq!(preview_text("Before\r> old\rAfter"), "Before\nAfter");
+        for input in ["> old\n\t> keep\nreply", "x\r> q\r\t> k\ny"] {
+            let once = preview_text(input);
+            assert_eq!(preview_text(&once), once, "{input:?}");
+        }
+        assert_eq!(preview_text("> old\n\t> keep\nreply"), " > keep\nreply");
+        assert_eq!(preview_text("a\tb\u{1}c"), "a b c");
+        let once = preview_text("> old\n  > keep\nreply");
+        assert_eq!(once, "  > keep\nreply");
+        assert_eq!(preview_text(&once), once, "filtering again must not change it");
+        assert_eq!(preview_text("> only\n> quote"), "> only\n> quote");
+        assert_eq!(preview_text("```\n> code\n```\n> q\nok"), "```\n> code\n```\nok");
+    }
 
     #[test]
     fn text_cdata_entities_and_attributes_preserve_decoding() {

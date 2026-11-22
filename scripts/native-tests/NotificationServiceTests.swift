@@ -455,9 +455,9 @@ import UniformTypeIdentifiers
         let room = "team@muc.example.com"
         let json = #"{"account":"me@example.com","contacts":{"alice@example.com":"Alice"},"rooms":{"team@muc.example.com":"Team"},"roomParticipants":{"team@muc.example.com":{"ownNick":"Me","nicks":["Alice","Bob","Me"]}}}"#
         let names = try! JSONDecoder().decode(SharedNames.self, from: Data(json.utf8))
-        func deliver(_ from: String, _ extra: [String: Any]) -> UNNotificationContent {
+        func deliver(_ from: String, _ extra: [String: Any], body: String = "Hello") -> UNNotificationContent {
             let content = UNMutableNotificationContent()
-            content.body = "Hello"
+            content.body = body
             content.userInfo = ["from": from, "to": "me@example.com"].merging(extra) { $1 }
             var output: UNNotificationContent?
             let service = NotificationService()
@@ -473,6 +473,8 @@ import UniformTypeIdentifiers
         precondition(legacy.title == shown.title && legacy.subtitle == shown.subtitle)
         precondition(deliver(room + "/Alice", ["muc_nick": "Bob"]).subtitle == "Bob", "muc_nick wins over the from resource")
         precondition(deliver(room, ["muc_nick": "Me"]).interruptionLevel == .passive, "Own nick is delivered passively")
+        let own = deliver(room, ["muc_nick": "Me"], body: "> old\nMy reply")
+        precondition(own.interruptionLevel == .passive && own.body == "My reply", "Passive own-room pushes drop quotes too")
         for absent: [String: Any] in [[:], ["muc_nick": ""], ["muc_nick": 42]] {
             let result = deliver(room, absent)
             precondition(result.title == "Team" && result.subtitle.isEmpty, "\(absent)")

@@ -73,7 +73,8 @@ export function formatLocalizedPreview(message: PreviewMessage, t: TranslateFn, 
       ? t('chat.encryption.unsupportedMessage', { method: unsupported.name })
       : t('chat.encryption.unsupportedMessageGeneric')
   }
-  return formatMessagePreview(message)
+  // Previews show the comment, not what it quotes (reply cards in a chat use formatMessagePreview directly).
+  return formatMessagePreview(message, { dropQuotes: true })
 }
 
 /** Shared failure text for message bubbles and compact previews. */
