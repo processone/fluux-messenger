@@ -30,6 +30,8 @@ const SCOPE = 'twins@example.test'
 const CONV = 'alice@example.test'
 const ROOM = 'room@conference.example.test'
 const T = 1_700_000_000_000
+// The kind-keyed cache functions are generic over the kind; spies and wrappers see them as plain overloads of both kinds.
+const unkeyed = <F extends (...args: never[]) => unknown>(fn: F) => fn as (...args: Parameters<F>) => ReturnType<F>
 
 function chat(over: Partial<Message>): Message {
   return {
@@ -390,11 +392,11 @@ describe('chat preview archive backfill and cache handoff', () => {
     const gate = new Promise<void>(resolve => { release = resolve })
     let ready!: () => void
     const read = new Promise<void>(resolve => { ready = resolve })
-    const getMessage = cache.getMessage
-    const applyCorrection = cache.applyCorrection
+    const getMessage = unkeyed(cache.getMessage)
+    const applyCorrection = unkeyed(cache.applyCorrection)
     const spy = action !== 'actor-correction'
-      ? vi.spyOn(cache, 'getMessage').mockImplementationOnce(async (...args) => { const result = await getMessage(...args); ready(); await gate; return result })
-      : vi.spyOn(cache, 'applyChatCorrection').mockImplementationOnce(async (...args) => { const result = await applyCorrection(...args); ready(); await gate; return result })
+      ? vi.spyOn(cache, 'getMessage').mockImplementationOnce(async (...args) => { const result = await getMessage(...args); ready(); await gate; return result as never })
+      : vi.spyOn(cache, 'applyCorrection').mockImplementationOnce(async (...args) => { const result = await applyCorrection(...args); ready(); await gate; return result as never })
     try {
       chatStore.getState().updateMessage(CONV, rows[1], action === 'retraction' ? { isRetracted: true } : { body: 'updated second', ...(action === 'actor-correction' && { isEdited: true }) }, undefined, action === 'actor-correction' ? { actorJid: SCOPE } : undefined)
       await read

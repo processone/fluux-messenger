@@ -19,7 +19,7 @@ import * as cache from '../utils/messageCache'
 
 vi.mock('../utils/messageCache', async importOriginal => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
-  return { ...actual, saveMessageWithResult: vi.fn(actual.saveRoomMessageWithResult), saveMessages: vi.fn(actual.saveRoomMessages) }
+  return { ...actual, saveMessageWithResult: vi.fn(actual.saveMessageWithResult), saveMessages: vi.fn(actual.saveMessages) }
 })
 const saveOne = vi.mocked(cache.saveMessageWithResult).getMockImplementation()!
 const saveBatch = vi.mocked(cache.saveMessages).getMockImplementation()!
@@ -58,7 +58,7 @@ beforeEach(async () => {
   vi.mocked(cache.saveMessages).mockReset().mockImplementation(saveBatch)
   connectionStore.setState({ windowVisible: true })
   roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
-  await saveBatch([bottom])
+  await saveBatch('room', [bottom])
   completeCoverage()
 })
 afterEach(() => { flush(); roomStore.getState().reset(); cache._resetDBForTesting(); setStorageScopeJid(null) })
@@ -113,7 +113,7 @@ it.each(['single', 'batch', 'moderation'] as const)('keeps B transient after %s 
   await roomStore.getState().addMessage(ROOM, { ...b })
   expect(transientCounts(key, undefined)).toEqual({ unread: 2 })
   if (method === 'single') {
-    await saveOne(a)
+    await saveOne('room', a)
     writeA.resolve(true)
   } else if (method === 'batch') {
     roomStore.setState({ messages: new Map([[ROOM, [b]]]) })
@@ -163,12 +163,12 @@ it('retires only a validated backfill after its archive patch commits', async ()
   await roomStore.getState().addMessage(ROOM, b)
   const gate = deferred()
   let written: RoomMessage[] = []
-  vi.mocked(cache.saveMessages).mockImplementationOnce(messages => { written = messages; return gate.promise })
+  vi.mocked(cache.saveMessages).mockImplementationOnce((_kind, messages) => { written = messages as RoomMessage[]; return gate.promise })
   roomStore.getState().mergeRoomMAMMessages(ROOM, [a], { first: a.stanzaId, last: a.stanzaId }, true, 'backward')
   expect(written).toHaveLength(1)
   expect(written[0].localRowRef).toEqual(messageRowRef(legacy))
   expect(transientCounts(key, undefined)).toEqual({ unread: 2 })
-  expect(await saveBatch(written)).toBe(true)
+  expect(await saveBatch('room', written)).toBe(true)
   gate.resolve(true)
   await vi.waitFor(() => expect(transientCounts(key, undefined)).toEqual({ unread: 1 }))
   expect((await cache.getRoomMessageByRowRef(ROOM, messageRowRef(a)))?.stanzaId).toBe(a.stanzaId)

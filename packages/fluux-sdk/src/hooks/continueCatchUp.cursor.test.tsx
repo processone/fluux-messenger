@@ -23,7 +23,6 @@ import { chatStore, roomStore, connectionStore } from '../stores'
 import { XMPPProvider } from '../provider'
 import { createMockXMPPClientForHooks } from '../core/test-utils'
 import { MAM_CATCHUP_FORWARD_MAX, MAM_ROOM_FORWARD_MAX_PAGES_MANUAL } from '../utils/mamCatchUpUtils'
-import * as messageCache from '../utils/messageCache'
 
 const mockClient = createMockXMPPClientForHooks()
 
@@ -34,12 +33,17 @@ vi.mock('../provider', async () => {
 
 // Empty cache: the store's resident messages (seeded per test) stay untouched
 // by the pre-query cache load, so each test controls the cursor inputs.
+// getMessages is kind-keyed: the chat and room reads keep their own mocks behind one dispatching function.
+const cachedReads = vi.hoisted(() => ({
+  chat: vi.fn().mockResolvedValue([]),
+  room: vi.fn().mockResolvedValue([]),
+}))
 vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
   return {
     ...actual,
     isMessageCacheAvailable: vi.fn().mockReturnValue(true),
-    getMessages: vi.fn().mockResolvedValue([]),
+    getMessages: vi.fn((kind: 'chat' | 'room', ...args: unknown[]) => cachedReads[kind](...args)),
   }
 })
 
@@ -160,7 +164,7 @@ describe('continueChatCatchUp cursor selection', () => {
   it('resumes from the newest cached archive id when the window is parked off the live edge', async () => {
     seedChatMessages([{ timestamp: new Date('2026-01-01T12:00:00Z'), stanzaId: 'parked-id' }])
     chatStore.setState({ windowAtLiveEdge: new Map([[CONV, false]]) })
-    vi.mocked(messageCache.getMessages).mockResolvedValueOnce([{
+    cachedReads.chat.mockResolvedValueOnce([{
       type: 'chat', id: 'cached-newest', originId: undefined, conversationId: CONV, from: CONV, body: 'newest',
       timestamp: new Date('2026-06-01T12:00:00Z'), isOutgoing: false, stanzaId: 'cached-newest-id',
     }])
@@ -287,7 +291,7 @@ describe('continueRoomCatchUp cursor selection', () => {
   it('resumes from the newest cached archive id when the window is parked off the live edge', async () => {
     seedRoomMessages([{ timestamp: new Date('2026-01-01T12:00:00Z'), stanzaId: 'parked-id' }])
     roomStore.setState({ windowAtLiveEdge: new Map([[ROOM, false]]) })
-    vi.mocked(messageCache.getMessages).mockResolvedValueOnce([{
+    cachedReads.room.mockResolvedValueOnce([{
       type: 'groupchat', id: 'cached-newest', originId: undefined, occupantId: undefined, roomJid: ROOM, from: `${ROOM}/alice`, nick: 'alice', body: 'newest',
       timestamp: new Date('2026-06-01T12:00:00Z'), isOutgoing: false, stanzaId: 'cached-newest-id',
     }])

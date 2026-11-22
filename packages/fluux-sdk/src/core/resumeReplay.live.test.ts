@@ -268,7 +268,7 @@ describe.skipIf(!accountsPath)(`resume replay against a live server (${mode}${en
         // Every replayed message was stored with its decrypted text the first
         // time, never with the fallback, and the message cache holds the text.
         expect(storedFallbacks).toEqual([])
-        const rows = (await getMessages(accounts.bob.jid)).filter((m) => m.id.startsWith(`replay-${t0}-`))
+        const rows = (await getMessages('chat', accounts.bob.jid)).filter((m) => m.id.startsWith(`replay-${t0}-`))
         note('cache', { rows: rows.map((m) => ({ id: m.id, body: m.body, isOutgoing: m.isOutgoing, encryptedPayload: !!m.encryptedPayload })) })
         expect(rows.map((m) => m.body).sort()).toEqual([...delivered].sort())
         expect(rows).toHaveLength(expected)
@@ -289,7 +289,7 @@ describe.skipIf(!accountsPath)(`resume replay against a live server (${mode}${en
       note('end', { conversations: [...chatStore.getState().conversations.values()].map((c) => ({ id: c.id, unread: c.unreadCount, last: c.lastMessage?.body })) })
       if (encrypted) {
         // The cache as it stands at the end, for the transcript, even after a failure.
-        const rows = await getMessages(accounts.bob.jid).catch(() => [])
+        const rows = await getMessages('chat', accounts.bob.jid).catch(() => [])
         note('cache-at-end', { rows: rows.filter((m) => m.id.startsWith(`replay-${t0}-`)).map((m) => ({ id: m.id, body: m.body, encryptedPayload: !!m.encryptedPayload })) })
       }
       if (process.env.FLUUX_LIVE_TRANSCRIPT) {

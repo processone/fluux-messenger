@@ -61,7 +61,6 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
   return {
     ...actual,
     countUnreadInArchive: vi.fn(actual.countUnreadInArchive),
-    countUnreadInArchive: vi.fn(actual.countRoomUnreadInArchive),
   }
 })
 import * as messageCache from '../utils/messageCache'
@@ -247,8 +246,6 @@ beforeEach(async () => {
   chatStore.getState().addConversation(createConversation(CID))
   vi.mocked(messageCache.countUnreadInArchive).mockReset()
   vi.mocked(messageCache.countUnreadInArchive).mockImplementation(countUnreadImplementation)
-  vi.mocked(messageCache.countUnreadInArchive).mockReset()
-  vi.mocked(messageCache.countUnreadInArchive).mockImplementation(countRoomUnreadImplementation)
   clearTransientScope(getStorageScopeJid() ?? '')
   _clearAllViewportEvidenceForTesting()
 })

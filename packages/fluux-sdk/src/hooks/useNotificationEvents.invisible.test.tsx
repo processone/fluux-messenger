@@ -13,9 +13,16 @@ import type { Message, RoomMessage } from '../core/types'
 import type { StoredRoomMessage } from '../core/types/message-internal'
 import * as messageCache from '../utils/messageCache'
 
+// Only the room kind of the kind-keyed getMessages is stubbed: the chat kind keeps its real implementation.
+const roomMessages = vi.hoisted(() => vi.fn().mockResolvedValue([]))
 vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
-  return { ...actual, isMessageCacheAvailable: vi.fn().mockReturnValue(false), getMessages: vi.fn().mockResolvedValue([]) }
+  return {
+    ...actual,
+    isMessageCacheAvailable: vi.fn().mockReturnValue(false),
+    getMessages: vi.fn((kind: 'chat' | 'room', ...args: unknown[]) =>
+      kind === 'room' ? roomMessages(...args) : (actual.getMessages as (...args: unknown[]) => unknown)(kind, ...args)),
+  }
 })
 
 const ROOM = 'tech@conference.example.com'
@@ -47,7 +54,7 @@ const mention = (id: string, nick: string, extra: Partial<RoomMessage> = {}): Ro
 describe('notifications for what the user cannot see', () => {
   beforeEach(() => {
     vi.mocked(messageCache.isMessageCacheAvailable).mockReturnValue(false)
-    vi.mocked(messageCache.getMessages).mockResolvedValue([])
+    roomMessages.mockResolvedValue([])
     clock = Date.now() - 60_000
     connectionStore.setState({ windowVisible: false })
     roomStore.setState({
@@ -156,7 +163,7 @@ describe('notifications for what the user cannot see', () => {
       act(() => roomStore.getState().setActiveRoom(null))
       expect(roomStore.getState().messages.get(ROOM)).toHaveLength(0)
       vi.mocked(messageCache.isMessageCacheAvailable).mockReturnValue(true)
-      vi.mocked(messageCache.getMessages).mockResolvedValue(cached)
+      roomMessages.mockResolvedValue(cached)
       await act(async () => { await roomStore.getState().activateRoom(ROOM) })
 
       expect(roomStore.getState().messages.get(ROOM)).toHaveLength(1)

@@ -38,46 +38,30 @@ function make(kind: Kind, entity: string, id: string, at: number, overrides: Par
       } as RoomMessage
 }
 
-const ops = {
-  chat: {
-    save: (m: Msg) => cache.saveMessage('chat', m as Message),
-    saveMany: (ms: Msg[]) => cache.saveMessages('chat', ms as Message[]),
-    saveWithResult: (m: Msg) => cache.saveMessageWithResult('chat', m as Message),
-    get: (e: string, id: string) => cache.getMessage('chat', e, id),
-    byStanzaId: (e: string, stanzaId: string) => cache.getMessageByStanzaId('chat', e, stanzaId),
-    byReference: (e: string, ref: string) => cache.getMessageByReference('chat', e, ref),
-    list: (e: string, o?: cache.GetMessagesOptions) => cache.getMessages('chat', e, o),
-    read: (e: string, o?: cache.GetMessagesOptions) => cache.readMessages('chat', e, o),
-    around: (e: string, id: string, o?: cache.GetMessagesAroundOptions) => cache.getMessagesAround('chat', e, { id }, o),
-    count: (e: string) => cache.getMessageCount('chat', e),
-    total: () => cache.getTotalMessageCount('chat'),
-    oldest: (e: string) => cache.getOldestMessageTimestamp('chat', e),
-    update: (e: string, id: string, u: Partial<Msg>) => cache.updateMessage('chat', e, id, u as Partial<Message>, 'user@example.com'),
-    react: (e: string, id: string, who: string, emojis: string[]) => cache.updateMessageReactions('chat', e, id, who, emojis),
-    remove: (e: string, id: string) => cache.deleteMessage('chat', e, id, 'user@example.com'),
-    removeAll: (e: string) => cache.deleteConversationMessages('chat', e),
-    iterate: (n: number, cb: (ms: Msg[]) => Promise<void>) => cache.iterateAllMessages('chat', n, cb as (ms: Message[]) => Promise<void>),
-  },
-  room: {
-    save: (m: Msg) => cache.saveMessage('room', m as RoomMessage),
-    saveMany: (ms: Msg[]) => cache.saveMessages('room', ms as RoomMessage[]),
-    saveWithResult: (m: Msg) => cache.saveMessageWithResult('room', m as RoomMessage),
-    get: (e: string, id: string) => cache.getMessage('room', e, id),
-    byStanzaId: (e: string, stanzaId: string) => cache.getMessageByStanzaId('room', e, stanzaId),
-    byReference: (e: string, ref: string) => cache.getMessageByReference('room', e, ref, `${e}/user`),
-    list: (e: string, o?: cache.GetMessagesOptions) => cache.getMessages('room', e, o),
-    read: (e: string, o?: cache.GetMessagesOptions) => cache.readMessages('room', e, o),
-    around: (e: string, id: string, o?: cache.GetMessagesAroundOptions) => cache.getMessagesAround('room', e, { id }, o),
-    count: (e: string) => cache.getMessageCount('room', e),
-    total: () => cache.getTotalMessageCount('room'),
-    oldest: (e: string) => cache.getOldestMessageTimestamp('room', e),
-    update: (e: string, id: string, u: Partial<Msg>) => cache.updateMessage('room', e, id, u as Partial<RoomMessage>, `${e}/user`),
-    react: (e: string, id: string, who: string, emojis: string[]) => cache.updateMessageReactions('room', e, id, who, emojis),
-    remove: (e: string, id: string) => cache.deleteMessage('room', e, id, `${e}/user`),
-    removeAll: (e: string) => cache.deleteConversationMessages('room', e),
-    iterate: (n: number, cb: (ms: Msg[]) => Promise<void>) => cache.iterateAllMessages('room', n, cb as (ms: RoomMessage[]) => Promise<void>),
-  },
-}
+/** The sender a row of this kind was made with; a room pins rows by `from`, a chat by its conversation. */
+const senderOf = (kind: Kind, entity: string) => (kind === 'chat' ? 'user@example.com' : `${entity}/user`)
+
+const ops = (kind: Kind) => ({
+  save: (m: Msg) => cache.saveMessage(kind, m as never),
+  saveMany: (ms: Msg[]) => cache.saveMessages(kind, ms as never),
+  saveWithResult: (m: Msg) => cache.saveMessageWithResult(kind, m as never),
+  get: (e: string, id: string) => cache.getMessage(kind, e, id),
+  byStanzaId: (e: string, stanzaId: string) => cache.getMessageByStanzaId(kind, e, stanzaId),
+  byReference: (e: string, ref: string) =>
+    kind === 'chat' ? cache.getMessageByReference('chat', e, ref) : cache.getMessageByReference('room', e, ref, senderOf(kind, e)),
+  list: (e: string, o?: cache.GetMessagesOptions) => cache.getMessages(kind, e, o),
+  read: (e: string, o?: cache.GetMessagesOptions) => cache.readMessages(kind, e, o),
+  around: (e: string, id: string, o?: cache.GetMessagesAroundOptions) => cache.getMessagesAround(kind, e, { id }, o),
+  count: (e: string) => cache.getMessageCount(kind, e),
+  total: () => cache.getTotalMessageCount(kind),
+  oldest: (e: string) => cache.getOldestMessageTimestamp(kind, e),
+  update: (e: string, id: string, u: Partial<Msg>) =>
+    kind === 'chat' ? cache.updateMessage('chat', e, id, u as Partial<Message>, senderOf(kind, e)) : cache.updateMessage('room', e, id, u as Partial<RoomMessage>, senderOf(kind, e)),
+  react: (e: string, id: string, who: string, emojis: string[]) => cache.updateMessageReactions(kind, e, id, who, emojis),
+  remove: (e: string, id: string) => cache.deleteMessage(kind, e, id, senderOf(kind, e)),
+  removeAll: (e: string) => cache.deleteConversationMessages(kind, e),
+  iterate: (n: number, cb: (ms: Msg[]) => Promise<void>) => cache.iterateAllMessages(kind, n, cb as never),
+})
 
 beforeEach(() => {
   _resetStorageScopeForTesting()
@@ -87,7 +71,7 @@ beforeEach(() => {
 })
 
 describe.each(['chat', 'room'] as const)('message cache, %s kind', (kind) => {
-  const o = ops[kind]
+  const o = ops(kind)
   const [here, elsewhere] = ENTITY[kind]
 
   it('saves one message and reads it back by id, only inside its own entity', async () => {
@@ -153,8 +137,14 @@ describe.each(['chat', 'room'] as const)('message cache, %s kind', (kind) => {
     expect(await o.count(here)).toBe(2)
     expect(await o.count(elsewhere)).toBe(1)
     expect(await o.total()).toBe(3)
+    expect(await o.count('nobody@example.com')).toBe(0)
     expect((await o.oldest(here))?.getTime()).toBe(1000)
     expect(await o.oldest('nobody@example.com')).toBeNull()
+  })
+
+  it('counts nothing in an empty cache', async () => {
+    expect(await o.total()).toBe(0)
+    expect(await o.count(here)).toBe(0)
   })
 
   it('updates fields in place and leaves the other entity alone', async () => {
@@ -197,12 +187,12 @@ describe.each(['chat', 'room'] as const)('message cache, %s kind', (kind) => {
 
 describe('message cache, kinds side by side', () => {
   it('keeps chat and room rows in separate stores even when the ids and entities coincide', async () => {
-    await ops.chat.save(make('chat', 'same@example.com', 'm1', 1000))
-    await ops.room.save(make('room', 'same@example.com', 'm1', 1000))
-    expect(await ops.chat.total()).toBe(1)
-    expect(await ops.room.total()).toBe(1)
-    await ops.chat.removeAll('same@example.com')
-    expect(await ops.chat.count('same@example.com')).toBe(0)
-    expect(await ops.room.count('same@example.com')).toBe(1)
+    await ops('chat').save(make('chat', 'same@example.com', 'm1', 1000))
+    await ops('room').save(make('room', 'same@example.com', 'm1', 1000))
+    expect(await ops('chat').total()).toBe(1)
+    expect(await ops('room').total()).toBe(1)
+    await ops('chat').removeAll('same@example.com')
+    expect(await ops('chat').count('same@example.com')).toBe(0)
+    expect(await ops('room').count('same@example.com')).toBe(1)
   })
 })

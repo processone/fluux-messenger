@@ -51,10 +51,10 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     ...actual,
     // Real by default; wrapped so individual tests can control resolution
     // order (vi.fn.mockImplementationOnce) without disabling the real cursor.
-    getMessages: vi.fn(actual.getRoomMessages),
-    countUnreadInArchive: vi.fn(actual.countRoomUnreadInArchive),
-    saveMessageWithResult: vi.fn(actual.saveRoomMessageWithResult),
-    saveMessages: vi.fn(actual.saveRoomMessages),
+    getMessages: vi.fn(actual.getMessages),
+    countUnreadInArchive: vi.fn(actual.countUnreadInArchive),
+    saveMessageWithResult: vi.fn(actual.saveMessageWithResult),
+    saveMessages: vi.fn(actual.saveMessages),
   }
 })
 import * as messageCache from '../utils/messageCache'
@@ -1657,9 +1657,9 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       // Let the recount reach its archive read, then land an arrival that raises
       // the count WITHOUT moving the pointer — the case the pointer-identity
       // guard alone cannot see.
-      vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(async (jid, args) => {
+      vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(async (kind, jid, args, _isVisible?) => {
         const actual = await vi.importActual<typeof import('../utils/messageCache')>('../utils/messageCache')
-        const res = await actual.countRoomUnreadInArchive(jid, args)
+        const res = await actual.countUnreadInArchive(kind, jid, args)
         roomStore.getState().addMessage(ROOM, archiveMsg('u2', 1200))
         return res
       })
@@ -1955,8 +1955,8 @@ describe('roomStore — `start`-filtered catch-up bootstraps coverage from its w
     let releaseWrite!: () => void
     const writeGate = new Promise<void>((resolve) => { releaseWrite = resolve })
     vi.mocked(messageCache.saveMessages).mockClear()
-    vi.mocked(messageCache.saveMessages).mockImplementationOnce(async (messages) => {
-      const committed = await saveRoomMessagesImplementation(messages)
+    vi.mocked(messageCache.saveMessages).mockImplementationOnce(async (...args) => {
+      const committed = await saveRoomMessagesImplementation(...args)
       await writeGate
       return committed
     })

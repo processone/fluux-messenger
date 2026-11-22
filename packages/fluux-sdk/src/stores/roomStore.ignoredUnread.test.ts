@@ -162,8 +162,8 @@ describe('room unread respects hidden ignored messages', () => {
     let release!: () => void
     const held = new Promise<void>(resolve => { release = resolve })
     const count = cache.countUnreadInArchive
-    const spy = vi.spyOn(cache, 'countRoomUnreadInArchive').mockImplementation(async (...args) => {
-      const result = await count(...args)
+    const spy = vi.spyOn(cache, 'countUnreadInArchive').mockImplementation(async (kind, id, args, isVisible?) => {
+      const result = await count(kind, id, args, isVisible)
       await held
       return result
     })
@@ -255,8 +255,8 @@ describe('room unread respects hidden ignored messages', () => {
     roomStore.getState().updateRoom(ROOM, { unreadCount: 1 })
     const count = cache.countUnreadInArchive
     const releases: Array<() => void> = []
-    const spy = vi.spyOn(cache, 'countRoomUnreadInArchive').mockImplementation(async (...args) => {
-      const result = await count(...args)
+    const spy = vi.spyOn(cache, 'countUnreadInArchive').mockImplementation(async (kind, id, args, isVisible?) => {
+      const result = await count(kind, id, args, isVisible)
       if (releases.length < 2) await new Promise<void>(resolve => { releases.push(resolve) })
       return result
     })

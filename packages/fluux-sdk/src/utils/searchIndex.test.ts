@@ -1470,14 +1470,14 @@ describe('searchIndex', () => {
       const released = new Promise<void>(resolve => { release = resolve })
       const iterate = messageCache.iterateAllMessages
       let scans = 0
-      const pause = vi.spyOn(messageCache, 'iterateAllMessages').mockImplementation(async (size, batch) => {
-        if (++scans === 1) {
-          await batch([rows[0]])
+      const pause = vi.spyOn(messageCache, 'iterateAllMessages').mockImplementation(async (kind, size, batch) => {
+        if (kind === 'chat' && ++scans === 1) {
+          await batch([rows[0]] as never)
           start()
           await released
-          await batch([rows[1]])
+          await batch([rows[1]] as never)
         } else {
-          await iterate(size, batch)
+          await iterate(kind, size, batch as never)
         }
       })
       const run = (kind: string) => kind === 'backfill' ? backfillFromMessageCache() : rebuildSearchIndex()

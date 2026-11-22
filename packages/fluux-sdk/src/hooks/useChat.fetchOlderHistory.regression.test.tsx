@@ -30,7 +30,13 @@ vi.mock('../provider', async () => {
 // Empty cache so fetchOlderHistory falls through to the MAM path.
 vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
-  return { ...actual, getMessages: vi.fn().mockResolvedValue([]) }
+  // Only the chat kind is stubbed: the room kind keeps its real implementation.
+  const chatMessages = vi.fn().mockResolvedValue([])
+  return {
+    ...actual,
+    getMessages: vi.fn((kind: 'chat' | 'room', ...args: unknown[]) =>
+      kind === 'chat' ? chatMessages(...args) : (actual.getMessages as (...args: unknown[]) => unknown)(kind, ...args)),
+  }
 })
 
 function wrapper({ children }: { children: ReactNode }) {

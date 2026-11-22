@@ -21,7 +21,6 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
 }))
 vi.mock('@fluux/sdk/cache', () => ({
   getMessagesAround: (...args: unknown[]) => around(...args),
-  getMessagesAround: (...args: unknown[]) => around(...args),
 }))
 vi.mock('@fluux/sdk/react', () => ({
   useChatStore: (selector: (s: unknown) => unknown) => selector({ messages: new Map() }),
@@ -97,7 +96,7 @@ describe('SavedPane', () => {
     expect(list).toHaveAttribute('data-history-complete', 'false')
     expect(screen.getByText('what came before')).toBeInTheDocument()
     // The window is read around the exact cached row (tied timestamps included), not around the saved time.
-    expect(around).toHaveBeenCalledWith('juliet@capulet.example', expect.objectContaining({ id: 'm-b' }), expect.objectContaining({ before: 50, after: 50 }))
+    expect(around).toHaveBeenCalledWith('chat', 'juliet@capulet.example', expect.objectContaining({ id: 'm-b' }), expect.objectContaining({ before: 50, after: 50 }))
     fireEvent.click(screen.getByText('search.goToMessage'))
     expect(open).toHaveBeenCalledWith(expect.objectContaining({ id: 'b' }))
     open.mockClear()

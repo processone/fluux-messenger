@@ -215,13 +215,8 @@ describe.each(['room', 'chat'] as const)('%s coverage through MAM and durable st
     const h = harness(kind)
     let release!: () => void
     const gate = new Promise<void>(resolve => { release = resolve })
-    if (kind === 'room') {
-      const save = cache.saveMessages
-      vi.spyOn(cache, 'saveRoomMessages').mockImplementationOnce(async messages => { await gate; return save(messages) })
-    } else {
-      const save = cache.saveMessages
-      vi.spyOn(cache, 'saveMessages').mockImplementationOnce(async messages => { await gate; return save(messages) })
-    }
+    const save = cache.saveMessages
+    vi.spyOn(cache, 'saveMessages').mockImplementationOnce(async (...args) => { await gate; return (save as (...args: unknown[]) => Promise<boolean>)(...args) })
     await h.query([{ entries: [receipt, first, latest] }])
     h.read(latest)
     const pointer = h.pointer()
@@ -237,8 +232,7 @@ describe.each(['room', 'chat'] as const)('%s coverage through MAM and durable st
 
   it('does not certify a page whose cache write failed', async () => {
     const h = harness(kind)
-    if (kind === 'room') vi.spyOn(cache, 'saveRoomMessages').mockResolvedValueOnce(false)
-    else vi.spyOn(cache, 'saveMessages').mockResolvedValueOnce(false)
+    vi.spyOn(cache, 'saveMessages').mockResolvedValueOnce(false)
     await h.query([{ entries: [receipt, first, latest], complete: true }], { start: new Date(0).toISOString() })
     h.read(latest)
     await h.recount()

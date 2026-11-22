@@ -55,6 +55,10 @@ const OTHER_CHAT = 'benvolio@montague.example'
 const ROOM = 'balcony@conference.montague.example'
 const OTHER_ROOM = 'square@conference.verona.example'
 
+// The kind-keyed archive functions correlate their arguments to `kind` only at the call site, so a
+// wrapper forwarding a spread argument list to the original needs the loosely-typed call signature.
+const forward = <F extends (...args: never[]) => unknown>(fn: F) => fn as unknown as (...args: unknown[]) => ReturnType<F>
+
 /** The word every test hides in a body and then demands the storage forget. */
 const SECRET = 'plutonium'
 
@@ -1480,7 +1484,7 @@ describe('retraction propagates to the cache and the search index', () => {
       await searchIndex.indexMessage(other)
 
       setStorageScopeJid(SCOPE)
-      const updateMessage = messageCache.updateMessage
+      const updateMessage = forward(messageCache.updateMessage)
       vi.spyOn(messageCache, 'updateMessage').mockImplementationOnce(async (...args) => {
         await updateMessage(...args)
         setStorageScopeJid(OTHER_SCOPE)
@@ -1495,8 +1499,8 @@ describe('retraction propagates to the cache and the search index', () => {
     it('settles a room pending record in the account where the probe started', async () => {
       const message = roomMessage({ stanzaId: 'archive-switch', occupantId: 'occ-alice' })
       await messageCache.saveMessage('room', message)
-      const updateRoomMessage = messageCache.updateMessage
-      vi.spyOn(messageCache, 'updateRoomMessage').mockImplementationOnce(async (...args) => {
+      const updateRoomMessage = forward(messageCache.updateMessage)
+      vi.spyOn(messageCache, 'updateMessage').mockImplementationOnce(async (...args) => {
         await updateRoomMessage(...args)
         setStorageScopeJid(OTHER_SCOPE)
       })
@@ -1516,7 +1520,7 @@ describe('retraction propagates to the cache and the search index', () => {
     it('settles a chat pending record in the account where the probe started', async () => {
       const message = chatMessage({ id: 'chat-switch', stanzaId: 'archive-chat-switch' })
       await messageCache.saveMessage('chat', message)
-      const updateMessage = messageCache.updateMessage
+      const updateMessage = forward(messageCache.updateMessage)
       vi.spyOn(messageCache, 'updateMessage').mockImplementationOnce(async (...args) => {
         await updateMessage(...args)
         setStorageScopeJid(OTHER_SCOPE)
@@ -1939,12 +1943,12 @@ describe('retraction propagates to the cache and the search index', () => {
       roomStore.getState().addRoom(room(), [])
       await messageCache.saveMessage('room', message)
       await searchIndex.indexMessage(message)
-      const readMessages = messageCache.getMessages
+      const readMessages = forward(messageCache.getMessages)
       let captured!: () => void
       let release!: () => void
       const snapshotReady = new Promise<void>(resolve => { captured = resolve })
       const resumeRead = new Promise<void>(resolve => { release = resolve })
-      vi.spyOn(messageCache, 'getRoomMessages').mockImplementationOnce(async (...args) => {
+      vi.spyOn(messageCache, 'getMessages').mockImplementationOnce(async (...args) => {
         const snapshot = await readMessages(...args)
         captured()
         await resumeRead

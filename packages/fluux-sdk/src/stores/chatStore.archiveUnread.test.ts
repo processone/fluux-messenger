@@ -1733,9 +1733,9 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       // Let the recount reach its archive read, then land an arrival that raises
       // the count WITHOUT moving the pointer — the case the pointer-identity
       // guard alone cannot see.
-      vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(async (id, args) => {
+      vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(async (kind, id, args, _isVisible?) => {
         const actual = await vi.importActual<typeof import('../utils/messageCache')>('../utils/messageCache')
-        const res = await actual.countUnreadInArchive(id, args)
+        const res = await actual.countUnreadInArchive(kind, id, args)
         chatStore.getState().addMessage(archiveMsg('u2', 1200))
         return res
       })
@@ -1897,8 +1897,8 @@ describe('chatStore — `start`-filtered catch-up bootstraps coverage from its w
     let releaseWrite!: () => void
     const writeGate = new Promise<void>((resolve) => { releaseWrite = resolve })
     vi.mocked(messageCache.saveMessages).mockClear()
-    vi.mocked(messageCache.saveMessages).mockImplementationOnce(async (messages) => {
-      const committed = await saveMessagesImplementation(messages)
+    vi.mocked(messageCache.saveMessages).mockImplementationOnce(async (...args) => {
+      const committed = await saveMessagesImplementation(...args)
       await writeGate
       return committed
     })

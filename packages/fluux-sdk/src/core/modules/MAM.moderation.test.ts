@@ -25,6 +25,10 @@ import { getRoomModerationId } from '../../utils/roomStanzaId'
 import { findMessageRowIndex, messageRowRef } from '../../utils/messageIdentity'
 import { reconcileRoomMessageSnapshots, resolveRoomMessageSnapshot } from '../../utils/roomMessageSnapshots'
 
+// The kind-keyed archive functions correlate their arguments to `kind` only at the call site, so a
+// wrapper forwarding a spread argument list to the original needs the loosely-typed call signature.
+const forward = <F extends (...args: never[]) => unknown>(fn: F) => fn as unknown as (...args: unknown[]) => ReturnType<F>
+
 const ROOM = 'moderation@conference.example.com'
 const ACCOUNT = 'me@example.com'
 const NS = 'urn:xmpp:mam:2'
@@ -746,12 +750,12 @@ it.each(['Spam', 'Ordinary', 'foreign identity'])('reconciles pending %s receive
 
 it.each(['before', 'during'])('observes pending moderation %s awaited history reconciliation without consuming it', async when => {
   roomStore.getState().addRoom(room, [])
-  const reconcile = cache.reconcileHistoryMessages
+  const reconcile = forward(cache.reconcileHistoryMessages)
   let complete!: () => void
   const completion = new Promise<void>(resolve => { complete = resolve })
-  vi.spyOn(cache, 'reconcileRoomHistoryMessages').mockImplementation(async (...args) => {
+  vi.spyOn(cache, 'reconcileHistoryMessages').mockImplementation(async (...args) => {
     await completion
-    return reconcile(...args)
+    return reconcile(...args) as never
   })
   const h = harness([])
   if (when === 'before') h.chat.handle(signal())
@@ -947,11 +951,11 @@ it('holds delayed replay publication and subsequent arrivals until scoped cache 
   roomStore.getState().addRoom(room, [])
   await cache.saveMessage('room', { ...original, body: '', isRetracted: true, retractedAt: new Date(4000), isModerated: true, moderationReason: 'Spam' })
   _clearRetractedIdentitiesForTesting()
-  const reconcile = cache.reconcileHistoryMessages
+  const reconcile = forward(cache.reconcileHistoryMessages)
   let complete!: () => void
   const completion = new Promise<void>(resolve => { complete = resolve })
-  const reads = vi.spyOn(cache, 'reconcileRoomHistoryMessages').mockImplementation(async (...args) => {
-    const result = await reconcile(...args)
+  const reads = vi.spyOn(cache, 'reconcileHistoryMessages').mockImplementation(async (...args) => {
+    const result = (await reconcile(...args)) as never
     await completion
     return result
   })
@@ -981,12 +985,12 @@ it('holds delayed replay publication and subsequent arrivals until scoped cache 
 
 it.each(['pending', 'account', 'reset', 'remove'] as const)('guards delayed publication when %s changes during cache lookup', async change => {
   roomStore.getState().addRoom(room, [])
-  const reconcile = cache.reconcileHistoryMessages
+  const reconcile = forward(cache.reconcileHistoryMessages)
   let buffered = false
   let complete!: () => void
   const completion = new Promise<void>(resolve => { complete = resolve })
-  const reads = vi.spyOn(cache, 'reconcileRoomHistoryMessages').mockImplementation(async (...args) => {
-    const result = await reconcile(...args)
+  const reads = vi.spyOn(cache, 'reconcileHistoryMessages').mockImplementation(async (...args) => {
+    const result = (await reconcile(...args)) as never as RoomMessage[]
     buffered = true
     await completion
     return result
@@ -1055,15 +1059,15 @@ function roomReaction(emoji: string) {
 }
 
 function holdReplayRead(call = 1) {
-  const reconcile = cache.reconcileHistoryMessages
+  const reconcile = forward(cache.reconcileHistoryMessages)
   let release!: () => void
   let started!: () => void
   const held = new Promise<void>(resolve => { release = resolve })
   const ready = new Promise<void>(resolve => { started = resolve })
   let reads = 0
-  vi.spyOn(cache, 'reconcileRoomHistoryMessages').mockImplementation(async (...args) => {
+  vi.spyOn(cache, 'reconcileHistoryMessages').mockImplementation(async (...args) => {
     if (++reads === call) { started(); await held }
-    return reconcile(...args)
+    return reconcile(...args) as never
   })
   return { ready, release }
 }

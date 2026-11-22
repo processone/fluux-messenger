@@ -38,6 +38,10 @@ const CHAT = 'alice@example.test'
 const OWN = 'me@example.test'
 const NS_MAM = 'urn:xmpp:mam:2'
 const NS_RSM = 'http://jabber.org/protocol/rsm'
+
+// The kind-keyed archive functions correlate their arguments to `kind` only at the call site, so a
+// wrapper forwarding a spread argument list to the original needs the loosely-typed call signature.
+const forward = <F extends (...args: never[]) => unknown>(fn: F) => fn as unknown as (...args: unknown[]) => ReturnType<F>
 const BASE = new Date('2026-09-27T20:00:00Z').getTime()
 
 function chatRow(id: string, offset: number): Message & { stanzaId: string } {
@@ -212,15 +216,9 @@ describe('unread recount after reconnect MAM', () => {
 
   function holdArchiveWrites() {
     const gate = deferred<void>()
-    const saveRooms = cache.saveMessages
-    const saveChats = cache.saveMessages
-    vi.spyOn(cache, 'saveRoomMessages').mockImplementation(async rows => {
-      const saved = await saveRooms(rows)
-      await gate.promise
-      return saved
-    })
-    vi.spyOn(cache, 'saveMessages').mockImplementation(async rows => {
-      const saved = await saveChats(rows)
+    const save = forward(cache.saveMessages)
+    vi.spyOn(cache, 'saveMessages').mockImplementation(async (...args) => {
+      const saved = await save(...args)
       await gate.promise
       return saved
     })
@@ -247,18 +245,20 @@ describe('unread recount after reconnect MAM', () => {
 
   it('retries initial recounts invalidated by live arrivals for both unopened entities', async () => {
     const gate = deferred<void>()
-    const countRooms = cache.countUnreadInArchive
-    const countChats = cache.countUnreadInArchive
-    const rooms = vi.spyOn(cache, 'countRoomUnreadInArchive').mockImplementationOnce(async (...args) => {
-      const result = await countRooms(...args)
-      await gate.promise
-      return result
-    })
-    const chats = vi.spyOn(cache, 'countUnreadInArchive').mockImplementationOnce(async (...args) => {
-      const result = await countChats(...args)
-      await gate.promise
-      return result
-    })
+    const count = forward(cache.countUnreadInArchive)
+    // One spy serves both kinds; each kind keeps its own once-held first call and its own call count.
+    const rooms = vi.fn((...args: unknown[]) => count('room', ...args))
+    const chats = vi.fn((...args: unknown[]) => count('chat', ...args))
+    for (const held of [rooms, chats]) {
+      const kind = held === rooms ? 'room' : 'chat'
+      held.mockImplementationOnce(async (...args: unknown[]) => {
+        const result = await count(kind, ...args)
+        await gate.promise
+        return result
+      })
+    }
+    vi.spyOn(cache, 'countUnreadInArchive').mockImplementation((kind, ...args) =>
+      (kind === 'room' ? rooms : chats)(...args) as ReturnType<typeof cache.countUnreadInArchive>)
     await reconnect()
     expectQueriesFinished()
     await vi.waitFor(() => {
@@ -290,7 +290,6 @@ describe('unread recount after reconnect MAM', () => {
   })
 
   it('keeps failed archive writes uncounted even after the loading flag clears', async () => {
-    vi.spyOn(cache, 'saveRoomMessages').mockResolvedValue(false)
     vi.spyOn(cache, 'saveMessages').mockResolvedValue(false)
     await reconnect()
     expectQueriesFinished()

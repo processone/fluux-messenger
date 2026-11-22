@@ -65,8 +65,8 @@ describe.each(['chat', 'room'] as const)('%s cache-only correction account scope
     const completion = deferred()
     const writes: Promise<unknown>[] = []
     const operations = {
-      chat: messageCache.applyCorrection,
-      room: messageCache.applyCorrection,
+      // One kind-keyed function serves both kinds; the kind is its first argument.
+      correction: messageCache.applyCorrection as (...args: unknown[]) => Promise<unknown>,
       search: searchIndex.updateMessage,
     }
     const track = <A extends unknown[], R>(operation: (...args: A) => Promise<R>, wait = Promise.resolve()) => (...args: A) => {
@@ -74,11 +74,7 @@ describe.each(['chat', 'room'] as const)('%s cache-only correction account scope
       writes.push(pending)
       return pending
     }
-    if (kind === 'chat') {
-      vi.spyOn(messageCache, 'applyChatCorrection').mockImplementation(track(operations.chat, completion.promise))
-    } else {
-      vi.spyOn(messageCache, 'applyRoomCorrection').mockImplementation(track(operations.room, completion.promise))
-    }
+    vi.spyOn(messageCache, 'applyCorrection').mockImplementation(track(operations.correction, completion.promise) as typeof messageCache.applyCorrection)
     vi.spyOn(searchIndex, 'updateMessage').mockImplementation(track(operations.search))
 
     const updates = {

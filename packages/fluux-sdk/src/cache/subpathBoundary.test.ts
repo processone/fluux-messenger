@@ -10,12 +10,9 @@ import * as cacheEntry from './index'
 describe('cache subpath boundary', () => {
   const cacheSymbols = [
     'saveMessage', 'saveMessages', 'getMessage', 'getMessageByStanzaId',
-    'getMessages', 'getMessageCount', 'updateMessage', 'deleteMessage',
+    'getMessages', 'getMessagesAround', 'getMessageCount', 'updateMessage', 'deleteMessage',
     'deleteConversationMessages', 'getOldestMessageTimestamp',
-    'saveRoomMessage', 'saveRoomMessages', 'getRoomMessage',
-    'getRoomMessageByStanzaId', 'getRoomMessages', 'getRoomMessageCount',
-    'updateRoomMessage', 'deleteRoomMessage', 'deleteRoomMessages',
-    'getOldestRoomMessageTimestamp', 'clearAllMessages', 'isMessageCacheAvailable',
+    'clearAllMessages', 'isMessageCacheAvailable',
     'clearAllAvatarData', 'revokeAllBlobUrls', 'getBlobUrlPoolSize',
     'bumpAvatarResumeCount', 'getAvatarResumeCount',
   ]

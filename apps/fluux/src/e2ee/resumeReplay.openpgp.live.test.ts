@@ -342,7 +342,7 @@ describe.skipIf(!accountsPath || session !== 'resumed')(`OpenPGP resume replay a
       // The message cache (IndexedDB), where a deferred decrypt repairs a
       // message of a closed conversation. Polled for up to 10 s so the
       // transcript shows whether, and when, the stored text becomes readable.
-      const cachedBodies = async () => Object.fromEntries((await getMessages(accounts.bob.jid))
+      const cachedBodies = async () => Object.fromEntries((await getMessages('chat', accounts.bob.jid))
         .filter((m) => plaintexts.has(m.id)).map((m) => [m.id, m.body]))
       const allReadable = (bodies: Record<string, string | undefined>) => [...plaintexts].every(([id, text]) => bodies[id] === text)
       let cached = await cachedBodies()
@@ -499,7 +499,7 @@ describe.skipIf(!accountsPath || !latePlugin)(`OpenPGP messages stored before th
     // Bob's conversation is not open, so its messages are kept in the message
     // cache; the in-memory store holds only those of a loaded conversation.
     const stored = () => (chatStore.getState().messages.get(accounts.bob.jid) ?? []).filter((m) => plaintexts.has(m.id))
-    const cachedRows = async () => (await getMessages(accounts.bob.jid)).filter((m) => plaintexts.has(m.id))
+    const cachedRows = async () => (await getMessages('chat', accounts.bob.jid)).filter((m) => plaintexts.has(m.id))
     // The body each message was first cached with.
     const firstBody = new Map<string, string | undefined>()
     const cachedBeforePlugin = async () => {

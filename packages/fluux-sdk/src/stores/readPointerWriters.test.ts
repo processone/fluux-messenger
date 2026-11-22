@@ -397,8 +397,8 @@ describe('mark-all-read followed by a coverage-complete recount', () => {
       let staleCount: Awaited<ReturnType<typeof countUnreadInArchive>> | undefined
       let releaseCount!: () => void
       const countGate = new Promise<void>((resolve) => { releaseCount = resolve })
-      const countSpy = vi.spyOn(messageCache, 'countUnreadInArchive').mockImplementationOnce(async (...args) => {
-        const result = await countUnreadInArchive(...args)
+      const countSpy = vi.spyOn(messageCache, 'countUnreadInArchive').mockImplementationOnce(async (kind, id, args, _isVisible?) => {
+        const result = await countUnreadInArchive(kind, id, args)
         staleCount = result
         await countGate
         return result

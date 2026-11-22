@@ -302,7 +302,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(getMessages).toHaveBeenCalledTimes(1)
-    expect(getMessages).toHaveBeenCalledWith(CID, {
+    expect(getMessages).toHaveBeenCalledWith('chat', CID, {
       after: new Date(0),
       before: new Date(timeFor('m7').getTime() + 1),
       limit: 50,

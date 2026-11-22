@@ -6,9 +6,8 @@ import type { SavedMessage } from '../core/types/saved'
 
 const cached = vi.hoisted(() => ({ room: null as unknown, chat: null as unknown }))
 vi.mock('./messageCache', () => ({
-  getMessageByStanzaId: async () => cached.room,
+  getMessageByStanzaId: async (kind: 'chat' | 'room') => kind === 'room' ? cached.room : cached.chat,
   getMessageByReference: async () => null,
-  getMessageByStanzaId: async () => cached.chat,
 }))
 
 const ROOM = 'team@conference.example'

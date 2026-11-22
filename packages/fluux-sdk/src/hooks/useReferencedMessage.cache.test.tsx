@@ -178,7 +178,7 @@ it('keeps a cached quotation stable through unrelated pending records and snapsh
   const unrelated: RoomMessage = { ...target, id: 'unrelated', stanzaId: 'unrelated-archive' }
 
   await cache.saveMessages('room', [target, unrelated])
-  const reads = vi.spyOn(cache, 'getRoomMessageByReference')
+  const reads = vi.spyOn(cache, 'getMessageByReference')
   let renders = 0
   const { result, rerender } = renderHook(({ messages }: { messages: RoomMessage[] }) => {
     renders++
@@ -204,7 +204,7 @@ it.each(['stanza', 'client', 'origin'])('applies relevant moderation to a cache-
   const target = { ...original, id: `client-${tier}`, stanzaId: `archive-${tier}`, originId: `origin-${tier}`, isRetracted: false, isModerated: false, moderationReason: undefined }
 
   await cache.saveMessage('room', target)
-  const reads = vi.spyOn(cache, 'getRoomMessageByReference')
+  const reads = vi.spyOn(cache, 'getMessageByReference')
   const { result } = renderHook(() => useReferencedMessage({ type: 'groupchat', roomJid: ROOM,
     id: tier === 'stanza' ? target.stanzaId : tier === 'client' ? target.id : target.originId, from: target.from, cache: true }))
   await waitFor(() => expect(result.current?.isRetracted).toBe(false))
@@ -222,7 +222,7 @@ it.each(['room', 'actor'])('ignores pending moderation with an unrelated %s iden
   const target = { ...original, id: `negative-${kind}`, stanzaId: `negative-archive-${kind}`, isRetracted: false, isModerated: false }
 
   await cache.saveMessage('room', target)
-  const reads = vi.spyOn(cache, 'getRoomMessageByReference')
+  const reads = vi.spyOn(cache, 'getMessageByReference')
   const { result } = renderHook(() => useReferencedMessage({ type: 'groupchat', roomJid: ROOM,
     id: target.stanzaId, from: target.from, cache: true }))
   await waitFor(() => expect(result.current?.isRetracted).toBe(false))
@@ -241,7 +241,7 @@ it('applies pending moderation received during a cache read through a client ali
   const target = { ...original, id: 'in-flight-client', stanzaId: 'in-flight-archive', isRetracted: false, isModerated: false }
 
   let finish!: (message: RoomMessage) => void
-  const reads = vi.spyOn(cache, 'getRoomMessageByReference').mockImplementation(() => new Promise(resolve => { finish = resolve }))
+  const reads = vi.spyOn(cache, 'getMessageByReference').mockImplementation((() => new Promise(resolve => { finish = resolve })) as never)
   const { result } = renderHook(() => useReferencedMessage({ type: 'groupchat', roomJid: ROOM,
     id: target.id, from: target.from, cache: true }))
   expect(result.current).toBeNull()

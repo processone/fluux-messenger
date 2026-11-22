@@ -324,7 +324,11 @@ describe('XEP-0490 stashed marker lock', () => {
       const verdicts = recountVerdicts(ROOM)
       let releaseCount!: (value: { unread: number }) => void
       const count = new Promise<{ unread: number }>((resolve) => { releaseCount = resolve })
-      const countUnread = vi.spyOn(messageCache, 'countRoomUnreadInArchive').mockImplementationOnce(() => count)
+      // One kind-keyed function serves both kinds: only the room kind is held, counted and observed here.
+      const countAny = messageCache.countUnreadInArchive as (...args: unknown[]) => Promise<unknown>
+      const countUnread = vi.fn((...args: unknown[]) => countAny('room', ...args)).mockImplementationOnce(() => count)
+      vi.spyOn(messageCache, 'countUnreadInArchive').mockImplementation(((kind: string, ...args: unknown[]) =>
+        kind === 'room' ? countUnread(...args) : countAny(kind, ...args)) as typeof messageCache.countUnreadInArchive)
 
       const { client, cleanup } = await connectWithNode([{ conversationJid: ROOM, stanzaId: 's-hole' }])
       await vi.waitFor(() => expect(roomMeta()?.pendingRemoteDisplayedStanzaId).toBe('s-hole'), WAIT)

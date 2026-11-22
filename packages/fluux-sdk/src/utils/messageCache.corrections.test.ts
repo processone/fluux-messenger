@@ -241,7 +241,7 @@ beforeEach(() => {
   chatStore.getState().addConversation({ id: PEER, name: 'Peer', type: 'chat', unreadCount: 0 })
   roomStore.getState().addRoom(createMockRoom(ROOM, { nickname: 'Peer', joined: true }))
   writes.length = 0
-  const track = <A extends unknown[], R>(implementation: (...args: A) => Promise<R>, settle = false) => (...args: A) => {
+  const track = <A extends unknown[], P extends Promise<unknown>>(implementation: (...args: A) => P, settle = false) => (...args: A): P => {
     const promise = implementation(...args)
     writes.push(settle ? promise.catch(() => {}) : promise)
     return promise
@@ -259,17 +259,17 @@ beforeEach(() => {
   vi.spyOn(retractionStorage, 'retractRoomMessageInStorage').mockImplementation(track(retractions.retractRoomMessageInStorage))
   const implementations = { ...cache }
   vi.spyOn(cache, 'saveMessages').mockImplementation(track(implementations.saveMessages))
-  vi.spyOn(cache, 'saveRoomMessages').mockImplementation(track(implementations.saveRoomMessages))
   vi.spyOn(cache, 'updateMessage').mockImplementation(track(implementations.updateMessage))
-  vi.spyOn(cache, 'updateRoomMessage').mockImplementation(track(implementations.updateRoomMessage))
-  vi.spyOn(cache, 'applyChatCorrection').mockImplementation(track(implementations.applyChatCorrection))
-  vi.spyOn(cache, 'applyRoomCorrection').mockImplementation(track(implementations.applyRoomCorrection))
+  vi.spyOn(cache, 'applyCorrection').mockImplementation(track(unkeyed(implementations.applyCorrection)))
 })
 afterEach(async () => {
   try { await drain() } finally {
     await searchIndex.closeSearchIndex(); unbind?.(); vi.useRealTimers(); vi.restoreAllMocks(); cache._resetDBForTesting()
   }
 })
+
+// The kind-keyed cache functions are generic over the kind; spies and wrappers see them as plain overloads of both kinds.
+const unkeyed = <F extends (...args: never[]) => unknown>(fn: F) => fn as (...args: Parameters<F>) => ReturnType<F>
 
 function permutations<T>(items: T[]): T[][] {
   return items.length ? items.flatMap((item, index) => permutations(items.filter((_, i) => i !== index)).map(rest => [item, ...rest])) : [[]]
@@ -493,8 +493,8 @@ describe.each<Kind>(['chat', 'room'])('%s correction persistence retry', kind =>
       expect(repaired.encryptedPayload).toBe(current.encryptedPayload)
       expect(repaired.correctionRevision?.supersedes).toEqual([])
       expect(repaired.liveCorrection).toBeUndefined()
-      const writer = kind === 'chat' ? vi.mocked(cache.applyCorrection) : vi.mocked(cache.applyCorrection)
-      expect(writer.mock.calls.at(-1)?.[2].liveCorrection).not.toBe(true)
+      const writer = vi.mocked(cache.applyCorrection)
+      expect(writer.mock.calls.at(-1)?.[3].liveCorrection).not.toBe(true)
       expect(await searchIndex.search('original')).toHaveLength(0)
       expect(await searchIndex.search('replacement')).toHaveLength(content === 'empty caption' ? 0 : 1)
       expect((await reload(kind)).body).toBe(current.body)
@@ -614,8 +614,7 @@ describe.each<Kind>(['chat', 'room'])('%s preview recovery source ownership', ki
       ...(edited && { isEdited: true, correctionRevision: { ids: ['stanza:sid-c1'], supersedes: [], archiveTimestamp: Date.parse(T1) }, correctionStanzaIds: ['sid-c1'] }),
     }
     await save(kind, source); seed(kind, [source]); seedPreview(kind, source)
-    if (kind === 'chat') vi.mocked(cache.applyCorrection).mockResolvedValueOnce(null)
-    else vi.mocked(cache.applyCorrection).mockResolvedValueOnce(null)
+    vi.mocked(cache.applyCorrection).mockResolvedValueOnce(null)
     await h.live({ id: 'c2', body: 'newest unsaved caption', at: T2, authoredAt: T2 })
     const before = structuredClone(preview(kind)!)
     expect(before.body).toBe('newest unsaved caption')
@@ -1422,22 +1421,16 @@ describe.each<Kind>(['chat', 'room'])('%s cached correction hydration', kind => 
   function blockRead(mode: LoadMode) {
     const started = deferred()
     const release = deferred()
-    const block = <A extends unknown[], T>(read: (...args: A) => Promise<T>) => async (...args: A) => {
+    const block = <A extends unknown[], R extends Promise<unknown>>(read: (...args: A) => R) => (async (...args: A) => {
       const result = await read(...args)
       started.resolve()
       await release.promise
       return result
-    }
+    }) as (...args: A) => R
     // Load-newer reads through the typed cache read; the other modes through the plain one.
-    if (kind === 'chat') {
-      if (mode === 'around') vi.spyOn(cache, 'getMessagesAround').mockImplementationOnce(block(cache.getMessagesAround))
-      else if (mode === 'newer') vi.spyOn(cache, 'readMessages').mockImplementationOnce(block(cache.readMessages))
-      else vi.spyOn(cache, 'getMessages').mockImplementationOnce(block(cache.getMessages))
-    } else {
-      if (mode === 'around') vi.spyOn(cache, 'getRoomMessagesAround').mockImplementationOnce(block(cache.getMessagesAround))
-      else if (mode === 'newer') vi.spyOn(cache, 'readRoomMessages').mockImplementationOnce(block(cache.readMessages))
-      else vi.spyOn(cache, 'getRoomMessages').mockImplementationOnce(block(cache.getMessages))
-    }
+    if (mode === 'around') vi.spyOn(cache, 'getMessagesAround').mockImplementationOnce(block(unkeyed(cache.getMessagesAround)))
+    else if (mode === 'newer') vi.spyOn(cache, 'readMessages').mockImplementationOnce(block(unkeyed(cache.readMessages)))
+    else vi.spyOn(cache, 'getMessages').mockImplementationOnce(block(unkeyed(cache.getMessages)))
     return { started, release }
   }
 
@@ -1463,7 +1456,7 @@ describe.each<Kind>(['chat', 'room'])('%s cached correction hydration', kind => 
         return [...older, ...newer]
       }
       if (kind === 'chat') vi.spyOn(cache, 'getMessagesAround').mockImplementationOnce(async () => await read() as StoredMessage[])
-      else vi.spyOn(cache, 'getRoomMessagesAround').mockImplementationOnce(async () => await read() as StoredRoomMessage[])
+      else vi.spyOn(cache, 'getMessagesAround').mockImplementationOnce(async () => await read() as StoredRoomMessage[])
       return { started, release }
     }
     const read = mode === 'around' ? splitRead() : blockRead(mode)
@@ -1578,14 +1571,13 @@ describe.each<Kind>(['chat', 'room'])('%s cached correction hydration', kind => 
     const base = original(kind)
     await save(kind, base)
     const started = deferred(), release = deferred()
-    const block = <A extends unknown[], T>(read: (...args: A) => Promise<T>) => async (...args: A) => {
+    const block = <A extends unknown[], R extends Promise<unknown>>(read: (...args: A) => R) => (async (...args: A) => {
       const result = await read(...args)
       started.resolve()
       await release.promise
       return result
-    }
-    if (kind === 'chat') vi.spyOn(cache, 'reconcileChatHistoryMessages').mockImplementationOnce(block(cache.reconcileHistoryMessages))
-    else vi.spyOn(cache, 'reconcileRoomHistoryMessages').mockImplementationOnce(block(cache.reconcileHistoryMessages))
+    }) as (...args: A) => R
+    vi.spyOn(cache, 'reconcileHistoryMessages').mockImplementationOnce(block(unkeyed(cache.reconcileHistoryMessages)))
     const loading = load('around')
     await started.promise
     if (change === 'account round trip') {
@@ -1811,7 +1803,7 @@ describe('live cache-only chat corrections', () => {
         return result
       })()
       writes.push(pending)
-      return pending
+      return pending as ReturnType<typeof apply>
     })
     const work = h.live({ id: 'c2', body: 'account secret', at: T2 })
     await started.promise
@@ -1829,7 +1821,7 @@ describe('live cache-only chat corrections', () => {
 
 function deferCorrectionCompletion(kind: Kind) {
   const started = deferred(), release = deferred()
-  const wrap = <A extends unknown[], R>(apply: (...args: A) => Promise<R>) => (...args: A) => {
+  const wrap = <A extends unknown[], R extends Promise<unknown>>(apply: (...args: A) => R) => (...args: A) => {
     const work = (async () => {
       const result = await apply(...args)
       started.resolve()
@@ -1837,10 +1829,9 @@ function deferCorrectionCompletion(kind: Kind) {
       return result
     })()
     writes.push(work)
-    return work
+    return work as R
   }
-  if (kind === 'chat') vi.mocked(cache.applyCorrection).mockImplementationOnce(wrap(vi.mocked(cache.applyCorrection).getMockImplementation()!))
-  else vi.mocked(cache.applyCorrection).mockImplementationOnce(wrap(vi.mocked(cache.applyCorrection).getMockImplementation()!))
+  vi.mocked(cache.applyCorrection).mockImplementationOnce(wrap(vi.mocked(cache.applyCorrection).getMockImplementation()!))
   return { started, release }
 }
 
@@ -1862,17 +1853,10 @@ describe.each<Kind>(['chat', 'room'])('%s correction completion ownership', kind
     const base = indexedBase(kind, edited)
     await save(kind, base); seedPreview(kind, base); await searchIndex.indexMessage(base)
     const readStarted = deferred(), install = deferred()
-    if (kind === 'chat') {
-      const get = cache.getMessages
-      vi.spyOn(cache, 'getMessages').mockImplementationOnce(async (...args) => {
+    const get = unkeyed(cache.getMessages)
+    vi.spyOn(cache, 'getMessages').mockImplementationOnce(async (...args) => {
         const rows = await get(...args); readStarted.resolve(); await install.promise; return rows
       })
-    } else {
-      const get = cache.getMessages
-      vi.spyOn(cache, 'getRoomMessages').mockImplementationOnce(async (...args) => {
-        const rows = await get(...args); readStarted.resolve(); await install.promise; return rows
-      })
-    }
     const loading = loadWindow(kind)
     await readStarted.promise
     const completion = deferCorrectionCompletion(kind)
@@ -2179,13 +2163,8 @@ describe.each<Kind>(['chat', 'room'])('%s correction identity and older activati
     const base = indexedBase(kind, true)
     await save(kind, base); seedPreview(kind, base)
     const read = deferred(), install = deferred()
-    if (kind === 'chat') {
-      const get = cache.getMessagesAround
-      vi.spyOn(cache, 'getMessagesAround').mockImplementationOnce(async (...args) => { const rows = await get(...args); read.resolve(); await install.promise; return rows })
-    } else {
-      const get = cache.getMessagesAround
-      vi.spyOn(cache, 'getRoomMessagesAround').mockImplementationOnce(async (...args) => { const rows = await get(...args); read.resolve(); await install.promise; return rows })
-    }
+    const get = unkeyed(cache.getMessagesAround)
+    vi.spyOn(cache, 'getMessagesAround').mockImplementationOnce(async (...args) => { const rows = await get(...args); read.resolve(); await install.promise; return rows as never })
     const loading = kind === 'chat' ? chatStore.getState().loadMessagesAroundFromCache(PEER, { id: base.id })
       : roomStore.getState().loadMessagesAroundFromCache(ROOM, { id: base.id, occupantId: (base as StoredRoomMessage).occupantId })
     await read.promise
@@ -2504,13 +2483,8 @@ describe.each<Kind>(['chat', 'room'])('%s durable live predecessor selection', k
     const observed = (kind === 'chat' ? await cache.getMessages('chat', PEER) : await cache.getMessages('room', ROOM, {}))[0] as Row
     Object.assign(base, observed)
     const read = deferred(), install = deferred()
-    if (kind === 'chat') {
-      const get = cache.getMessages
-      vi.spyOn(cache, 'getMessages').mockImplementationOnce(async (...args) => { const rows = await get(...args); read.resolve(); await install.promise; return rows })
-    } else {
-      const get = cache.getMessages
-      vi.spyOn(cache, 'getRoomMessages').mockImplementationOnce(async (...args) => { const rows = await get(...args); read.resolve(); await install.promise; return rows })
-    }
+    const get = unkeyed(cache.getMessages)
+    vi.spyOn(cache, 'getMessages').mockImplementationOnce(async (...args) => { const rows = await get(...args); read.resolve(); await install.promise; return rows as never })
     const loading = loadWindow(kind)
     await read.promise
     const c1 = { id: 'c1', body: 'durable first edit', ...(kind === 'chat' && outgoing && { to: PEER }) }
@@ -2571,7 +2545,7 @@ describe('deferred recovery storage generation', () => {
     h.stores.chat.getConversationMessages.mockImplementation(() => chatStore.getState().messages.get(PEER) ?? [])
     const blocked = await blockedDecrypt()
     const writeStarted = deferred(), releaseWrite = deferred()
-    const update = cache.updateMessage
+    const update = unkeyed(cache.updateMessage)
     const port = phase === 'durable write' ? {
       ...cache,
       updateMessage: async (...args: Parameters<typeof cache.updateMessage>) => {
@@ -2906,10 +2880,10 @@ describe.each<Kind>(['chat', 'room'])('%s search insertion after identity enrich
     let pending: Promise<void> | undefined
     if (mode === 'backfill' || mode === 'rebuild') {
       await save(kind, ...history)
-      const method = kind === 'chat' ? 'iterateAllMessages' : 'iterateAllRoomMessages'
-      const iterate = cache[method]
-      vi.spyOn(cache, method).mockImplementation(async (size: number, onBatch: Parameters<typeof cache.iterateAllMessages>[1] | Parameters<typeof cache.iterateAllRoomMessages>[1]) => {
-        await iterate(size, async batch => {
+      const iterate = unkeyed(cache.iterateAllMessages)
+      vi.spyOn(cache, 'iterateAllMessages').mockImplementation(async (iterated, size, onBatch) => {
+        if (iterated !== kind) return iterate(iterated, size, onBatch as never)
+        await iterate(iterated, size, async (batch: Array<Row>) => {
           const rows = [...batch.filter(row => row.id !== base.id), ...batch.filter(row => row.id === base.id)]
           await onBatch(rows.slice(0, 50) as never)
           started.resolve(); await release.promise
@@ -3013,11 +2987,13 @@ describe.each<Kind>(['chat', 'room'])('%s search insertion after identity enrich
   it('cancels a backfill snapshot after an account round trip', async () => {
     setStorageScopeJid(SELF)
     await save(kind, { ...original(kind), body: 'account secret' })
-    const method = kind === 'chat' ? 'iterateAllMessages' : 'iterateAllRoomMessages'
-    const iterate = cache[method]
+    const iterate = unkeyed(cache.iterateAllMessages)
     const started = deferred(), release = deferred()
-    vi.spyOn(cache, method).mockImplementationOnce(async (size: number, onBatch: Parameters<typeof cache.iterateAllMessages>[1] | Parameters<typeof cache.iterateAllRoomMessages>[1]) => {
-      await iterate(size, async batch => { started.resolve(); await release.promise; await onBatch(batch as never) })
+    let intercepted = false
+    vi.spyOn(cache, 'iterateAllMessages').mockImplementation(async (iterated, size, onBatch) => {
+      if (iterated !== kind || intercepted) return iterate(iterated, size, onBatch as never)
+      intercepted = true
+      await iterate(iterated, size, async (batch: Array<Row>) => { started.resolve(); await release.promise; await onBatch(batch as never) })
     })
     const result = searchIndex.backfillFromMessageCache().then(() => null, error => error)
     await started.promise
@@ -3130,17 +3106,17 @@ describe.each<Kind>(['chat', 'room'])('%s correction handoff after recovered sou
     if (kind === 'room') seed(kind, [c1])
     const decrypt = await blockedDecrypt()
     const written = deferred(), release = deferred()
-    const block = <A extends unknown[], R>(update: (...args: A) => Promise<R>) => (...args: A) => {
+    const block = <A extends unknown[], R extends Promise<unknown>>(update: (...args: A) => R) => (...args: A) => {
       const pending = (async () => {
         const result = await update(...args)
         written.resolve(); await release.promise
         return result
       })()
       writes.push(pending)
-      return pending
+      return pending as R
     }
-    const port = { ...cache, updateMessage: block(cache.updateMessage) }
-    if (kind === 'room') vi.spyOn(cache, 'updateRoomMessage').mockImplementationOnce(block(cache.updateMessage))
+    const port = { ...cache, updateMessage: block(unkeyed(cache.updateMessage)) }
+    if (kind === 'room') vi.spyOn(cache, 'updateMessage').mockImplementationOnce(block(unkeyed(cache.updateMessage)))
     const engine = new DeferredDecryptEngine({ getManager: () => decrypt.manager, getStores: () => h.stores, getOwnBareJid: () => SELF, cache: port, updateSearchIndex: searchIndex.updateMessage })
     const retry = engine.retryPending()
     await decrypt.started.promise; decrypt.release.resolve()
@@ -3479,7 +3455,7 @@ describe('encrypted receive through transport recovery', () => {
             return result
           })()
           writes.push(pending)
-          return pending
+          return pending as ReturnType<typeof apply>
         })
         release.resolve(); await task.mock.results[0].value; await lookupStarted.promise
       }
@@ -4119,8 +4095,8 @@ describe.each(['single', 'batch'] as const)('%s room preview hydration ownership
     setStorageScopeJid(SELF)
     await save('room', original('room'))
     const started = deferred(), release = deferred()
-    const read = cache.getMessages
-    vi.spyOn(cache, 'getRoomMessages').mockImplementationOnce(async (...args) => {
+    const read = unkeyed(cache.getMessages)
+    vi.spyOn(cache, 'getMessages').mockImplementationOnce(async (...args) => {
       const rows = await read(...args); started.resolve(); await release.promise; return rows
     })
     const work = mode === 'single' ? roomStore.getState().loadPreviewFromCache(ROOM) : roomStore.getState().hydratePreviewsFromCache()
@@ -4169,10 +4145,10 @@ it('commits only surviving room previews after a batched read overlaps recreatio
   const other = { ...original('room'), roomJid: otherRoom, from: `${otherRoom}/Peer`, body: 'surviving room content' } as StoredRoomMessage
   await save('room', original('room'), other)
   const started = deferred(), release = deferred()
-  const read = cache.getMessages
-  vi.spyOn(cache, 'getRoomMessages').mockImplementation(async (...args) => {
+  const read = unkeyed(cache.getMessages)
+  vi.spyOn(cache, 'getMessages').mockImplementation(async (...args) => {
     const rows = await read(...args)
-    if (args[0] === otherRoom) { started.resolve(); await release.promise }
+    if (args[0] === 'room' && args[1] === otherRoom) { started.resolve(); await release.promise }
     return rows
   })
   const work = roomStore.getState().hydratePreviewsFromCache()

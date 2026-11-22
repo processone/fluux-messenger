@@ -60,7 +60,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     saveMessages: vi.fn().mockResolvedValue(true),
     getMessages: getRoomMessages,
     // The typed read serves what getRoomMessages is mocked to return, as a readable cache.
-    readMessages: vi.fn((...args: Parameters<typeof actual.readRoomMessages>) =>
+    readMessages: vi.fn((...args: Parameters<typeof actual.readMessages>) =>
       getRoomMessages(...args).then((value: RoomMessage[]) => ({ status: 'ok' as const, value }))),
     getMessagesAround: vi.fn().mockResolvedValue([]),
     updateMessage: vi.fn().mockResolvedValue(undefined),
@@ -2039,6 +2039,7 @@ describe('roomStore', () => {
       expect(roomWindow(ROOM)[0].stanzaId).toBeUndefined()
       expect(roomStore.getState().roomMeta.get(ROOM)?.lastMessage?.stanzaId).toBeUndefined()
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'room',
         ROOM,
         'm1',
         { stanzaId: undefined },
@@ -2740,7 +2741,7 @@ describe('roomStore', () => {
       roomStore.getState().addRoom(createRoom('fast@conference.example.com'))
 
       let resolveSlow: (value: RoomMessage[]) => void = () => {}
-      vi.mocked(messageCache.getMessages).mockImplementation((roomJid) =>
+      vi.mocked(messageCache.getMessages).mockImplementation((_kind, roomJid, _options?) =>
         roomJid === 'slow@conference.example.com'
           ? new Promise((resolve) => { resolveSlow = resolve })
           : Promise.resolve([])
@@ -2857,6 +2858,7 @@ describe('roomStore', () => {
       await roomStore.getState().activateRoom(roomJid)
 
       expect(messageCache.getMessagesAround).toHaveBeenCalledWith(
+        'room',
         roomJid,
         { id: 'msg-150' },
         expect.any(Object)
@@ -4083,6 +4085,7 @@ describe('roomStore', () => {
 
       expect(roomWindow('test@conference.example.com')[0].reactions).toEqual({ '👍': ['bob'] })
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'room',
         'test@conference.example.com',
         'msg1',
         { reactions: { '👍': ['bob'] } },
@@ -5474,7 +5477,7 @@ describe('roomStore', () => {
       const result = await roomStore.getState().loadPreviewFromCache(roomJid)
 
       expect(result).toEqual(cachedMessage)
-      expect(messageCache.getMessages).toHaveBeenCalledWith(roomJid, {
+      expect(messageCache.getMessages).toHaveBeenCalledWith('room', roomJid, {
         limit: 10,
         latest: true,
       })
@@ -5593,7 +5596,7 @@ describe('roomStore', () => {
       expect(roomStore.getState().rooms.get(roomB)?.lastMessage).toBeUndefined()
 
       // B's newest cached message is more recent than A's.
-      vi.mocked(messageCache.getMessages).mockImplementation((jid) =>
+      vi.mocked(messageCache.getMessages).mockImplementation((_kind, jid, _options?) =>
         Promise.resolve(
           jid === roomB
             ? [makeMsg(roomB, '2024-01-15T12:00:00Z', 'newer')]
@@ -5685,7 +5688,7 @@ describe('roomStore', () => {
       const latest = roomMsgAt('newer-5', 5)
       roomStore.setState({ messages: new Map([[roomJid, [latest]]]) })
       let finish!: (rows: RoomMessage[]) => void
-      vi.mocked(messageCache.getMessagesAround).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      vi.mocked(messageCache.getMessagesAround).mockImplementationOnce(() => new Promise<RoomMessage[]>(resolve => { finish = resolve }))
       const request = new AbortController()
       const pending = roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' }, undefined, request.signal)
       await vi.waitFor(() => expect(messageCache.getMessagesAround).toHaveBeenCalledTimes(1))
@@ -5701,7 +5704,7 @@ describe('roomStore', () => {
 
       const returned = await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' })
 
-      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(roomJid, { id: 'anchor' }, expect.any(Object))
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith('room', roomJid, { id: 'anchor' }, expect.any(Object))
       const resident = roomWindow(roomJid)
       expect(resident?.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
       expect(returned.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
@@ -5740,7 +5743,7 @@ describe('roomStore', () => {
         setResidentWindowSize(5000)
       }
 
-      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(roomJid, { id: 'anchor' }, { after: 3 })
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith('room', roomJid, { id: 'anchor' }, { after: 3 })
       // The bounded slice stopped short of the resident newest message, so it must not sit past a gap.
       expect(roomWindow(roomJid)?.map((m) => m.id)).toEqual(['anchor', 'newer-5', 'newer-6'])
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
@@ -5766,17 +5769,17 @@ describe('roomStore', () => {
         setResidentWindowSize(5000)
       }
 
-      expect(vi.mocked(messageCache.getMessagesAround).mock.calls.map(call => call[2]?.after)).toEqual([3, undefined])
+      expect(vi.mocked(messageCache.getMessagesAround).mock.calls.map(call => call[3]?.after)).toEqual([3, undefined])
       expect(roomWindow(roomJid)?.map((m) => m.id)).toEqual(['anchor', 'unread', 'latest'])
     })
 
     it('keeps a caller-chosen newer bound and the live edge when the cache tail is shorter than the window', async () => {
       vi.mocked(messageCache.getMessagesAround).mockResolvedValue([roomMsgAt('anchor', 4), roomMsgAt('newer-5', 5)])
       await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' }, { before: 0, after: 10 })
-      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(roomJid, { id: 'anchor' }, { before: 0, after: 10 })
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith('room', roomJid, { id: 'anchor' }, { before: 0, after: 10 })
       vi.mocked(messageCache.getMessagesAround).mockClear()
       await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' })
-      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(roomJid, { id: 'anchor' }, { after: 5000 })
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith('room', roomJid, { id: 'anchor' }, { after: 5000 })
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).not.toBe(false)
     })
   })
@@ -5938,7 +5941,7 @@ describe('roomStore', () => {
       expect(roomWindow(roomJid).length).toBe(before.length)
       expect(roomWindow(roomJid)[roomWindow(roomJid).length - 1].id).toBe(before[before.length - 1].id)
       // ...but the message is still persisted to IndexedDB...
-      expect(messageCache.saveMessageWithResult).toHaveBeenCalledWith(expect.objectContaining({ id: 'live-1' }))
+      expect(messageCache.saveMessageWithResult).toHaveBeenCalledWith('room', expect.objectContaining({ id: 'live-1' }))
       // ...and meta (sidebar preview + unread badge) still update.
       expect(room.lastMessage?.id).toBe('live-1')
       expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage?.id).toBe('live-1')
@@ -6000,8 +6003,8 @@ describe('roomStore', () => {
       // Attaching either page would splice it after resident-4999 and hide every cached message between.
       expect(roomWindow(roomJid)).toBe(parked)
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
-      expect(messageCache.saveMessages).toHaveBeenCalledWith([expect.objectContaining({ id: 'caught-up-1' })])
-      expect(messageCache.saveMessages).toHaveBeenCalledWith([expect.objectContaining({ id: 'fetch-latest-1' })])
+      expect(messageCache.saveMessages).toHaveBeenCalledWith('room', [expect.objectContaining({ id: 'caught-up-1' })])
+      expect(messageCache.saveMessages).toHaveBeenCalledWith('room', [expect.objectContaining({ id: 'fetch-latest-1' })])
       expect(roomStore.getState().getRoom(roomJid)?.lastMessage?.id).toBe('fetch-latest-1')
     })
   })
@@ -6114,7 +6117,7 @@ describe('roomStore', () => {
       await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
 
       const newestInMemory = roomMsgAt(`resident-${RESIDENT_WINDOW_SIZE - 1}`, RESIDENT_WINDOW_SIZE - 1)
-      expect(messageCache.getMessages).toHaveBeenCalledWith(roomJid, {
+      expect(messageCache.getMessages).toHaveBeenCalledWith('room', roomJid, {
         after: newestInMemory.timestamp,
         limit: 50,
       })
@@ -6539,6 +6542,7 @@ describe('roomStore', () => {
       await flushRetractionStorage()
       // Verify IndexedDB update uses actual message id, not the stanza-id
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'room',
         roomJid,
         'client-id-1',
         { isRetracted: true, retractedAt: expect.any(Date) },
@@ -6572,6 +6576,7 @@ describe('roomStore', () => {
       expect(updated?.body).toBe('Hello (fixed)')
       // IndexedDB update still keyed by the actual stored message id.
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'room',
         roomJid,
         'muc-rewritten-id',
         { isEdited: true, body: 'Hello (fixed)', originalBody: 'Hello' },
@@ -7258,6 +7263,7 @@ describe('roomStore pending retractions', () => {
     expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
     await flushRetractionStorage()
     expect(messageCache.updateMessage).toHaveBeenCalledWith(
+      'room',
       roomJid,
       'm1',
       expect.objectContaining({ isRetracted: true }),
@@ -7282,7 +7288,7 @@ describe('roomStore pending retractions', () => {
     })
     expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
     // The tombstone rides the archive write instead of racing it.
-    expect(messageCache.saveMessages).toHaveBeenCalledWith([
+    expect(messageCache.saveMessages).toHaveBeenCalledWith('room', [
       expect.objectContaining({ id: 'm1', isRetracted: true }),
     ])
   })
@@ -7358,6 +7364,7 @@ describe('roomStore parity drift regressions', () => {
       expect(roomStore.getState().messages.get(roomJid)?.[0]?.stanzaId).toBe('archive-123')
       // The backfill must also persist so the cursor survives a reload.
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'room',
         roomJid,
         'orig-1',
         expect.objectContaining({ stanzaId: 'archive-123' }),
@@ -7502,6 +7509,7 @@ describe('roomStore parity drift regressions', () => {
       // saveRoomMessages upserts by identity, so the row stays findable by the
       // archive id it just gained.
       expect(messageCache.saveMessages).toHaveBeenCalledWith(
+        'room',
         expect.arrayContaining([
           expect.objectContaining({ id: 'own-1', stanzaId: 'arch-merge' }),
         ])

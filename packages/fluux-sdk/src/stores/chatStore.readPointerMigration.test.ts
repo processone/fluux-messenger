@@ -22,8 +22,8 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
   return {
     ...actual,
-    getMessage: (conversationId: string, id: string) => (
-      getMessageGate ? getMessageGate(id) : actual.getMessage(conversationId, id)
+    getMessage: (kind: 'chat' | 'room', conversationId: string, id: string) => (
+      getMessageGate ? getMessageGate(id) : actual.getMessage(kind, conversationId, id)
     ),
   }
 })

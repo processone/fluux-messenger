@@ -5,21 +5,29 @@ import { roomStore } from '../stores/roomStore'
 import { ignoreStore } from '../stores/ignoreStore'
 import { createRoom, createMessage, seedRoomWindow } from '../stores/roomStore.testHelpers'
 import type { RoomMessage, RoomOccupant } from '../core/types'
-import * as messageCache from '../utils/messageCache'
+
+// The cache functions are kind-keyed: only the room kind is mocked, the chat kind keeps its real implementation.
+const roomCache = vi.hoisted(() => ({
+  getMessages: vi.fn(),
+  getMessagesAround: vi.fn(),
+}))
 
 vi.mock('../utils/messageCache', async (importOriginal) => {
-  const getRoomMessages = vi.fn()
+  const actual = await importOriginal<typeof import('../utils/messageCache')>()
+  const forward = (name: keyof typeof actual) => actual[name] as unknown as (...args: unknown[]) => unknown
+  const forRoom = (name: keyof typeof actual, room: (...args: unknown[]) => unknown) =>
+    vi.fn((kind: string, ...args: unknown[]) => kind === 'room' ? room(...args) : forward(name)(kind, ...args))
   return {
-  ...await importOriginal<typeof import('../utils/messageCache')>(),
+  ...actual,
   isMessageCacheAvailable: vi.fn(() => true),
-  getMessages: getRoomMessages,
-  // The typed read serves what getRoomMessages is mocked to return, as a readable cache.
-  readMessages: vi.fn(async (...args: unknown[]) => ({ status: 'ok' as const, value: await getRoomMessages(...args) })),
-  getMessagesAround: vi.fn(),
-  saveMessage: vi.fn().mockResolvedValue(undefined),
-  saveMessageWithResult: vi.fn().mockResolvedValue(true),
-  saveMessages: vi.fn().mockResolvedValue(true),
-  reconcileHistoryMessages: vi.fn(async (messages: RoomMessage[]) => messages),
+  getMessages: forRoom('getMessages', roomCache.getMessages),
+  // The typed read serves what the room getMessages is mocked to return, as a readable cache.
+  readMessages: forRoom('readMessages', async (...args: unknown[]) => ({ status: 'ok' as const, value: await roomCache.getMessages(...args) })),
+  getMessagesAround: forRoom('getMessagesAround', roomCache.getMessagesAround),
+  saveMessage: forRoom('saveMessage', vi.fn().mockResolvedValue(undefined)),
+  saveMessageWithResult: forRoom('saveMessageWithResult', vi.fn().mockResolvedValue(true)),
+  saveMessages: forRoom('saveMessages', vi.fn().mockResolvedValue(true)),
+  reconcileHistoryMessages: forRoom('reconcileHistoryMessages', async (messages: unknown) => messages),
   }
 })
 
@@ -47,8 +55,8 @@ describe('preview decisions with queued occupant identities', () => {
     unsubscribe = createStoreBindings(client, () => ({
       ...refs, room: roomStore.getState(), ignore: ignoreStore.getState(),
     }))
-    vi.mocked(messageCache.getMessages).mockResolvedValue([visible, ignored])
-    vi.mocked(messageCache.getMessagesAround).mockResolvedValue([visible, ignored])
+    roomCache.getMessages.mockResolvedValue([visible, ignored])
+    roomCache.getMessagesAround.mockResolvedValue([visible, ignored])
     ignoreStore.getState().addIgnored(roomJid, { identifier: 'bob@example.test', displayName: 'Bob' })
   })
 
@@ -106,7 +114,7 @@ describe('preview decisions with queued occupant identities', () => {
 
   it.each(['single', 'batch'] as const)('refreshes identities after a pending %s cache preview read', async path => {
     let complete!: (messages: RoomMessage[]) => void
-    vi.mocked(messageCache.getMessages).mockImplementation(jid => jid === roomJid
+    roomCache.getMessages.mockImplementation(jid => jid === roomJid
       ? new Promise(resolve => { complete = resolve }) : Promise.resolve([]))
     const pending = path === 'single'
       ? roomStore.getState().loadPreviewFromCache(roomJid)
@@ -120,7 +128,7 @@ describe('preview decisions with queued occupant identities', () => {
 
   it('uses current identity when a batch waits for another room cache read', async () => {
     let completeOther!: (messages: RoomMessage[]) => void
-    vi.mocked(messageCache.getMessages).mockImplementation(jid => jid === roomJid
+    roomCache.getMessages.mockImplementation(jid => jid === roomJid
       ? Promise.resolve([visible, ignored]) : new Promise(resolve => { completeOther = resolve }))
     const pending = roomStore.getState().hydratePreviewsFromCache()
     await Promise.resolve()
@@ -132,7 +140,7 @@ describe('preview decisions with queued occupant identities', () => {
 
   it('does not use a room object captured before an already-committed identity change', async () => {
     let complete!: (messages: RoomMessage[]) => void
-    vi.mocked(messageCache.getMessages).mockReturnValue(new Promise(resolve => { complete = resolve }))
+    roomCache.getMessages.mockReturnValue(new Promise(resolve => { complete = resolve }))
     const pending = roomStore.getState().loadPreviewFromCache(roomJid)
     client.emit('room:occupant-joined', { roomJid, occupant: bob })
     vi.advanceTimersByTime(16)
