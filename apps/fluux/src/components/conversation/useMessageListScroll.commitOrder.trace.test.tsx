@@ -55,6 +55,15 @@ interface Props {
 const lines: string[] = []
 let apiRef: UseMessageListScrollResult | undefined
 const scrollTopSets: number[] = []
+let pendingLoad: Promise<void> | undefined
+let settleLoad: (() => void) | undefined
+
+// Frames wait in a queue and run when a step flushes them, the way the scroll bench schedules them,
+// so a frame never runs inside the call that requested it.
+const frameQueue: FrameRequestCallback[] = []
+function flushFrames() {
+  for (let guard = 0; frameQueue.length > 0 && guard < 500; guard += 1) frameQueue.shift()?.(0)
+}
 
 function Harness(props: Props) {
   const geometry = React.useRef({ scrollHeight: 1000, clientHeight: 500 })
@@ -75,7 +84,11 @@ function Harness(props: Props) {
     isLoadingNewer: props.isLoadingNewer,
     interiorPlacementVersion: props.interiorPlacementVersion,
     staticMode: props.staticMode,
-    onScrollToTop: () => {},
+    onScrollToTop: () => {
+      // The load stays in flight until the scenario lets it settle, as a network load does.
+      pendingLoad = new Promise<void>((resolve) => { settleLoad = resolve })
+      return pendingLoad
+    },
     onLoadNewer: () => {},
     clearFirstNewMessageId: () => {},
     onLoadAround: () => {},
@@ -191,7 +204,7 @@ function spyOn(cls: { name: string; prototype: object }) {
 const ids = (prefix: string, from: number, to: number) =>
   Array.from({ length: to - from }, (_, i) => `${prefix}-${from + i}`)
 
-function runScenarios(): string {
+async function runScenarios(): Promise<string> {
   lines.length = 0
   lastLine = ''
   repeat = 0
@@ -201,6 +214,7 @@ function runScenarios(): string {
   mark('mount a (live edge entry)')
   scrollTopSets.length = 0
   const view = render(<Harness {...current} />)
+  act(() => { flushFrames() })
   flushRepeat()
   lines.push(`   scroll writes: [${scrollTopSets.join(',')}]`)
   const step = (label: string, patch: Partial<Props>) => {
@@ -208,6 +222,7 @@ function runScenarios(): string {
     current = { ...current, ...patch }
     scrollTopSets.length = 0
     act(() => { view.rerender(<Harness {...current} />) })
+    act(() => { flushFrames() })
     flushRepeat()
     lastLine = ''
     lines.push(`   scroll writes: [${scrollTopSets.join(',')}]`)
@@ -222,9 +237,14 @@ function runScenarios(): string {
 
   mark('load earlier requested')
   act(() => { apiRef?.handleLoadEarlier() })
+  act(() => { flushFrames() })
   flushRepeat()
   step('older loading', { isLoadingOlder: true })
   step('prepend lands', { ids: [...ids('a', 5, 10), ...ids('a', 10, 17)], isLoadingOlder: false })
+  mark('load settles after the prepend')
+  await act(async () => { settleLoad?.(); await pendingLoad })
+  act(() => { flushFrames() })
+  flushRepeat()
   step('interior arrival', { ids: [...ids('a', 5, 10), 'a-9b', ...ids('a', 10, 17)], interiorPlacementVersion: 1 })
   step('window slides off live edge', { windowAtLiveEdge: false })
   step('window returns to live edge', { windowAtLiveEdge: true })
@@ -252,6 +272,8 @@ function runScenarios(): string {
 
   mark('unmount')
   view.unmount()
+  // Controller deactivation waits one microtask; let it run before the trace is read.
+  await act(async () => { await Promise.resolve(); await Promise.resolve() })
   flushRepeat()
   return lines.join('\n') + '\n'
 }
@@ -264,11 +286,14 @@ describe('useMessageListScroll commit order', () => {
     resetScrollShadowDiagnostics()
     vi.stubGlobal('ResizeObserver', MockResizeObserver)
     realRaf = window.requestAnimationFrame
+    frameQueue.length = 0
+    pendingLoad = undefined
+    settleLoad = undefined
     window.requestAnimationFrame = (callback: FrameRequestCallback) => {
-      callback(0)
-      return 0
+      frameQueue.push(callback)
+      return frameQueue.length
     }
-    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'queueMicrotask'] })
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
     // A saved reading position for room b and room d's history, so the switch paths take the
     // saved-position entry.
@@ -288,17 +313,17 @@ describe('useMessageListScroll commit order', () => {
   })
 
   it('calls the controller, session, persistence and window coordinator in the recorded order', async () => {
-    const trace = runScenarios()
+    const trace = await runScenarios()
     await expect(trace).toMatchFileSnapshot('./__traces__/useMessageListScroll.commitOrder.trace.txt')
   })
 
-  it('records the same trace on a second run', () => {
-    const first = runScenarios()
+  it('records the same trace on a second run', async () => {
+    const first = await runScenarios()
     cleanup()
     scrollStateManager.reset()
     resetScrollShadowDiagnostics()
     scrollStateManager.enterConversation('b@example.test', 10)
     scrollStateManager.leaveConversation('b@example.test', 200, 1000, 500, undefined, undefined)
-    expect(runScenarios()).toBe(first)
+    expect(await runScenarios()).toBe(first)
   })
 })

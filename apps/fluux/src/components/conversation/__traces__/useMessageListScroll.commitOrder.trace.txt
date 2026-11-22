@@ -52,6 +52,30 @@ PositioningController.hasInteractionHold
 PositioningController.ownsPositionTarget
 PositioningController.ownsMessageTarget
 PositioningController.hasInteractionHold
+ViewportSession.hasGenuineInput a@example.test
+ViewportSession.isCurrent a@example.test
+PositioningController.hasInteractionPosition
+ViewportSession.hasGenuineInput a@example.test
+ViewportSession.isCurrent a@example.test
+PositioningController.savedPositionStatus a@example.test
+PositioningController.refreshLiveEdge a@example.test
+DirectionalHistoryWindowCoordinator.observeWindow a@example.test
+PositioningController.isSavedPositionPending a@example.test
+PositioningController.savedPositionStatus a@example.test
+PositioningController.isDirectionalHistoryPending a@example.test
+PositioningController.hasInteractionHold
+DirectionalHistoryWindowCoordinator.observeLiveEdge a@example.test
+ViewportSession.hasGenuineInput a@example.test
+ViewportSession.isCurrent a@example.test
+PositioningController.hasInteractionPosition
+ViewportSession.hasGenuineInput a@example.test
+ViewportSession.isCurrent a@example.test
+PositioningController.savedPositionStatus a@example.test
+PositioningController.refreshLiveEdge a@example.test
+PositioningController.isSavedPositionPending a@example.test
+PositioningController.savedPositionStatus a@example.test
+PositioningController.isDirectionalHistoryPending a@example.test
+PositioningController.hasInteractionHold
 ViewportSession.snapshotFor a@example.test
 ViewportSession.isCurrent a@example.test
 ViewportSession.observedRowIdFor a@example.test
@@ -83,30 +107,6 @@ PositioningController.hasInteractionHold
   (x2)
 PositioningController.ownsPositionTarget
 PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-ViewportSession.hasGenuineInput a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.hasInteractionPosition
-ViewportSession.hasGenuineInput a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.savedPositionStatus a@example.test
-PositioningController.refreshLiveEdge a@example.test
-DirectionalHistoryWindowCoordinator.observeWindow a@example.test
-PositioningController.isSavedPositionPending a@example.test
-PositioningController.savedPositionStatus a@example.test
-PositioningController.isDirectionalHistoryPending a@example.test
-PositioningController.hasInteractionHold
-DirectionalHistoryWindowCoordinator.observeLiveEdge a@example.test
-ViewportSession.hasGenuineInput a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.hasInteractionPosition
-ViewportSession.hasGenuineInput a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.savedPositionStatus a@example.test
-PositioningController.refreshLiveEdge a@example.test
-PositioningController.isSavedPositionPending a@example.test
-PositioningController.savedPositionStatus a@example.test
-PositioningController.isDirectionalHistoryPending a@example.test
 PositioningController.hasInteractionHold
    scroll writes: [500,500]
 == append incoming
@@ -501,23 +501,6 @@ PositioningController.ownsMessageTarget
 PositioningController.hasInteractionHold
 DirectionalHistoryWindowCoordinator.attachGeneration
 DirectionalHistoryWindowCoordinator.invokeLoad a@example.test
-DirectionalHistoryWindowCoordinator.markLoadSettled
-DirectionalHistoryWindowCoordinator.releaseSettledWithoutShift a@example.test
-PositioningController.cancelDirectionalHistoryWithoutShift a@example.test
-PositioningController.currentDirectionalRun a@example.test
-DirectionalHistoryWindowCoordinator.finishPosition
-PositioningController.snapshot
-ViewportSession.observedRowIdFor a@example.test
-ViewportSession.isCurrent a@example.test
-ViewportSession.recordProgrammaticWrite a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
 == older loading
 ViewportSession.hasGenuineInput a@example.test
 ViewportSession.isCurrent a@example.test
@@ -536,6 +519,9 @@ ViewportSession.snapshotFor a@example.test
 ViewportSession.isCurrent a@example.test
 DirectionalHistoryWindowCoordinator.isPendingWindowShift a@example.test
 DirectionalHistoryWindowCoordinator.activeSnapshot a@example.test
+DirectionalHistoryWindowCoordinator.shiftedBeforeRestore a@example.test
+DirectionalHistoryWindowCoordinator.pendingGeneration a@example.test
+PositioningController.isDirectionalHistoryPending a@example.test
 ViewportSession.hasGenuineInput a@example.test
 ViewportSession.isCurrent a@example.test
 PositioningController.hasInteractionPosition
@@ -544,123 +530,58 @@ ViewportSession.isCurrent a@example.test
 PositioningController.savedPositionStatus a@example.test
 PositioningController.refreshLiveEdge a@example.test
 DirectionalHistoryWindowCoordinator.observeWindow a@example.test
+DirectionalHistoryWindowCoordinator.pendingGeneration a@example.test
+PositioningController.isDirectionalHistoryPending a@example.test
+DirectionalHistoryWindowCoordinator.restoringFor a@example.test
+PositioningController.reconcileDirectionalHistory a@example.test
+PositioningController.currentDirectionalRun a@example.test
+PositioningController.ownsPositionTarget
+PositioningController.ownsMessageTarget
+PositioningController.hasInteractionHold
+  (x2)
+PositioningController.ownsPositionTarget
+PositioningController.ownsMessageTarget
+PositioningController.hasInteractionHold
+DirectionalHistoryWindowCoordinator.recordPlacement
+PositioningController.ownsPositionTarget
+PositioningController.ownsMessageTarget
+PositioningController.hasInteractionHold
+  (x2)
+PositioningController.ownsPositionTarget
+PositioningController.ownsMessageTarget
+PositioningController.hasInteractionHold
+DirectionalHistoryWindowCoordinator.markRestored
+PositioningController.snapshot
+ViewportSession.observedRowIdFor a@example.test
+ViewportSession.isCurrent a@example.test
+ViewportSession.recordProgrammaticWrite a@example.test
+ViewportSession.isCurrent a@example.test
+DirectionalHistoryWindowCoordinator.finishPosition
+PositioningController.snapshot
+ViewportSession.observedRowIdFor a@example.test
+ViewportSession.isCurrent a@example.test
+ViewportSession.recordProgrammaticWrite a@example.test
+ViewportSession.isCurrent a@example.test
+PositioningController.ownsPositionTarget
+PositioningController.ownsMessageTarget
+PositioningController.hasInteractionHold
+  (x2)
+PositioningController.ownsPositionTarget
+PositioningController.ownsMessageTarget
+PositioningController.hasInteractionHold
 PositioningController.isSavedPositionPending a@example.test
 PositioningController.savedPositionStatus a@example.test
 PositioningController.isDirectionalHistoryPending a@example.test
+PositioningController.hasInteractionHold
 PositioningController.reconcileInteractionHold a@example.test
 PositioningController.hasInteractionHold
 PositioningController.reconcileLiveEdge a@example.test
 PositioningController.isInputHeld a@example.test
 PositioningController.rearmLiveEdgeFromGeometry a@example.test
-PositioningController.hasUnreadMarkerHold a@example.test
-PositioningController.canRearmAfterTargetTakeover a@example.test
-PositioningController.hasCurrentTargetTakeover a@example.test
-PositioningController.acceptRequest a@example.test ambient-live-edge/geometry-rearm
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-ViewportSession.snapshotFor a@example.test
-ViewportSession.isCurrent a@example.test
-ViewportSession.observedRowIdFor a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.hasPendingNavigation a@example.test
-PositioningController.hasInteractionHold
-ViewportSession.observeGeometry a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.snapshot
-ViewportSession.observedRowIdFor a@example.test
-ViewportSession.isCurrent a@example.test
-ViewportSession.recordProgrammaticWrite a@example.test
-ViewportSession.isCurrent a@example.test
-ViewportSession.recordViewport a@example.test
-ViewportSession.isCurrent a@example.test
-ScrollPersistenceAdapter.clearSavedPosition a@example.test
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.hasUnreadMarkerHold a@example.test
-ViewportSession.recordMeasuredLiveEdge a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.snapshot
-ViewportSession.observedRowIdFor a@example.test
-ViewportSession.isCurrent a@example.test
-ViewportSession.recordProgrammaticWrite a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.reconcileInteractionHold a@example.test
-PositioningController.hasInteractionHold
-PositioningController.reconcileLiveEdge a@example.test
-PositioningController.isInputHeld a@example.test
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-ViewportSession.snapshotFor a@example.test
-ViewportSession.isCurrent a@example.test
-ViewportSession.observedRowIdFor a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.hasPendingNavigation a@example.test
-PositioningController.hasInteractionHold
-ViewportSession.observeGeometry a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.snapshot
-ViewportSession.observedRowIdFor a@example.test
-ViewportSession.isCurrent a@example.test
-ViewportSession.recordProgrammaticWrite a@example.test
-ViewportSession.isCurrent a@example.test
-ViewportSession.recordViewport a@example.test
-ViewportSession.isCurrent a@example.test
-ScrollPersistenceAdapter.clearSavedPosition a@example.test
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.hasUnreadMarkerHold a@example.test
-ViewportSession.recordMeasuredLiveEdge a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.snapshot
-ViewportSession.observedRowIdFor a@example.test
-ViewportSession.isCurrent a@example.test
-ViewportSession.recordProgrammaticWrite a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-   scroll writes: [500,500]
+   scroll writes: [500]
+== load settles after the prepend
+DirectionalHistoryWindowCoordinator.markLoadSettled
+DirectionalHistoryWindowCoordinator.releaseSettledWithoutShift a@example.test
 == interior arrival
 ViewportSession.snapshotFor a@example.test
 ViewportSession.isCurrent a@example.test
@@ -681,54 +602,9 @@ PositioningController.reconcileInteractionHold a@example.test
 PositioningController.hasInteractionHold
 PositioningController.reconcileLiveEdge a@example.test
 PositioningController.isInputHeld a@example.test
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
+PositioningController.rearmLiveEdgeFromGeometry a@example.test
 PositioningController.hasInteractionHold
-  (x2)
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-ViewportSession.snapshotFor a@example.test
-ViewportSession.isCurrent a@example.test
-ViewportSession.observedRowIdFor a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.hasPendingNavigation a@example.test
-PositioningController.hasInteractionHold
-ViewportSession.observeGeometry a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.snapshot
-ViewportSession.observedRowIdFor a@example.test
-ViewportSession.isCurrent a@example.test
-ViewportSession.recordProgrammaticWrite a@example.test
-ViewportSession.isCurrent a@example.test
-ViewportSession.recordViewport a@example.test
-ViewportSession.isCurrent a@example.test
-ScrollPersistenceAdapter.clearSavedPosition a@example.test
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.hasUnreadMarkerHold a@example.test
-ViewportSession.recordMeasuredLiveEdge a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.snapshot
-ViewportSession.observedRowIdFor a@example.test
-ViewportSession.isCurrent a@example.test
-ViewportSession.recordProgrammaticWrite a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-PositioningController.ownsPositionTarget
-PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-  (x2)
-   scroll writes: [500]
+   scroll writes: []
 == window slides off live edge
 ViewportSession.snapshotFor a@example.test
 ViewportSession.isCurrent a@example.test
@@ -1116,7 +992,20 @@ PositioningController.hasInteractionHold
 PositioningController.ownsPositionTarget
 PositioningController.ownsMessageTarget
 PositioningController.hasInteractionHold
-  (x2)
+ViewportSession.hasGenuineInput c@example.test
+ViewportSession.isCurrent c@example.test
+PositioningController.hasInteractionPosition
+ViewportSession.hasGenuineInput c@example.test
+ViewportSession.isCurrent c@example.test
+PositioningController.savedPositionStatus c@example.test
+PositioningController.refreshLiveEdge c@example.test
+DirectionalHistoryWindowCoordinator.observeWindow c@example.test
+PositioningController.isSavedPositionPending c@example.test
+PositioningController.savedPositionStatus c@example.test
+PositioningController.isDirectionalHistoryPending c@example.test
+PositioningController.hasInteractionHold
+DirectionalHistoryWindowCoordinator.observeLiveEdge c@example.test
+PositioningController.hasInteractionHold
 PositioningController.acceptRequest c@example.test fallback/unread-marker-unavailable
 PositioningController.ownsPositionTarget
 PositioningController.ownsMessageTarget
@@ -1171,19 +1060,6 @@ PositioningController.hasInteractionHold
 PositioningController.ownsPositionTarget
 PositioningController.ownsMessageTarget
 PositioningController.hasInteractionHold
-ViewportSession.hasGenuineInput c@example.test
-ViewportSession.isCurrent c@example.test
-PositioningController.hasInteractionPosition
-ViewportSession.hasGenuineInput c@example.test
-ViewportSession.isCurrent c@example.test
-PositioningController.savedPositionStatus c@example.test
-PositioningController.refreshLiveEdge c@example.test
-DirectionalHistoryWindowCoordinator.observeWindow c@example.test
-PositioningController.isSavedPositionPending c@example.test
-PositioningController.savedPositionStatus c@example.test
-PositioningController.isDirectionalHistoryPending c@example.test
-PositioningController.hasInteractionHold
-DirectionalHistoryWindowCoordinator.observeLiveEdge c@example.test
 ViewportSession.hasGenuineInput c@example.test
 ViewportSession.isCurrent c@example.test
 PositioningController.hasInteractionPosition
@@ -1264,6 +1140,18 @@ PositioningController.ownsMessageTarget
 PositioningController.hasInteractionHold
 PositioningController.ownsPositionTarget
 PositioningController.ownsMessageTarget
+DirectionalHistoryWindowCoordinator.observeLiveEdge d@example.test
+ViewportSession.hasGenuineInput d@example.test
+ViewportSession.isCurrent d@example.test
+PositioningController.hasInteractionPosition
+ViewportSession.hasGenuineInput d@example.test
+ViewportSession.isCurrent d@example.test
+PositioningController.savedPositionStatus d@example.test
+PositioningController.refreshLiveEdge d@example.test
+PositioningController.isSavedPositionPending d@example.test
+PositioningController.savedPositionStatus d@example.test
+PositioningController.isDirectionalHistoryPending d@example.test
+PositioningController.hasInteractionHold
 ViewportSession.snapshotFor d@example.test
 ViewportSession.isCurrent d@example.test
 ViewportSession.observedRowIdFor d@example.test
@@ -1277,18 +1165,6 @@ PositioningController.ownsMessageTarget
 PositioningController.hasInteractionHold
 PositioningController.ownsPositionTarget
 PositioningController.ownsMessageTarget
-DirectionalHistoryWindowCoordinator.observeLiveEdge d@example.test
-ViewportSession.hasGenuineInput d@example.test
-ViewportSession.isCurrent d@example.test
-PositioningController.hasInteractionPosition
-ViewportSession.hasGenuineInput d@example.test
-ViewportSession.isCurrent d@example.test
-PositioningController.savedPositionStatus d@example.test
-PositioningController.refreshLiveEdge d@example.test
-PositioningController.isSavedPositionPending d@example.test
-PositioningController.savedPositionStatus d@example.test
-PositioningController.isDirectionalHistoryPending d@example.test
-PositioningController.hasInteractionHold
    scroll writes: []
 == switch back to a
 ViewportSession.snapshotFor a@example.test
@@ -1352,6 +1228,31 @@ PositioningController.hasInteractionHold
 PositioningController.ownsPositionTarget
 PositioningController.ownsMessageTarget
 PositioningController.hasInteractionHold
+ViewportSession.hasGenuineInput a@example.test
+ViewportSession.isCurrent a@example.test
+PositioningController.hasInteractionPosition
+ViewportSession.hasGenuineInput a@example.test
+ViewportSession.isCurrent a@example.test
+PositioningController.savedPositionStatus a@example.test
+PositioningController.refreshLiveEdge a@example.test
+DirectionalHistoryWindowCoordinator.observeWindow a@example.test
+PositioningController.isSavedPositionPending a@example.test
+PositioningController.savedPositionStatus a@example.test
+PositioningController.isDirectionalHistoryPending a@example.test
+PositioningController.hasInteractionHold
+PositioningController.cancelExplicitTarget d@example.test
+DirectionalHistoryWindowCoordinator.observeLiveEdge a@example.test
+ViewportSession.hasGenuineInput a@example.test
+ViewportSession.isCurrent a@example.test
+PositioningController.hasInteractionPosition
+ViewportSession.hasGenuineInput a@example.test
+ViewportSession.isCurrent a@example.test
+PositioningController.savedPositionStatus a@example.test
+PositioningController.refreshLiveEdge a@example.test
+PositioningController.isSavedPositionPending a@example.test
+PositioningController.savedPositionStatus a@example.test
+PositioningController.isDirectionalHistoryPending a@example.test
+PositioningController.hasInteractionHold
 ViewportSession.snapshotFor a@example.test
 ViewportSession.isCurrent a@example.test
 ViewportSession.observedRowIdFor a@example.test
@@ -1383,31 +1284,6 @@ PositioningController.hasInteractionHold
   (x2)
 PositioningController.ownsPositionTarget
 PositioningController.ownsMessageTarget
-PositioningController.hasInteractionHold
-ViewportSession.hasGenuineInput a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.hasInteractionPosition
-ViewportSession.hasGenuineInput a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.savedPositionStatus a@example.test
-PositioningController.refreshLiveEdge a@example.test
-DirectionalHistoryWindowCoordinator.observeWindow a@example.test
-PositioningController.isSavedPositionPending a@example.test
-PositioningController.savedPositionStatus a@example.test
-PositioningController.isDirectionalHistoryPending a@example.test
-PositioningController.hasInteractionHold
-PositioningController.cancelExplicitTarget d@example.test
-DirectionalHistoryWindowCoordinator.observeLiveEdge a@example.test
-ViewportSession.hasGenuineInput a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.hasInteractionPosition
-ViewportSession.hasGenuineInput a@example.test
-ViewportSession.isCurrent a@example.test
-PositioningController.savedPositionStatus a@example.test
-PositioningController.refreshLiveEdge a@example.test
-PositioningController.isSavedPositionPending a@example.test
-PositioningController.savedPositionStatus a@example.test
-PositioningController.isDirectionalHistoryPending a@example.test
 PositioningController.hasInteractionHold
    scroll writes: [500,500]
 == switch to empty room
@@ -1708,3 +1584,13 @@ PositioningController.hasInteractionHold
 ViewportSession.snapshotFor e@example.test
 ViewportSession.isCurrent e@example.test
 ScrollPersistenceAdapter.leaveConversation e@example.test
+PositioningController.snapshot
+PositioningController.deactivate e@example.test
+PositioningController.ownsPositionTarget
+PositioningController.ownsMessageTarget
+PositioningController.hasInteractionHold
+  (x2)
+PositioningController.ownsPositionTarget
+PositioningController.ownsMessageTarget
+PositioningController.hasInteractionHold
+PositioningController.cancelExecutionsIfSuperseded
