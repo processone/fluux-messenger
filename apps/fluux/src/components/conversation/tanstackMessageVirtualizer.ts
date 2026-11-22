@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { defaultRangeExtractor, elementScroll, useVirtualizer, type Virtualizer } from '@tanstack/react-virtual'
 import type { MessageVirtualizer, ScrollWrite, ScrollWriteOutcome, ScrollWriteOwner } from './messageVirtualizer'
+import {
+  applyLibraryAdjustment,
+  awaitingCommandReadBack,
+  canWriteScroll,
+  clampedWrite,
+  hasLibraryAdjustment,
+  hasPendingFling,
+  heldOffset,
+  iosGesture,
+  libraryCommand,
+  retargetLibraryWrite,
+  trackCommitUpdate,
+  type ClampedWrite,
+  type ScrollCommandLike,
+} from './tanstackVirtualBridge'
 
 // Frames with neither a scroll event nor an offset change before we declare scrolling settled and
 // stop polling (~100ms at 60fps — close to @tanstack's default 150ms isScrollingResetDelay).
@@ -26,9 +41,6 @@ function useEntryOverscan(hasRows: boolean): number {
   }, [hasRows, overscan])
   return overscan
 }
-
-// Marks a virtualizer whose commit-time update the adapter already tracks.
-const COMMIT_TRACKED = Symbol('commitTracked')
 
 /**
  * Whether the offset observer is following a scroll in progress. See observeElementOffsetWithRaf.
@@ -137,42 +149,6 @@ export function observeElementOffsetWithRaf(
 }
 
 /**
- * Points virtual-core's bookkeeping for a compensation write at the position actually written:
- * `target` is in layout coordinates (the library adds its held offset to the element position).
- * Its write record, which the read-back is matched against, and its clamp recovery were computed
- * from the offset it decided on, so a rebased write that kept the old ones would be read back as
- * foreign and lose the part a not yet grown spacer clamps away. Both are private, so a library
- * that renames them leaves the write correct and only the bookkeeping as it was.
- */
-function retargetLibraryWrite(instance: object, layoutOffset: number, delta: number) {
-  const lib = instance as {
-    pendingWrite?: { target: number } | null
-    _clampedAdjustment?: unknown
-    _clampedBy?: (target: number) => unknown
-  }
-  const target = layoutOffset + delta
-  if (lib.pendingWrite) lib.pendingWrite.target = target
-  if (typeof lib._clampedBy === 'function') lib._clampedAdjustment = lib._clampedBy(target)
-}
-
-// virtual-core's record of a compensation write the browser clamped: the position it meant, in
-// layout coordinates, and the element max (plus held offset) the write stopped at.
-type ClampedWrite = { target: number; maxAtWrite: number }
-
-/**
- * The library's clamped-write record as it stands now. A write past the element's max is clamped
- * until the spacer grows, and virtual-core keeps the meant position to retry once it has. The next
- * compensation overwrites that record with its own just before it writes, so a writer takes it
- * before the library resizes the row. The record is private: a library that renames it leaves
- * each correction on the element's position, as before.
- */
-function clampedWrite(instance: object): ClampedWrite | null {
-  const pending = (instance as { _clampedAdjustment?: ClampedWrite | null })._clampedAdjustment
-  return pending && typeof pending.target === 'number' && typeof pending.maxAtWrite === 'number'
-    ? { target: pending.target, maxAtWrite: pending.maxAtWrite } : null
-}
-
-/**
  * Where the reader is, in layout coordinates, from the element's position there. While the element
  * still sits at the max an earlier compensation was clamped to, nobody has moved it since, and the
  * reader is where that write meant to put it. A correction is approved, anchored and written from
@@ -219,18 +195,6 @@ interface Args {
  * `getItemKey = items[i].key` (the message id) binds the measurement cache to the message,
  * not the index, so it survives MAM prepend (which shifts every index).
  */
-// The private gesture tracker of @tanstack/virtual-core 3.19.5+ (absent before, so every use is guarded).
-type IosGestureLike = { end?: () => void; tail?: () => 'tap' | 'fling' | null }
-// Private command identity: virtual-core keeps this object when a queued command starts writing.
-type ScrollCommandLike = { phase?: string }
-// The private library correction an estimate refresh reuses, and the state its resize path checks first.
-type CorrectionInternals = {
-  scrollState?: ScrollCommandLike | null
-  _holdOffset?: number
-  _awaitingCommandReadBack?: () => boolean
-  _canWriteScroll?: () => boolean
-  applyScrollAdjustment?: (delta: number) => boolean
-}
 type ItemKey = ReturnType<Virtualizer<HTMLElement, Element>['options']['getItemKey']>
 // What the next measurement write corrects, judged when it was decided: the row virtual-core is
 // about to resize, or an estimate refresh whose shift at the reader is already measured.
@@ -350,7 +314,7 @@ export function useTanstackMessageVirtualizer({
   // browser rounding our own write.
   const reportElementPosition = useCallback((instance: Virtualizer<HTMLElement, Element>, top: number) => {
     const activity = scrollActivityRef.current
-    const hold = (instance as unknown as { _holdOffset?: number })._holdOffset ?? 0
+    const hold = heldOffset(instance)
     if (!activity.active && instance.scrollOffset !== null && Math.abs(top + hold - instance.scrollOffset) >= 1) {
       activity.start?.()
     }
@@ -425,7 +389,7 @@ export function useTanstackMessageVirtualizer({
     overscan,
     rangeExtractor,
     scrollToFn: (offset, options, instance) => {
-      const command = (instance as unknown as { scrollState?: ScrollCommandLike | null }).scrollState
+      const command = libraryCommand(instance)
       const queuedRecord = queuedWriteRef.current
       const queued = queuedRecord?.command ?? null
       // _writeAwaitingCommand changes the same command's phase before its first write. A hold
@@ -499,7 +463,7 @@ export function useTanstackMessageVirtualizer({
       // is still owed: this one adds to the position that one meant (see readerOffset). An estimate
       // refresh measured its shift at that same position just before asking.
       const live = scroller?.scrollTop ?? offset
-      const hold = (instance as unknown as { _holdOffset?: number })._holdOffset ?? 0
+      const hold = heldOffset(instance)
       const base = readerOffset(live + hold, correction?.owed ?? null)
       const sameRows = instance.scrollElement === scroller && itemKeyRef.current?.items === rows
       const anchorIndex = heldAnchorIndex()
@@ -568,15 +532,7 @@ export function useTanstackMessageVirtualizer({
   // clamp retry. React cannot render synchronously inside its commit, so a read-back reported from
   // there asks for no synchronous render (reportMotion). The method is private: a library that
   // renames it leaves those reports asking as the library would.
-  const commitUpdate = virtualizer as unknown as { _willUpdate?: () => unknown; [COMMIT_TRACKED]?: true }
-  if (typeof commitUpdate._willUpdate === 'function' && !commitUpdate[COMMIT_TRACKED]) {
-    const willUpdate = commitUpdate._willUpdate
-    commitUpdate._willUpdate = () => {
-      committingRef.current = true
-      try { return willUpdate() } finally { committingRef.current = false }
-    }
-    commitUpdate[COMMIT_TRACKED] = true
-  }
+  trackCommitUpdate(virtualizer, committing => { committingRef.current = committing })
 
   const getOffsetForMessageId = useCallback((id: string): number | null => {
     const index = indexById.get(id)
@@ -608,7 +564,7 @@ export function useTanstackMessageVirtualizer({
     if (record.outcome) return record.outcome
     if (record.command === null) return { status: 'refused', reason: 'dropped' }
     const detached = virtualizer.scrollElement !== record.scroller
-    const state = (virtualizer as unknown as { scrollState?: ScrollCommandLike | null }).scrollState
+    const state = libraryCommand(virtualizer)
     if (state === record.command && state.phase === 'queued') {
       if (detached) return settleWrite(record, { status: 'refused', reason: 'detached' })
       return record.owner && !record.owner.isCurrent()
@@ -642,7 +598,7 @@ export function useTanstackMessageVirtualizer({
       // Only a command that survived the reader's takeover can own its later queued write.
       // Store its identity, not just a flag: replacement/cancellation must not lend it authority.
       if (generationRef.current === generation) {
-        const command = (virtualizer as unknown as { scrollState?: ScrollCommandLike | null }).scrollState
+        const command = libraryCommand(virtualizer)
         if (command?.phase === 'queued' && record.outcome === null) {
           record.command = command
           queuedWriteRef.current = record
@@ -686,15 +642,14 @@ export function useTanstackMessageVirtualizer({
   // caller owns the pixels, or while a smooth or written command is landing, which virtual-core's
   // own resize correction also leaves alone.
   const readEstimateAnchor = () => {
-    const lib = virtualizer as unknown as CorrectionInternals
     const scroller = virtualizer.scrollElement
-    const phase = lib.scrollState?.phase
+    const phase = libraryCommand(virtualizer)?.phase
     if (!adjustmentEnabledRef.current || !scroller || phase === 'smooth' || phase === 'smoothLanded'
-      || lib._awaitingCommandReadBack?.()) return null
+      || awaitingCommandReadBack(virtualizer)) return null
     virtualizer.getTotalSize()
     const index = heldAnchorRef.current !== null ? heldAnchorIndex()
       : virtualizer.getVirtualItemForOffset(
-        readerOffset(scroller.scrollTop + (lib._holdOffset ?? 0), clampedWrite(virtualizer)),
+        readerOffset(scroller.scrollTop + heldOffset(virtualizer), clampedWrite(virtualizer)),
       )?.index
     const item = index === undefined ? undefined : virtualizer.measurementsCache[index]
     return item ? { index: item.index, key: item.key, start: item.start } : null
@@ -706,10 +661,9 @@ export function useTanstackMessageVirtualizer({
   // commits first, windowed where the reader is going; the write lands in the same task, before any
   // paint. A commit that cannot run synchronously leaves the clamp to the library as before.
   const commitRoomFor = (delta: number) => {
-    const lib = virtualizer as unknown as CorrectionInternals
     const scroller = virtualizer.scrollElement
     const offset = virtualizer.scrollOffset
-    if (!scroller || offset === null || lib._canWriteScroll?.() === false
+    if (!scroller || offset === null || !canWriteScroll(virtualizer)
       || delta <= scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop) return
     virtualizer.scrollOffset = offset + delta
     try { virtualizer.options.onChange?.(virtualizer, true) }
@@ -723,18 +677,16 @@ export function useTanstackMessageVirtualizer({
   const keepEstimateAnchor = (anchor: NonNullable<ReturnType<typeof readEstimateAnchor>>): boolean => {
     const item = virtualizer.measurementsCache[anchor.index]
     const delta = item?.key === anchor.key ? item.start - anchor.start : 0
-    const lib = virtualizer as unknown as CorrectionInternals
-    if (delta === 0 || typeof lib.applyScrollAdjustment !== 'function') return false
+    if (delta === 0 || !hasLibraryAdjustment(virtualizer)) return false
     commitRoomFor(delta)
     correctionRef.current = { kind: 'estimates', owed: clampedWrite(virtualizer) }
-    try { return lib.applyScrollAdjustment(delta) }
+    try { return applyLibraryAdjustment(virtualizer, delta) }
     finally { correctionRef.current = null }
   }
 
   return {
     cancelPendingScroll,
-    hasPendingFling: () =>
-      (virtualizer as unknown as { _iosGesture?: IosGestureLike })._iosGesture?.tail?.() === 'fling',
+    hasPendingFling: () => hasPendingFling(virtualizer),
     refreshEstimates: (sync) => {
       // virtual-core re-derives the estimates of unmeasured rows only when its measurement options
       // change or a row resizes, and getOffsetForIndex reads the last derivation. A new getItemKey
@@ -781,8 +733,7 @@ export function useTanstackMessageVirtualizer({
       // that gesture first, as the library does itself for a write it does not defer. Only an
       // unrefused write owns them: the reader-takeover check runs here, with the gesture still
       // open, so a refusal and its cancellation leave the reader's protection intact.
-      const gesture = opts?.releaseGesture
-        ? (virtualizer as unknown as { _iosGesture?: IosGestureLike })._iosGesture : undefined
+      const gesture = opts?.releaseGesture ? iosGesture(virtualizer) : undefined
       if (gesture) {
         const generation = generationRef.current
         const scroller = virtualizer.scrollElement

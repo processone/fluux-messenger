@@ -38,6 +38,15 @@
       "rangeStrategy": "bump"
     },
     {
+      "description": "Held at exactly 3.14.26, which fixes @tanstack/virtual-core at 3.19.11. Fluux reads ten private virtual-core members, all in apps/fluux/src/components/conversation/tanstackVirtualBridge.ts, and a minor or patch release can rename or reshape them while every check stays green. Renovate may still open a pull request, but it is never merged automatically: a person updates react-virtual deliberately, runs the scroll bench (apps/fluux/src/components/conversation/scrollBench), updates the bridge and its contract test (tanstackVirtualBridge.test.ts, which also names the locked versions) and the browser journeys, all in the same change. As with the rule above, a package here holds its whole non-major group back from automatic merging.",
+      "matchPackageNames": [
+        "@tanstack/react-virtual",
+        "@tanstack/virtual-core"
+      ],
+      "rangeStrategy": "pin",
+      "automerge": false
+    },
+    {
       "description": "Disable known-broken major bumps that need manual migration work",
       "matchPackageNames": [
         "zod-validation-error",
