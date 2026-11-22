@@ -68,6 +68,22 @@ describe('buildRoomContactSuggestions', () => {
     ])
   })
 
+  it('reduces cached device-address members to one bare suggestion', () => {
+    const occupants = new Map([
+      ['James', { nick: 'James', jid: 'james@fluux.chat/desktop', affiliation: 'none' as const, role: 'participant' as const }],
+    ])
+    const affiliatedMembers = [
+      { jid: 'james@fluux.chat/phone', affiliation: 'member' as const },
+      { jid: 'Riley@fluux.chat/phone', affiliation: 'member' as const },
+      { jid: 'riley@fluux.chat/tablet', affiliation: 'member' as const },
+    ]
+    const result = buildRoomContactSuggestions(createRoom({ occupants, affiliatedMembers }))
+    expect(result).toEqual([
+      { jid: 'james@fluux.chat', name: 'James' },
+      { jid: 'Riley@fluux.chat', name: undefined },
+    ])
+  })
+
   it('handles undefined affiliatedMembers', () => {
     const occupants = new Map([
       ['alice', { nick: 'alice', jid: 'alice@example.com', affiliation: 'member' as const, role: 'participant' as const }],
