@@ -475,7 +475,7 @@ describe.each([chatSurface, roomSurface])('timeline scenarios: $name store', (s)
       const slice = [
         s.message('a1', '2024-01-15T09:00:00Z'), s.message('a2', '2024-01-15T09:30:00Z'), s.message('a3', '2024-01-15T09:45:00Z'),
       ]
-      vi.mocked(messageCache.getMessagesAround).mockResolvedValue(slice)
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue(slice as Message[])
       const read = await s.loadAround('a2')
       expect(ids(read)).toEqual(['a1', 'a2', 'a3'])
       expect(ids(s.window())).toEqual(['a1', 'a2', 'a3'])
