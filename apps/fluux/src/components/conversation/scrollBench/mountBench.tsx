@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import type { BaseMessage } from '@fluux/sdk'
-import { MessageList, type MessageListProps } from '../MessageList'
+import { FlatMessageList, type FlatMessageListProps } from '../MessageList.flat-test-utils'
 import { ScriptedScroller, type ScriptedScrollerOptions } from './scriptedScroller'
 
 export function makeMessages(count: number, from = 0): BaseMessage[] {
@@ -21,7 +21,7 @@ export interface Bench {
   scroller: ScriptedScroller
   /** The list's own scroll element. */
   element: () => HTMLElement
-  update: (props: Partial<MessageListProps<BaseMessage>>) => void
+  update: (props: Partial<FlatMessageListProps<BaseMessage>>) => void
   unmount: () => void
   /** The ids of the rows currently mounted, in order. */
   mountedIds: () => string[]
@@ -40,19 +40,19 @@ export interface Bench {
  * library) over a scripted scroller. Call from a test; `bench.scroller.uninstall()` in afterEach.
  */
 export function mountBench(
-  props: Partial<MessageListProps<BaseMessage>> = {},
+  props: Partial<FlatMessageListProps<BaseMessage>> = {},
   options: ScriptedScrollerOptions = {},
 ): Bench {
   const scroller = new ScriptedScroller(options)
   scroller.install()
-  const base: MessageListProps<BaseMessage> = {
+  const base: FlatMessageListProps<BaseMessage> = {
     messages: makeMessages(60),
     // A conversation of its own per mount: the height cache and saved positions are keyed by it.
     conversationId: `bench-conversation-${++conversations}`,
     renderMessage: (message) => <div>{message.body}</div>,
     ...props,
   }
-  const view = render(<MessageList {...base} />)
+  const view = render(<FlatMessageList {...base} />)
   let current = base
   const element = () => scroller.scroller!
   const bench: Bench = {
@@ -60,7 +60,7 @@ export function mountBench(
     element,
     update: (next) => {
       current = { ...current, ...next }
-      view.rerender(<MessageList {...current} />)
+      view.rerender(<FlatMessageList {...current} />)
     },
     unmount: () => view.unmount(),
     mountedIds: () => Array.from(element().querySelectorAll<HTMLElement>('[data-message-row-id]'))
