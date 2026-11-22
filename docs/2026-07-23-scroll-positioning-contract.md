@@ -816,6 +816,14 @@ library over a scripted scroller with no fake scroll geometry in the test. Each 
 fix and fails when that fix is reverted; `replays*.test.tsx` name the fix beside each replay. A scroll
 bug is reproduced there first, as a replay, and then fixed.
 
+The replays cover ten distinct fixes: the reader offset under clamped growth, a shrink while scrolling
+backward, a takeover while a finger is down, cancelling a navigation by `cancelScroll`, the
+live-edge pin held by a finger, the viewport shrink, the stale-height wipe on a width change, the
+width the hidden rows are estimated at, a last message that grows under the pointer, and the
+jump-to-latest button as an interaction bridge. A few fixes have a second variant replay; those are
+supplementary. The two estimate replays guard the width behavior that survives the removal of the
+own-row estimate fixes they replace.
+
 ### Virtualizer and native scroll ownership
 
 `@tanstack/virtual-core` keeps its own pending-scroll reconciler: every `scrollToIndex` /
