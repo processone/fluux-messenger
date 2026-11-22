@@ -1,986 +1,267 @@
 # Message-list scroll positioning contract
 
-Status: migration complete. Saved-position restoration, unread-marker positioning, explicit message
-targets, live-edge pinning, fixed-anchor layout preservation, directional history preservation, and
-resident-top navigation are authoritative controller slices, and the orchestration hook holds no
-positioning frame loop of its own. Every branch decision that a test could not otherwise reach is a
-pure function with paired controls.
+Status: migration complete. Every placement path is a controller slice, the orchestration hook
+holds no frame loop, and each branch decision a test could not otherwise reach is a pure function.
+This document is a rule table: one row is one rule, with the file that owns it. Narrative history of
+how a rule was found lives in the commit that added its test, named in the last column.
 
-## Purpose
+## Purpose and scope
 
-Message-list positioning historically had several independent implementations for live-edge pinning,
-saved-position restoration, unread markers, explicit message targets, directional history loads,
-and media re-anchoring. Most are individually justified, but they share `scrollTop`, virtualizer
-measurements, cancellation, persistence gates, and WebKit workarounds. Correctness therefore depends
-on effect ordering and on every implementation honoring the same implicit rules.
+Positioning splits in two. **Position policy** (what is wanted, whether it is reachable, which
+request supersedes which, when input cancels automatic positioning) is pure and deterministic.
+**Browser reconciliation** (how estimated and measured geometry converges, WebKit layout and
+repaint) is imperative and stays in leased executors. Centralising must not weaken a WebKit safeguard.
 
-The migration goal is one positioning authority. This document defines the semantic request and
-lifecycle contract that authority will consume.
+| Layer | Owner | Holds |
+| --- | --- | --- |
+| Commit plan | `commitPlan.ts` | Which work a React commit owes, in what order (below) |
+| Hook | `useMessageListScroll.ts` | Runs the plan; at most 8 effects, 15 refs (`useMessageListScroll.budget.test.ts`) |
+| Controller | `positioningController.ts` | Generations, supersession, input takeover, lease |
+| Runner | `positionRunner.ts`, `placementStrategies.ts` | One run lifecycle, seven placement strategies |
+| Executors | `*BrowserAdapter.ts`, `useScrollExecutors.ts` | Pixel writes under a lease; no policy |
+| Viewport memory | `viewportSession.ts` | Geometry, input and write attribution; values only |
+| Persistence | `scrollPersistenceAdapter.ts` | Saved reading position; values only |
+| History windows | `directionalHistoryWindowCoordinator.ts` | Older/newer eligibility and identity; values only |
+| Virtualizer | `tanstackMessageVirtualizer.ts`, `tanstackVirtualBridge.ts` | Library access, one locked version |
 
-It intentionally separates two concerns:
+Out of scope: replacing measurement or repaint safeguards, changing entry priority or saved data,
+treating a one-shot scroll as enough under virtualization, making raw `scrollTop` a durable position,
+and the two isolated contexts under "Ownership boundary".
 
-1. **Position policy:** what position is wanted, whether it is reachable, which newer request
-   supersedes an older one, and when user input cancels automatic positioning.
-2. **Browser reconciliation:** how estimated and measured geometry converges on that position,
-   including WebKit layout/repaint behavior.
+## Commit events
 
-The first concern can be pure and deterministic. The second remains the hard browser-specific work;
-centralizing it later must not erase or weaken its current safeguards.
+One pure function, `planCommit(previousFacts, facts)`, returns the ordered event list a commit owes.
+The hook builds `facts` from every value the old effects listed as dependencies (callback identities
+included), runs the layout events in one layout effect, and the passive events in one passive effect
+after paint. An event is planned when a fact in its trigger list changed from the previous commit,
+or on the first commit. A replayed setup (StrictMode) plans as a first commit.
 
-## Controller migration and fidelity findings
+| # | Event | Phase | Planned when these change | Skipped when | Does |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `enter-conversation` | layout | conversation, unread marker, last id, count, read pointer, static, target, live-edge window, entry callbacks | never | Leaves the old room, arbitrates entry, begins exactly one provisional request |
+| 2 | `late-synced-read` | layout | conversation, marker, last id, read pointer, static | the late-MDS predicate is false | Synced read at the tail supersedes a restored position |
+| 3 | `settle-divider` | layout | conversation, marker, static | not a same-room marker clear, or reader input exists | Settles to live edge when a divider vanishes before input |
+| 4 | `refresh-saved-position` | layout | conversation, first/last id, count, live-edge window | static, or no unsettled saved request | Re-drives a restore still waiting for rows |
+| 5 | `refresh-live-edge` | layout | conversation, first/last id, count, newer loading, live-edge window | static | Re-drives an idle live-edge request |
+| 6 | `restore-directional-window` | layout | conversation, first id, count, interior placement version | static, or no load snapshot | Restores the reader's anchor before paint after a load lands |
+| 7 | `arrival` | layout | conversation, last id, outgoing flag, count, live-edge window | not initialised, or static | Follows, holds or ignores a changed bottom row (`newMessageDecision`) |
+| 8 | `row-growth` | layout | row signature | conversation changed, or signature unchanged | Re-pins when rows grew under a reader at the edge |
+| 9 | `typing-indicator` | layout | typing flag, conversation | decision says skip | Re-pins under the band the indicator takes from the scrollport |
+| 10 | `refresh-interaction-hold` | layout | every commit | no hold, or static | Keeps a held message in place and the jump button current |
+| 11 | `remember-read-position` | passive | conversation, read pointer | never | Remembers the read position the next departure saves |
+| 12 | `publish-committed` | passive | every commit | never | Publishes committed values the browser ports read |
+| 13 | `log-mount` | passive | first commit | later commits | Diagnostic mount marker |
+| 14 | `store-target` | passive | store target, count, conversation, static | no target and no earlier request | Begins, refreshes or cancels the store-requested target |
+| 15 | `release-directional-window` | passive | conversation, live-edge window | coordinator says none | Drops a stale directional anchor on return to the live edge |
+| 16 | `older-load-finished` | passive | older-loading flag | not a true-to-false change, static, or reader off the edge | Forces the final repaint after a catch-up |
+| 17 | `rearm-marker-clear` | passive | unread marker | marker unchanged | The next first scroll arms marker clearing again |
 
-The controller is held in a ref and owns no React state. For saved positions it owns entry selection,
-generation/operation cancellation, reachability, one around-load attempt, and explicit
-legacy-offset/live-edge fallback. For unread markers it owns entry and jump-to-last-read requests,
-frame scheduling, stale-work cancellation, convergence, and live-edge fallback. For explicit
-message targets it owns supersession, one around-load attempt, mounting and center-position
-convergence, user takeover, and completion. For live edge it owns entry/FAB/outgoing generations,
-same-generation content stimuli, global-tail recentering, the 60-frame/8-stable-frame convergence
-budget, and user cancellation. Media and ambient layout preservation share one fixed-anchor
-execution machine with the former 90-frame/8-stable-frame/8px contract. The ambient layout stimuli
-are listed under "Sources distinguish" below. Their request arbitration, along with media and directional-history
-preservation, is defined under "Entry arbitration and later supersession" below. Leased imperative
-executors translate accepted requests into browser/virtualizer writes, and every frame must hold the
-current controller lease before it can write. Directional history is accepted before a load begins,
-remains pending until the first resident ID changes or the load settles without a window shift, then
-either performs its pre-paint anchor/fallback write or releases the request. A landed shift retains
-the former full 60-frame late-measurement budget under one lease. Its executor retains WebKit
-kinetic-scroll cancellation, 2px target-shift correction, 5px clamp recovery, and bounded
-distance-from-bottom fallback. Boundary input while the load is still pending retains the captured
-anchor because no pixel owner exists yet; takeover becomes cancellable after the initial
-positioning write, matching the former loop's timing. Explicit competing requests still supersede
-pending directional history. At the resident bound an interior arrival evicts the oldest row, so
-the first resident ID can change before the load's own batch lands and spend that restore early.
-Until the load settles, a later first-ID change restores the same anchor to the same place again
-with a fresh request in the same pre-paint pass, however long the 60-frame loop has been over. It
-does so only while the reader still reads where the last restore put them: the controller answers
-that from whether their own input, or any accepted request other than layout, media or history
-preservation, has come since that restore's generation. Once the reader moved on, the shift is
-left to ambient handling.
-Under the resident bound an interior arrival keeps the first resident ID, yet it moves every row
-below it, and the pending directional request makes the controller refuse the ambient layout
-request that would otherwise hold them. The directional window therefore also carries the store's
-interior placement version: while the load is pending, a new interior placement counts as a window
-shift, so the load restores its own anchor at the arrival exactly as it does after an eviction at
-the bound, and restores again when its batch lands under the same reader-held rule. Ambient
-insertion handling stands aside for any shift the load restores. A load whose request the controller
-refused, as it does under a hover interaction hold, or has superseded since, holds nothing: the
-coordinator drops it at its first shift, and ambient insertion handling keeps that shift and the
-batch's. At the resident bound such a batch also evicts the newest rows, so the last resident ID
-moves as it does for a live-edge arrival. Ambient insertion handling tells the two apart by whether
-the row that was first is still resident: rows that land above it are above the reader whatever
-happened to the tail, so their shift is preserved. That row is found through its aliases, since the
-batch may carry it with an archive ID it lacked, which renames its handle. The bottom row the trim
-leaves, even the reader's own message, is a slide rather than an arrival or a send (see the
-sliding-window rule below), so it starts no live-edge request that would supersede that hold.
-All authoritative slices share the same controller-owned
-`PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
-measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,
-convergence state, and lifecycle ownership moved out of the hook-local loop. Unlike unread-marker
-positioning, saved-position restoration deliberately has no fixed geometry-drift
-takeover threshold: legitimate deep-history measurement corrections can exceed 300px while rows
-settle, so user-input cancellation remains its takeover signal.
-
-The seven placement paths (saved position, unread marker, explicit target, resident top, live edge,
-anchor preservation, directional history) run through one `PositionRunner` in `positionRunner.ts`.
-The runner owns what the paths share: the run's state, the lease that says whether it still owns
-the position, adoption and scheduling of the frame loop, drift convergence, held-write waiting,
-and the order a run is torn down in. Each path is a placement strategy in `placementStrategies.ts`
-that states only what makes it that path: how a frame is judged, when the run is done, and what it
-tells its executor. `PositioningController` keeps the public entry points and input handling and
-delegates the lifecycle. Budgets, tolerances and WebKit safeguards live beside their strategy
-(`HELD_WRITE_FRAMES` in the runner, `HELD_INPUT_TIMEOUT_MS` in the controller), and the
-frame-by-frame trace in `positioningController.trace.test.ts` pins every path's observable order.
-
-Viewport observation is owned by one imperative, conversation-scoped `ViewportSession`. It
-holds the latest geometry and bottom anchor, measured-live-edge evidence, input and movement
-evidence, recorded application writes, and independent top/bottom travel latches. It accepts only
-values: no DOM element, virtualizer, frame scheduler, or pixel-write operation crosses its boundary.
-Conversation entry resets every fact, and observations tagged for the room just left are rejected,
-so delayed controller callbacks cannot mutate the new room's evidence.
-
-Movement attribution compares observed positions after accounting for viewport clamping and
-recorded application writes; unchanged content height or an elapsed settle timeout is not required.
-`VirtualizerSpacer` routes height updates through `commitVirtualizerLayout`, which observes geometry
-immediately before and after the DOM write. The first observation retains any reader movement;
-the second attributes a spacer-induced clamp while the reduced scroll range is still observable,
-even if later row growth hides it before the native scroll event arrives. Regression coverage is in
-`apps/fluux/src/components/conversation/MessageList.virtualizedScroll.test.tsx`.
-Home's application animation remains programmatic until later input takes over. Observed movement
-rebases the reading anchor to a visible row, so subsequent layout correction follows the reader's
-current position. Movement sampled before a native scroll event retains its own geometry for that
-event to consume once; a later layout or application destination cannot replace that evidence.
-A released keyboard input retains ownership of its matching later native scroll event until an
-independently observed layout change ends that causal chain.
-
-Native upward panning retains visible progress when a previously measured row entirely above
-the viewport shrinks. The virtualizer compensates that shrink even during backward scrolling,
-using the existing measurement writer and live-offset rebasing. Other library fold/direction rules
-remain unchanged: backward growth and remeasurements spanning the viewport top are not compensated.
-Explicit adjustment suppression and held-anchor rules still take precedence. One stable predicate
-reads those current refs; a row's end uses its latest measured size even before the lazy layout
-cache rebuilds. This adapter explicitly mirrors the library's ordinary fold/direction policy apart
-from backward shrink, so dependency upgrades must review that override. Ordinary-row metric
-sampling excludes whisper cards, whose borders and padding otherwise alternate the sampled width
-and chrome as rows enter the window, re-estimating unrelated offscreen rows without a resize.
-`e2e/scroll-native-pan.ts` exercises actual Chromium middle-click autoscroll in direct chats and
-rooms, with held, jitter-latched and middle-stopped journeys. Each case enlarges a measured
-overscan wrapper by the captured defect's delta and establishes the live edge before native input.
-The pointer then stays outside the dead zone and continues backward. A shallow, invisible fixture
-element uses real ResizeObserver delivery to schedule removal of the deeper row's constraint only
-when backward motion and a matching live offset are observed, away from the live-edge clamp region.
-The virtualizer's own real observer measures the resulting row shrink; neither its callback nor
-library state is fabricated. A forwarding probe separately verifies backward direction at the actual
-measurement call and records its cached key/size and resize-local visible geometry. The comparison
-must belong to that row's layout update, within two observed frames and without intervening
-unrelated size changes. A later unrelated shrink cannot supply that result. Continuous frame checks
-also retain stable message identity, order and viewport-relative placement rather than treating
-raw scroll offsets as reading progress. The wrapper constraint leaves ordinary text/chrome
-sampling alone. A paused shrink is not a substitute: the library can already compensate it, so it
-does not by itself demonstrate the backward-measurement defect.
-WebKit has no equivalent middle-click mode. The compensation also applies to other inputs and
-engines, but dedicated WebKit upward-wheel/momentum proof with a measured row shrinking above the
-reader is an explicitly accepted proof gap for this change. Existing shared WebKit measurement and
-reading regression coverage does not qualify that specific timing case.
-
-These direction rules need the virtualizer to see a scroll as in progress for as long as it lasts.
-The offset observer reports every position as motion from the first scroll event, or the first
-offset change its frame poll sees, until neither has arrived for six frames; only then does it
-report the scroll at rest. While a scroll is in progress, the reader takeover leaves the
-virtualizer's motion state alone. A wheel or touch move can move the list before its first scroll
-event. Once one has, the takeover or the measurement hook that finds the list a pixel or more from
-the position the virtualizer holds starts the scroll, reported as motion. Reported at rest, the
-virtualizer would drop the scroll event's own report as a repeat. Every write the library makes on
-its own reports its read-back as motion with the reader's direction kept, since a correction moves
-the content, not the reader: a resize correction, a held correction written once the element is
-back in range, and the rest of a correction the browser clamped. The measurement hook, which
-reports a position the element reached without a scroll event, reports it as motion too, so the
-library keeps its overscroll guard and leaves a correction held through a rubber band unwritten
-until the bounce returns. A report from inside React's commit asks for no synchronous render, as
-the library's own commit-time update asks for none. Navigation writes and reports outside a scroll
-still publish at rest.
-
-Native upward panning also retains visible progress when the metrics behind unmeasured estimates
-are resampled. Up to three chrome corrections per geometry change estimates during a pan, when a
-plain row of a shape first mounts. The sampled width stays put during a pan: own hug-width
-bubbles are only as wide as their text, so with only own bubbles mounted the sampler reads the
-content column they sit in, the width an incoming row's text fills, and moving between own-only
-and mixed windows keeps one width. An estimate refresh keeps the held anchor, or else the row at
-the reader's live offset, at the same placement: the offset shift the new estimates cause above
-it goes through the library's own scroll correction, in either direction and during backward
-scrolling, because no row the reader has seen changed size. A refresh that moved
-the offset commits its re-render in the same task, so no paint shows the new offset with the old
-row positions. A shift larger than the scroll room the old spacer leaves would be clamped, and the
-window rendered at the clamped offset would mount older rows whose first measurements replace the
-library's recovery of the rest, skipping the reader far back. Such a refresh first commits the
-taller layout windowed at the shifted offset, then writes the whole shift, all before paint.
-Disabled automatic adjustment and a smooth or written scroll still landing keep their pixels; an
-iOS gesture defers the correction as it does a resize. Sampling the column for own bubbles also
-removes the own-only feedback loop, in which a refresh re-windowed the list away from the incoming
-row and the width sample fell back to the widest own text, so the list never settled.
-`e2e/scroll-native-pan-estimates.ts` seeds a direct chat and a room for three journeys, each
-panning upward with actual Chromium middle-click autoscroll: a latest window of own messages only,
-into the incoming rows above it; a run of own messages below incoming ones, into the older
-incoming rows; and continuation rows whose first plain one corrects the chrome. The virtualizer's
-own observer measures every row; a forwarding probe records each estimate refresh with its
-resampled metrics. The own-message journeys require the content column's width from the latest
-window on and no width change during the pan; the chrome journey requires its correction during
-backward motion. Across every refresh and every frame a reading cannot return to a newer
-message, move the same message against the pan, or skip more older messages than native
-autoscroll reveals in the time between them (three rows per 100ms, and at least three). Readings
-more than 250ms apart follow a stalled frame and are exempt from the skip check, and a refresh with
-no reading that close fails as unproven. Unit coverage, including the actual
-sampler, growth past the scroll room with a windowed list, and the held-anchor, suppression and
-animated-scroll precedence, is in
-`apps/fluux/src/components/conversation/tanstackMessageVirtualizer.estimates.test.tsx`.
-
-Automatic older/newer pagination requires that independently observed movement geometry reach
-the relevant boundary, subject to the directional coordinator's eligibility checks. Layout-only
-resize, typing, media growth, clamping, and delayed correction events supply no such evidence.
-An upward wheel at resident top is an explicitly attributed older-history request, even when
-clamping prevents a native scroll event. It does not treat layout-only displacement as movement.
-Explicit navigation and initial loads remain separate, as does downward wheel input at the resident
-newer-history boundary.
-
-Scroll persistence is mediated by a value-only `ScrollPersistenceAdapter`. It consumes immutable
-viewport-session snapshots and owns entry reads, throttled continuous saves, leave-versus-mark-left
-decisions, and explicit saved-position clearing. The adapter rejects stale-room snapshots and
-controller-owned scroll events and has no DOM, virtualizer, scheduler, or pixel-write capability.
-
-Directional history windowing is mediated by a value-only
-`DirectionalHistoryWindowCoordinator`. It owns older/newer availability, cooldown and travel
-eligibility, monotonic load identity, anchor/distance facts, loader invocation, no-shift completion,
-and false-to-true live-window cleanup. A loader promise bounds only the snapshot that invoked it:
-settlement from an older superseded load cannot release the current request, while an in-flight
-load keeps its snapshot until its own first-id shift can reconcile. A restored snapshot stays until
-its load settles, not only for its cooldown, so a batch that lands after an eviction-driven restore
-is restored again (see above). Conversation entry drops the
-departed conversation's snapshot, and delayed settlement or window observation from that snapshot
-cannot mutate the active conversation. A dedicated `DirectionalHistoryBrowserAdapter` owns visual
-anchor capture, the one-frame settlement scheduler, reachability probes, WebKit kinetic-scroll
-cancellation, and anchor/fallback pixel writes under the controller lease. Between capture and the
-batch landing it follows the reader on every scroll event, so the restore's first frame places the
-anchor where the reader last saw it rather than at its capture-time `offsetPx` (an iOS bounce past
-the top keeps moving the rows after capture, and the landing commit clamps `scrollTop` to 0).
-While rendered rows cover the top of the view, the followed anchor becomes the row the reader now
-sees there, chosen as at capture: a reader who scrolled on while the load waited no longer reads
-the capture row, which an arrival between it and the view would move without moving theirs. Only a
-row in view qualifies, so an arrival outside the view moves no row the reader reads. A row mostly
-scrolled past the top gives way to the next row only when that row starts in the top half of the
-view: a message taller than the view that fills it stays the anchor, rather than the row below the
-view. With virtualization off the adapter captures and follows the rendered message rows the same
-way. Past the top, or with a stale window, the anchor stays and only its offset follows. The
-followed anchor stops changing once rows land before it, since only the restore may place it from
-then on. The load's snapshot records the row the restore held and its placement, and a restart of
-the same load requests them instead of the capture row and offset, so the rows stay where the first
-restore put them. From its first
-write until its execution ends, the restore holds that anchor in the virtualizer: every row before
-the anchor that resizes is compensated, including rows between the viewport top and the anchor,
-which the library alone leaves to move it.
-`useDirectionalHistoryLoads` invokes the adapter and supplies lifecycle completion callbacks; the
-orchestration hook only wires its ports and consumes its triggers. The coordinator imports no DOM,
-virtualizer, frame scheduler, positioning controller, or pixel-write capability.
-
-Saved-position reconciliation likewise runs through a dedicated browser adapter. It owns
-reachability probes, bounded legacy-offset writes, bottom-fraction anchor positioning, and the
-restore frame-loop port, while the hook supplies cache loading, live-window recentering, live-edge
-fallback, and completion callbacks. The shared bottom-fraction adapter keeps saved restoration and
-fixed-anchor preservation on the same row-rect/virtualizer geometry without giving either a second
-positioning lifecycle. A saved restore that needs no reassertion settles after its initial write,
-releasing ownership for later media preservation; an unfinished restore still excludes ambient
-reading-layout corrections.
-
-Explicit target navigation uses immediate center writes: restarting a smooth animation while
-remeasurement moves the target makes convergence samples unreliable and recreates scroll fighting.
-Before settlement, the accepted navigation can own motion from the released iOS fling that preceded
-it. The same holds for return-to-latest until its first settle and for Home while it is current:
-the library holds their write until that fling ends, and the leftover movement must not cancel it.
-That ownership starts with the request, before any frame loop owns the pixels: return-to-latest
-from a slid window first loads newer messages, and a jump outside the resident window first loads
-around its target. Return-to-latest's first step to an unread divider below the view, and the
-jump-to-last-read pill's visit, are reader navigation too, including the divider loop's own check for
-movement away from its landing, and so is the handover to the live edge when the divider cannot be
-shown or lands there; the divider placed on entering a conversation is not.
-When the list's scrollbar takes space, as the list's own scrollbar style gives it in desktop WebKit
-and Chromium views, the library cannot end the fling at the navigation's first write and holds every
-write until the fling ends. A live-edge, message-jump or unread-divider frame whose write the fling
-still holds is no landing: the loop neither settles on the fling's position nor spends its own
-frames while it waits, up to a bound well past a fling's momentum, so the held write lands once the
-fling ends.
-The shared viewport observer requires both the current positioning lease and the virtualizer's
-actual pending-fling state; it applies the same attribution to native events and measurement/frame
-observations. New input still takes over, and a new finger ends the old fling. Settled maintenance,
-follow-live re-pins (including a follow re-armed by the reader's own movement, which shares the
-return-to-latest request source, so the live-edge execution carries the distinction), missing
-gesture state and ordinary unobserved reader movement keep their existing vetoes. The writer
-still publishes actual post-write offsets and runs its unchanged before-write authority check.
-After settlement, layout changes maintain only the selected row's visibility. Correction moves the
-viewport only far enough to expose a clipped edge; an already-visible row, or a tall row spanning
-the viewport, is not recentered. This maintenance keeps the existing generation, requires a mounted
-target, and neither loads around it nor repeats target consumption or highlighting. It never
-acquires follow-live for later arrivals.
-
-Virtualized maintenance retains the selected rendered row, including when navigation resolves an
-archive reference; identifier selection follows [Message Identifiers](MESSAGE_IDENTIFIERS.md).
-Media and ambient layout preservation defer to that selected target even after it settles.
-Pending media batches consume the shared viewport movement verdict: observed user movement cancels
-their stale anchor correction even when content height changes simultaneously. Layout-only changes
-retain ordinary media preservation.
-
-The batch takes its reading anchor from the viewport session: an image's load callback can arrive
-after the row has already grown, so a fresh DOM snapshot would
-preserve the displaced position. Explicit navigation refreshes that session anchor as each write
-lands. A viewport-height change rebases the anchor at the shared observation boundary, accounting
-for pending content displacement. The rebase reaches both the pending media batch and an active
-media-preservation request, retargeting any queued virtualizer correction while keeping the same
-controller generation. Regression coverage lives in `useMessageListScroll.delayedDelivery.test.tsx`,
-`messageTargetResize.test.tsx`, `archiveReferenceRetention.test.tsx`, and
-`settledTargetReconciler.test.tsx` under `apps/fluux/src/components/conversation/`.
-
-The live-edge executor retains its bottom-specific browser safeguards: tail-layout flushes for late
-WebKit measurement, the 4px missed-frame correction, repaint-burst coalescing, background-MAM
-repaint suppression, and the `overflowY` stale-paint repair. These remain executor mechanics rather
-than competing lifecycle owners. A settled or best-effort generation flushes any owed trailing
-repaint; user takeover or supersession deliberately discards that debt so it cannot repaint after
-the reader takes control or leak into unrelated content.
-
-They live in a `LiveEdgeBrowserAdapter` whose repaint-burst coalescer and pin-cost probe are
-adapter-scoped rather than per-executor: a burst is precisely a run of arrivals each superseding the
-last, so state that ended with one executor could never coalesce. Window facts are re-read per call
-because a live-edge executor outlives the render that built it, while forward-window availability
-and the conversation whose bottom intent is recorded stay per-execution — they are facts of the
-request, not live geometry. Conversation entry drops any owed repaint debt so it cannot flush into
-the room being opened.
-
-Fixed-anchor preservation and resident-top navigation likewise reconcile through
-`AnchorPreservationBrowserAdapter` and `ResidentTopBrowserAdapter`. The first routes all three
-ambient stimuli through the shared bottom-fraction geometry under distinct frame-loop labels; the
-second advances an application-controlled animation through its leased frame executor.
-
-Resident-top navigation observes shared viewport geometry before each frame, checks that its lease
-still owns the request, and writes the next interpolated offset with immediate application
-attribution. It settles after two frames within 1px of the resident top, or releases best-effort
-after 120 observation frames without snapping. Row measurements can compensate between animation
-writes; each animation frame interpolates from the actual current offset. Home resets the prior
-top-boundary travel latch, and its controller-owned progress cannot recreate user pagination
-evidence; a later genuine user move away from the top can still re-arm ordinary load-older.
-
-Residual shadow observations cover entry staging before an explicit target. A shared error boundary
-catches and counts adapter, validator, controller-driver, and executor errors; failure must degrade
-according to the active request's source-specific policy and must never escape into the scroll
-effect or event handler. The demo scroll-invariant suite fails if either `divergenceCount` or
-`instrumentationErrorCount` is non-zero. Retained diagnostic samples are capped, not the pass
-criterion.
-
-For residual shadow observations, zero divergences means the model agrees with the hand-authored
-semantic `actual` label at each observation site: desired position plus the coarse
-waiting/positioning/applied/paused/fallback/idle phase. It does **not** compare rendered pixels and
-must not be read as proof that the browser landed
-or painted at the requested position, nor does it prove that every ownership site was observed.
-Pixel geometry, measurement convergence, and WebKit repaint remain covered by the scroll-invariant
-scenarios and the leased imperative reconcilers.
-
-Generation allocation is module-private and shared by controller instances. Each mounted
-message-list owns its controller model, but a remount (including StrictMode effect replay) cannot
-reuse a generation. No adapter or model helper can mint one.
-
-The three previously prose-only fidelity seams are descriptive of current behavior:
-
-- **Media preservation does not suppress an outgoing send.** The live new-message effect suppresses
-  only while entry restore is pending or a directional load has not completed its initial restore.
-  A replay captured from the media-growth invariant proves that an outgoing live-edge request
-  supersedes an active media anchor.
-- **`position-applied` is the current release seam, before measurement settle.** The saved controller
-  applies the initial anchor/offset write synchronously, marks the lease applied, and then schedules
-  the remaining restore-anchor frames through its shared loop. Directional restoration likewise sets
-  `saved.restored` after its initial bounded write and before its measurement re-assert loop.
-  Recorded restore facts prove an outgoing request is rejected before that signal and accepted
-  immediately after it.
-- **Already-resolved synced live edge wins synchronously.** The entry effect compares the remote
-  read pointer with the resident tail and clears obsolete saved state before beginning the
-  controller request. Late `mds-live-edge` and `mds-settle` remain separate supersession paths only
-  for remote state that arrives after entry.
-
-These checks establish policy fidelity; they do not claim that jsdom can prove pixel convergence or
-WebKit paint correctness.
-
-## Non-goals for this stage
-
-- Replacing browser measurement/repaint safeguards while migrating positioning policy.
-- Changing entry priority, marker placement, saved scroll data, or history loading.
-- Removing measurement settle windows, tolerances, or WebKit repaint workarounds.
-- Treating a one-shot scroll as sufficient under virtualization.
-- Making raw `scrollTop` a new durable position type.
-- Migrating static search-context lists in the first controller slice. They do not use the live-list
-  positioning hook today and must remain isolated until explicitly brought under this contract.
+Order rules: layout events run in table order before paint; passive events after it, never before a
+layout event; a layout event never waits on a passive one. A new concern is a new row here, not a
+new effect. Guardrails: `commitPlan.test.ts` pins each trigger; `useMessageListScroll.commitOrder.trace.test.tsx`
+pins every call the commits make into the controller, session, persistence adapter and coordinator
+against `__traces__/useMessageListScroll.commitOrder.trace.txt`.
 
 ## Desired positions
 
-`DesiredPosition` has four durable semantic variants plus one migration bridge:
+| Position | Meaning | Follows appends |
+| --- | --- | --- |
+| Live edge | Keep the tail visible until genuine takeover | Yes (the only follow-live variant) |
+| Fixed anchor, `bottom-fraction` | `rowTop + fraction * rowHeight = scrollTop + viewport`, fraction in `[0, 1]`; saved reading, media and ambient layout | No, even on the newest row at fraction 1 |
+| Fixed anchor, `top-offset` | `rowTop - scrollTop = offsetPx`, negative allowed; directional history and message interaction | No |
+| Message target | Row at start, top-third, center or end | No |
+| Resident top | Top of the loaded window; later travel may load older | No |
+| Legacy offset | Anchorless persisted `scrollTop`; never written by new code | No |
 
-- **Live edge:** keep following appended messages and bottom-of-list UI until genuine user takeover.
-- **Fixed anchor:** keep a point in one message at a stable viewport placement. Its placement is a
-  discriminated type, so the two geometries cannot be mixed:
-  - `bottom-fraction`: saved reading position, media preservation, and ambient layout preservation
-    for divider movement or delayed insertion. The fraction is validated in
-    `[0, 1]`, where `0` is the row top and `1` its bottom. The exact equation is
-    `rowTop + fraction * rowHeight = scrollTop + viewportHeight`;
-  - `top-offset`: directional history preservation and deliberate message interaction. The equation is
-    `rowTop - scrollTop = offsetPx`; negative offsets are valid when the top-visible row begins
-    above the viewport. The directional executor replaces the captured `offsetPx` with the
-    anchor's offset at the reader's last scroll before the batch landed.
-- **Message target:** place a message at start, top-third, center, or end for
-  unread/reply/search/activity navigation.
-- **Resident top:** move to the top of the currently loaded window; ordinary history loading may
-  follow.
-- **Legacy offset:** transitional support for anchorless persisted `scrollTop` from existing saved
-  states. New code must not persist it as the semantic position.
+A saved content anchor stays authoritative; its raw pixel value is only a fallback. A raw-only saved
+state selects legacy offset and still outranks unread and live edge.
 
-Live edge is the only follow-live variant. A fixed anchor on the newest message with fraction `1`
-does **not** follow later appends.
+## Requests, sources and precedence
 
-A saved content anchor remains authoritative. Its raw pixel value is a source-specific fallback
-when that anchor is unavailable. An old saved state containing only the raw value selects the
-transitional legacy-offset position and still outranks unread/live-edge entry, preserving current
-behavior.
+Every request has a positive monotonic generation, a conversation, a semantic source and a desired
+position, as a discriminated union (provenance and position must agree; a fallback that changes the
+position gets honest fallback provenance). Generation allocation is module-private and survives
+remounts. The generation watermark survives settlement and cancellation; stale async work is ignored.
 
-## Message interaction holds
+| Source | May want | Notes |
+| --- | --- | --- |
+| Conversation entry (incl. synced live edge) | Saved anchor, legacy offset, unread, live edge | Synced live edge also discards obsolete saved state |
+| Explicit user navigation | Target, live edge, unread, resident top | Supersedes the provisional entry |
+| Outgoing message | Live edge only | Reader intent; may supersede navigation |
+| Ambient live-edge recovery | Live edge | Only from a paused or null state, only if the caller's geometry guard allows |
+| Directional history | Top-offset anchor | Preservation class |
+| Media remeasurement | Bottom-fraction anchor | Preservation class |
+| Ambient layout (divider moved, delayed insertion, width change) | Bottom-fraction anchor | Strictest class |
+| Late XEP-0490/MDS | Live edge | Only before takeover |
 
-Desktop direct conversations and rooms hold a message only after deliberate mouse movement,
-a click, keyboard action focus, or an open More/reaction panel. Row entry alone is not intent:
-content scrolling under a resting pointer must continue following latest. Toolbar visibility
-retains its existing hover delay and text-selection suppression. Only keyboard focus matching
-`:focus-visible` forces the toolbar visible; mouse-created focus follows the ordinary hover lifetime.
-A keyboard-visible control remains interactive through a physical mouse activation, even before the
-hover-intent delay finishes; clearing keyboard-only visibility must not discard the pending click.
-Row-local subscriptions expose held membership without broadcasting each target change to every bubble.
-
-An `interaction` request holds the original row handle and the message body's top offset through
-the existing anchor executor and bounded controller frame loop. When the hold starts on a final
-row whose bottom is visible at the live bottom, it also captures that row's height. Acquisition
-includes the one-CSS-pixel endpoint, matching interaction jump-button visibility and integer
-rounding of fractional browser layout. This includes rows taller than the scrollport and transfers
-from another held row at unchanged bottom geometry.
-Growth of the held row (such as an incoming reaction) moves its top upward by that growth, keeping
-its bottom content visible before pointer departure. Viewport shrink alone does not move the
-held body. This still anchors the original row, not newly arriving messages; holds acquired while
-reading history keep the exact top offset. The virtualizer retains that row
-and suspends independent measurement compensation. Recorded positioning writes and layout anchoring
-remain excluded from navigation attribution. Other scroll movement cancels the hold even without a
-wheel/key signal: selection-edge scrolling, native drag autoscroll, middle-click autoscroll and
-find-in-page must not be corrected back to the held target.
-An ongoing deliberate scroll gesture blocks acquisition; beginning an admitted hold clears stale
-input attribution from earlier gestures. Later layout stimuli reopen the same generation;
-arrivals, typing, media, divider changes and geometry-based rearming cannot replace an active hold,
-even after its current reconciliation settles. A growing viewport can remove the required scroll
-range, so the executor reserves only the missing bottom space; ending the hold restores it.
-
-Displayed toolbar slots remain fixed during the hold, but current capabilities still disable and
-gate execution. More and reaction panels keep the hold beyond the original row bounds. A held
-reaction picker captures its available list space on opening, keeping its controls reachable without
-scrolling the message or resizing under arriving posts; touch/static picker sizing stays unchanged. Escape closes
-the panel and restores its trigger without invoking broader conversation navigation. A disappearing
-or retracted target closes safely rather than transferring actions to another row. Physical row
-ownership survives archive-id backfill; current action callbacks follow the qualified identity.
-A conflicting known identity, disconnected row or handle resolving elsewhere ends the hold instead.
-
-Pointer departure (with panels closed), or keyboard action-focus departure (with panels closed),
-releases the hold. Mouse-created focus does not keep an otherwise disengaged mouse interaction alive.
-Native `dragend` and `drop` clear dragging even when the browser delivers no `mouseup`. Typing in the
-composer disengages any hold, including one started by a Reply click or keyboard action, using the
-saved-following policy. Only an open More/reaction menu retains its hold during composer input.
-A middle-button press also releases using the saved-following policy. An ordinary middle-click's
-`auxclick` completion clears hover suppression. A held middle drag clears it on physical release,
-even when the browser consumes `auxclick`. Sub-dead-zone pointer jitter does not count as a held drag:
-Blink changes its middle-pan mode only outside its 15-CSS-pixel dead zone on either axis. Such jitter
-must keep every row blocked when release latches the pan. A clicked, latched pan keeps the block until its stopping
-click/release, key or blur; a middle release with no matching observed press ends the block when the
-browser consumes the stopping press. Actual native movement still takes priority through viewport attribution.
-Hosts without `auxclick` clear it on mouseup.
-Only a reader who was following latest before the hold resumes automatically. Disengagement consumes
-current native geometry before applying that saved policy, including pixels whose scroll callback has
-not arrived. Input-end live-edge reporting and deferred interaction rearm use current geometry, not an
-older bottom sample. History reading keeps
-a settled fixed position; a deliberate scroll, own send or explicit jump takes priority and closes
-panels before moving. A manual takeover cannot rearm from the usual near-bottom band alone: actual
-bottom geometry or explicit latest navigation is required. Directed input that ends at the unchanged
-true bottom settles the released hold there even when no scroll event fires, so later arrivals still
-follow. Eligible input retains that settlement intent when its applied layout compensation lands later:
-non-virtualized compensation and virtualizer after-write observations re-check the true bottom after
-input ends. Upward movement or a new position generation invalidates the pending intent; layout alone
-and an ongoing gesture cannot arm following. Upward input does not rearm at its pre-motion bottom;
-its first upward pixel remains reading intent. Scrolling away while held, including within the ordinary 150px band, keeps the reading position.
-Blur and target removal use the same saved following policy after closing panels. Conversation departure, disabling and teardown clear ownership
-without resuming the departed interaction. Touch action sheets and static previews do not acquire this hold.
-
-Beginning a hold revokes previously reported follow-edge evidence before a future offscreen arrival
-can consume it. Intersection-based message-seen reporting and canonical unread counts remain unchanged.
-While holding, the existing latest-message control also appears for arrivals below the viewport inside
-the ordinary near-bottom band; reserved layout space alone does not expose it. A message's open More
-or reaction menu hides that control until the menus close, so the jump never covers the menu.
-
-## Request provenance
-
-Every position request carries:
-
-- a positive, safe-integer monotonic generation;
-- the conversation id;
-- a semantic source;
-- the desired position.
-
-The request is a discriminated union: provenance and desired position must agree. For example, a
-late-MDS request can only want live edge, history preservation can only want a top-offset anchor,
-and outgoing-message provenance cannot request resident top. A fallback that changes the desired
-position also gets honest fallback provenance; it does not retain the source of the failed target.
-
-Sources distinguish:
-
-- provisional conversation entry, including distinct synced-live-edge provenance that tells the
-  adapter to discard obsolete saved state;
-- explicit user navigation;
-- an outgoing message that deliberately returns the sender to live edge;
-- ambient live-edge recovery when a reconciliation stimulus remains eligible but has no live-edge
-  owner to re-open;
-- directional history preservation;
-- media remeasurement preservation;
-- ambient layout preservation when the unread divider moves or a delayed live-path message is
-  inserted inside the resident window, or conversation-column width changes rewrap messages;
-- late XEP-0490/MDS supersession.
-
-Incoming messages at the resident live edge, reactions, typing, composer/container/viewport resize,
-media measurement, and MAM completion normally reconcile the current request. When there is no
-live-edge owner to re-open, an otherwise eligible stimulus may instead create an ambient live-edge
-request from its own stimulus-aware geometry verdict. It may recover only a paused live-edge or null
-active state; it never converts a fixed reading position into follow-live. Ambient layout
-preservation uses the stimuli listed under "Sources distinguish" above. An outgoing send is
-different: current behavior deliberately moves a reader out of history, so it creates a live-edge
-request. The attempt is dropped while a directional-load or entry-restore
-preservation step is still pending, matching the existing send-stick suppression; the preservation
-owner releases after its first position is applied, not after the entire measurement-settle loop.
-Later ordinary stimuli handle content from any dropped attempt.
-
-A bottom row that a sliding-window load brings in is neither an arrival nor a send. A load past
-the resident bound slides the window off the live edge, and the new bottom row is whichever older
-message the slide kept, often the reader's own. The new-message decision reads whether the window
-is at the live edge now and whether it was when the arrival baseline was taken. When either is
-false, the bottom-row change is a slide: it creates no live-edge request, and the directional load
-that slid the window keeps the reading position. A send can only reach a window at the live edge,
-so an outgoing bottom row off it is history. See `newMessageDecision.ts` and the sliding-window
-journeys in `e2e/scroll-reading.ts`.
-
-Container growth after the composer shrinks is re-open-only: post-resize geometry cannot distinguish
-a follower left short of the bottom from a reader who deliberately scrolled up, so this stimulus
-never creates an ambient live-edge request.
-
-See `README.md` under Theming & Personalization for reading-width preferences and defaults.
-Conversation-column width changes are also re-open-only for live-edge following. Rewrap can move
-the tail outside the at-bottom band before reconciliation runs, so the existing follow owner takes
-priority over post-rewrap geometry. Otherwise, preserve the captured bottom-fraction reading anchor
-or reconcile an owned message target; a width change cannot start following for a history reader.
-Width reconciliation also runs when the same observation shrinks the viewport height as a draft
-rewraps, and refreshes the captured width so later scrolls can update the reading anchor.
-See `useViewportResizeReconciliation.ts` and `e2e/scroll-reading-width.ts`.
+| Rule | What holds | Owner | Tests |
+| --- | --- | --- | --- |
+| Class order | Layout preservation yields to every unsettled position. Media and history preservation yield to a converging reader-intent position but may re-anchor an unsettled live-edge follow. Ambient recovery shares the media class. Unknown sources get the strictest class | `scrollPositionModel.ts` | scrollPositionModel.test.ts, positioningController.test.ts |
+| Outgoing send | Creates a live-edge request, dropped while an entry restore or directional restore has not yet applied its first position; after that it need not wait for settle | controller, `newMessageDecision.ts` | newMessageDecision.test.ts, positioningController.test.ts |
+| Sliding window | A bottom row brought in by a slide off the live edge is neither arrival nor send; no request, the load keeps the reader | `newMessageDecision.ts` | newMessageDecision.test.ts |
+| Media vs send | Media preservation never suppresses an outgoing send | controller | positioningController.test.ts |
+| Re-open only | Composer-shrink growth and column-width change never create an ambient live-edge request; width change preserves the captured anchor or an owned target | `useViewportResizeReconciliation.ts` | useViewportResizeReconciliation.test.ts |
+| Stimuli | Incoming at the live edge, reactions, typing, resize, media and MAM completion reconcile the current request; none turns a fixed reading position into follow-live | controller | positioningController.test.ts |
+| Deactivation | Leaving the list clears conversation, request and MDS eligibility, keeps the watermark, rejects later callbacks | controller | positioningController.test.ts |
 
 ## Entry arbitration and later supersession
 
-Entry selects exactly one provisional request:
-
-1. already-resolved synced live edge invalidates stale local state;
-2. saved fixed anchor, or transitional raw-only saved offset;
-3. first unread message;
-4. live edge.
-
-An explicit reply/search/activity target is not folded into this priority table. It is a separate,
-newer request and supersedes the provisional entry request.
-
-The entry choice is not final: XEP-0490/MDS state can resolve after entry and reposition an unread
-divider. That reconciliation must not issue a live-edge request merely because the remote pointer
-reaches the newest message; the active visit's divider remains parked until an explicit clear path
-retires it. Before genuine user takeover, an accepted MDS positioning correction is limited to the
-currently displayed conversation and only while that provisional entry remains eligible. After
-takeover, explicit navigation, outgoing send, or one accepted MDS correction, the late-MDS entry
-window closes. A delayed result from the room just left must never reactivate it. A later explicit
-user request remains allowed but does not reopen MDS eligibility.
-
-Source priority chooses the one provisional entry request. After entry, generation order governs
-permitted supersession; a newer generation alone does not bypass current-conversation or MDS
-eligibility guards. Async work tagged with a stale generation is ignored.
-
-Request precedence is classified exhaustively by source. Layout preservation is the strictest
-ambient class: it yields to every unsettled position, including live-edge follow. Media and
-directional-history preservation yield while a non-live-edge reader-intent position is still
-converging, but may re-anchor an unsettled live-edge follow because following the bottom is a policy,
-not a destination the reader is waiting to reach. Ambient live-edge recovery uses that same
-`yields-to-navigation` class. Unknown future sources default to the strictest class until
-deliberately classified. An outgoing-message live-edge request is the deliberate exception: sending
-is reader intent and may supersede an in-flight navigation, subject to the unfinished restore or
-history-preservation ownership rule above.
-
-User input and follow-live are separate facts. For requests other than explicit message targets,
-genuine input cancels the current reconciliation run immediately. A live-edge request retains its
-generation in a paused-user-input phase until settled geometry shows whether the reader left the
-edge; stale callbacks cannot resume that pause.
-Input that remains within the bottom threshold settles the same request and keeps following.
-At the resident live edge, following uses a distance strictly below `AT_BOTTOM_THRESHOLD` (150 px).
-At 150 px or more, the scroll-to-bottom FAB becomes eligible; an active bottom-pin claim suppresses
-it while the viewport settles.
-Subject to the unread-marker hold below, manually returning to the bottom after another position
-was cancelled creates a fresh generation-bearing live-edge request without reopening late-MDS
-eligibility. An ambient stimulus may also mint a fresh generation from a paused or null state, but
-only when the caller's geometry guard says the stimulus is eligible for ordinary live-edge
-reconciliation. This keeps the verdict displacement-aware for row growth and viewport shrink.
-
-An accepted unread-marker entry or navigation holds reading intent through settlement and
-cancellation. While that hold remains, near-bottom geometry cannot set the measured-at-bottom
-latch, report live-edge arrival, or re-arm ambient following. The shared `observeUserInputEnd`
-boundary releases it only when directional input completes within the bottom threshold;
-geometry-only observations and pointer contact do not release it. Keyboard message selection
-reports its geometry through that boundary after scrolling the selected row into view. An accepted
-live-edge request, including an outgoing send or marker fallback, also clears the hold; a new entry
-or conversation deactivation resets it.
-
-For explicit message targets, a deliberate upward attempt immediately releases protection, even
-when movement is blocked or erased by a simultaneous viewport clamp. Relevant wheel, keyboard,
-directional touch, and observable scrollbar-drag input share this policy. Mere pointer contact has
-no upward direction. Upward keys from the message scroller or its non-editable descendants are
-observed during capture, before a message handler can consume them; already-prevented,
-Alt/Ctrl/Meta-modified, editable, and outside-list key events are excluded. Home remains an explicit
-resident-top command.
-Upward intent also discards any pending selected-target media batch without creating movement or
-pagination evidence. Zero or nonmoving downward input may pause settled-target maintenance and
-resume it when input ends; it does not release protection as an upward attempt does. Independently
-observed movement takes over in either direction. After upward takeover, ambient changes cannot
-re-arm follow-live merely because the viewport remains near the bottom; an observed downward
-return or a fresh explicit navigation can resume it.
-
-When the message list unmounts or navigation leaves conversations, a generation-guarded deactivation
-clears the current conversation, active request, and MDS eligibility while retaining the watermark.
-Callbacks from the unmounted conversation are then rejected.
-
-Saved live-edge fallback also respects sliding-window reachability. The leased executor requests
-newer resident slices until the global tail becomes resident; only then may it apply the live-edge
-position. If no forward-window port exists, it explicitly lands at the best resident edge and ends
-ownership rather than leaving restoration permanently pending.
+| Rule | What holds | Owner | Tests |
+| --- | --- | --- | --- |
+| Entry priority | Exactly one provisional request, chosen in order: resolved synced live edge (invalidates stale local state), saved anchor or raw-only offset, first unread message, live edge | `entryArbitration.ts` | entryArbitration.test.ts |
+| Explicit target | Not part of entry priority: a newer request that supersedes the provisional one | controller | positioningController.test.ts |
+| Synced live edge | Remote read pointer equal to the tail clears obsolete saved state synchronously; an empty conversation never discards a saved position | `entryArbitration.ts` | entryArbitration.test.ts |
+| Late MDS | May reposition only the displayed conversation and only while entry is eligible and before takeover, navigation, send or one accepted correction; never issues live edge merely because the pointer reached the tail; a result from the room just left never reactivates | `entryArbitration.ts` | entryArbitration.test.ts, mdsSettleDecision.test.ts |
+| After entry | Generation order governs supersession; a newer generation alone does not bypass conversation or MDS guards | controller | positioningController.test.ts |
+| Input cancels | Genuine input cancels the current run for every request except explicit targets | controller | positioningController.test.ts, liveScrollOwnership.test.ts |
+| Paused live edge | Keeps its generation in paused-user-input until settled geometry shows whether the reader left; input within the threshold settles it and keeps following | controller | positioningController.test.ts |
+| Threshold | Following means strictly under `AT_BOTTOM_THRESHOLD` (150 px); at 150 px or more the scroll-to-bottom button is eligible; an active pin claim suppresses it | `fabVisibility.ts` | fabVisibility.test.ts, scrollEventDecisions.test.ts |
+| Manual return | Returning to the bottom after a cancel creates a fresh live-edge generation without reopening late MDS | controller | positioningController.test.ts |
+| Unread hold | An accepted marker entry or navigation holds reading intent through settlement and cancellation: near-bottom geometry cannot set the at-bottom latch or re-arm following; only directional input ending within the threshold releases it, as does an accepted live-edge request; entry or deactivation resets it | controller, `observeUserInputEnd` | positioningController.test.ts, useMessageListScroll.markerEntry.test.tsx |
+| Target takeover | A deliberate upward attempt releases target protection at once, even when clamped. Wheel, keys, directional touch and scrollbar drag share the policy; upward keys are read in capture (not prevented, unmodified, not editable, inside the list); zero or non-moving downward input only pauses maintenance; observed movement takes over either way; after upward takeover, near-bottom alone cannot re-arm follow | controller, `useScrollContainerBinding.ts` | useScrollContainerBinding.test.ts, positioningController.test.ts |
+| Saved live-edge fallback | Requests newer slices until the global tail is resident, then applies live edge; with no forward port it lands at the best resident edge and ends | saved executor | positioningController.test.ts |
 
 ## Reachability lifecycle
 
-The semantic lifecycle is:
+`request -> resolving -> pending(empty-window | around-load | target-not-indexed) | loading-around | unavailable(by source) | recentering-live-edge -> mounting(index) -> reconciling -> position-applied -> paused-user-input -> settled`
 
-```text
-request
-  -> resolving
-      -> pending(empty-window)
-      -> loading-around(message)
-      -> pending(around-load)
-      -> pending(target-not-indexed)
-      -> unavailable(source-specific policy)
-      -> recentering-live-edge
-      -> mounting(index)
-      -> reconciling
-      -> position-applied
-      -> paused-user-input
-      -> settled
-```
+| Rule | What holds |
+| --- | --- |
+| Empty window | A hydrating empty window is not evidence a saved target is missing |
+| Absent target | Distinguishes around-load available, in flight and exhausted; an empty completed slice never reloads forever |
+| No loader | Behaviour follows provenance: saved restore uses legacy offset then live edge; unread uses live edge; explicit targets wait; directional history uses captured distance from bottom and clamps; media preservation warns and stops |
+| Indexed but unmounted | A loaded message can be absent from the measured window; mount, then position, never both in one frame |
+| Live edge | Rows do not prove the global tail is resident: a slid-up window recenters, then mounts and reconciles the tail |
+| Unread near the start | A mounted marker at the resident start may reject start placement and fall back to live edge, so no scroll-to-zero loads older history |
+| Reconciling | The target is reachable; layout may not have settled |
 
-These states have distinct meanings:
+## Placement paths
 
-- An empty hydrating window is not evidence that a saved target is missing.
-- A target absent from a populated item set distinguishes an available around request, a request
-  already loading, and an exhausted/unavailable loader. An empty completed slice cannot trigger the
-  same load forever.
-- If no around-loader can satisfy it, behavior comes from request provenance rather than a generic
-  fallback: saved restore uses legacy offset then live edge, unread uses live edge, explicit targets
-  wait, directional history uses captured distance-from-bottom and clamps, and media preservation
-  warns and stops.
-- A loaded/indexed message can still be absent from the measured virtual window.
-- Live edge can likewise require mounting the tail of a slid-up virtual window; merely having rows
-  does not prove that the global tail is resident. A FAB/live-edge request first recenters a
-  slid-up window, then mounts and reconciles the global tail.
-- A mounted unread marker near the resident start can still reject start placement and use its
-  live-edge fallback, avoiding a scroll-to-zero that spuriously loads older history.
-- Mounting a row and positioning it are separate phases. They must not emit competing targets in
-  the same frame.
-- Reconciling means the semantic target is reachable; it does not mean layout has stabilized.
+All seven run through one `PositionRunner` under a lease; each frame must hold the current lease to write.
 
-The generation watermark survives settlement and cancellation. A stale cache load, mount callback,
-measurement, or MDS completion cannot revive cancelled work.
+| Path | Budget and tolerance | Rules that are easy to lose | Tests |
+| --- | --- | --- | --- |
+| Saved position | 90 frames, 8 stable, 8 px; no drift takeover (deep history may correct over 300 px) | Writes the initial anchor or offset, marks position-applied, then re-asserts; a restore needing none settles after its first write; an unfinished restore excludes ambient corrections | positioningController.trace.test.ts, useMessageListScroll.restore.test.tsx |
+| Unread marker | 300 px drift guard only when content height is unchanged since the last landing; a height correction allows another write | Uses row estimates at once; first calibration of a mount commits the spacer and reasserts in the same task before paint, later ones wait for the next render; final landing geometry decides fallback, not a transient clamp | useMessageListScroll.markerEntry.test.tsx, MessageList.calibration.test.tsx |
+| Explicit target | Immediate center writes (never a smooth restart) | Settled maintenance only exposes a clipped edge, never recenters a visible or taller-than-view row, keeps its generation, loads nothing, never repeats consumption or highlight, never acquires follow-live | settledTargetReconciler.test.tsx, messageTargetResize.test.tsx |
+| Live edge | 60 frames, 8 stable; no drift takeover (growth is its job) | Tail-layout flushes, 4 px missed-frame correction, repaint-burst coalescing (adapter-scoped), background-MAM repaint suppression, `overflowY` stale-paint repair; settled or best-effort flushes owed repaint, takeover or supersession discards it; entry drops repaint debt | liveEdgeBrowserAdapter.test.ts, MessageList.pinBottomRepaint.test.tsx |
+| Fixed-anchor preservation | 90 frames, 8 stable, 8 px | Media, divider and insertion stimuli share bottom-fraction geometry | mediaGrowthDecisions.test.ts, ambientAnchorDecisions.test.ts |
+| Directional history | 60-frame late-measurement budget, 2 px target shift, 5 px clamp recovery | Accepted before the load; pending until the first resident id changes (or an interior placement under the bound) or the load settles with no shift; boundary input keeps the captured anchor until the first write, then takeover is allowed; explicit requests supersede it | directionalHistoryBrowserAdapter.test.ts, directionalHistoryWindowCoordinator.test.ts |
+| Resident top | Settles after 2 frames within 1 px, best-effort after 120 frames | Interpolates from the actual offset each frame; resets the top travel latch; its own progress never counts as pagination evidence | positioningController.trace.test.ts |
 
-## Reconciler responsibilities
+Held writes: a frame whose write a released iOS fling still holds is no landing; the loop neither
+settles on the fling's position nor spends frames waiting, up to a bound well past a fling's
+momentum (`HELD_WRITE_FRAMES`, `HELD_INPUT_TIMEOUT_MS`). Navigation can own motion from the fling
+that preceded it: explicit target, return-to-latest until first settle, Home while current, the
+marker visit, the jump-to-last-read visit and the handover to live edge. Entry's own divider does not.
 
-The controller-owned reconcilers own the difficult runtime work below. None belongs in the pure
-model; browser-specific geometry remains in leased imperative executors. Every slice now reconciles
-behind a dedicated browser adapter — directional history, saved position, unread marker, explicit
-target, live edge, fixed anchor, and resident top:
+### Directional history details
 
-- resolve IDs against the loaded item set;
-- request an around slice and resume when it arrives;
-- mount an off-window virtual row;
-- translate current measured geometry into the requested placement;
-- use one semantic positioning target per frame; calibration may reassert that same target before paint;
-- re-resolve as estimated rows acquire measured sizes;
-- apply purpose-appropriate drift tolerances, stable-frame counts, and hard frame budgets;
-- recover when coalesced height deltas hide the final bottom-pin correction;
-- distinguish growth-driven programmatic scroll events from genuine takeover;
-- keep transient programmatic positions out of saved reading state;
-- cancel WebKit kinetic scrolling around directional history loads;
-- force/coalesce WebKit repaint when layout is correct but painted pixels are stale;
-- guarantee single-flight ownership and cancel stale generations.
-
-In particular, the model describes **what position is wanted**. It does not make measurement settle
-or stale-paint reconciliation disappear.
-
-Unread-marker placement uses the available row estimates immediately, including when the mounted
-window contains only attachments or system notices. A successful mounted-text measurement can
-refresh unmeasured estimates while retaining measured sizes. On the first calibration of a mount,
-`MessageList` commits the new spacer and reasserts the current marker execution in the same task
-before paint, without starting another frame loop. Later calibrations refresh the estimates in
-React's next render and leave the marker to its own frames: a synchronous re-render re-windows the
-list, and the rows it mounts would queue the next sample inside the current one. A later refresh
-commits at once only when keeping the reader in place moved the scroll offset. Row chrome is
-sampled only from plain-text rows without rendered `<br>` line breaks, and chrome-only
-recalibrations stop notifying after a fixed
-count per content width, line box and font. The controller's 300px drift guard applies only when
-content height is unchanged since the previous landing; a content-height correction must allow
-another marker write. The final landing's live-edge geometry determines fallback, not an earlier
-transient clamp. A frame whose write a released iOS fling still holds is no landing: the list is
-where the fling carries it, so the loop neither settles there nor spends its frames waiting for the
-write to land, up to a bound well past a fling's momentum. Regression coverage is in
-`tanstackMessageVirtualizer.ownership.test.tsx`, `positioningController.test.ts`,
-`messageTargetResize.test.tsx`, `useMessageListScroll.markerEntry.test.tsx`,
-`useRowMetrics.test.tsx` and `MessageList.calibration.test.tsx` under
-`apps/fluux/src/components/conversation/`; `e2e/scroll-reading.ts` covers the first-open
-trajectory and a switch between conversations with reply rows in a browser.
-
-Live-edge reconciliation deliberately has no fixed geometry-drift takeover threshold. Large
-geometry changes are the content-growth condition it must absorb, so genuine user input or a newer
-generation is its takeover signal. Adding the unread-marker drift guard here would abort valid
-deep growth and media-settle runs.
-
-## Current behavior inventory
-
-| Current trigger | Semantic position | Reachability / supersession notes |
+| Rule | What holds | Tests |
 | --- | --- | --- |
-| Entry with saved state | Fixed bottom-relative fractional anchor | Empty window waits; absent target can load around; indexed target may need mounting |
-| Entry with raw-only legacy state | Transitional legacy offset | Still outranks unread/live edge; not persisted by new semantic code |
-| Entry with unread | Message at start | Cache hydration and virtual mounting may delay resolution |
-| Entry without restore/unread | Live edge | Remains follow-live until user leaves it |
-| Explicit reply/search/activity target | Message target | Navigation and settled visibility maintenance follow the explicit-target contract above |
-| Jump-to-last-read | Message at start | Reuses unread-marker placement |
-| FAB or live-edge keyboard command | Unread marker, then live edge | If the marker is still below the viewport, first activation visits it (virtualized start alignment; current non-virtualized path uses top-third); a later activation goes live |
-| Outgoing message | Live edge | Deliberately supersedes a fixed historical position after its first landing releases preservation ownership; it need not wait for full convergence |
-| Incoming message at the resident live edge | Current or geometry-rearmed live edge | Must not make a fixed anchor follow; recovery is limited to paused/null ownership and the caller's geometry guard |
-| Delayed live-path message inserted inside the resident window while reading history | Selected target or fixed bottom-relative fractional anchor | See explicit-target maintenance and ambient request precedence above |
-| Late MDS live-edge state | Live edge | Newer automatic request only before user takeover |
-| Media at live edge | Current or geometry-rearmed live edge | Debounced measurement stimulus; recovery uses the pre-growth eligibility captured by the caller |
-| Media while reading history | Selected target or fixed bottom-relative fractional anchor | See explicit-target maintenance and pending-batch cancellation above |
-| Unread divider moves while reading history | Selected target or fixed bottom-relative fractional anchor | Preserve the current position under the explicit-target and ambient precedence rules above |
-| Load older/newer | Fixed top-relative offset anchor | Subject to ambient request precedence above; wait for the directional window change (a new first resident ID, or a new interior placement under the resident bound) and release if the load settles without one; restore again on each later window change until the load settles while the reader has not moved on; if the anchor disappears after a shift, preserve captured distance from bottom and clamp |
-| Home / resident-top command | Resident top | Does not itself trigger load-older; later genuine user travel can re-arm ordinary boundary loading |
-| Reaction, typing, resize, MAM completion | Reconcile current position | See selected-target maintenance and stimulus-specific live-edge eligibility above |
+| Restart | At the resident bound an interior arrival evicts the oldest row, so the first id can change before the batch lands; a later first-id change restores the same anchor again with a fresh request in the same pre-paint pass, only while the reader still reads where the last restore put them (no input and no non-preservation request since that generation) | directionalHistoryWindowCoordinator.test.ts, useMessageListScroll.loadNewer.test.tsx |
+| Under the bound | An interior arrival keeps the first id but moves rows below it; the window carries the store's interior placement version, which counts as a shift while a load is pending | directionalHistoryWindowCoordinator.test.ts |
+| Refused load | A load the controller refused (hover hold) or that was superseded holds nothing; ambient insertion keeps the shift and the batch's; the retained-row test uses aliases, since the batch can rename a handle with an archive id | directionalHistoryWindowCoordinator.test.ts |
+| Snapshot | Persists until its load settles, not only its cooldown; a settlement from an older load never releases the current one; entry drops the departed room's snapshot | directionalHistoryWindowCoordinator.test.ts |
+| Anchor follow | Between capture and landing the anchor follows every scroll event; rendered rows covering the top make the row the reader sees there the anchor (a row mostly past the top yields only if the next starts in the top half); stops changing once rows land before it; a restart requests the held row and placement | directionalHistoryBrowserAdapter.test.ts |
+| Hold | From first write to end of execution the virtualizer retains the anchor and compensates every resizing row before it | directionalHistoryBrowserAdapter.test.ts |
+| Evidence | Automatic pagination needs independently observed movement reaching the boundary; layout-only resize, typing, media, clamp and delayed corrections supply none. An upward wheel at the resident top is an attributed older-history request even if clamped. Explicit navigation, initial loads and downward wheel at the newer boundary are separate | useDirectionalHistoryLoads.test.ts, scrollEventDecisions.test.ts |
 
-The FAB/End choice is made from current geometry, not a remembered click state. If the unread marker
-is already visible or above the viewport, the same activation goes directly to live edge.
+## Message interaction holds
+
+| Rule | What holds | Tests |
+| --- | --- | --- |
+| Acquire | Desktop direct chats and rooms, after deliberate mouse movement, a click, keyboard action focus (`:focus-visible`) or an open More/reaction panel; row entry alone is not intent. A deliberate gesture in progress blocks acquisition; a hold clears stale input attribution | positioningController.interaction.test.ts, useMessageInteractionHold.test.tsx |
+| Position | Holds the row handle and message-body top offset through the anchor executor; a final row whose bottom is visible at the live bottom (one CSS pixel endpoint, taller rows included) also keeps its height, so its growth moves its top up; viewport shrink alone does not move the body | positioningController.interaction.test.ts, useMessageInteractionHold.test.tsx |
+| Virtualizer | Retains the row and suspends independent compensation; the executor reserves only missing bottom space and restores it on release | positioningController.interaction.test.ts, useMessageInteractionHold.test.tsx |
+| Cancel | Any other movement cancels it (selection-edge scroll, drag or middle-click autoscroll, find-in-page); pointer jitter inside Blink's 15 px dead zone is not a drag; a latched pan blocks until its stopping click, release, key or blur | positioningController.interaction.test.ts, useMessageInteractionHold.test.tsx |
+| Replace | Arrivals, typing, media, divider changes and geometry re-arming cannot replace an active hold; later layout stimuli reopen the same generation | positioningController.interaction.test.ts, useMessageInteractionHold.test.tsx |
+| Release | Pointer or keyboard-focus departure with panels closed, composer typing (open menus keep it), middle press, blur, target removal; deletion or retraction closes safely, never transferring to another row; identity survives archive-id backfill | positioningController.interaction.test.ts, useMessageInteractionHold.test.tsx |
+| Resume | Only a reader following latest resumes; geometry is read fresh, including pixels whose scroll callback has not arrived; history readers keep a settled fixed position; a send or explicit jump takes priority and closes panels first; input ending at the unchanged true bottom settles there; upward input never re-arms at its pre-motion bottom | positioningController.interaction.test.ts, useMessageInteractionHold.test.tsx |
+| Controls | Jump button also shows for arrivals inside the near-bottom band while holding, hidden while a More or reaction menu is open; toolbar slots stay fixed; the reaction picker captures its list space on open; Escape closes the panel and restores its trigger; touch sheets and static previews never hold | MessageToolbar.interaction.test.tsx, useMessageInteractionHold.test.tsx |
+
+## Viewport observation and attribution
+
+| Rule | What holds | Owner |
+| --- | --- | --- |
+| Session | One conversation-scoped session; values only (no DOM, virtualizer, scheduler or write); entry resets every fact; observations tagged for the room just left are rejected | `viewportSession.ts` |
+| Movement | Compared after viewport clamping and recorded application writes; no unchanged-height or settle-timeout requirement; sampled movement keeps its own geometry for the next native event; a released key keeps ownership of its matching native event until an independent layout change | `viewportSession.ts` |
+| Spacer | Height updates go through `commitVirtualizerLayout`, observing before and after the write so a spacer-induced clamp is attributed | `VirtualizerSpacer.tsx` |
+| Reading anchor | Observed movement rebases the anchor to a visible row; a height change rebases at the shared boundary, reaching the media batch and any active media request without a new generation; the batch anchor comes from the session, not a DOM snapshot taken after growth | `useMessageListScroll.ts` |
+| Fling | Attribution needs both the current lease and the virtualizer's real pending-fling state, for native events and measurement alike; new input still takes over and a new finger ends the old fling; settled maintenance, follow re-pins, missing gesture state and unobserved movement keep their vetoes | `viewportSession.ts` |
+| Persistence | Consumes immutable session snapshots; owns entry reads, throttled saves, leave versus mark-left, clearing; rejects stale-room snapshots and controller-owned scrolls | `scrollPersistenceAdapter.ts` |
+| Shadow model | Error-contained; failure degrades by the active request's policy and never escapes into an effect or handler. Zero divergences means the model agrees with the semantic label, never that pixels landed; the demo invariant suite fails on any divergence or instrumentation error | `scrollPositionShadow.ts` |
+
+## Virtualizer and native scroll ownership
+
+| Rule | What holds | Proof |
+| --- | --- | --- |
+| Library lock | `@tanstack/react-virtual` pinned to one exact version, updates without automerge; ten undeclared members reached only through `tanstackVirtualBridge.ts`, each run against the installed library | `tanstackVirtualBridge.test.ts` |
+| Bench | `scrollBench/` runs the real list, controller, adapters and library over a scripted scroller; each replay is a past fix and fails when reverted; a scroll bug is reproduced there as a replay first | `scrollBench/replays*.test.tsx` |
+| Pending reconciler | The library arms a pending target for up to five seconds on every scroll write; cancelling a lease alone cannot retire it; the adapter reports before/after observations for navigation, measurement and reconcile writes and syncs its cached offset first | `tanstackMessageVirtualizer.*.test.tsx` |
+| Clamped compensation | A compensation the browser clamped (spacer not yet grown) counts as the position it meant for resized-row choice, estimate-refresh anchor and next compensation, until the reader leaves that max | `issue1601-measurement-write.test.tsx` |
+| Writes | Measurement and immediate offset/index writes publish the landed offset before paint; a reconcile write is refused if its preceding observation finds reader movement; settlement and row release retarget pending centering to the current offset | virtualizer adapter |
+| Receipts | `scrollToOffset` and `scrollToIndex` return a receipt: `applied` (read-back offset), `queued` (held for an iOS fling, changes once), or `refused` (`reader`, `superseded`, `dropped`, `detached`); writes carry the lease owner, current while the request is active; a non-current owner is refused, including a held write; measurement compensation has none; emergency writes and target re-anchor pass no owner | `tanstackMessageVirtualizer.receipt.test.tsx` |
+| Automatic adjustment | Disabled while a selected message owns positioning; live scrollers disable `overflow-anchor` throughout attachment and restore it on detach | hook, virtualizer |
+| Motion state | A scroll is in progress from its first event or first polled offset change until six quiet frames; the reader takeover leaves motion alone; every library-made write reports its read-back as motion with the reader's direction; a report inside React's commit asks for no synchronous render; navigation writes outside a scroll publish at rest | `tanstackMessageVirtualizer.ts` |
+| Upward panning | A measured row wholly above the viewport that shrinks is compensated even when scrolling backward (override of the library's fold/direction rule; review on every upgrade); backward growth and spanning remeasures are not; held anchor and suppression take precedence | `tanstackMessageVirtualizer.estimates.test.tsx`, `e2e/scroll-native-pan.ts` |
+| Estimates | Resampling metrics during a pan allows up to three chrome corrections per geometry change; sampled width stays put (own-only windows read the content column); a refresh keeps the held anchor or the reader's row in place through the library correction, committing re-render in the same task; a shift larger than the old spacer's room first commits the taller layout windowed at the shifted offset, then writes the shift, before paint; whisper cards are excluded from sampling; an iOS gesture defers the correction | `useRowMetrics.test.tsx`, `e2e/scroll-native-pan-estimates.ts` |
+| Proof gap | WebKit upward-wheel and momentum with a shrinking row above the reader is an accepted proof gap | - |
+
+## Behavior inventory
+
+| Trigger | Position | Notes |
+| --- | --- | --- |
+| Entry with saved state | Bottom-fraction anchor | Empty window waits; absent target loads around; unmounted target mounts |
+| Entry with raw-only state | Legacy offset | Outranks unread and live edge |
+| Entry with unread | Message at start | Hydration and mounting may delay |
+| Entry otherwise | Live edge | Follows until the reader leaves it |
+| Reply, search, activity target | Message target | Maintenance rules above |
+| Jump to last read | Message at start | Reuses marker placement |
+| FAB or End | Unread marker, then live edge | Chosen from current geometry: a marker still below the view is visited first (virtualized start alignment, non-virtualized top-third); visible or above goes live |
+| Outgoing message | Live edge | Supersedes history after the first landing |
+| Incoming at the live edge | Current or re-armed live edge | Never makes a fixed anchor follow |
+| Delayed insertion, divider move, media while reading | Target or bottom-fraction anchor | Ambient precedence |
+| Late MDS live edge | Live edge | Only before takeover |
+| Load older or newer | Top-offset anchor | Directional rules; clamp to captured distance from bottom if the anchor vanishes |
+| Home | Resident top | Does not itself load older |
+| Reaction, typing, resize, MAM completion | Reconcile current | Stimulus-specific eligibility |
 
 ## Ownership boundary
 
-The controller-owned mechanisms retain leased browser reconcilers for saved anchors, unread markers,
-explicit message targets, live edge, fixed-anchor media/layout preservation, directional
-history, and resident top. These
-reconcilers implement measurement convergence; they are not separate positioning authorities.
-There is no independent positioning frame-loop implementation left inside `useMessageListScroll`.
-Executor construction lives in `useScrollExecutors` without exception: it supplies each adapter's
-value ports and hands the finished executor back for the hook to submit, so no `createExecutor` call
-appears in `useMessageListScroll`. Directional-history availability probes and one-frame settlement
-scheduling are encapsulated by `useDirectionalHistoryLoads`, which builds no executor and owns no
-pixel write. The orchestration hook also applies non-virtualized reading-layout adjustments through
-the controller's `preserveReadingLayout` guard and records the resulting geometry as a programmatic
-write. That path cannot replace selected-target ownership or an unsettled request. Emergency
-bottom and resident-top writes remain executor fallbacks when a controller request is unavailable.
-Static-preview operations remain isolated as documented below.
-
-The executor factories' changing callback identities are part of that integration contract because
-dependent effects use them to follow render-scoped window facts. The authoritative explanation and
-dependency rules live with the implementation in
-`apps/fluux/src/components/conversation/useScrollExecutors.ts`.
-
-Ambient layout preservation is entirely inside the scroll owner. `MessageList` provides only the
-store-owned interior-placement version and a lookup of where a row it renders sits, resolved through
-the row's aliases; it receives no raw anchor capture/restore callbacks. The
-virtualized executor corrects through `scrollToOffset`/`scrollToIndex` so TanStack's pending-scroll
-reconciler is retargeted rather than raced by an unleased `scrollTop` write. Pre-mutation anchors
-for divider movement and delayed insertion are captured continuously, and the accepted request
-performs its first correction in the post-commit, pre-paint layout effect.
-
-Every leased reconciler uses `controllerFrameLoop`. It owns the concrete scheduled frame and
-diagnostic handle, and finishes exactly once when the lease is stale before scheduling, becomes
-stale before callback delivery, or frame scheduling/controller callback work throws. Normal
-controller unavailable—including a safely contained executor failure—superseded, takeover,
-deactivation, and settlement paths call the same finish operation. Live-edge pin-claim
-start/renew/release hooks are part of that lifecycle, so the claim deadline is scheduler-failure
-defense in depth rather than recovery from an accepted controller gap.
-
-The live hook result and active-list registry have exact reviewed API-shape guards. Adding a new
-callback—whether or not its name contains `scrollTop`—fails until its ownership semantics are
-reviewed, preventing a low-level anchor/offset/scroller escape hatch from bypassing generations.
-The unused generic `useMessageScroll` hook and its raw bottom writers have been deleted, so the app
-hook barrel no longer advertises an alternate live-list positioning owner. The ownership guard
-keeps that retired surface absent.
-
-The former send/composer/media writers in `ChatView` and `RoomView` have been removed. Outgoing rows
-already create a controller-owned live-edge request, scroller resize is observed by the message
-list's controller-backed correction path, and room media now receives the same list-owned callback
-as 1:1 media. That callback is published through a stable shell so current executor/window changes
-do not invalidate every memoized row. These stimuli no longer add a second pixel writer.
-
-Two visually similar scroll operations are explicitly outside this migration:
-
-- `SearchContextView` is a static preview with its own scroller and no live-conversation persistence,
-  follow-live, unread, or history-window ownership. Its persistent-highlight positioning loop remains
-  isolated from the live message-list controller. Its rows are still interactive, so a reply/poll
-  click inside a preview resolves within that preview's own scroller — never the document, and never
-  the live conversation. Because several previews can be mounted beside the live list while the
-  active-list registry holds only one entry, requests from inside any list route by **containment**
-  (`messageTargetContext`), not by registration order; previews therefore do not register at all.
-  The registry remains for callers with no enclosing list that mean the live conversation
-  (`PollBanner`, find-on-page). Its Home shortcut likewise retains one isolated smooth write because
-  static previews deliberately have no active controller conversation to accept that command.
-- Keyboard selection in `useMessageSelection` uses
-  `scrollIntoView({ block: 'nearest' })` only to keep the selected row visible. It is viewport
-  maintenance, not a semantic message-position request, and remains intentionally direct. Its
-  completion observation follows the unread-marker hold rule under "Entry arbitration and later
-  supersession".
-
-A later migration is incomplete until each in-scope owner either routes through the controller or is
-explicitly documented as an isolated, non-competing context. New controller code must replace and
-delete old owners rather than wrap them indefinitely.
-
-### Library lock and the scroll bench
-
-`@tanstack/react-virtual` is pinned to one exact version in `apps/fluux/package.json` and
-`renovate.json` opens its updates without automerge. Fluux relies on ten members `virtual-core` does
-not declare for consumers; `tanstackVirtualBridge.ts` is the only file that reaches them, and
-`tanstackVirtualBridge.test.ts` runs the installed library through each one. A library update that
-renames one fails that test instead of degrading the adapter silently.
-
-`scrollBench/` runs the real list, controller, browser adapters, virtualizer adapter and installed
-library over a scripted scroller with no fake scroll geometry in the test. Each replay in it is a past
-fix and fails when that fix is reverted; `replays*.test.tsx` name the fix beside each replay. A scroll
-bug is reproduced there first, as a replay, and then fixed.
-
-The replays cover ten distinct fixes: the reader offset under clamped growth, a shrink while scrolling
-backward, a takeover while a finger is down, cancelling a navigation by `cancelScroll`, the
-live-edge pin held by a finger, the viewport shrink, the stale-height wipe on a width change, the
-width the hidden rows are estimated at, a last message that grows under the pointer, and the
-jump-to-latest button as an interaction bridge. A few fixes have a second variant replay; those are
-supplementary. The two estimate replays guard the width behavior that survives the removal of the
-own-row estimate fixes they replace.
-
-### Virtualizer and native scroll ownership
-
-`@tanstack/virtual-core` keeps its own pending-scroll reconciler: every `scrollToIndex` /
-`scrollToOffset` arms a `scrollState` that survives for up to five seconds and re-applies **its**
-target on each frame that measurement moves it. Cancelling a controller lease alone cannot retire
-this internal target. The adapter exposes before/after observations for navigation, measurement,
-and reconciliation writes so the viewport session can attribute them. Before TanStack computes a
-measurement adjustment, the adapter observes shared viewport geometry and synchronizes its cached
-offset with the actual scroller. This keeps above-viewport compensation relative to the reader's
-current position even when native scroll delivery is delayed. A compensation the browser clamped
-because the spacer has not grown yet is part of that position while the element still sits at the
-max the write stopped at. Which resized rows are above the reader, the row an estimate refresh keeps
-in place, and where the next compensation starts are all taken at the position the clamped one
-meant, so several rows measuring above the reader before the spacer grows keep the reader where it
-was, at the live edge included, and a row that growth moved below the clamped position still counts
-as above the reader. Once the reader moves off that max, all three use the reader's position again.
-Regression coverage is in `issue1601-measurement-write.test.tsx`. Measurement writes and immediate
-offset/index writes publish their landed offset to the virtual window before paint. A reconciliation
-write is refused when its preceding observation detects user movement. At explicit-target settlement, the
-adapter retargets pending index centering to the current offset before completion can expose the
-target highlight; releasing a retained row also retargets to the current offset.
-
-While a selected message owns positioning, TanStack's automatic measurement adjustments are
-disabled. Live scrollers disable native `overflow-anchor` throughout attachment, including after
-takeover, and restore the prior inline setting on detach. Reading-layout adjustments therefore
-remain under application control rather than competing with native anchoring.
-
-Resident-top animation follows the leased frame contract above. On the virtualized path its
-immediate frame writes use `scrollToOffset`, keeping TanStack's pending target aligned with each
-landed position.
-
-`scrollToOffset` and `scrollToIndex` return a receipt (`ScrollWrite`). Its `outcome()` reads
-`applied` with the offset the browser read back, `queued` while the library holds the write for an
-iOS fling, or `refused` with a reason: `reader` (the reader veto), `superseded` (a newer request
-or write owns the list), `dropped` (the library let go of a held write) or `detached` (the scroller
-changed). A `queued` receipt changes once, to `applied` or `refused`, and is read from the
-library's state on demand. The leased writes pass an `owner` taken from the lease; it is current
-while the request is the active one, whether or not its frame loop is running. A write whose owner
-is no longer current is refused and never written, including a write the library was holding.
-Measurement compensation has no receipt and still cannot be refused. The two emergency writes and
-the explicit-target completion re-anchor pass no owner. Regression coverage is
-`tanstackMessageVirtualizer.receipt.test.tsx`.
+| Rule | What holds |
+| --- | --- |
+| One authority | No frame loop inside `useMessageListScroll`; executors are built only in `useScrollExecutors`; `useDirectionalHistoryLoads` builds none and owns no write; emergency bottom and resident-top writes are executor fallbacks |
+| Frame lifecycle | Every leased reconciler uses `controllerFrameLoop`, finishing exactly once on stale lease, thrown work, supersession, takeover, deactivation or settle; pin-claim start, renew and release are part of it, so the claim deadline is defense in depth |
+| Ambient layout | Entirely inside the scroll owner; `MessageList` supplies only the interior-placement version and a row-position lookup; the virtualized executor corrects through `scrollToOffset` or `scrollToIndex`; the first correction runs in the post-commit pre-paint layout effect |
+| API guard | The hook result and active-list registry have reviewed API-shape tests; a new callback fails until its ownership is reviewed; the generic `useMessageScroll` is deleted and kept absent |
+| No second writer | `ChatView`, `RoomView`, composer and media callbacks hold no pixel writer; room media uses the same list-owned callback through a stable shell |
+| Isolated: static preview | `SearchContextView` has its own scroller, no persistence, follow-live, unread or windows; requests inside any list route by containment (`messageTargetContext`), previews never register; Home keeps one isolated smooth write |
+| Isolated: keyboard selection | `useMessageSelection` uses `scrollIntoView({ block: 'nearest' })` as viewport maintenance and reports through `observeUserInputEnd` |
+| Future owners | Each must route through the controller or be documented as isolated; new controller code replaces and deletes old owners |
 
 ## Test standard
 
-Pure-model tests use paired controls that differ by one semantic fact. Every test must identify a
-plausible incorrect implementation that would make it fail.
+Pure-model tests use paired controls that differ by one semantic fact, and each must name a plausible
+wrong implementation that would fail it. Assert complete results; a test that repeats fixture
+arithmetic protects nothing.
 
-Required controls include:
+| Control | Pair |
+| --- | --- |
+| Follow | Live edge follows an append; an anchor on the same tail row, a target, resident top and legacy offset do not |
+| Reachability | Empty window, absent target with and without loader, indexed-unmounted and mounted resolve to different phases; around-load available, in flight, exhausted differ; source policies differ |
+| Live edge | An unmounted tail mounts before reconcile; a slid-up window recenters first; a legacy offset reconciles without mounting another row |
+| Entry | Unread marker at the resident start falls back to live edge; resolved synced live edge beats a saved anchor; saved and raw-only beat unread; unread beats live edge |
+| Navigation | FAB or End picks the marker only while it needs a visit; a newer target supersedes the entry generation |
+| Staleness | Stale generation completion and stale input cancellation are ignored, current succeed; deactivation blocks callbacks; cancel and settle keep the watermark |
+| MDS and send | Late MDS supersedes eligible entry, not after takeover, navigation or a switch; a send cannot steal pending saved or directional preservation and may proceed after first apply |
+| Input | Cancellation and re-arm obey the entry and input rules, including pending directional preservation and unread holds |
+| Commit plan | Each event's trigger changes and each skip condition differ by one fact (`commitPlan.test.ts`); the call order across scripted commits matches the recorded trace |
+| Types | Incompatible provenance and position pairs fail at compile time |
 
-- live edge follows an append; an anchor on the same tail message does not;
-- message target, resident top, and legacy offset do not follow appends either;
-- empty window, target absent with loader, target absent without loader, indexed/unmounted, and
-  mounted resolve to different phases;
-- load-around available, in-flight, and exhausted resolve differently;
-- source-specific target-unavailable policies remain different;
-- an unmounted live-edge tail mounts before reconciliation;
-- a slid-up window recenters before treating its resident bottom as the global live edge;
-- a legacy raw offset reconciles without mounting an unrelated row;
-- a mounted unread marker at the resident start takes its live-edge fallback;
-- already-resolved synced live edge changes the entry selection from saved anchor to live edge;
-- saved anchor and raw-only legacy state beat unread; unread beats ordinary live-edge fallback;
-- FAB/End chooses the unread marker only while live geometry says it still needs a visit;
-- a newer explicit target supersedes the provisional entry generation;
-- stale generation phase completion is ignored while current generation completion succeeds;
-- stale input cancellation is ignored;
-- late MDS supersedes eligible entry but is rejected after takeover/navigation and after switching
-  conversations;
-- outgoing send cannot steal ownership from pending saved/directional preservation;
-- outgoing send may proceed after the preservation position is first applied, before full settle;
-- input cancellation and follow-live rearming obey the entry and input rules above, including
-  pending directional-history preservation and unread-marker holds;
-- deactivation blocks callbacks from an unmounted conversation;
-- cancellation and settlement preserve the generation watermark;
-- incompatible provenance/position pairs fail compile-time controls.
+Pixel convergence stays a real-engine concern: pair mechanism tests with Chromium and WebKit scroll
+invariants and desktop WebKit validation for kinetic scrolling and stale paint. Playwright does not
+cover iOS fling; validate it on the iOS simulator.
 
-Tests must assert complete results where practical. A test that only repeats fixture arithmetic or
-asserts that an enum contains the value supplied by the fixture does not protect behavior.
-
-Pixel convergence remains a real-engine concern. When runtime migration begins, mechanism-level unit
-tests must be paired with Chromium/WebKit scroll invariants and real desktop WebKit validation for
-kinetic scrolling and stale-paint behavior.
-
-## Incremental migration after this contract
-
-1. [x] Introduce one generation-aware reconciliation controller without changing existing
-   positioning.
-2. [x] Migrate saved-anchor restoration: delete the legacy restore dispatcher, pending ref, and
-   around-load status map; retain the measurement loop only as a generation/operation-leased
-   reconciler.
-3. [x] Migrate unread and explicit message targets: the controller owns their generations,
-   supersession, reachability, frame convergence, and cancellation; their private loops and target
-   around-load ref are deleted.
-4. [x] Migrate live-edge pinning and media/content-growth preservation while retaining
-   bottom-specific measurement/repaint safeguards; delete both private hook-owned loops.
-5. [x] Migrate directional history preservation last, retaining kinetic cancellation, full-budget
-   late-measurement tracking, distance-from-bottom fallback, and clamp recovery; delete the private
-   prepend/window-shift loop.
-6. [x] Route resident-top and unread-divider layout preservation through the controller, remove
-   public raw anchor restoration, and document the two isolated, non-competing preview/selection
-   scroll contexts.
-   - [x] Harden the shared frame lifecycle so stale leases and thrown work release monitors and
-     live-edge pin claims; guard the public live-scroll API against semantic escape hatches.
-   - [x] Delete the unused generic `useMessageScroll` owner, its barrel export, dedicated tests, and
-     stale component-test mocks.
-7. Split persistence, viewport/interaction tracking, history windowing, and reconciliation out of
-   the orchestration hook.
-   - [x] Extract a conversation-scoped, observation-only viewport session; its current movement,
-     input, and application-write attribution contract is defined above.
-   - [x] Move enter/leave/save/clear behavior and throttling behind a persistence adapter consuming
-     viewport-session snapshots.
-   - [x] Extract directional history load eligibility, invocation, and completion into a window
-     coordinator that owns no positioning.
-   - [x] Move DOM/virtualizer reconciliation mechanics behind explicit browser adapters.
-     - [x] Extract directional-history capture, settlement scheduling, reachability, kinetic
-       cancellation, and anchor/fallback writes behind its leased browser adapter.
-     - [x] Extract saved-position reachability, legacy-offset and bottom-fraction writes behind its
-       leased browser adapter, with shared bottom-fraction geometry for fixed anchors.
-     - [x] Extract unread-marker and explicit-target reachability, passive conversation handoff,
-       leased positioning, around loading, and target completion behind dedicated browser adapters.
-     - [x] Extract the remaining live-edge, fixed-anchor, and resident-top browser executors.
-   - [x] Leave the React hook as thin lifecycle orchestration. Taken one cohesive unit at a time so
-     each step keeps the scroll invariants as its gate:
-     - [x] Move executor construction — the frame-loop factory, the adapters that outlive one
-       execution, and every `create*`/`build*Executor` — into `useScrollExecutors`.
-     - [x] Extract the scroller/content callback refs, their genuine-input listeners, and the
-       non-virtualized content-growth observer into `useScrollContainerBinding`.
-     - [x] Extract ambient divider/insertion anchor tracking into
-       `useAmbientAnchorPreservation`, with every branch decision as a pure function in
-       `ambientAnchorDecisions`.
-     - [x] Extract media-growth snapshotting and debouncing into
-       `useMediaGrowthPreservation`, with the settled-batch outcome in `mediaGrowthDecisions`.
-       Movement attribution remains with the shared `ViewportSession` described above.
-     - [x] Extract directional-history load start, release and post-frame settling into
-       `useDirectionalHistoryLoads`. It adds no eligibility rule of its own: the coordinator still
-       decides, and the browser adapter still captures and writes.
-     - [x] Reduce the scroll and wheel handlers to a value-only interpretation of geometry in
-       `scrollEventDecisions`, leaving the handlers to read facts once and apply the plan.
-     - [x] Express conversation-entry arbitration as a pure model over facts in
-       `entryArbitration`, leaving a thin effect that applies its verdict. The five-condition
-       synced-live-edge predicate and its late-resolving twin are now separately testable, including
-       the empty-conversation case where a bare pointer comparison would discard a saved position.
-     - [x] Express the two remaining ambient re-pins as pure decisions: `mdsSettleDecision` for a
-       divider cleared before the reader moves, and `typingIndicatorDecision` for the band that
-       shrinks the scrollport, the twin of `rowGrowthDecision`. The detectors that remain in the
-       hook carry a single condition each, where a decision layer would be ceremony.
-
-Each migration must preserve observable behavior, add a falsifiable regression control, and remove
-one previous source of scroll authority.
+Each change keeps observable behavior, adds a falsifiable regression control, and removes one
+source of scroll authority.
