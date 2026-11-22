@@ -4,6 +4,7 @@
  */
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
+import { activateChat } from './harness/scrollHarness'
 import { join } from 'node:path'
 
 test.use({ viewport: { width: 1280, height: 900 } })
@@ -12,6 +13,11 @@ async function boot(page: Page, mode: 'light' | 'dark') {
   await page.addInitScript(mode => localStorage.setItem('fluux-theme', mode), mode)
   await bootDemo(page, '/demo.html?tutorial=false')
   await page.evaluate(() => (window as any).__demoClient.stopAnimation())
+  // The demo reports ready before startup has finished moving focus. Tab skips zones that
+  // are not mounted, so a first conversation opening between two presses changes where the
+  // next one lands, and the shell takes focus once shortly after it mounts.
+  await activateChat(page, 'ava@fluux.chat')
+  await expect(page.locator('.chrome-shell')).toBeFocused()
 }
 
 async function capture(page: Page, name: string) {
@@ -193,7 +199,8 @@ test('theme, accent and system-mode changes refresh the guarded token', async ({
 test('clicked checkbox and slider do not retain keyboard rings', async ({ page }) => {
   await page.goto('/')
   const checkbox = page.locator('input[type="checkbox"]').first()
-  await expect(checkbox).toBeVisible()
+  // A cold dev server can take longer than the default 5s to serve the login page's modules.
+  await expect(checkbox).toBeVisible({ timeout: test.info().timeout })
   await page.keyboard.press('Tab')
   await checkbox.focus()
   await expect(checkbox).toHaveCSS('outline-width', '2px')
