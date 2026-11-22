@@ -30,7 +30,7 @@ export function stripQuotedLines(text: string): string {
 
   // Trim whole blank lines, never the first line's indent: removing it could turn an indented
   // `  > x` into a `>` line, and filtering twice (Rust, then Swift) must give the same text.
-  while (kept.length && !kept[0].trim()) kept.shift()
-  const remaining = kept.join('\n').trimEnd()
+  const first = kept.findIndex(line => line.trim())
+  const remaining = first < 0 ? '' : kept.slice(first).join('\n').trimEnd()
   return remaining ? remaining : text.trim()
 }

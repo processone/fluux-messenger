@@ -20,7 +20,7 @@ describe('stripQuotedLines', () => {
 })
 
 describe('stripQuotedLines idempotence', () => {
-  it.each(['> old\n  > keep\nreply', '> a\n> b', 'x\n> q\n\n y', '\n\n> q\n z'])('%j', input => {
+  it.each(['> old\n  > keep\nreply', '> a\n> b', 'x\n> q\n\n y', '\n\n> q\n z', '> old\n\t> keep\nreply'])('%j', input => {
     const once = stripQuotedLines(input)
     expect(stripQuotedLines(once)).toBe(once)
   })
@@ -35,5 +35,13 @@ describe('formatMessagePreview dropQuotes', () => {
   })
   it('keeps nested quotes without the option (reply cards)', () => {
     expect(formatMessagePreview({ body: 'a\n> q' })).toBe('a\n> q')
+  })
+})
+
+describe('stripQuotedLines cost', () => {
+  it('handles many leading blank lines in linear time', () => {
+    const start = Date.now()
+    expect(stripQuotedLines(`${'\n'.repeat(200000)}> old\nreply`)).toBe('reply')
+    expect(Date.now() - start).toBeLessThan(1000)
   })
 })

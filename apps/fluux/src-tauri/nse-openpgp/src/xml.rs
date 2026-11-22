@@ -319,19 +319,17 @@ fn strip_quoted_lines(text: &str) -> String {
         return text;
     }
     // Whole blank lines only, so filtering again downstream gives the same text.
-    while kept.first().is_some_and(|l| l.trim().is_empty()) {
-        kept.remove(0);
-    }
-    let remaining = kept.join("\n");
+    let first = kept.iter().position(|l| !l.trim().is_empty()).unwrap_or(kept.len());
+    let remaining = kept[first..].join("\n");
     let remaining = remaining.trim_end();
     if remaining.is_empty() { text.trim().to_string() } else { remaining.to_string() }
 }
 fn preview_text(text: &str) -> String {
-    strip_quoted_lines(text)
-        .chars()
-        .filter(|c| !c.is_control() || *c == '\n')
-        .take(240)
-        .collect()
+    // Sanitize first: removing control characters (tabs) after the quote filter would expose
+    // an indented `\t> x` line to the Swift pass, which filters again.
+    let text = text.replace("\r\n", "\n").replace('\r', "\n");
+    let clean: String = text.chars().filter(|c| !c.is_control() || *c == '\n').collect();
+    strip_quoted_lines(&clean).chars().take(240).collect()
 }
 #[cfg(test)]
 pub(crate) fn ox_body(bytes: &[u8], account: &str) -> Result<String> {
@@ -351,6 +349,11 @@ mod tests {
         assert_eq!(preview_text(&format!("{quote}My comment")), "My comment");
         assert_eq!(preview_text("> old\r\nMy reply"), "My reply");
         assert_eq!(preview_text("Before\r> old\rAfter"), "Before\nAfter");
+        for input in ["> old\n\t> keep\nreply", "x\r> q\r\t> k\ny"] {
+            let once = preview_text(input);
+            assert_eq!(preview_text(&once), once, "{input:?}");
+        }
+        assert_eq!(preview_text("> old\n\t> keep\nreply"), "reply");
         let once = preview_text("> old\n  > keep\nreply");
         assert_eq!(once, "  > keep\nreply");
         assert_eq!(preview_text(&once), once, "filtering again must not change it");

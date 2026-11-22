@@ -70,8 +70,8 @@ enum NotificationContent {
         }
         guard dropped else { return text }
         // Trim whole blank lines only, so filtering twice (Rust, then Swift) gives the same text.
-        while let first = kept.first, first.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { kept.removeFirst() }
-        let joined = kept.joined(separator: "\n")
+        let first = kept.firstIndex { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? kept.endIndex
+        let joined = kept[first...].joined(separator: "\n")
         let remaining = String(joined.reversed().drop(while: { $0.isWhitespace || $0.isNewline }).reversed())
         return remaining.isEmpty ? normalized.trimmingCharacters(in: .whitespacesAndNewlines) : remaining
     }
