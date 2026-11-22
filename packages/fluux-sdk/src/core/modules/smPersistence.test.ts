@@ -338,6 +338,8 @@ describe('SmPersistence', () => {
     })
     const client = (id: string, outbound: number, outbound_q: unknown[]) =>
       ({ streamManagement: { id, inbound: 0, outbound, outbound_q } })
+    const tracking = (id: string, outbound: number, outbound_q: unknown[]) =>
+      ({ streamManagement: { ...client(id, outbound, outbound_q).streamManagement, enabled: true } })
     const taken = (sm: SmPersistence) => sm.takeUnconfirmed(JID).map(message => message.id)
     /** A page that saved `items` as unacknowledged, then reloaded. */
     const reloaded = (acked: number, items: unknown[]) => {
@@ -421,8 +423,11 @@ describe('SmPersistence', () => {
     it('replaces a known-lost record with the position of its retry', () => {
       const sm = reloaded(4, [chat('retried')])
       sm.settleNewSession()
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+      const stream = tracking('session-2', 0, [chat('retried')])
+      sm.endRetry(JID, 'retried', true, stream)
 
-      sm.saveUnconfirmed(JID, client('session-2', 0, [chat('retried')]))
+      sm.saveUnconfirmed(JID, stream)
 
       expect(JSON.parse(sessionStorage.getItem(KEY)!)).toEqual([
         { id: 'retried', to: 'bob@example.com', session: 'session-2', sequence: 1 },
@@ -434,7 +439,53 @@ describe('SmPersistence', () => {
       sm.settleNewSession()
       sm.beginRetry(JID, 'retried', 'bob@example.com')
 
-      sm.endRetry(JID, 'retried', true)
+      sm.endRetry(JID, 'retried', true, tracking('session-2', 0, [chat('retried')]))
+
+      expect(taken(sm)).toEqual([])
+      expect(sessionStorage.getItem(KEY)).toBeNull()
+    })
+
+    it('keeps the record when a Retry was written on a session without Stream Management', () => {
+      const sm = reloaded(4, [chat('retried')])
+      sm.settleNewSession()
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+
+      sm.endRetry(JID, 'retried', true, { streamManagement: { id: '', enabled: false, outbound: 0, outbound_q: [] } })
+      sm.saveUnconfirmed(JID, null)
+
+      const next = new SmPersistence(createDeps())
+      next.restoreUnconfirmed(JID)
+      next.settleNewSession()
+      expect(taken(next)).toEqual(['retried'])
+    })
+
+    it.each([
+      ['the live stream', (sm: SmPersistence) => sm.saveUnconfirmed(JID, client('session-1', 4, [chat('retried')]))],
+      ['the queue kept from the previous client', (sm: SmPersistence) => {
+        sm.keepUnacknowledged(client('session-1', 4, [chat('retried')]) as never)
+        sm.saveUnconfirmed(JID, null)
+      }],
+    ])('after a refused Retry, an older attempt in %s does not replace its record', (_where, unload) => {
+      const sm = new SmPersistence(createDeps())
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+      sm.endRetry(JID, 'retried', false, tracking('session-1', 4, [chat('retried')]))
+
+      unload(sm)
+
+      const next = new SmPersistence(createDeps())
+      next.restoreUnconfirmed(JID)
+      next.settleResumed('session-1', 5)
+      expect(taken(next)).toEqual(['retried'])
+    })
+
+    it('a new session keeps a reported record, so its pending mark can still settle it', () => {
+      const sm = reloaded(4, [chat('retried')])
+      sm.settleNewSession()
+      const [reported] = sm.takeUnconfirmed(JID)
+      sm.keepUnacknowledged(client('session-1', 4, [chat('retried')]) as never)
+
+      sm.settleNewSession()
+      sm.settleUnconfirmed(JID, reported, true)
 
       expect(taken(sm)).toEqual([])
       expect(sessionStorage.getItem(KEY)).toBeNull()
@@ -465,7 +516,7 @@ describe('SmPersistence', () => {
       const sm = new SmPersistence(createDeps())
       sm.beginRetry(JID, 'retried', 'bob@example.com')
 
-      sm.endRetry(JID, 'retried', false)
+      sm.endRetry(JID, 'retried', false, null)
 
       expect(JSON.parse(sessionStorage.getItem(KEY)!)).toEqual([{ id: 'retried', to: 'bob@example.com' }])
       expect(taken(sm)).toEqual(['retried'])
@@ -491,7 +542,7 @@ describe('SmPersistence', () => {
 
       sm.settleUnconfirmed(JID, stale, true)
 
-      sm.endRetry(JID, 'retried', false)
+      sm.endRetry(JID, 'retried', false, null)
       expect(taken(sm)).toEqual(['retried'])
     })
 

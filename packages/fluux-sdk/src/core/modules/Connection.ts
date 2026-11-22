@@ -2238,7 +2238,7 @@ export class Connection extends BaseModule {
     const jid = this.credentials?.jid
     if (!jid) return () => {}
     this.smPersistence.beginRetry(jid, messageId, to)
-    return sent => this.smPersistence.endRetry(jid, messageId, sent)
+    return sent => this.smPersistence.endRetry(jid, messageId, sent, this.xmpp)
   }
 
   /** Give the state machine the window of the session in the cache. */

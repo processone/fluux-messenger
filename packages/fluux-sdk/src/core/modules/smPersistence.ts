@@ -22,6 +22,8 @@ import { NS_STANZA_ID } from '../namespaces'
 export interface SmStateSource {
   streamManagement?: {
     id?: string | null
+    /** Whether the stream currently counts what is sent, which also queues it until acknowledged. */
+    enabled?: boolean
     inbound?: number
     outbound?: number
     outbound_q?: unknown[]
@@ -206,9 +208,16 @@ export class SmPersistence {
     const kept = this.unacknowledged
       ? unconfirmedMessagesIn(this.unacknowledged.id, this.unacknowledged.items, this.unacknowledged.acked)
       : []
-    // An attempt still queued from before a Retry says nothing about the Retry, which has not gone out.
-    const tracked = [...kept, ...live].filter((message) => !this.retrying.has(message.id))
-    this.writeUnconfirmed(jid, latestById([...this.unconfirmed, ...tracked]))
+    this.writeUnconfirmed(jid, this.withQueued([...kept, ...live]))
+  }
+
+  /**
+   * The records with what is queued added. A record without a session is a message
+   * known to be unsent, so a queued attempt of it is an older one and changes nothing.
+   */
+  private withQueued(queued: readonly SmUnconfirmedMessage[]): SmUnconfirmedMessage[] {
+    const unsent = new Set(this.unconfirmed.filter((message) => message.session === undefined).map((message) => message.id))
+    return latestById([...this.unconfirmed, ...queued.filter((message) => !unsent.has(message.id))])
   }
 
   /** Read back what the previous page load saved. */
@@ -245,7 +254,7 @@ export class SmPersistence {
       ? unconfirmedMessagesIn(this.unacknowledged.id, this.unacknowledged.items, this.unacknowledged.acked)
       : []
     this.unacknowledged = null
-    this.unconfirmed = latestById([...this.unconfirmed, ...kept]).map((message) =>
+    this.unconfirmed = this.withQueued(kept).map((message) =>
       message.session === undefined ? message : { id: message.id, to: message.to })
   }
 
@@ -283,9 +292,13 @@ export class SmPersistence {
     this.writeUnconfirmed(jid, this.unconfirmed)
   }
 
-  /** Sent: the stream tracks this attempt now. Not sent: the record stays and is reported again. */
-  endRetry(jid: string, id: string, sent: boolean): void {
-    if (!this.retrying.delete(id) || !sent) return
+  /**
+   * The record goes only when the stream tracks the new attempt. If it could not be
+   * sent, or went out on a session without Stream Management, nothing else would
+   * show that it may not have arrived, so the record stays and is reported again.
+   */
+  endRetry(jid: string, id: string, sent: boolean, xmpp: SmStateSource | null): void {
+    if (!this.retrying.delete(id) || !sent || !xmpp?.streamManagement?.enabled) return
     this.unconfirmed = this.unconfirmed.filter((message) => message.id !== id)
     this.writeUnconfirmed(jid, this.unconfirmed)
   }
