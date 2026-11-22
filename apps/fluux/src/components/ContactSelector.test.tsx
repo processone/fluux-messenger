@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { ContactSelector } from './ContactSelector'
 import { ModalShell } from './ModalShell'
 import type { Contact, PresenceStatus } from '@fluux/sdk'
@@ -664,9 +664,14 @@ describe('ContactSelector', () => {
     })
 
     describe('inside a modal', () => {
+      const mockOnClose = vi.fn()
+      const suggestions = () => screen.queryByTestId('contact-suggestions')
+
+      beforeEach(() => mockOnClose.mockClear())
+
       function openInModal() {
         render(
-          <ModalShell title="Invite" onClose={vi.fn()}>
+          <ModalShell title="Invite" onClose={mockOnClose}>
             <ContactSelector selectedContacts={[]} onSelectionChange={mockOnSelectionChange} />
             <button type="button">Cancel</button>
           </ModalShell>
@@ -693,6 +698,104 @@ describe('ContactSelector', () => {
         fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })
 
         expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+      })
+
+      it('Escape closes only the list, and the next Escape closes the window', async () => {
+        const input = openInModal()
+        expect(suggestions()).toBeInTheDocument()
+
+        fireEvent.keyDown(input, { key: 'Escape' })
+        expect(suggestions()).not.toBeInTheDocument()
+        expect(input).toHaveFocus()
+        expect(mockOnClose).not.toHaveBeenCalled()
+
+        fireEvent.keyDown(input, { key: 'Escape' })
+        // The window closes after its exit animation.
+        await waitFor(() => expect(mockOnClose).toHaveBeenCalledTimes(1))
+      })
+
+      it('Escape clears typed text first, then closes the list, then the window', async () => {
+        const input = openInModal()
+        fireEvent.change(input, { target: { value: 'ali' } })
+
+        fireEvent.keyDown(input, { key: 'Escape' })
+        expect(input).toHaveValue('')
+        expect(suggestions()).toBeInTheDocument()
+
+        fireEvent.keyDown(input, { key: 'Escape' })
+        expect(suggestions()).not.toBeInTheDocument()
+        expect(mockOnClose).not.toHaveBeenCalled()
+
+        fireEvent.keyDown(input, { key: 'Escape' })
+        // The window closes after its exit animation.
+        await waitFor(() => expect(mockOnClose).toHaveBeenCalledTimes(1))
+      })
+
+      it('leaves Tab and Shift+Tab to the window once Escape closed the list', () => {
+        const input = openInModal()
+        fireEvent.keyDown(input, { key: 'Escape' })
+
+        fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })
+
+        expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+      })
+
+      it('does not move the highlight of a closed list with Tab', () => {
+        const input = openInModal()
+        fireEvent.keyDown(input, { key: 'Escape' })
+
+        fireEvent.keyDown(input, { key: 'Tab' })
+        act(() => input.focus())
+        fireEvent.keyDown(input, { key: 'ArrowDown' })
+        fireEvent.keyDown(input, { key: 'Enter' })
+
+        expect(mockOnSelectionChange).toHaveBeenCalledExactlyOnceWith(['charlie@example.com'])
+      })
+
+      it('picks nobody with Enter while the list is closed', () => {
+        const input = openInModal()
+        fireEvent.keyDown(input, { key: 'Escape' })
+
+        fireEvent.keyDown(input, { key: 'Enter' })
+
+        expect(mockOnSelectionChange).not.toHaveBeenCalled()
+        expect(mockOnClose).not.toHaveBeenCalled()
+      })
+
+      it.each([
+        { way: 'ArrowDown', reopen: (input: HTMLElement) => fireEvent.keyDown(input, { key: 'ArrowDown' }) },
+        { way: 'ArrowUp', reopen: (input: HTMLElement) => fireEvent.keyDown(input, { key: 'ArrowUp' }) },
+        { way: 'typing', reopen: (input: HTMLElement) => fireEvent.change(input, { target: { value: 'c' } }) },
+        { way: 'a click', reopen: (input: HTMLElement) => fireEvent.click(input) },
+      ])('shows a closed list again with $way, at its first entry', ({ reopen }) => {
+        const input = openInModal()
+        fireEvent.keyDown(input, { key: 'ArrowDown' })
+        fireEvent.keyDown(input, { key: 'Escape' })
+
+        reopen(input)
+        expect(suggestions()).toBeInTheDocument()
+        fireEvent.keyDown(input, { key: 'Enter' })
+
+        expect(mockOnSelectionChange).toHaveBeenCalledExactlyOnceWith(['charlie@example.com'])
+      })
+
+      it('keeps a closed list closed when focus comes back, so Tab can pass through', () => {
+        vi.useFakeTimers()
+        try {
+          const input = openInModal()
+          fireEvent.keyDown(input, { key: 'Escape' })
+
+          act(() => screen.getByRole('button', { name: 'Cancel' }).focus())
+          act(() => { vi.advanceTimersByTime(200) })
+          act(() => input.focus())
+
+          expect(input).toHaveFocus()
+          expect(suggestions()).not.toBeInTheDocument()
+          fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })
+          expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+        } finally {
+          vi.useRealTimers()
+        }
       })
     })
 

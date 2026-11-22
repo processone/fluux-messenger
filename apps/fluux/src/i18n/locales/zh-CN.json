@@ -176,7 +176,7 @@
         "manage": "管理",
         "searchContacts": "搜索联系人…",
         "addMoreContacts": "添加更多联系人…",
-        "keyboardHint": "使用 Tab/↑↓ 键导航，按 Enter 键选择",
+        "keyboardHint": "使用 Tab/↑↓ 键导航，按 Enter 键选择，按 Esc 键关闭",
         "noContactsFound": "未找到联系人",
         "pressEnterToAdd": "按 Enter 键添加",
         "blockUser": "屏蔽用户",

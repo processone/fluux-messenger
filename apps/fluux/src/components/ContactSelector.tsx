@@ -75,7 +75,8 @@ interface UnifiedContact {
  * - Tab/Shift+Tab: cycle through matching contacts
  * - Arrow Up/Down: navigate dropdown list
  * - Enter: select highlighted contact
- * - Escape: clear search
+ * - Escape: step back one layer: clear the search, then close the list, then let the
+ *   surrounding window handle it. With the list closed, Tab moves to the next control.
  * - Backspace (empty input): remove last selected contact
  */
 export function ContactSelector({
@@ -102,9 +103,13 @@ export function ContactSelector({
   // must still pick the entry that is highlighted. `null` means the first entry.
   const [highlightedJid, setHighlightedJid] = useState<string | null>(null)
   const [isFocused, setIsFocused] = useState(false)
+  // Escape closed the list. It stays closed when focus returns, so Tab can pass through the
+  // picker, until the user asks for it again by typing, with an arrow key or with a click.
+  const [isListDismissed, setIsListDismissed] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
+  const hintRef = useRef<HTMLDivElement>(null)
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Recent-activity ordering is a one-shot nicety for the dropdown. Read it
@@ -232,6 +237,7 @@ export function ContactSelector({
     if (next === search) return
     setSearch(next)
     setHighlightedJid(null)
+    setIsListDismissed(false)
   }
 
   const cancelPendingBlur = () => {
@@ -249,7 +255,7 @@ export function ContactSelector({
     !excludedJids.has(searchJidNormalized)
 
   // The popover shows suggestions, an add-this-JID row, or a no-match notice.
-  const isPopoverOpen = isFocused && (filteredContacts.length > 0 || !!search)
+  const isPopoverOpen = isFocused && !isListDismissed && (filteredContacts.length > 0 || !!search)
 
   // Focus stays in the input, so a screen reader hears why the highlighted person
   // cannot be chosen only through a status message.
@@ -360,8 +366,10 @@ export function ContactSelector({
     if (!list || !row) return
     const listRect = list.getBoundingClientRect()
     const rowRect = row.getBoundingClientRect()
+    // The keyboard hint stays pinned over the bottom of the list.
+    const visibleBottom = listRect.bottom - (hintRef.current?.offsetHeight ?? 0)
     if (rowRect.top < listRect.top) list.scrollTop -= listRect.top - rowRect.top
-    else if (rowRect.bottom > listRect.bottom) list.scrollTop += rowRect.bottom - listRect.bottom
+    else if (rowRect.bottom > visibleBottom) list.scrollTop += rowRect.bottom - visibleBottom
   }, [isPopoverOpen, highlightedIndex])
 
   const selectContact = (jid: string) => {
@@ -400,9 +408,9 @@ export function ContactSelector({
 
   // A modal's focus trap listens on its panel, so it sees Tab before React's bubble handlers
   // and would move focus out while the highlight moves too. The capture phase runs first and
-  // marks the key as used. With no contacts to move through, Tab stays ordinary navigation.
+  // marks the key as used. With no list to move through, Tab stays ordinary navigation.
   const handleKeyDownCapture = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== 'Tab' || filteredContacts.length === 0) return
+    if (e.key !== 'Tab' || isListDismissed || filteredContacts.length === 0) return
     e.preventDefault()
     moveHighlight(e.shiftKey ? -1 : 1)
   }
@@ -417,6 +425,8 @@ export function ContactSelector({
     // Enter can add a JID even if no contacts match
     if (e.key === 'Enter') {
       e.preventDefault()
+      // A closed list has no visible choice for Enter to confirm.
+      if (isListDismissed) return
       if (filteredContacts[highlightedIndex]) {
         // Select highlighted contact from dropdown
         selectContact(filteredContacts[highlightedIndex].jid)
@@ -427,15 +437,32 @@ export function ContactSelector({
       return
     }
 
-    // Escape clears search
+    // Escape steps back one layer: the search, then the list, then the surrounding window.
+    // Stopping it here keeps it from the window's Escape-to-close listener on the document.
     if (e.key === 'Escape') {
+      if (!search && !isPopoverOpen) return
       e.preventDefault()
-      changeSearch('')
+      e.stopPropagation()
+      if (search) {
+        changeSearch('')
+      } else {
+        setIsListDismissed(true)
+        setHighlightedJid(null)
+      }
       return
     }
 
     // Navigation only works when there are contacts to navigate
     if (filteredContacts.length === 0) {
+      return
+    }
+
+    // An arrow key shows a closed list again, without moving past its first entry.
+    if (isListDismissed) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        setIsListDismissed(false)
+      }
       return
     }
 
@@ -499,6 +526,7 @@ export function ContactSelector({
           type="text"
           value={search}
           onChange={(e) => changeSearch(e.target.value)}
+          onClick={() => setIsListDismissed(false)}
           onKeyDownCapture={handleKeyDownCapture}
           onKeyDown={handleKeyDown}
           onFocus={() => { cancelPendingBlur(); setIsFocused(true) }}
@@ -576,7 +604,10 @@ export function ContactSelector({
                     </div>
                   )
                 })}
-                <div className="px-3 py-1.5 text-xs text-fluux-muted border-t border-fluux-hover bg-fluux-sidebar">
+                <div
+                  ref={hintRef}
+                  className="sticky bottom-0 px-3 py-1.5 text-xs text-fluux-muted border-t border-fluux-hover bg-fluux-sidebar"
+                >
                   {t('contacts.keyboardHint')}
                 </div>
               </>

@@ -176,7 +176,7 @@
         "manage": "Upravljaj",
         "searchContacts": "Pretraži kontakte...",
         "addMoreContacts": "Dodaj više kontakata...",
-        "keyboardHint": "Tab/↑↓ za navigaciju, Enter za odabir",
+        "keyboardHint": "Tab/↑↓ za navigaciju, Enter za odabir, Esc za zatvaranje",
         "noContactsFound": "Kontakti nisu pronađeni",
         "pressEnterToAdd": "Pritisnite Enter za dodavanje",
         "blockUser": "Blokiraj korisnika",

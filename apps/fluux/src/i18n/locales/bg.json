@@ -176,7 +176,7 @@
         "manage": "Управление",
         "searchContacts": "Търсене на контакти...",
         "addMoreContacts": "Добави още контакти...",
-        "keyboardHint": "Tab/↑↓ за навигация, Enter за избор",
+        "keyboardHint": "Tab/↑↓ за навигация, Enter за избор, Esc за затваряне",
         "noContactsFound": "Няма намерени контакти",
         "pressEnterToAdd": "Натиснете Enter за добавяне",
         "blockUser": "Блокиране на потребител",
