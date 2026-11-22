@@ -2,7 +2,7 @@
  * Stream Management monkey-patches for xmpp.js
  *
  * These patches are applied at runtime to the xmpp.js client instance created
- * in Connection.createXmppClient(). They address three issues:
+ * in Connection.createXmppClient(). They address four issues:
  *
  * 1. **SM ack debouncing** (patchSmAckDebounce):
  *    xmpp.js sends an immediate <a h='N'/> for every <r/> from the server.
@@ -60,11 +60,19 @@
  *    If a later xmpp.js counts these stanzas itself, the counter has already
  *    moved and the patch adds nothing.
  *
+ * 4. **SM outbound count of unparsable addresses** (patchSmOutboundCount):
+ *    xmpp.js writes a stanza, then builds an outgoing context that parses its
+ *    `to` and `from`. An address with no domain, such as `@`, throws there,
+ *    before the stream-management filter queues the stanza. The server still
+ *    counts it (ejabberd 26.09 does for iq, message and presence), so its
+ *    acknowledgement would release the next queued stanza instead.
+ *
  * @module
  */
 
 import type { Client, Element, SmOutboundQueueItem, StreamManagement } from '@xmpp/client'
-import { xml } from '@xmpp/client'
+import { jid, xml } from '@xmpp/client'
+import { parse as parseXml } from 'ltx'
 
 const NS_SM = 'urn:xmpp:sm:3'
 const DEBOUNCE_MS = 250
@@ -238,6 +246,75 @@ export function patchSmInboundCount(xmppClient: Client): void {
     inboundBefore.delete(element)
     if (sm.inbound === before) sm.inbound += 1
   })
+}
+
+/** Whether xmpp.js's outgoing context would throw on this stanza's `to` or `from`. */
+function hasUnparsableAddress(stanza: Element): boolean {
+  try {
+    for (const address of [stanza.attrs.to, stanza.attrs.from]) {
+      if (address) jid(address)
+    }
+    return false
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Queue the stanzas xmpp.js cannot build an outgoing context for, on the same
+ * condition as its own filter. See the module documentation (patch 4). The send
+ * still rejects as it did; only the count changes.
+ *
+ * Guard: only patches real xmpp.js clients — test mocks (which lack outbound_q)
+ * are left untouched.
+ */
+export function patchSmOutboundCount(xmppClient: Client): void {
+  const sm = xmppClient.streamManagement
+  if (!Array.isArray(sm?.outbound_q) || typeof xmppClient.prependListener !== 'function') return
+
+  xmppClient.prependListener('send', (element: Element) => {
+    if (!COUNTED_STANZAS.has(element.name) || (!sm.enabled && !sm.enableSent)) return
+    if (hasUnparsableAddress(element)) {
+      sm.outbound_q.push({ stanza: element, stamp: new Date().toISOString() })
+    }
+  })
+}
+
+/**
+ * Report the stanzas of a raw XML write to xmpp.js, as its own send() does after
+ * writing an element. `client.write()` skips that step, while the server still
+ * counts each stanza in its `h`; without this, an acknowledgement of a raw stanza
+ * would release the next queued stanza instead.
+ *
+ * The caller's bytes are already on the wire, so they stay exactly as typed. Only
+ * iq, message and presence are reported: the server does not count anything else.
+ * Malformed XML reports nothing, because the server ends the stream and its
+ * session on it. A listener that throws, as xmpp.js's does on an unparsable
+ * address, neither fails the send nor stops the listeners after it.
+ *
+ * Guard: only real xmpp.js clients — test mocks (which lack outbound_q) are left
+ * untouched.
+ */
+export function reportRawStanzasSent(xmppClient: Client, rawXml: string): void {
+  if (!Array.isArray(xmppClient.streamManagement?.outbound_q)) return
+  let written: Element
+  try {
+    written = parseXml(`<raw>${rawXml}</raw>`) as unknown as Element
+  } catch {
+    return
+  }
+  // The listeners of the `send` event, which is not on the SDK-facing declaration.
+  const emitter = xmppClient as unknown as { rawListeners: (event: 'send') => ((element: Element) => void)[] }
+  for (const child of written.children) {
+    if (typeof child === 'string' || !COUNTED_STANZAS.has(child.name)) continue
+    for (const listener of emitter.rawListeners('send')) {
+      try {
+        listener.call(xmppClient, child)
+      } catch {
+        // The stanza is already on the wire.
+      }
+    }
+  }
 }
 
 /**
