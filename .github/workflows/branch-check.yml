@@ -86,6 +86,58 @@ jobs:
       - name: App unit tests
         run: npm run test:run --workspace=@xmpp/fluux
 
+  # Informational: lists rewritten test expectations, removed protection and
+  # growth of files over 2,000 lines in the job summary. It is its own job and
+  # nothing needs it, so it can never add time to the light check. Every step
+  # inside is time-boxed and failure-tolerant, the job itself ends green, and
+  # its own 25-minute limit sits above the 15 minutes of work it allows itself.
+  # The script comes from main, so a change cannot edit its own report; until
+  # it exists on main the report says it could not compare.
+  report:
+    name: Test change report (informational)
+    # No scope condition: a baseline-only or Rust-test-only change skips the
+    # light check but still has protection to report.
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    steps:
+      # Every step here is tolerant: a failed step must not leave a failed
+      # check on the change. The last step reports what could not be done.
+      - name: Checkout
+        uses: actions/checkout@v7
+        continue-on-error: true
+        with:
+          # The report compares with the merge base on main.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        continue-on-error: true
+        with:
+          node-version: '26'
+          cache: npm
+
+      - name: Test change report
+        if: always()
+        timeout-minutes: 15
+        continue-on-error: true
+        shell: bash
+        run: |
+          could_not() {
+            printf '### Test change report\n\n**Could not compare**: %s. Nothing is claimed about this change.\n' "$1" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
+          [ -d .git ] || could_not "the checkout failed"
+          [ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge 26 ] || could_not "Node.js 26 was not available"
+          git fetch --no-tags origin main:refs/remotes/origin/main \
+            && git show origin/main:scripts/report-test-changes.mjs > "$RUNNER_TEMP/report-test-changes.mjs" \
+            || could_not "the report script is not on main yet"
+          timeout 210 npm ci || could_not "installing dependencies did not finish"
+          timeout 300 npm run build || could_not "the build did not finish"
+          timeout 90 npm run build --workspace=@fluux/omemo || could_not "the OMEMO build did not finish"
+          timeout 180 node "$RUNNER_TEMP/report-test-changes.mjs" || could_not "the report did not finish"
+
   rust:
     name: Light check (Rust)
     needs: changes

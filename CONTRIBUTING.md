@@ -109,6 +109,7 @@ git checkout -b fix/your-bug-fix
 - Changelog entries in `apps/fluux/src/data/changelog.ts` must describe user-visible changes only.
 - Follow existing code style
 - Add tests for new functionality
+- The branch check lists rewritten test expectations, removed protection and growth of files over 2,000 lines in its job summary. The merge card names each listed item with one line of why; the report never blocks a change.
 - Update documentation if needed
 
 ### 3. Test Your Changes
