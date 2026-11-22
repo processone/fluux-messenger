@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router'
-import { clearAllMessages, saveRoomMessages } from '@fluux/sdk/cache'
+import { clearAllMessages, saveMessages } from '@fluux/sdk/cache'
 import { roomStore } from '@fluux/sdk/stores'
 import { useRoomStore } from '@fluux/sdk/react'
 import { messageRowRef, useSearch, type RoomMessage, type SearchResult } from '@fluux/sdk'
@@ -57,7 +57,7 @@ it('loads an evicted search result through navigation and highlights its confirm
   const target = row('shared', 2000, 'Confirmed target')
   const uncertain = { ...target,  timestamp: new Date(1000), body: 'Uncertain collision' }
   const latest = Array.from({ length: 120 }, (_, i) => row('tail-' + i, 3000 + i, 'Recent ' + i))
-  await saveRoomMessages([uncertain, target, ...latest])
+  await saveMessages('room', [uncertain, target, ...latest])
   roomStore.setState({ messages: new Map([[ROOM, latest]]) })
   const previewResult: SearchResult = { indexId: 'target', messageId: target.id, isRoom: true, conversationId: ROOM,
     conversationName: 'Navigation', from: target.from, stanzaId: target.stanzaId, occupantId: target.occupantId,
@@ -81,7 +81,7 @@ it.each(['occupant-row:["wire","peer"]', 'archive-row:["wire","peer","archive"]'
     const target = row(literal, 1000, 'Literal target')
     const decoy = row('wire', 2000, 'Decoded decoy')
     const latest = Array.from({ length: 120 }, (_, i) => row('tail-' + i, 3000 + i, 'Recent ' + i))
-    await saveRoomMessages([target, decoy, ...latest])
+    await saveMessages('room', [target, decoy, ...latest])
     roomStore.setState({ messages: new Map([[ROOM, [decoy, ...latest]]]) })
     render(<MemoryRouter><LiveList literal={literal} /></MemoryRouter>)
     fireEvent.click(screen.getByText('Open literal'))

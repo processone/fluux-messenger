@@ -51,20 +51,20 @@ Object.defineProperty(globalThis, 'localStorage', {
 // Mock messageCache to verify IndexedDB operations
 vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
-  const getRoomMessages = vi.fn().mockResolvedValue([])
+  const roomGetMessages = vi.fn().mockResolvedValue([])
   return {
     ...actual,
     isMessageCacheAvailable: vi.fn().mockReturnValue(true),
-    saveRoomMessage: vi.fn().mockResolvedValue(undefined),
-    saveRoomMessageWithResult: vi.fn().mockResolvedValue(true),
-    saveRoomMessages: vi.fn().mockResolvedValue(true),
-    getRoomMessages,
-    // The typed read serves what getRoomMessages is mocked to return, as a readable cache.
-    readRoomMessages: vi.fn((...args: Parameters<typeof actual.readRoomMessages>) =>
-      getRoomMessages(...args).then((value: RoomMessage[]) => ({ status: 'ok' as const, value }))),
-    getRoomMessagesAround: vi.fn().mockResolvedValue([]),
-    updateRoomMessage: vi.fn().mockResolvedValue(undefined),
-    deleteRoomMessages: vi.fn().mockResolvedValue(undefined),
+    saveMessage: vi.fn().mockResolvedValue(undefined),
+    saveMessageWithResult: vi.fn().mockResolvedValue(true),
+    saveMessages: vi.fn().mockResolvedValue(true),
+    getMessages: roomGetMessages,
+    // The typed read serves what roomGetMessages is mocked to return, as a readable cache.
+    readMessages: vi.fn((...args: Parameters<typeof actual.readMessages>) =>
+      roomGetMessages(...args).then((value: RoomMessage[]) => ({ status: 'ok' as const, value }))),
+    getMessagesAround: vi.fn().mockResolvedValue([]),
+    updateMessage: vi.fn().mockResolvedValue(undefined),
+    deleteConversationMessages: vi.fn().mockResolvedValue(undefined),
   }
 })
 
@@ -120,9 +120,9 @@ describe('roomStore', () => {
     })
     vi.clearAllMocks()
     // clearAllMocks does NOT reset implementations: a test that mocks a
-    // rejecting/false-resolving saveRoomMessages would leak it into every
+    // rejecting/false-resolving roomSaveMessages would leak it into every
     // later test. Re-assert the factory default here so ordering can't matter.
-    vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(true)
+    vi.mocked(messageCache.saveMessages).mockResolvedValue(true)
     // A failed save poisons the per-room chain by design — drop it between tests.
     _resetRoomArchiveSavesForTesting()
     // The transient overlay is a module-level Map outside any store — several
@@ -1738,7 +1738,7 @@ describe('roomStore', () => {
 
       roomStore.getState().addMessage('test@conference.example.com', message)
 
-      expect(messageCache.saveRoomMessageWithResult).toHaveBeenCalled()
+      expect(messageCache.saveMessageWithResult).toHaveBeenCalled()
     })
 
     it('should not save message to IndexedDB when noLocalStore is true (XEP-0334)', () => {
@@ -1747,7 +1747,7 @@ describe('roomStore', () => {
 
       roomStore.getState().addMessage('test@conference.example.com', message)
 
-      expect(messageCache.saveRoomMessageWithResult).not.toHaveBeenCalled()
+      expect(messageCache.saveMessageWithResult).not.toHaveBeenCalled()
     })
 
     it('should set noLocalStore=true on messages for Quick Chat rooms', () => {
@@ -1757,7 +1757,7 @@ describe('roomStore', () => {
       roomStore.getState().addMessage('quickchat@conference.example.com', message)
 
       // Message should not be saved to IndexedDB
-      expect(messageCache.saveRoomMessageWithResult).not.toHaveBeenCalled()
+      expect(messageCache.saveMessageWithResult).not.toHaveBeenCalled()
 
       // But message should still be in memory with noLocalStore flag
       expect(roomWindow('quickchat@conference.example.com').length).toBe(1)
@@ -2038,7 +2038,8 @@ describe('roomStore', () => {
 
       expect(roomWindow(ROOM)[0].stanzaId).toBeUndefined()
       expect(roomStore.getState().roomMeta.get(ROOM)?.lastMessage?.stanzaId).toBeUndefined()
-      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+      expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'room',
         ROOM,
         'm1',
         { stanzaId: undefined },
@@ -2066,12 +2067,12 @@ describe('roomStore', () => {
       roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
       const msg = { ...createMessage('m1', ROOM, 'alice', 'real'), stanzaId: 'archive-1' }
       roomStore.getState().addMessage(ROOM, msg)
-      vi.mocked(messageCache.updateRoomMessage).mockClear()
+      vi.mocked(messageCache.updateMessage).mockClear()
 
       roomStore.getState().clearMessageStanzaId(ROOM, 'not-present')
 
       expect(roomWindow(ROOM)[0].stanzaId).toBe('archive-1')
-      expect(messageCache.updateRoomMessage).not.toHaveBeenCalled()
+      expect(messageCache.updateMessage).not.toHaveBeenCalled()
     })
   })
 
@@ -2686,8 +2687,8 @@ describe('roomStore', () => {
   describe('activateRoom', () => {
     afterEach(() => {
       // Restore the factory default so later tests get a clean resolved-[] mock
-      vi.mocked(messageCache.getRoomMessages).mockReset()
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([])
+      vi.mocked(messageCache.getMessages).mockReset()
+      vi.mocked(messageCache.getMessages).mockResolvedValue([])
     })
 
     it('should hydrate messages from cache before marking the room active', async () => {
@@ -2704,7 +2705,7 @@ describe('roomStore', () => {
         timestamp: new Date(),
         isOutgoing: false,
       }
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([cached])
+      vi.mocked(messageCache.getMessages).mockResolvedValue([cached])
 
       // Snapshot the in-memory messages at the exact moment activation happens —
       // the unread marker is computed from them, so they must be loaded first
@@ -2732,7 +2733,7 @@ describe('roomStore', () => {
       await roomStore.getState().activateRoom(null)
 
       expect(roomStore.getState().activeRoomJid).toBeNull()
-      expect(messageCache.getRoomMessages).not.toHaveBeenCalled()
+      expect(messageCache.getMessages).not.toHaveBeenCalled()
     })
 
     it('should drop a stale activation that resolves after a newer one', async () => {
@@ -2740,7 +2741,7 @@ describe('roomStore', () => {
       roomStore.getState().addRoom(createRoom('fast@conference.example.com'))
 
       let resolveSlow: (value: RoomMessage[]) => void = () => {}
-      vi.mocked(messageCache.getRoomMessages).mockImplementation((roomJid) =>
+      vi.mocked(messageCache.getMessages).mockImplementation((_kind, roomJid, _options?) =>
         roomJid === 'slow@conference.example.com'
           ? new Promise((resolve) => { resolveSlow = resolve })
           : Promise.resolve([])
@@ -2762,7 +2763,7 @@ describe('roomStore', () => {
       // Hold the cache read open so we can observe the in-flight window — this is
       // the gap during which ChatLayout would otherwise flash the empty state.
       let resolveRead: (value: RoomMessage[]) => void = () => {}
-      vi.mocked(messageCache.getRoomMessages).mockReturnValue(
+      vi.mocked(messageCache.getMessages).mockReturnValue(
         new Promise((resolve) => { resolveRead = resolve })
       )
 
@@ -2795,7 +2796,7 @@ describe('roomStore', () => {
       const roomJid = 'slow@conference.example.com'
       roomStore.getState().addRoom(createRoom(roomJid))
       let release: (messages: RoomMessage[]) => void = () => {}
-      vi.mocked(messageCache.getRoomMessages).mockReturnValueOnce(new Promise(resolve => { release = resolve }))
+      vi.mocked(messageCache.getMessages).mockReturnValueOnce(new Promise(resolve => { release = resolve }))
       const markers = new Map(roomStore.getState().firstNewMessageMarkers)
       const opening = roomStore.getState().activateRoom(roomJid)
 
@@ -2851,12 +2852,13 @@ describe('roomStore', () => {
         roomMsgAt('msg-150', 150),
         roomMsgAt('msg-151', 151),
       ]
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(latestSlice)
-      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue(aroundSlice)
+      vi.mocked(messageCache.getMessages).mockResolvedValue(latestSlice)
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue(aroundSlice)
 
       await roomStore.getState().activateRoom(roomJid)
 
-      expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(
+        'room',
         roomJid,
         { id: 'msg-150' },
         expect.any(Object)
@@ -3214,7 +3216,7 @@ describe('roomStore', () => {
       }
       roomStore.getState().mergeRoomMAMMessages(jid, [below, mid], {}, false, 'backward')
       // Clearance is deferred until the page is durably cached (crash-window
-      // safety); the mocked saveRoomMessages resolves immediately, so waitFor.
+      // safety); the mocked roomSaveMessages resolves immediately, so waitFor.
       await vi.waitFor(() => {
         expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
       })
@@ -3222,7 +3224,7 @@ describe('roomStore', () => {
 
     it('backward CLEARANCE with persistable messages is deferred until the page is durably cached', async () => {
       // Crash window: the gap deletion is persisted (localStorage) while
-      // saveRoomMessages to IndexedDB is fire-and-forget. A crash in between
+      // roomSaveMessages to IndexedDB is fire-and-forget. A crash in between
       // leaves cache [old][HOLE][new] with no marker. The deletion must wait
       // for the durable write.
       roomStore.getState().addRoom(createRoom(jid))
@@ -3232,7 +3234,7 @@ describe('roomStore', () => {
       }]]]) })
 
       let resolveSave!: (committed: boolean) => void
-      vi.mocked(messageCache.saveRoomMessages).mockReturnValue(
+      vi.mocked(messageCache.saveMessages).mockReturnValue(
         new Promise<boolean>((resolve) => { resolveSave = resolve })
       )
 
@@ -3269,7 +3271,7 @@ describe('roomStore', () => {
       }]]]) })
 
       let resolveSave!: (committed: boolean) => void
-      vi.mocked(messageCache.saveRoomMessages).mockReturnValue(
+      vi.mocked(messageCache.saveMessages).mockReturnValue(
         new Promise<boolean>((resolve) => { resolveSave = resolve })
       )
 
@@ -3299,7 +3301,7 @@ describe('roomStore', () => {
         start: new Date('2026-07-06T00:00:00Z').getTime(),
         startId: 'old-cursor',
       }]]]) })
-      vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(false)
+      vi.mocked(messageCache.saveMessages).mockResolvedValue(false)
 
       const m: RoomMessage = {
         type: 'groupchat', id: 'fwd', stanzaId: undefined, originId: undefined, occupantId: undefined, roomJid: jid, from: `${jid}/a`, nick: 'a',
@@ -3317,7 +3319,7 @@ describe('roomStore', () => {
       // has exactly the deletion/advance crash window.
       roomStore.getState().addRoom(createRoom(jid))
       let resolveSave!: (committed: boolean) => void
-      vi.mocked(messageCache.saveRoomMessages).mockReturnValue(
+      vi.mocked(messageCache.saveMessages).mockReturnValue(
         new Promise<boolean>((resolve) => { resolveSave = resolve })
       )
 
@@ -3350,7 +3352,7 @@ describe('roomStore', () => {
 
       let resolveN!: (ok: boolean) => void
       let resolveN1!: (ok: boolean) => void
-      vi.mocked(messageCache.saveRoomMessages)
+      vi.mocked(messageCache.saveMessages)
         .mockReturnValueOnce(new Promise<boolean>((r) => { resolveN = r }))
         .mockReturnValueOnce(new Promise<boolean>((r) => { resolveN1 = r }))
 
@@ -3403,7 +3405,7 @@ describe('roomStore', () => {
 
     it('gap FORMATION is dropped when the durable write reports failure', async () => {
       roomStore.getState().addRoom(createRoom(jid))
-      vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(false)
+      vi.mocked(messageCache.saveMessages).mockResolvedValue(false)
 
       const m: RoomMessage = {
         type: 'groupchat', id: 'fwd', stanzaId: undefined, originId: undefined, occupantId: undefined, roomJid: jid, from: `${jid}/a`, nick: 'a',
@@ -3442,7 +3444,7 @@ describe('roomStore', () => {
       roomStore.getState().addRoom(createRoom(jid))
       roomStore.setState({ roomCoverage: new Map([[jid, { bottomId: 'deep', topId: 'top' }]]) })
       let resolveSave!: (committed: boolean) => void
-      vi.mocked(messageCache.saveRoomMessages).mockReturnValue(new Promise<boolean>((r) => { resolveSave = r }))
+      vi.mocked(messageCache.saveMessages).mockReturnValue(new Promise<boolean>((r) => { resolveSave = r }))
 
       const older: RoomMessage = {
         type: 'groupchat', id: 'old', originId: undefined, occupantId: undefined, roomJid: jid, from: `${jid}/a`, nick: 'a', stanzaId: 'deeper',
@@ -3482,7 +3484,7 @@ describe('roomStore', () => {
     it('coverage advance is dropped when the durable write reports failure', async () => {
       roomStore.getState().addRoom(createRoom(jid))
       roomStore.setState({ roomCoverage: new Map([[jid, { bottomId: 'deep' }]]) })
-      vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(false)
+      vi.mocked(messageCache.saveMessages).mockResolvedValue(false)
 
       const older: RoomMessage = {
         type: 'groupchat', id: 'old', originId: undefined, occupantId: undefined, roomJid: jid, from: `${jid}/a`, nick: 'a', stanzaId: 'deeper',
@@ -3526,7 +3528,7 @@ describe('roomStore', () => {
       // BEFORE the switch still resolves — its apply must be epoch-guarded.
       roomStore.getState().addRoom(createRoom(jid))
       let resolveSave!: (ok: boolean) => void
-      vi.mocked(messageCache.saveRoomMessages).mockReturnValue(
+      vi.mocked(messageCache.saveMessages).mockReturnValue(
         new Promise<boolean>((r) => { resolveSave = r })
       )
       const m: RoomMessage = {
@@ -4082,7 +4084,8 @@ describe('roomStore', () => {
       roomStore.getState().updateReactions('test@conference.example.com', 'server-stanza-id-123', 'bob', ['👍'])
 
       expect(roomWindow('test@conference.example.com')[0].reactions).toEqual({ '👍': ['bob'] })
-      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+      expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'room',
         'test@conference.example.com',
         'msg1',
         { reactions: { '👍': ['bob'] } },
@@ -4721,7 +4724,7 @@ describe('roomStore', () => {
     it('background catch-up of a NON-active room persists to IndexedDB + preview but not RAM', () => {
       // roomJid is NOT the active room here (background catch-up of another room).
       roomStore.setState({ activeRoomJid: 'other@conference.example.com' })
-      vi.mocked(messageCache.saveRoomMessages).mockClear()
+      vi.mocked(messageCache.saveMessages).mockClear()
 
       const mam: RoomMessage[] = [
         { type: 'groupchat', id: 'bg-1', stanzaId: undefined, originId: undefined, occupantId: undefined, roomJid, from: `${roomJid}/bob`, nick: 'bob', body: 'caught up 1', timestamp: new Date('2024-02-01T10:00:00Z'), isOutgoing: false },
@@ -4731,7 +4734,7 @@ describe('roomStore', () => {
       roomStore.getState().mergeRoomMAMMessages(roomJid, mam, {}, true, 'forward')
 
       // Persisted to IndexedDB (durable history)...
-      expect(messageCache.saveRoomMessages).toHaveBeenCalled()
+      expect(messageCache.saveMessages).toHaveBeenCalled()
       // ...sidebar preview updated...
       expect(roomStore.getState().rooms.get(roomJid)?.lastMessage?.id).toBe('bg-2')
       // ...but the resident array is NOT populated (only the active room is in RAM).
@@ -5440,7 +5443,7 @@ describe('roomStore', () => {
 
     beforeEach(() => {
       roomStore.getState().reset()
-      vi.mocked(messageCache.getRoomMessages).mockReset()
+      vi.mocked(messageCache.getMessages).mockReset()
       const room: Room = {
         jid: roomJid,
         name: 'Test Room',
@@ -5469,12 +5472,12 @@ describe('roomStore', () => {
         timestamp: new Date('2024-01-15T10:00:00Z'),
         isOutgoing: false,
       }
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([cachedMessage])
+      vi.mocked(messageCache.getMessages).mockResolvedValue([cachedMessage])
 
       const result = await roomStore.getState().loadPreviewFromCache(roomJid)
 
       expect(result).toEqual(cachedMessage)
-      expect(messageCache.getRoomMessages).toHaveBeenCalledWith(roomJid, {
+      expect(messageCache.getMessages).toHaveBeenCalledWith('room', roomJid, {
         limit: 10,
         latest: true,
       })
@@ -5484,7 +5487,7 @@ describe('roomStore', () => {
     })
 
     it('should return null when no cached messages exist', async () => {
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([])
+      vi.mocked(messageCache.getMessages).mockResolvedValue([])
 
       const result = await roomStore.getState().loadPreviewFromCache(roomJid)
 
@@ -5521,7 +5524,7 @@ describe('roomStore', () => {
         timestamp: new Date('2024-01-15T08:00:00Z'),
         isOutgoing: false,
       }
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([olderCachedMessage])
+      vi.mocked(messageCache.getMessages).mockResolvedValue([olderCachedMessage])
 
       await roomStore.getState().loadPreviewFromCache(roomJid)
 
@@ -5534,7 +5537,7 @@ describe('roomStore', () => {
       const result = await roomStore.getState().loadPreviewFromCache('nonexistent@conference.example.com')
 
       expect(result).toBeNull()
-      expect(messageCache.getRoomMessages).not.toHaveBeenCalled()
+      expect(messageCache.getMessages).not.toHaveBeenCalled()
     })
   })
 
@@ -5574,14 +5577,14 @@ describe('roomStore', () => {
 
     beforeEach(() => {
       roomStore.getState().reset()
-      vi.mocked(messageCache.getRoomMessages).mockReset()
+      vi.mocked(messageCache.getMessages).mockReset()
       vi.mocked(messageCache.isMessageCacheAvailable).mockReturnValue(true)
     })
 
     // Restore the shared cache mocks so overrides here don't leak into later blocks.
     afterEach(() => {
-      vi.mocked(messageCache.getRoomMessages).mockReset()
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([])
+      vi.mocked(messageCache.getMessages).mockReset()
+      vi.mocked(messageCache.getMessages).mockResolvedValue([])
       vi.mocked(messageCache.isMessageCacheAvailable).mockReturnValue(true)
     })
 
@@ -5593,7 +5596,7 @@ describe('roomStore', () => {
       expect(roomStore.getState().rooms.get(roomB)?.lastMessage).toBeUndefined()
 
       // B's newest cached message is more recent than A's.
-      vi.mocked(messageCache.getRoomMessages).mockImplementation((jid) =>
+      vi.mocked(messageCache.getMessages).mockImplementation((_kind, jid, _options?) =>
         Promise.resolve(
           jid === roomB
             ? [makeMsg(roomB, '2024-01-15T12:00:00Z', 'newer')]
@@ -5621,7 +5624,7 @@ describe('roomStore', () => {
       roomStore.getState().updateLastMessagePreview(roomA, fresh)
 
       // Cache only has an older message.
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([
+      vi.mocked(messageCache.getMessages).mockResolvedValue([
         makeMsg(roomA, '2024-01-15T08:00:00Z', 'stale cache'),
       ])
 
@@ -5641,7 +5644,7 @@ describe('roomStore', () => {
 
       await roomStore.getState().hydratePreviewsFromCache()
 
-      expect(messageCache.getRoomMessages).not.toHaveBeenCalled()
+      expect(messageCache.getMessages).not.toHaveBeenCalled()
     })
   })
 
@@ -5650,8 +5653,8 @@ describe('roomStore', () => {
 
     beforeEach(() => {
       roomStore.getState().reset()
-      vi.mocked(messageCache.getRoomMessagesAround).mockReset()
-      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue([])
+      vi.mocked(messageCache.getMessagesAround).mockReset()
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue([])
       roomStore.getState().addRoom({
         jid: roomJid,
         name: 'Test Room',
@@ -5685,10 +5688,10 @@ describe('roomStore', () => {
       const latest = roomMsgAt('newer-5', 5)
       roomStore.setState({ messages: new Map([[roomJid, [latest]]]) })
       let finish!: (rows: RoomMessage[]) => void
-      vi.mocked(messageCache.getRoomMessagesAround).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      vi.mocked(messageCache.getMessagesAround).mockImplementationOnce(() => new Promise<RoomMessage[]>(resolve => { finish = resolve }))
       const request = new AbortController()
       const pending = roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' }, undefined, request.signal)
-      await vi.waitFor(() => expect(messageCache.getRoomMessagesAround).toHaveBeenCalledTimes(1))
+      await vi.waitFor(() => expect(messageCache.getMessagesAround).toHaveBeenCalledTimes(1))
       request.abort()
       finish([roomMsgAt('old-3', 3), roomMsgAt('anchor', 4), latest])
       await pending
@@ -5697,11 +5700,11 @@ describe('roomStore', () => {
 
     it('hydrates the resident array with the cache slice that contains the anchor', async () => {
       const slice = [roomMsgAt('old-3', 3), roomMsgAt('anchor', 4), roomMsgAt('newer-5', 5)]
-      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue(slice)
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue(slice)
 
       const returned = await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' })
 
-      expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(roomJid, { id: 'anchor' }, expect.any(Object))
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith('room', roomJid, { id: 'anchor' }, expect.any(Object))
       const resident = roomWindow(roomJid)
       expect(resident?.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
       expect(returned.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
@@ -5710,7 +5713,7 @@ describe('roomStore', () => {
     it('keeps the anchor resident when more than the window bound of cached messages are newer', async () => {
       const latest = [roomMsgAt('newer-7', 7), roomMsgAt('newer-8', 8), roomMsgAt('newer-9', 9)]
       roomStore.setState({ messages: new Map([[roomJid, latest]]) })
-      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue([
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue([
         roomMsgAt('old-3', 3), roomMsgAt('anchor', 4), roomMsgAt('newer-5', 5), roomMsgAt('newer-6', 6),
         ...latest.map((m) => ({ ...m })),
       ])
@@ -5730,7 +5733,7 @@ describe('roomStore', () => {
     it('bounds the newer rows it reads to one resident window and leaves the live edge when it hits the bound', async () => {
       const latest = roomMsgAt('newer-9', 9)
       roomStore.setState({ messages: new Map([[roomJid, [latest]]]) })
-      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue([
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue([
         roomMsgAt('anchor', 4), roomMsgAt('newer-5', 5), roomMsgAt('newer-6', 6), roomMsgAt('newer-7', 7),
       ])
       setResidentWindowSize(3)
@@ -5740,7 +5743,7 @@ describe('roomStore', () => {
         setResidentWindowSize(5000)
       }
 
-      expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(roomJid, { id: 'anchor' }, { after: 3 })
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith('room', roomJid, { id: 'anchor' }, { after: 3 })
       // The bounded slice stopped short of the resident newest message, so it must not sit past a gap.
       expect(roomWindow(roomJid)?.map((m) => m.id)).toEqual(['anchor', 'newer-5', 'newer-6'])
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
@@ -5756,7 +5759,7 @@ describe('roomStore', () => {
       roomStore.setState({ messages: new Map([[roomJid, [latest]]]) })
       // after: 3 returns exactly three newer rows, all hidden; the unread row ties with them but lies past the cap.
       const bounded = [roomMsgAt('anchor', 3), spam('spam-a', 4), spam('spam-b', 4), spam('spam-c', 4)]
-      vi.mocked(messageCache.getRoomMessagesAround)
+      vi.mocked(messageCache.getMessagesAround)
         .mockResolvedValueOnce(bounded)
         .mockResolvedValueOnce([...bounded, roomMsgAt('unread', 4), latest])
       setResidentWindowSize(3)
@@ -5766,17 +5769,17 @@ describe('roomStore', () => {
         setResidentWindowSize(5000)
       }
 
-      expect(vi.mocked(messageCache.getRoomMessagesAround).mock.calls.map(call => call[2]?.after)).toEqual([3, undefined])
+      expect(vi.mocked(messageCache.getMessagesAround).mock.calls.map(call => call[3]?.after)).toEqual([3, undefined])
       expect(roomWindow(roomJid)?.map((m) => m.id)).toEqual(['anchor', 'unread', 'latest'])
     })
 
     it('keeps a caller-chosen newer bound and the live edge when the cache tail is shorter than the window', async () => {
-      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue([roomMsgAt('anchor', 4), roomMsgAt('newer-5', 5)])
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue([roomMsgAt('anchor', 4), roomMsgAt('newer-5', 5)])
       await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' }, { before: 0, after: 10 })
-      expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(roomJid, { id: 'anchor' }, { before: 0, after: 10 })
-      vi.mocked(messageCache.getRoomMessagesAround).mockClear()
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith('room', roomJid, { id: 'anchor' }, { before: 0, after: 10 })
+      vi.mocked(messageCache.getMessagesAround).mockClear()
       await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'anchor' })
-      expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(roomJid, { id: 'anchor' }, { after: 5000 })
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith('room', roomJid, { id: 'anchor' }, { after: 5000 })
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).not.toBe(false)
     })
   })
@@ -5788,7 +5791,7 @@ describe('roomStore', () => {
 
     beforeEach(() => {
       roomStore.getState().reset()
-      vi.mocked(messageCache.getRoomMessages).mockReset()
+      vi.mocked(messageCache.getMessages).mockReset()
       roomStore.getState().addRoom({
         jid: roomJid,
         name: 'Test Room',
@@ -5834,7 +5837,7 @@ describe('roomStore', () => {
       for (let i = 0; i < 50; i++) {
         olderBatch.push(roomMsgAt(`older-${i}`, i))
       }
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(olderBatch)
+      vi.mocked(messageCache.getMessages).mockResolvedValue(olderBatch)
 
       await roomStore.getState().loadOlderMessagesFromCache(roomJid, 50)
 
@@ -5854,8 +5857,8 @@ describe('roomStore', () => {
 
     beforeEach(() => {
       roomStore.getState().reset()
-      vi.mocked(messageCache.getRoomMessages).mockReset()
-      vi.mocked(messageCache.saveRoomMessageWithResult).mockClear()
+      vi.mocked(messageCache.getMessages).mockReset()
+      vi.mocked(messageCache.saveMessageWithResult).mockClear()
       roomStore.getState().addRoom({
         jid: roomJid,
         name: 'Test Room',
@@ -5899,7 +5902,7 @@ describe('roomStore', () => {
       for (let i = 0; i < 50; i++) {
         olderBatch.push(roomMsgAt(`older-${i}`, i))
       }
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(olderBatch)
+      vi.mocked(messageCache.getMessages).mockResolvedValue(olderBatch)
     }
 
     it('a fresh room seeded via addRoom is at the live edge', () => {
@@ -5927,7 +5930,7 @@ describe('roomStore', () => {
       await roomStore.getState().loadOlderMessagesFromCache(roomJid, 50)
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
 
-      vi.mocked(messageCache.saveRoomMessageWithResult).mockClear()
+      vi.mocked(messageCache.saveMessageWithResult).mockClear()
       const before = roomWindow(roomJid)
       const live = roomMsgAt('live-1', 10000)
       roomStore.getState().addMessage(roomJid, live)
@@ -5938,7 +5941,7 @@ describe('roomStore', () => {
       expect(roomWindow(roomJid).length).toBe(before.length)
       expect(roomWindow(roomJid)[roomWindow(roomJid).length - 1].id).toBe(before[before.length - 1].id)
       // ...but the message is still persisted to IndexedDB...
-      expect(messageCache.saveRoomMessageWithResult).toHaveBeenCalledWith(expect.objectContaining({ id: 'live-1' }))
+      expect(messageCache.saveMessageWithResult).toHaveBeenCalledWith('room', expect.objectContaining({ id: 'live-1' }))
       // ...and meta (sidebar preview + unread badge) still update.
       expect(room.lastMessage?.id).toBe('live-1')
       expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage?.id).toBe('live-1')
@@ -5950,7 +5953,7 @@ describe('roomStore', () => {
       await roomStore.getState().loadOlderMessagesFromCache(roomJid, 50)
       const parked = roomWindow(roomJid)
 
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([roomMsgAt('latest-1', 9000)])
+      vi.mocked(messageCache.getMessages).mockResolvedValue([roomMsgAt('latest-1', 9000)])
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
       expect(roomWindow(roomJid)).toBe(parked)
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
@@ -5963,7 +5966,7 @@ describe('roomStore', () => {
     it('recenters an emptied window to the live edge on a latest-N load', async () => {
       roomStore.setState((state) => ({ windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false) }))
 
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([roomMsgAt('latest-1', 9000)])
+      vi.mocked(messageCache.getMessages).mockResolvedValue([roomMsgAt('latest-1', 9000)])
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
       expect(roomWindow(roomJid).map((m) => m.id)).toEqual(['latest-1'])
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(true)
@@ -5992,7 +5995,7 @@ describe('roomStore', () => {
       seedSlidWindow()
       roomStore.setState((state) => ({ windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false) }))
       const parked = roomWindow(roomJid)
-      vi.mocked(messageCache.saveRoomMessages).mockClear()
+      vi.mocked(messageCache.saveMessages).mockClear()
 
       roomStore.getState().mergeRoomMAMMessages(roomJid, [roomMsgAt('caught-up-1', 20000)], {}, true, 'forward')
       roomStore.getState().mergeRoomMAMMessages(roomJid, [roomMsgAt('fetch-latest-1', 30000)], {}, false, 'backward', { preserveGapMarker: false, isFetchLatest: true })
@@ -6000,8 +6003,8 @@ describe('roomStore', () => {
       // Attaching either page would splice it after resident-4999 and hide every cached message between.
       expect(roomWindow(roomJid)).toBe(parked)
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
-      expect(messageCache.saveRoomMessages).toHaveBeenCalledWith([expect.objectContaining({ id: 'caught-up-1' })])
-      expect(messageCache.saveRoomMessages).toHaveBeenCalledWith([expect.objectContaining({ id: 'fetch-latest-1' })])
+      expect(messageCache.saveMessages).toHaveBeenCalledWith('room', [expect.objectContaining({ id: 'caught-up-1' })])
+      expect(messageCache.saveMessages).toHaveBeenCalledWith('room', [expect.objectContaining({ id: 'fetch-latest-1' })])
       expect(roomStore.getState().getRoom(roomJid)?.lastMessage?.id).toBe('fetch-latest-1')
     })
   })
@@ -6012,7 +6015,7 @@ describe('roomStore', () => {
 
     beforeEach(() => {
       roomStore.getState().reset()
-      vi.mocked(messageCache.getRoomMessages).mockReset()
+      vi.mocked(messageCache.getMessages).mockReset()
       roomStore.getState().addRoom({
         jid: roomJid,
         name: 'Test Room',
@@ -6048,7 +6051,7 @@ describe('roomStore', () => {
       const spam = Array.from({ length: 20 }, (_, i) => ({ ...roomMsgAt(`spam-${i}`, i + 1),
         body: '', isRetracted: true, isModerated: true, moderationReason: ' sPaM ' }))
       roomStore.setState({ messages: new Map([[roomJid, [anchor]]]), windowAtLiveEdge: new Map([[roomJid, false]]) })
-      vi.mocked(messageCache.getRoomMessages)
+      vi.mocked(messageCache.getMessages)
         .mockResolvedValueOnce(spam.slice(0, 10))
         .mockResolvedValueOnce(spam.slice(10))
         .mockResolvedValueOnce([newer])
@@ -6067,9 +6070,9 @@ describe('roomStore', () => {
     it('stops at ordinary deletion rows instead of hiding their tombstones', async () => {
       roomStore.setState({ messages: new Map([[roomJid, [roomMsgAt('anchor', 0)]]]) })
       const deletion = { ...roomMsgAt('deleted', 1), body: '', isRetracted: true, isModerated: true, moderationReason: 'Other' }
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([deletion])
+      vi.mocked(messageCache.getMessages).mockResolvedValue([deletion])
       expect(await roomStore.getState().loadNewerMessagesFromCache(roomJid, 1)).toEqual([deletion])
-      expect(messageCache.getRoomMessages).toHaveBeenCalledTimes(1)
+      expect(messageCache.getMessages).toHaveBeenCalledTimes(1)
     })
 
     // Seed the room at the resident cap with a slid-up window (oldest resident is 'resident-0').
@@ -6094,7 +6097,7 @@ describe('roomStore', () => {
       for (let i = 0; i < 50; i++) {
         newerBatch.push(roomMsgAt(`newer-${i}`, RESIDENT_WINDOW_SIZE + i))
       }
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(newerBatch)
+      vi.mocked(messageCache.getMessages).mockResolvedValue(newerBatch)
 
       await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
 
@@ -6109,12 +6112,12 @@ describe('roomStore', () => {
 
     it('queries the cache with an after-cursor at the newest resident timestamp', async () => {
       seedResidentWindow()
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([])
+      vi.mocked(messageCache.getMessages).mockResolvedValue([])
 
       await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
 
       const newestInMemory = roomMsgAt(`resident-${RESIDENT_WINDOW_SIZE - 1}`, RESIDENT_WINDOW_SIZE - 1)
-      expect(messageCache.getRoomMessages).toHaveBeenCalledWith(roomJid, {
+      expect(messageCache.getMessages).toHaveBeenCalledWith('room', roomJid, {
         after: newestInMemory.timestamp,
         limit: 50,
       })
@@ -6124,7 +6127,7 @@ describe('roomStore', () => {
       seedResidentWindow()
       // Fewer than the requested limit ⇒ no more newer messages remain in the cache.
       const newerBatch = [roomMsgAt('newer-0', RESIDENT_WINDOW_SIZE)]
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(newerBatch)
+      vi.mocked(messageCache.getMessages).mockResolvedValue(newerBatch)
 
       await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
 
@@ -6137,7 +6140,7 @@ describe('roomStore', () => {
       for (let i = 0; i < 50; i++) {
         newerBatch.push(roomMsgAt(`newer-${i}`, RESIDENT_WINDOW_SIZE + i))
       }
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(newerBatch)
+      vi.mocked(messageCache.getMessages).mockResolvedValue(newerBatch)
 
       await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
 
@@ -6146,7 +6149,7 @@ describe('roomStore', () => {
 
     it('keeps the window parked when the cache cannot be read', async () => {
       seedResidentWindow()
-      vi.mocked(messageCache.readRoomMessages).mockResolvedValueOnce({ status: 'unavailable' })
+      vi.mocked(messageCache.readMessages).mockResolvedValueOnce({ status: 'unavailable' })
 
       expect(await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)).toEqual([])
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
@@ -6155,7 +6158,7 @@ describe('roomStore', () => {
     it('returns an empty array and does nothing when the room has no resident messages', async () => {
       const returned = await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
       expect(returned).toEqual([])
-      expect(messageCache.getRoomMessages).not.toHaveBeenCalled()
+      expect(messageCache.getMessages).not.toHaveBeenCalled()
     })
   })
 
@@ -6165,7 +6168,7 @@ describe('roomStore', () => {
 
     beforeEach(() => {
       roomStore.getState().reset()
-      vi.mocked(messageCache.getRoomMessages).mockReset()
+      vi.mocked(messageCache.getMessages).mockReset()
       roomStore.getState().addRoom({
         jid: roomJid,
         name: 'Test Room',
@@ -6200,7 +6203,7 @@ describe('roomStore', () => {
         messages: new Map(state.messages).set(roomJid, [roomMsgAt('resident-0', 0)]),
         windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false),
       }))
-      vi.mocked(messageCache.readRoomMessages).mockResolvedValueOnce({ status: 'unavailable' })
+      vi.mocked(messageCache.readMessages).mockResolvedValueOnce({ status: 'unavailable' })
 
       expect(await roomStore.getState().recenterToLatest(roomJid)).toBe(false)
       // Released so the caller's fetch-latest from the archive lands in the window.
@@ -6221,7 +6224,7 @@ describe('roomStore', () => {
       })
 
       const latestBatch = [roomMsgAt('latest-1', 90000)]
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(latestBatch)
+      vi.mocked(messageCache.getMessages).mockResolvedValue(latestBatch)
 
       await roomStore.getState().recenterToLatest(roomJid)
 
@@ -6245,7 +6248,7 @@ describe('roomStore', () => {
         }),
       }))
 
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(
+      vi.mocked(messageCache.getMessages).mockResolvedValue(
         Array.from({ length: RESIDENT_WINDOW_SIZE }, (_, i) => roomMsgAt(`latest-${i}`, RESIDENT_WINDOW_SIZE + 600 + i))
       )
       await roomStore.getState().recenterToLatest(roomJid)
@@ -6282,7 +6285,7 @@ describe('roomStore', () => {
         }),
       }))
 
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([roomMsgAt('latest-1', 10)])
+      vi.mocked(messageCache.getMessages).mockResolvedValue([roomMsgAt('latest-1', 10)])
       await roomStore.getState().recenterToLatest(roomJid)
 
       expect(roomStore.getState().messages.get(roomJid)?.map((m) => m.id)).toEqual(['resident-0', 'resident-1', 'latest-1'])
@@ -6290,7 +6293,7 @@ describe('roomStore', () => {
     })
 
     it('sets windowAtLiveEdge true even when the cache has nothing newer (already-resident latest window)', async () => {
-      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([])
+      vi.mocked(messageCache.getMessages).mockResolvedValue([])
 
       await roomStore.getState().recenterToLatest(roomJid)
 
@@ -6538,7 +6541,8 @@ describe('roomStore', () => {
       // microtasks after the synchronous store update.
       await flushRetractionStorage()
       // Verify IndexedDB update uses actual message id, not the stanza-id
-      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+      expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'room',
         roomJid,
         'client-id-1',
         { isRetracted: true, retractedAt: expect.any(Date) },
@@ -6571,7 +6575,8 @@ describe('roomStore', () => {
       expect(updated?.isEdited).toBe(true)
       expect(updated?.body).toBe('Hello (fixed)')
       // IndexedDB update still keyed by the actual stored message id.
-      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+      expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'room',
         roomJid,
         'muc-rewritten-id',
         { isEdited: true, body: 'Hello (fixed)', originalBody: 'Hello' },
@@ -6943,9 +6948,9 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
     })
     vi.clearAllMocks()
     // clearAllMocks does NOT reset implementations: a test that mocks a
-    // rejecting/false-resolving saveRoomMessages would leak it into every
+    // rejecting/false-resolving roomSaveMessages would leak it into every
     // later test. Re-assert the factory default here so ordering can't matter.
-    vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(true)
+    vi.mocked(messageCache.saveMessages).mockResolvedValue(true)
     // A failed save poisons the per-room chain by design — drop it between tests.
     _resetRoomArchiveSavesForTesting()
     // The transient overlay is a module-level Map outside any store — several
@@ -7250,14 +7255,15 @@ describe('roomStore pending retractions', () => {
 
   it('replays the record when the room hydrates from the cache', async () => {
     roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`, 'occ-1')
-    vi.mocked(messageCache.getRoomMessages).mockResolvedValue([occupantMessage('m1')])
+    vi.mocked(messageCache.getMessages).mockResolvedValue([occupantMessage('m1')])
 
     await roomStore.getState().loadMessagesFromCache(roomJid)
 
     expect(roomWindow(roomJid)[0]).toMatchObject({ isRetracted: true })
     expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
     await flushRetractionStorage()
-    expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+    expect(messageCache.updateMessage).toHaveBeenCalledWith(
+      'room',
       roomJid,
       'm1',
       expect.objectContaining({ isRetracted: true }),
@@ -7282,7 +7288,7 @@ describe('roomStore pending retractions', () => {
     })
     expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
     // The tombstone rides the archive write instead of racing it.
-    expect(messageCache.saveRoomMessages).toHaveBeenCalledWith([
+    expect(messageCache.saveMessages).toHaveBeenCalledWith('room', [
       expect.objectContaining({ id: 'm1', isRetracted: true }),
     ])
   })
@@ -7345,7 +7351,7 @@ describe('roomStore parity drift regressions', () => {
         originId: 'origin-abc',
       }
       roomStore.getState().addMessage(roomJid, original)
-      vi.mocked(messageCache.updateRoomMessage).mockClear()
+      vi.mocked(messageCache.updateMessage).mockClear()
 
       // The MAM/archive copy of the same message arrives with the server archive id.
       const archived: RoomMessage = { ...original, stanzaId: 'archive-123' }
@@ -7357,7 +7363,8 @@ describe('roomStore parity drift regressions', () => {
       // The runtime mirror must receive the same patched array.
       expect(roomStore.getState().messages.get(roomJid)?.[0]?.stanzaId).toBe('archive-123')
       // The backfill must also persist so the cursor survives a reload.
-      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+      expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'room',
         roomJid,
         'orig-1',
         expect.objectContaining({ stanzaId: 'archive-123' }),
@@ -7431,7 +7438,7 @@ describe('roomStore parity drift regressions', () => {
         messageAt('old-1', 'bob', 'deep 1', '2024-01-15T09:00:00Z'),
         messageAt('old-2', 'bob', 'deep 2', '2024-01-15T09:30:00Z'),
       ]
-      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValueOnce(oldSlice)
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValueOnce(oldSlice)
       await roomStore.getState().loadMessagesAroundFromCache(roomJid, { id: 'old-1' })
 
       // The old slice must not replace the newest preview.
@@ -7486,7 +7493,7 @@ describe('roomStore parity drift regressions', () => {
         originId: 'origin-merge',
       }
       roomStore.getState().addMessage(roomJid, own)
-      vi.mocked(messageCache.updateRoomMessage).mockClear()
+      vi.mocked(messageCache.updateMessage).mockClear()
 
       // The archive copy of the same message arrives via MAM with the server id.
       const archived: RoomMessage = { ...own, stanzaId: 'arch-merge' }
@@ -7499,9 +7506,10 @@ describe('roomStore parity drift regressions', () => {
       // The backfill rides the merge's DURABLE archive write, not a
       // fire-and-forget update: a coverage bottom may name this row, so its
       // write has to be the one the gap/coverage commit gates on.
-      // saveRoomMessages upserts by identity, so the row stays findable by the
+      // roomSaveMessages upserts by identity, so the row stays findable by the
       // archive id it just gained.
-      expect(messageCache.saveRoomMessages).toHaveBeenCalledWith(
+      expect(messageCache.saveMessages).toHaveBeenCalledWith(
+        'room',
         expect.arrayContaining([
           expect.objectContaining({ id: 'own-1', stanzaId: 'arch-merge' }),
         ])

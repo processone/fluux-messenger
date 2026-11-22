@@ -38,8 +38,8 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
   return {
     ...actual,
     isMessageCacheAvailable: vi.fn().mockReturnValue(true),
-    saveRoomMessages: vi.fn().mockResolvedValue(true),
-    getRoomMessages: vi.fn().mockResolvedValue([]),
+    saveMessages: vi.fn().mockResolvedValue(true),
+    getMessages: vi.fn().mockResolvedValue([]),
   }
 })
 import * as messageCache from '../utils/messageCache'
@@ -106,7 +106,7 @@ beforeEach(() => {
   _resetThrottledStorageForTesting()
   roomStore.setState({ rooms: new Map(), messages: new Map(), activeRoomJid: null })
   roomStore.getState().addRoom(createRoom(ROOM))
-  vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(true)
+  vi.mocked(messageCache.saveMessages).mockResolvedValue(true)
 })
 
 afterEach(() => {
@@ -163,7 +163,7 @@ describe('mergeRoomMAMMessages reporting', () => {
   })
 
   it('reports a failed write with its rows under persistenceFailed', async () => {
-    vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(false)
+    vi.mocked(messageCache.saveMessages).mockResolvedValue(false)
     const { next } = collector()
 
     roomStore
@@ -186,7 +186,7 @@ describe('mergeRoomMAMMessages reporting', () => {
 
   it('waits for the write before reporting', async () => {
     let settle: (ok: boolean) => void = () => {}
-    vi.mocked(messageCache.saveRoomMessages).mockReturnValue(
+    vi.mocked(messageCache.saveMessages).mockReturnValue(
       new Promise<boolean>((resolve) => {
         settle = resolve
       })

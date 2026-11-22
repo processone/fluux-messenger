@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import 'fake-indexeddb/auto'
 import { roomStore } from '@fluux/sdk/stores'
-import { clearAllMessages, saveRoomMessages, getRoomMessageByStanzaId } from '@fluux/sdk/cache'
+import { clearAllMessages, saveMessages, getMessageByStanzaId } from '@fluux/sdk/cache'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Room, RoomMessage } from '@fluux/sdk'
 import { RoomBulkModerationModal, type RoomBulkModerationModalProps } from './RoomBulkModerationModal'
@@ -91,7 +91,7 @@ it('selects, reviews and removes selected B when earlier A reuses its client ID'
 it('removes reviewed cached B after eviction while a different archive entry remains resident', async () => {
   const target = message('evicted-archive', { occupantId: 'sender', body: 'Confirmed B', timestamp: new Date(1000) })
   const legacy = { ...target, stanzaId: 'earlier-archive', body: 'Preserved A', timestamp: new Date(2000) }
-  await saveRoomMessages([legacy, target])
+  await saveMessages('room', [legacy, target])
   const moderateMessage = vi.fn().mockResolvedValue(undefined)
   const view = renderResident(<RoomBulkModerationModal {...props} messages={[target, legacy]} moderateMessage={moderateMessage} />)
   fireEvent.click(screen.getByRole('checkbox', { name: /Confirmed B/ }))
@@ -190,8 +190,8 @@ describe('RoomBulkModerationModal', () => {
   it('accepts a legacy cached target at bulk confirmation', async () => {
     await clearAllMessages()
     const legacy = message('legacy-foreign-id', {  })
-    await saveRoomMessages([legacy])
-    const cached = (await getRoomMessageByStanzaId(room.jid, legacy.stanzaId!))!
+    await saveMessages('room', [legacy])
+    const cached = (await getMessageByStanzaId('room', room.jid, legacy.stanzaId!))!
     const moderateMessage = vi.fn().mockResolvedValue(undefined)
     renderResident(<RoomBulkModerationModal {...props} messages={[cached]} moderateMessage={moderateMessage} />)
     fireEvent.click(screen.getByRole('button', { name: 'Select all shown' }))
@@ -199,7 +199,7 @@ describe('RoomBulkModerationModal', () => {
     const confirm = screen.queryByRole('button', { name: 'Remove selected messages' })
     if (confirm) await act(async () => { fireEvent.click(confirm) })
     expect(moderateMessage).toHaveBeenCalledExactlyOnceWith(room.jid, legacy.stanzaId, undefined)
-    expect(await getRoomMessageByStanzaId(room.jid, legacy.stanzaId!)).toMatchObject({ body: legacy.body })
+    expect(await getMessageByStanzaId('room', room.jid, legacy.stanzaId!)).toMatchObject({ body: legacy.body })
   })
   it('uses the canonical Spam reason for every selected message', async () => {
     const moderateMessage = vi.fn().mockResolvedValue(undefined)
@@ -379,8 +379,8 @@ it.each(['select', 'review'])('reacts to moderation received after eviction duri
   const room = { ...props.room, jid: `${phase}-evicted@conference.example.com` }
   const messages = props.messages.map(row => message(row.stanzaId!, { id: row.stanzaId!, roomJid: room.jid, from: `${room.jid}/Spammer`, nick: row.nick }))
   const localProps = { ...props, room, messages }
-  await saveRoomMessages(messages)
-  expect(await getRoomMessageByStanzaId(room.jid, 'spam-two')).toMatchObject({ body: 'spam-two' })
+  await saveMessages('room', messages)
+  expect(await getMessageByStanzaId('room', room.jid, 'spam-two')).toMatchObject({ body: 'spam-two' })
   roomStore.setState({ messages: new Map([[room.jid, messages]]) })
   const moderateMessage = vi.fn().mockResolvedValue(undefined)
   const view = render(<RoomBulkModerationModal {...localProps} moderateMessage={moderateMessage} />)
@@ -393,7 +393,7 @@ it.each(['select', 'review'])('reacts to moderation received after eviction duri
   }))
   await waitFor(() => expect(screen.queryByText('spam-one')).not.toBeInTheDocument())
   await waitFor(() => expect(roomStore.getState().pendingRetractions.get(room.jid)).toBeUndefined())
-  expect(await getRoomMessageByStanzaId(room.jid, 'spam-one')).toMatchObject({ isRetracted: true, isModerated: true, moderationReason: 'Spam' })
+  expect(await getMessageByStanzaId('room', room.jid, 'spam-one')).toMatchObject({ isRetracted: true, isModerated: true, moderationReason: 'Spam' })
   expect(screen.queryByText('spam-one')).not.toBeInTheDocument()
   if (phase === 'select') selectSpam()
   fireEvent.click(screen.getByRole('button', { name: 'Remove selected messages' }))
@@ -405,8 +405,8 @@ it('skips moderation received after eviction while a prior removal is in flight'
   const room = { ...props.room, jid: 'running-evicted@conference.example.com' }
   const messages = props.messages.map(row => message(row.stanzaId!, { id: row.stanzaId!, roomJid: room.jid, from: `${room.jid}/Spammer`, nick: row.nick }))
   const localProps = { ...props, room, messages }
-  await saveRoomMessages(messages)
-  expect(await getRoomMessageByStanzaId(room.jid, 'spam-two')).toMatchObject({ body: 'spam-two' })
+  await saveMessages('room', messages)
+  expect(await getMessageByStanzaId('room', room.jid, 'spam-two')).toMatchObject({ body: 'spam-two' })
   roomStore.setState({ messages: new Map([[room.jid, messages]]) })
   const first = deferred()
   const moderateMessage = vi.fn().mockReturnValue(first.promise)
@@ -432,7 +432,7 @@ it('uses cached moderation in the captured membership without loading history', 
   const room = { ...props.room, jid: 'cached-bulk@conference.example.com' }
   const target = message('cached-target', { id: 'cached-client', roomJid: room.jid, from: `${room.jid}/Spammer` })
   const kept = message('kept', { id: 'kept-client', roomJid: room.jid, from: `${room.jid}/Spammer`, body: 'Kept message' })
-  await saveRoomMessages([{ ...target, isRetracted: true, isModerated: true, moderationReason: 'Spam' }, kept])
+  await saveMessages('room', [{ ...target, isRetracted: true, isModerated: true, moderationReason: 'Spam' }, kept])
   const history = vi.spyOn(roomStore.getState(), 'loadOlderMessagesFromCache')
   const fetch = vi.spyOn(globalThis, 'fetch')
   const moderateMessage = vi.fn().mockResolvedValue(undefined)
@@ -451,7 +451,7 @@ it('uses cached moderation in the captured membership without loading history', 
 it('preserves an evicted target when only another room was moderated', async () => {
   const room = { ...props.room, jid: 'scoped-bulk@conference.example.com' }
   const target = message('scoped-target', { id: 'scoped-client', roomJid: room.jid, from: `${room.jid}/Spammer` })
-  await saveRoomMessages([target])
+  await saveMessages('room', [target])
   const moderateMessage = vi.fn().mockResolvedValue(undefined)
   const view = render(<RoomBulkModerationModal {...props} room={room} messages={[target]} moderateMessage={moderateMessage} />)
   fireEvent.click(screen.getByRole('button', { name: 'Select all shown' }))

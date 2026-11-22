@@ -19,15 +19,6 @@ Object.defineProperty(globalThis, 'localStorage', {
 
 // Mock messageCache to prevent IndexedDB operations
 vi.mock('../utils/messageCache', () => ({
-  saveRoomMessageWithResult: vi.fn().mockResolvedValue(true),
-  saveRoomMessage: vi.fn().mockResolvedValue(undefined),
-  saveRoomMessages: vi.fn().mockResolvedValue(undefined),
-  getRoomMessages: vi.fn().mockResolvedValue([]),
-  getRoomMessage: vi.fn().mockResolvedValue(null),
-  getRoomMessageByStanzaId: vi.fn().mockResolvedValue(null),
-  updateRoomMessage: vi.fn().mockResolvedValue(undefined),
-  deleteRoomMessage: vi.fn().mockResolvedValue(undefined),
-  deleteRoomMessages: vi.fn().mockResolvedValue(undefined),
   saveMessageWithResult: vi.fn().mockResolvedValue(true),
   saveMessage: vi.fn().mockResolvedValue(undefined),
   saveMessages: vi.fn().mockResolvedValue(undefined),
@@ -40,9 +31,7 @@ vi.mock('../utils/messageCache', () => ({
   clearAllMessages: vi.fn().mockResolvedValue(undefined),
   isMessageCacheAvailable: vi.fn().mockReturnValue(false),
   getOldestMessageTimestamp: vi.fn().mockResolvedValue(null),
-  getOldestRoomMessageTimestamp: vi.fn().mockResolvedValue(null),
   getMessageCount: vi.fn().mockResolvedValue(0),
-  getRoomMessageCount: vi.fn().mockResolvedValue(0),
 }))
 
 import { setupConversationSyncSideEffects } from './conversationSyncSideEffects'

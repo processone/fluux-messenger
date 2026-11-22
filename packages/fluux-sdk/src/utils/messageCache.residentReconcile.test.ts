@@ -31,7 +31,7 @@ describe('history reconcile against the resident window', () => {
     const second = chat('second', { stanzaId: 'archive-1', isRetracted: true, retractedAt: new Date(2_000) })
     const unrelated = Array.from({ length: 50 }, (_, i) => chat(`other-${i}`, { stanzaId: `archive-other-${i}` }))
 
-    const [reconciled] = await messageCache.reconcileChatHistoryMessages([page], () => [...unrelated, first, ...unrelated, second], null)
+    const [reconciled] = await messageCache.reconcileHistoryMessages('chat', [page], () => [...unrelated, first, ...unrelated, second], null)
 
     expect(reconciled.stanzaId).toBe('archive-1')
     expect(reconciled.isRetracted).toBe(true)
@@ -41,7 +41,7 @@ describe('history reconcile against the resident window', () => {
     const page = chat('page', { stanzaId: 'archive-1' })
     const resident = [chat('a', { stanzaId: 'archive-2', isRetracted: true, retractedAt: new Date(2_000) })]
 
-    const [reconciled] = await messageCache.reconcileChatHistoryMessages([page], () => resident, null)
+    const [reconciled] = await messageCache.reconcileHistoryMessages('chat', [page], () => resident, null)
 
     expect(reconciled.isRetracted).toBeFalsy()
   })
@@ -51,8 +51,8 @@ describe('history reconcile against the resident window', () => {
     const sameRoom = room('same-id', { stanzaId: 'archive-1', isRetracted: true, retractedAt: new Date(2_000) })
     const otherRoom = room('same-id', { roomJid: 'other@conference.example.com', from: 'other@conference.example.com/alice', stanzaId: 'archive-1', isRetracted: true, retractedAt: new Date(2_000) })
 
-    const [withSameRoom] = await messageCache.reconcileRoomHistoryMessages([page], () => [sameRoom], null)
-    const [withOtherRoom] = await messageCache.reconcileRoomHistoryMessages([page], () => [otherRoom], null)
+    const [withSameRoom] = await messageCache.reconcileHistoryMessages('room', [page], () => [sameRoom], null)
+    const [withOtherRoom] = await messageCache.reconcileHistoryMessages('room', [page], () => [otherRoom], null)
 
     expect(withSameRoom.isRetracted).toBe(true)
     expect(withOtherRoom.isRetracted).toBeFalsy()
@@ -66,7 +66,7 @@ describe('history reconcile against the resident window', () => {
       get(target, property, receiver) { if (property === 'stanzaId') reads++; return Reflect.get(target, property, receiver) },
     }))
 
-    const result = await messageCache.reconcileChatHistoryMessages(page, () => counted, null)
+    const result = await messageCache.reconcileHistoryMessages('chat', page, () => counted, null)
 
     expect(result).toHaveLength(100)
     // Indexing reads each resident's identity once; a scan per row would read it about once per row.

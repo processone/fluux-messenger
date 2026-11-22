@@ -58,7 +58,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 
 import { RoomMessageInput } from './RoomView'
 import type { RoomMessage, FileAttachment, MentionReference } from '@fluux/sdk'
-import { clearAllMessages, saveRoomMessage, getRoomMessage } from '@fluux/sdk/cache'
+import { clearAllMessages, saveMessage, getMessage } from '@fluux/sdk/cache'
 import { roomStore } from '@fluux/sdk/stores'
 import type { PendingAttachment, ReplyInfo } from './MessageComposer'
 
@@ -305,13 +305,13 @@ describe('evicted staged replies', () => {
   beforeEach(async () => {
     await clearAllMessages()
     roomStore.setState({ messages: new Map([[STABLE.roomJid, [stagedOriginal]]]), drafts: new Map(), pendingRetractions: new Map() })
-    await saveRoomMessage(stagedOriginal)
+    await saveMessage('room', stagedOriginal)
   })
 
   it('omits a stale legacy quotation when its confirmed Spam row is cached behind an unrelated wire-ID hit', async () => {
     const legacy = { ...stagedOriginal, stanzaId: 'foreign' }
     await clearAllMessages()
-    await saveRoomMessage({ ...stagedOriginal, localRowRef: { id: legacy.id, occupantId: legacy.occupantId, stanzaId: legacy.stanzaId, unconfirmed: true } })
+    await saveMessage('room', { ...stagedOriginal, localRowRef: { id: legacy.id, occupantId: legacy.occupantId, stanzaId: legacy.stanzaId, unconfirmed: true } })
     roomStore.setState({ messages: new Map([[STABLE.roomJid, [legacy]]]) })
     let finish!: (attachment: FileAttachment) => void
     const uploadFile = vi.fn(() => new Promise<FileAttachment>(resolve => { finish = resolve }))
@@ -321,9 +321,9 @@ describe('evicted staged replies', () => {
     let sending!: Promise<boolean>
     act(() => { sending = capturedComposer.props!.onSend!('Preserved draft') })
     await act(async () => {
-      await saveRoomMessage(stagedOriginal)
-      await saveRoomMessage({ ...stagedOriginal, isRetracted: true, isModerated: true, moderationReason: 'Spam' })
-      await saveRoomMessage(roomMessageFixture({ ...stagedOriginal, id: 'other-client', stanzaId: 'foreign', body: 'Keep B', timestamp: new Date(+stagedOriginal.timestamp + 1000) }))
+      await saveMessage('room', stagedOriginal)
+      await saveMessage('room', { ...stagedOriginal, isRetracted: true, isModerated: true, moderationReason: 'Spam' })
+      await saveMessage('room', roomMessageFixture({ ...stagedOriginal, id: 'other-client', stanzaId: 'foreign', body: 'Keep B', timestamp: new Date(+stagedOriginal.timestamp + 1000) }))
       roomStore.setState({ messages: new Map(), pendingRetractions: new Map() })
       finish(uploadedAttachment)
       await sending
@@ -362,7 +362,7 @@ describe('evicted staged replies', () => {
     act(() => { sending = capturedComposer.props!.onSend!('Draft with photo') })
     act(() => roomStore.setState({ messages: new Map() }))
     if (source === 'pending') act(() => moderateNonresident())
-    else await act(async () => { await saveRoomMessage({ ...stagedOriginal, isRetracted: true, isModerated: true, moderationReason: 'Spam' }) })
+    else await act(async () => { await saveMessage('room', { ...stagedOriginal, isRetracted: true, isModerated: true, moderationReason: 'Spam' }) })
     await act(async () => { finishUpload(uploadedAttachment); await sending })
     expect(sendMessage).toHaveBeenCalledWith(STABLE.roomJid, 'Draft with photo', expect.objectContaining({
       replyTo: undefined, attachment: uploadedAttachment,
@@ -374,7 +374,7 @@ describe('evicted staged replies', () => {
     render(<RoomMessageInput {...STABLE} replyingTo={stagedOriginal} sendMessage={sendMessage} />)
     act(() => roomStore.setState({ messages: new Map() }))
     if (kind === 'occupant-collision') {
-      await act(async () => { await saveRoomMessage({ ...stagedOriginal, stanzaId: 'another-archive', occupantId: 'another-occupant',
+      await act(async () => { await saveMessage('room', { ...stagedOriginal, stanzaId: 'another-archive', occupantId: 'another-occupant',
         isRetracted: true, isModerated: true, moderationReason: 'Spam' }) })
     } else act(() => moderateNonresident(kind === 'ordinary' ? 'Off topic' : 'Spam',
       kind === 'client-collision' ? stagedOriginal.id : stagedOriginal.stanzaId!,
@@ -390,7 +390,7 @@ describe('evicted staged replies', () => {
 it.each(['display', 'upload'])('retains a staged ordinary quotation after cache scrubbing during %s', async mode => {
   await clearAllMessages()
   roomStore.setState({ messages: new Map([[STABLE.roomJid, [stagedOriginal]]]), drafts: new Map(), pendingRetractions: new Map() })
-  await saveRoomMessage(stagedOriginal)
+  await saveMessage('room', stagedOriginal)
   let finishUpload!: (attachment: FileAttachment) => void
   const uploadFile = vi.fn(() => new Promise<FileAttachment>(resolve => { finishUpload = resolve }))
   const sendMessage = vi.fn().mockResolvedValue('sent')
@@ -403,7 +403,7 @@ it.each(['display', 'upload'])('retains a staged ordinary quotation after cache 
   act(() => roomStore.setState({ messages: new Map() }))
   act(() => roomStore.getState().recordPendingRetraction(STABLE.roomJid, stagedOriginal.stanzaId!, STABLE.roomJid,
     undefined, { isModerated: true, moderationReason: 'Off topic' }))
-  await waitFor(async () => expect((await getRoomMessage(STABLE.roomJid, stagedOriginal.id, stagedOriginal.from, stagedOriginal.occupantId))?.body).toBe(''))
+  await waitFor(async () => expect((await getMessage('room', STABLE.roomJid, stagedOriginal.id, stagedOriginal.from, stagedOriginal.occupantId))?.body).toBe(''))
   await waitFor(() => expect(roomStore.getState().pendingRetractions.get(STABLE.roomJid)).toBeUndefined())
   await act(async () => {})
   if (mode === 'display') {

@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useXMPP } from '@fluux/sdk'
 import { chatStore, roomStore, connectionStore, getBareJid, getLocalPart } from '@fluux/sdk'
 import { findMessageById } from '@fluux/sdk'
-import { getMessage as getCachedMessage, getMessageByStanzaId as getCachedMessageByStanzaId } from '@fluux/sdk/cache'
-import { getRoomMessage as getCachedRoomMessage, getRoomMessageByStanzaId as getCachedRoomMessageByStanzaId } from '@fluux/sdk/cache'
+import { getMessage, getMessageByStanzaId } from '@fluux/sdk/cache'
 import { useToastStore } from '@/stores/toastStore'
 import { useReactionMentionStore } from '@/stores/reactionMentionStore'
 import { formatReactionNotification, reactionPreviewText } from '@/utils/reactionNotificationText'
@@ -88,8 +87,8 @@ export function useReactionNotifications(): void {
         // Both lookups are conversation-scoped: a client id names a message in ONE
         // stream and repeats across them, so an unscoped read can answer with another
         // conversation's row (see docs/MESSAGE_IDENTIFIERS.md).
-        message = (await getCachedMessage(conversationId, messageId))
-          ?? (await getCachedMessageByStanzaId(conversationId, messageId))
+        message = (await getMessage('chat', conversationId, messageId))
+          ?? (await getMessageByStanzaId('chat', conversationId, messageId))
           ?? undefined
       }
       if (!message?.isOutgoing) return
@@ -145,7 +144,7 @@ export function useReactionNotifications(): void {
       const roomMessages = roomStore.getState().messages.get(roomJid) ?? []
       let message = state.getMessage(roomJid, messageId)
       if (!message) {
-        message = (await getCachedRoomMessage(roomJid, messageId)) ?? (await getCachedRoomMessageByStanzaId(roomJid, messageId)) ?? undefined
+        message = (await getMessage('room', roomJid, messageId)) ?? (await getMessageByStanzaId('room', roomJid, messageId)) ?? undefined
       }
       if (!message || message.nick !== room.nickname) return
 

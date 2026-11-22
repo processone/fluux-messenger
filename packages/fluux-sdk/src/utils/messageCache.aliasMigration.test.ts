@@ -119,7 +119,7 @@ describe('version-5 retracted row cleanup', () => {
     await tx.done
     db.close()
 
-    await cache.getMessages(CHAT)
+    await cache.getMessages('chat', CHAT)
 
     const after = await openDB(DB_NAME)
     for (const [name, key] of [[CHAT_STORE, 'preserved-chat-key'], [ROOM_STORE, 'preserved-room-key']] as const) {
@@ -166,7 +166,7 @@ describe('version-5 correction alias migration', () => {
       return put.call(this, value, key)
     })
 
-    await cache.getMessages(CHAT)
+    await cache.getMessages('chat', CHAT)
     const db = await openDB(DB_NAME)
     expect(db.version).toBe(11)
     const expectedWrites: string[] = []
@@ -195,14 +195,14 @@ describe('version-5 correction alias migration', () => {
       progress.push(value ? value.percent : 'idle')
     })
     try {
-      await cache.getMessages(CHAT)
+      await cache.getMessages('chat', CHAT)
       expect(progress).toEqual([null, 0, 50, 99, 'idle'])
       const db = await openDB(DB_NAME)
       expect(db.version).toBe(11)
       db.close()
       progress.length = 0
       cache._resetDBForTesting()
-      await cache.getRoomMessages(ROOM)
+      await cache.getMessages('room', ROOM)
       expect(progress).toEqual([])
     } finally {
       unsubscribe()
@@ -213,7 +213,7 @@ describe('version-5 correction alias migration', () => {
     const states: unknown[] = []
     const unsubscribe = cacheMigrationStore.subscribe(state => { states.push(state.progress) })
     try {
-      await cache.getMessages(CHAT)
+      await cache.getMessages('chat', CHAT)
       expect(states).toEqual([])
     } finally {
       unsubscribe()
@@ -223,7 +223,7 @@ describe('version-5 correction alias migration', () => {
   it('backfills room batches when the chat archive is empty', async () => {
     const rows = await seedManyV5(0, 258)
     const alias = rows.room[257].correctionStanzaIds![0]
-    expect((await cache.findRoomRetractionTargets(ROOM, alias))?.candidates).toHaveLength(1)
+    expect((await cache.findRetractionTargets('room', ROOM, alias))?.candidates).toHaveLength(1)
     const db = await openDB(DB_NAME)
     expect(db.version).toBe(11)
     expect(await db.count(CHAT_STORE)).toBe(0)
@@ -240,7 +240,7 @@ describe('version-5 correction alias migration', () => {
       if (value?.percent === 0) setStorageScopeJid('other@example.test')
     })
     try {
-      await cache.getMessages(CHAT)
+      await cache.getMessages('chat', CHAT)
       expect(progress).toEqual([null, 0, 'idle'])
       expect(cacheMigrationStore.getState().progress).toBeNull()
     } finally {
@@ -250,10 +250,10 @@ describe('version-5 correction alias migration', () => {
 
   it('preserves every row and key, then resolves and retracts cached correction aliases', async () => {
     const rows = await seedV5()
-    expect((await cache.findChatRetractionTargets(CHAT, 'older-alias'))?.candidates).toHaveLength(1)
-    expect((await cache.findRoomRetractionTargets(ROOM, 'older-alias'))?.candidates).toHaveLength(1)
-    expect(await cache.findChatRetractionTargets('other@example.test', 'older-alias')).toBeUndefined()
-    expect(await cache.findRoomRetractionTargets('other@conference.example.test', 'older-alias')).toBeUndefined()
+    expect((await cache.findRetractionTargets('chat', CHAT, 'older-alias'))?.candidates).toHaveLength(1)
+    expect((await cache.findRetractionTargets('room', ROOM, 'older-alias'))?.candidates).toHaveLength(1)
+    expect(await cache.findRetractionTargets('chat', 'other@example.test', 'older-alias')).toBeUndefined()
+    expect(await cache.findRetractionTargets('room', 'other@conference.example.test', 'older-alias')).toBeUndefined()
     const db = await openDB(DB_NAME)
     expect(db.version).toBe(11)
     for (const [store, row, scope] of [[CHAT_STORE, rows.chat, CHAT_SCOPE], [ROOM_STORE, rows.room, roomScope(ROOM)]] as const) {
@@ -263,17 +263,17 @@ describe('version-5 correction alias migration', () => {
     db.close()
     await retractUnresidentChatTarget(CHAT, { targetId: 'older-alias', actorJid: 'other@example.test', retractedAt: 2000 })
     await retractUnresidentRoomTarget(ROOM, { targetId: 'older-alias', actorJid: rows.room.from, actorOccupantId: 'other-occupant', retractedAt: 2000 })
-    expect((await cache.getMessages(CHAT))[0].body).toBe(rows.chat.body)
-    expect((await cache.getRoomMessages(ROOM))[0].body).toBe(rows.room.body)
+    expect((await cache.getMessages('chat', CHAT))[0].body).toBe(rows.chat.body)
+    expect((await cache.getMessages('room', ROOM))[0].body).toBe(rows.room.body)
     await retractUnresidentChatTarget(CHAT, { targetId: 'older-alias', actorJid: rows.chat.from, retractedAt: 2000 })
     await retractUnresidentRoomTarget(ROOM, { targetId: 'older-alias', actorJid: rows.room.from, actorOccupantId: rows.room.occupantId, retractedAt: 2000 })
-    expect((await cache.getMessages(CHAT))[0]).toMatchObject({ isRetracted: true, body: '' })
-    expect((await cache.getRoomMessages(ROOM))[0]).toMatchObject({ isRetracted: true, body: '' })
+    expect((await cache.getMessages('chat', CHAT))[0]).toMatchObject({ isRetracted: true, body: '' })
+    expect((await cache.getMessages('room', ROOM))[0]).toMatchObject({ isRetracted: true, body: '' })
   })
 
   it('performs ordinary correction lookups without reading whole histories after upgrading', async () => {
     const rows = await seedV5()
-    await cache.findChatRetractionTargets(CHAT, 'older-alias')
+    await cache.findRetractionTargets('chat', CHAT, 'older-alias')
     const getAll = IDBIndex.prototype.getAll
     vi.spyOn(IDBIndex.prototype, 'getAll').mockImplementation(function (this: IDBIndex, ...args) {
       if (this.name === 'conversationId' || this.name === 'roomJid') throw new Error('whole history read')
@@ -281,10 +281,10 @@ describe('version-5 correction alias migration', () => {
     })
     vi.spyOn(IDBObjectStore.prototype, 'getAll').mockImplementation(() => { throw new Error('whole store read') })
     const updates = { isEdited: true, body: 'new correction', correctionRevision: { ids: ['stanza:new-alias'], supersedes: [], archiveTimestamp: 3000 }, correctionStanzaIds: ['new-alias'] }
-    expect(await cache.applyChatCorrection(CHAT, 'original', updates, { actorJid: rows.chat.from })).toMatchObject({ body: 'new correction' })
-    expect(await cache.applyRoomCorrection(ROOM, 'original', updates, { actorJid: rows.room.from, actorOccupantId: rows.room.occupantId })).toMatchObject({ body: 'new correction' })
-    expect((await cache.findChatRetractionTargets(CHAT, 'older-alias'))?.candidates[0].body).toBe('new correction')
-    expect((await cache.findRoomRetractionTargets(ROOM, 'older-alias'))?.candidates[0].body).toBe('new correction')
+    expect(await cache.applyCorrection('chat', CHAT, 'original', updates, { actorJid: rows.chat.from })).toMatchObject({ body: 'new correction' })
+    expect(await cache.applyCorrection('room', ROOM, 'original', updates, { actorJid: rows.room.from, actorOccupantId: rows.room.occupantId })).toMatchObject({ body: 'new correction' })
+    expect((await cache.findRetractionTargets('chat', CHAT, 'older-alias'))?.candidates[0].body).toBe('new correction')
+    expect((await cache.findRetractionTargets('room', ROOM, 'older-alias'))?.candidates[0].body).toBe('new correction')
   })
 
   it('rolls back completed batches in both stores when a write request fails', async () => {
@@ -299,7 +299,7 @@ describe('version-5 correction alias migration', () => {
       if (++updates === 88) return this.add(value, key)
       return put.call(this, value, key)
     })
-    await cache.findChatRetractionTargets(CHAT, 'older-alias')
+    await cache.findRetractionTargets('chat', CHAT, 'older-alias')
     unsubscribe()
     expect(progress).toContainEqual({ percent: 0 })
     expect(progress.at(-1)).toBeNull()
@@ -321,7 +321,7 @@ describe('version-5 correction alias migration', () => {
       if (this.transaction.mode === 'versionchange' && ++reads === 2) throw new Error('batch read interrupted')
       return getAll.apply(this, args)
     })
-    expect(await cache.getMessages(CHAT)).toEqual([])
+    expect(await cache.getMessages('chat', CHAT)).toEqual([])
     fault.mockRestore()
     expect(cacheMigrationStore.getState().progress).toBeNull()
     const db = await openDB(DB_NAME)
@@ -331,7 +331,7 @@ describe('version-5 correction alias migration', () => {
     db.close()
     // The final partial batch contains a correction needing backfill.
     const alias = rows.chat[257].correctionStanzaIds![0]
-    expect((await cache.findChatRetractionTargets(CHAT, alias))?.candidates).toHaveLength(1)
+    expect((await cache.findRetractionTargets('chat', CHAT, alias))?.candidates).toHaveLength(1)
   })
 
   it('retries an interrupted upgrade on the next cache read without reloading the app', async () => {
@@ -341,12 +341,12 @@ describe('version-5 correction alias migration', () => {
       throw new Error('backfill interrupted')
     })
 
-    expect(await cache.getMessages(CHAT)).toEqual([])
+    expect(await cache.getMessages('chat', CHAT)).toEqual([])
     fault.mockRestore()
     expect(IDBObjectStore.prototype.put).toBe(put)
 
-    expect(await cache.getMessages(CHAT)).toMatchObject([{ body: rows.chat.body }])
-    expect(await cache.getRoomMessages(ROOM)).toMatchObject([{ body: rows.room.body }])
+    expect(await cache.getMessages('chat', CHAT)).toMatchObject([{ body: rows.chat.body }])
+    expect(await cache.getMessages('room', ROOM)).toMatchObject([{ body: rows.room.body }])
   })
 })
 
@@ -369,14 +369,14 @@ describe('version-11 index cleanup', () => {
 
   it('drops the timestamp index from both message stores of an existing cache, keeping its rows', async () => {
     const rows = await seedV5()
-    await cache.getMessages(CHAT)
+    await cache.getMessages('chat', CHAT)
     expect(await indexNames()).toEqual(expected)
-    expect((await cache.getMessages(CHAT)).map(m => m.body)).toEqual([rows.chat.body])
-    expect((await cache.getRoomMessages(ROOM)).map(m => m.body)).toEqual([rows.room.body])
+    expect((await cache.getMessages('chat', CHAT)).map(m => m.body)).toEqual([rows.chat.body])
+    expect((await cache.getMessages('room', ROOM)).map(m => m.body)).toEqual([rows.room.body])
   })
 
   it('creates no timestamp index on a fresh cache', async () => {
-    await cache.getMessages(CHAT)
+    await cache.getMessages('chat', CHAT)
     expect(await indexNames()).toEqual(expected)
   })
 })

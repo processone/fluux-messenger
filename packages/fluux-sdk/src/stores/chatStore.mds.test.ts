@@ -207,7 +207,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
     const cid = 'juliet@capulet.example'
     // A previous session stashed s9 and the stash was restored from storage; nothing is resident.
     seedConversation(cid, { unreadCount: 2, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
-    vi.mocked(messageCache.getMessageByStanzaId).mockImplementation(async (conversationId, stanzaId) =>
+    vi.mocked(messageCache.getMessageByStanzaId).mockImplementation(async (_kind, conversationId, stanzaId) =>
       conversationId === cid && stanzaId === 's9' ? { ...msg('m9', 's9'), isOutgoing: true, body: '' } : null)
 
     try {

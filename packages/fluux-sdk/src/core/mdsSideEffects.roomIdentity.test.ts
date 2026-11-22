@@ -70,7 +70,7 @@ it.each(['resident', 'preview', 'cache'] as const)('does not publish unread B fo
   const b = row('archive-b', 2000)
   if (source === 'resident') roomStore.setState({ messages: new Map([[ROOM, [b]]]) })
   if (source === 'preview') roomStore.getState().updateRoom(ROOM, { lastMessage: b })
-  if (source === 'cache') await cache.saveRoomMessages([b])
+  if (source === 'cache') await cache.saveMessages('room', [b])
   pointer(makeReadPointer(a, 'room'))
   const publisher = startPublisher()
   await drain()
@@ -106,7 +106,7 @@ it.each(['resident', 'preview', 'cache'] as const)('publishes a validated legacy
   const saved = makeReadPointer(a, 'room')
   if (source === 'resident') roomStore.setState({ messages: new Map([[ROOM, [b, canonical]]]) })
   if (source === 'preview') roomStore.getState().updateRoom(ROOM, { lastMessage: canonical })
-  if (source === 'cache') await cache.saveRoomMessages([b, canonical])
+  if (source === 'cache') await cache.saveMessages('room', [b, canonical])
   pointer(saved)
   const publisher = startPublisher()
   await drain()
@@ -135,12 +135,12 @@ it('retries an unresolved local pointer after validated cache confirmation with 
   const b = row('unread', 1000)
   const saved = makeReadPointer(a, 'room')
   pointer(saved)
-  await cache.saveRoomMessages([b])
+  await cache.saveMessages('room', [b])
   const publisher = startPublisher()
   await drain()
   expect(publisher.publishDisplayed).not.toHaveBeenCalled()
   const confirmed = backfillRoomStanzaId(a, { ...row('actual', 1000), body: a.body })
-  await cache.saveRoomMessages([confirmed])
+  await cache.saveMessages('room', [confirmed])
   roomStore.getState().updateRoom(ROOM, { unreadCount: 1 })
   await drain()
   expect(publisher.publishDisplayed.mock.calls).toEqual([[ROOM, 'actual', ROOM]])
@@ -156,7 +156,7 @@ it('keeps old saved references usable only through the validated alias', async (
     ? saved.order.tiebreak : { kind: 'room' as const, from: a.from, id: a.id }
   const legacy: ReadPointer = { order: { role: 'exact', timestamp: 1000, tiebreak }, identity }
   pointer(legacy)
-  await cache.saveRoomMessages([row('foreign', 2000), confirmed])
+  await cache.saveMessages('room', [row('foreign', 2000), confirmed])
   const publisher = startPublisher()
   await drain()
   expect(publisher.publishDisplayed.mock.calls).toEqual([[ROOM, 'actual', ROOM]])
@@ -214,7 +214,7 @@ it.each(['room', 'account'] as const)('rejects a saved pointer scoped to another
 it('keeps the newest preview through older cursor invalidation, eviction and Spam moderation', async () => {
   const a = row('archive-a', 1000)
   const b = row('archive-b', 2000)
-  await cache.saveRoomMessages([a, b])
+  await cache.saveMessages('room', [a, b])
   roomStore.getState().setActiveRoom(ROOM)
   roomStore.setState({ messages: new Map([[ROOM, [a, b]]]) })
   roomStore.getState().updateRoom(ROOM, { lastMessage: b })
@@ -227,7 +227,7 @@ it('keeps the newest preview through older cursor invalidation, eviction and Spa
     { isModerated: true, moderatedBy: ROOM, moderationReason: 'Spam' })
   expect(roomStore.getState().roomMeta.get(ROOM)!.lastMessage).toMatchObject({ stanzaId: b.stanzaId, isRetracted: true, moderationReason: 'Spam' })
   await drain()
-  expect((await cache.getRoomMessages(ROOM)).find(message => message.body === a.body)?.isRetracted).not.toBe(true)
+  expect((await cache.getMessages('room', ROOM)).find(message => message.body === a.body)?.isRetracted).not.toBe(true)
 })
 
 it.each([false, true])('publishes a confirmed pointer without a local row, cache available: %s', async available => {
@@ -261,7 +261,7 @@ it.each(['resident', 'preview', 'cache'] as const)('resolves an older occupant-l
   const put = async (messages: RoomMessage[]) => {
     if (source === 'resident') roomStore.setState({ messages: new Map([[ROOM, messages]]) })
     if (source === 'preview') roomStore.getState().updateRoom(ROOM, { lastMessage: messages.at(-1) })
-    if (source === 'cache') await cache.saveRoomMessages(messages)
+    if (source === 'cache') await cache.saveMessages('room', messages)
     roomStore.getState().updateRoom(ROOM, { unreadCount: messages.length })
   }
   await put([newer])
@@ -294,8 +294,8 @@ it.each(['resident', 'cache'] as const)('withholds an occupant-less pointer with
   if (source === 'resident') {
     roomStore.setState({ messages: new Map([[ROOM, [a, b]]]) })
     // A cached copy of only one candidate must not override the resident ambiguity.
-    await cache.saveRoomMessages([a])
-  } else await cache.saveRoomMessages([a, b])
+    await cache.saveMessages('room', [a])
+  } else await cache.saveMessages('room', [a, b])
   pointer({ identity: { state: 'local', messageId: legacy.id },
     order: { role: 'exact', timestamp: 1000, tiebreak: { kind: 'room', from: legacy.from, id: legacy.id } } })
   const publisher = startPublisher()
@@ -311,7 +311,7 @@ it.each(['only-a', 'only-b', 'preview-a', 'split', 'resident-preview'] as const)
     const other = { ...legacy, occupantId: 'other' }
     const donor = { ...row('archive-b', 1000), occupantId: 'other' }
     const b = backfillRoomStanzaId(other, { ...donor })
-    await cache.saveRoomMessages(source === 'split' ? [b] : source === 'resident-preview' ? [] : [a, b])
+    await cache.saveMessages('room', source === 'split' ? [b] : source === 'resident-preview' ? [] : [a, b])
     roomStore.setState({ messages: new Map([[ROOM, source === 'only-b' ? [b] : source === 'preview-a' ? [] : [a]]]) })
     if (source === 'preview-a' || source === 'resident-preview') roomStore.getState().updateRoom(ROOM, { lastMessage: source === 'preview-a' ? a : b })
     const saved: ReadPointer = { identity: { state: 'local', messageId: legacy.id },
@@ -349,7 +349,7 @@ it.each([true, false, undefined])('publishes a cached archive pointer with legac
     order: { role: 'exact', timestamp: +message.timestamp, tiebreak: { kind: 'room', from: message.from,
       id: message.id, occupantId: message.occupantId, row: JSON.stringify([message.stanzaId, unconfirmed ?? true]) } },
   }
-  await cache.saveRoomMessage(message)
+  await cache.saveMessage('room', message)
   pointer(saved)
   const publisher = startPublisher()
   await drain()

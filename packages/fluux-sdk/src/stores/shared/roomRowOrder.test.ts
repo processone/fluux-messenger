@@ -26,7 +26,7 @@ function row(stanzaId: string, fields: Partial<RoomMessage> = {}): RoomMessage {
 }
 const a = row('archive-a')
 const b = row('archive-b', { isMention: true })
-const count = (pointer: ReturnType<typeof makeReadPointer>) => cache.countRoomUnreadInArchive(ROOM, { floor: new Date(0), pointer: pointer.order })
+const count = (pointer: ReturnType<typeof makeReadPointer>) => cache.countUnreadInArchive('room', ROOM, { floor: new Date(0), pointer: pointer.order })
 
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory()
@@ -43,7 +43,7 @@ it('orders and counts distinct confirmed archive rows within one sender/client/o
   expect(compareExact(exactPosition(a, 'room'), exactPosition(b, 'room'))).toBeLessThan(0)
   expect(sortMessagesByTimestamp([b, a], 'room')).toEqual([a, b])
   expect(compareExact(exactPosition(a, 'chat'), exactPosition(b, 'chat'))).toBe(0)
-  await cache.saveRoomMessages([b, a])
+  await cache.saveMessages('room', [b, a])
   const first = makeReadPointer(a, 'room')
   expect(await count(first)).toEqual({ unread: 1 })
   const state = { unreadCount: 2, mentionsCount: 1, readPointer: first }
@@ -57,7 +57,7 @@ it('orders and counts distinct confirmed archive rows within one sender/client/o
 
 it('advances the real store and clears unread and mentions only after complete cache derivation', async () => {
   const bottom = row('bottom', { id: 'bottom', timestamp: new Date(0), isOutgoing: true })
-  await cache.saveRoomMessages([bottom, b, a])
+  await cache.saveMessages('room', [bottom, b, a])
   roomStore.getState().addRoom(createRoom(ROOM, { unreadCount: 2, mentionsCount: 1, historyFloor: new Date(0) }), [a, b])
   roomStore.setState({ activeRoomJid: null, windowAtLiveEdge: new Map([[ROOM, false]]),
     mamQueryStates: new Map([[ROOM, { isLoading: false, error: null, hasQueried: true, isHistoryComplete: true, isCaughtUpToLive: true }]]),
@@ -97,7 +97,7 @@ it('round-trips local order and preserves it through validated confirmation and 
 })
 
 it('preserves old pointer progress conservatively until the named row or a later millisecond is read', async () => {
-  await cache.saveRoomMessages([a, b])
+  await cache.saveMessages('room', [a, b])
   const raw = serializeReadPointer(makeReadPointer(a, 'room'))
   if (raw.order.role !== 'exact') throw new Error('Expected exact pointer')
   delete (raw.order.tiebreak as { row?: string }).row

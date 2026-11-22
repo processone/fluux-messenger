@@ -52,7 +52,7 @@ function queue(work: () => Promise<void>): Promise<void> {
 async function recordRead(evidence: ReadEvidence, bound: Session): Promise<void> {
   if (session !== bound || owner() !== bound.account) return
   const { event, resident } = evidence
-  const cached = event.messageOnly ? [] : await getMessages(event.conversationId, {
+  const cached = event.messageOnly ? [] : await getMessages('chat', event.conversationId, {
     before: new Date(event.pointer.order.timestamp + 1), limit: 4096,
   })
   const readCached = cached.filter(message => !isAhead(makeReadPointer(message, 'chat'), event.pointer))
@@ -119,7 +119,7 @@ export async function reserveIOSNotification(conversation: string, messageId: st
     return settings.account !== account || !settings.enabled
   }
   if (bound.account !== account || owner() !== account) return false
-  let message = residentMessage(conversation, messageId, selected) ?? await getMessage(conversation, messageId, selected)
+  let message = residentMessage(conversation, messageId, selected) ?? await getMessage('chat', conversation, messageId, selected)
   message = residentMessage(conversation, messageId, selected) ?? message
   if (!message || message.isRetracted || session !== bound || !current()) return false
   const identity = messageLedgerIdentity(message, account)
@@ -131,6 +131,6 @@ export async function reserveIOSNotification(conversation: string, messageId: st
     deltas: [{ ...identity, account, epoch: bound.epoch, conversation, read: false, notified: true }],
   })
   if (!result.allowed || session !== bound || !current()) return false
-  const latest = residentMessage(conversation, messageId, selected) ?? await getMessage(conversation, messageId, selected)
+  const latest = residentMessage(conversation, messageId, selected) ?? await getMessage('chat', conversation, messageId, selected)
   return !!latest && !latest.isRetracted && session === bound && current()
 }

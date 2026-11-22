@@ -3,7 +3,7 @@
 import 'fake-indexeddb/auto'
 import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { messageRowRef } from '@fluux/sdk'
-import { clearAllMessages, saveRoomMessages, getRoomMessages } from '@fluux/sdk/cache'
+import { clearAllMessages, saveMessages, getMessages } from '@fluux/sdk/cache'
 import { flattenMessageItems } from './flattenMessageItems'
 import { describe, expect, it, vi } from 'vitest'
 import {
@@ -149,8 +149,8 @@ it('restores old DOM and virtualized anchors from a persisted cached identity al
     id: 'old-anchor', stanzaId: 'foreign', occupantId: 'peer', timestamp: new Date(1000), body: 'Legacy', isOutgoing: false }
   const oldRef = { id: legacy.id, stanzaId: legacy.stanzaId, occupantId: legacy.occupantId }
   const oldHandle = messageRowId(oldRef)!
-  await saveRoomMessages([roomMessageFixture({ originId: undefined, ...legacy, stanzaId: 'actual', localRowRef: messageRowRef(legacy) })])
-  const [merged] = await getRoomMessages(legacy.roomJid)
+  await saveMessages('room', [roomMessageFixture({ originId: undefined, ...legacy, stanzaId: 'actual', localRowRef: messageRowRef(legacy) })])
+  const [merged] = await getMessages('room', legacy.roomJid)
   expect(merged.localRowRef).toEqual(messageRowRef(legacy))
   const root = document.createElement('div')
   const row = document.createElement('div')

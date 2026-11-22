@@ -41,10 +41,10 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
 
 // Cache reads moved to the @fluux/sdk/cache escape-hatch subpath.
 vi.mock('@fluux/sdk/cache', () => ({
-  getMessage: (...args: unknown[]) => mockGetCachedMessage(...args),
-  getMessageByStanzaId: (...args: unknown[]) => mockGetCachedMessageByStanzaId(...args),
-  getRoomMessage: (...args: unknown[]) => mockGetCachedRoomMessage(...args),
-  getRoomMessageByStanzaId: (...args: unknown[]) => mockGetCachedRoomMessageByStanzaId(...args),
+  getMessage: (kind: 'chat' | 'room', ...args: unknown[]) =>
+    (kind === 'room' ? mockGetCachedRoomMessage : mockGetCachedMessage)(...args),
+  getMessageByStanzaId: (kind: 'chat' | 'room', ...args: unknown[]) =>
+    (kind === 'room' ? mockGetCachedRoomMessageByStanzaId : mockGetCachedMessageByStanzaId)(...args),
 }))
 
 vi.mock('react-i18next', () => ({

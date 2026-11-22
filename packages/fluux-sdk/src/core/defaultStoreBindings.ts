@@ -41,7 +41,7 @@ async function syncArchiveReactions(signal: ArchiveSignal): Promise<void> {
   const recorded = await getArchiveSignal(signal.conversationId, signal.archiveId, signal.from)
   scope.assertCurrent()
   if (!recorded) return
-  const message = await getMessageByReference(signal.conversationId, signal.effect.targetId)
+  const message = await getMessageByReference('chat', signal.conversationId, signal.effect.targetId)
   scope.assertCurrent()
   if (message) {
     const emojis = Object.entries(message.reactions ?? {})
@@ -99,7 +99,7 @@ export function createDefaultStoreBindings(): StoreBindings {
       getServerInfo: () => connectionStore.getState().serverInfo,
     },
     chat: {
-      resolveReactionTarget: (...args) => getMessageByReference(...args),
+      resolveReactionTarget: (...args) => getMessageByReference('chat', ...args),
       getArchiveSignal: (...args) => getArchiveSignal(...args),
       rememberArchiveSignal: async (...args) => {
         const scope = captureStorageScope()

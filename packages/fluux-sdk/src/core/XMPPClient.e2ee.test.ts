@@ -18,6 +18,12 @@ Object.defineProperty(globalThis, 'localStorage', {
   writable: true,
 })
 
+const archiveCounts = vi.hoisted(() => ({
+  chat: vi.fn().mockResolvedValue({ unread: 0 }),
+  // RecomputeUnreadForRoom's room counterpart.
+  room: vi.fn().mockResolvedValue({ unread: 0 }),
+}))
+
 // Prevent IndexedDB operations triggered by chatStore.addMessage / updateMessage
 vi.mock('../utils/messageCache', () => ({
   getArchiveSignal: vi.fn().mockResolvedValue(undefined),
@@ -37,21 +43,19 @@ vi.mock('../utils/messageCache', () => ({
   // recomputeUnreadForConversation's coverage
   // gate resolves the coverage bottom and counts through these — tests that
   // exercise the phantom-badge fix past the gate override them.
-  countUnreadInArchive: vi.fn().mockResolvedValue({ unread: 0 }),
-  // RecomputeUnreadForRoom's room counterpart.
-  countRoomUnreadInArchive: vi.fn().mockResolvedValue({ unread: 0 }),
+  // The function is kind-keyed: the chat and room counts keep their own mocks behind one dispatcher.
+  countUnreadInArchive: vi.fn((kind: 'chat' | 'room', ...args: unknown[]) =>
+    kind === 'room' ? archiveCounts.room(...args) : archiveCounts.chat(...args)),
   resolveArchivePosition: vi.fn().mockResolvedValue(null),
   updateMessage: vi.fn().mockResolvedValue(undefined),
   // Resolves the durable copy of a live correction; null means no cached row.
-  applyChatCorrection: vi.fn().mockResolvedValue(null),
+  applyCorrection: vi.fn().mockResolvedValue(null),
   updateMessageReactions: vi.fn().mockResolvedValue(false),
   // The retraction sink resolves its target through the identity ladder before
   // writing. This mock is deliberately explicit (no importOriginal) to keep the
   // SDK barrel out of this file, so every cache export it reaches is listed here.
-  findChatRetractionTargets: vi.fn().mockResolvedValue(undefined),
-  findChatMessageCopies: vi.fn().mockResolvedValue([]),
-  findRoomRetractionTargets: vi.fn().mockResolvedValue(undefined),
-  findRoomMessageCopies: vi.fn().mockResolvedValue([]),
+  findRetractionTargets: vi.fn().mockResolvedValue(undefined),
+  findMessageCopies: vi.fn().mockResolvedValue([]),
   areRetractedInCache: vi.fn().mockResolvedValue([]),
   deleteMessage: vi.fn().mockResolvedValue(undefined),
   deleteMessageForRecovery: vi.fn().mockResolvedValue(true),
@@ -60,16 +64,6 @@ vi.mock('../utils/messageCache', () => ({
   isMessageCacheAvailable: vi.fn().mockReturnValue(false),
   getOldestMessageTimestamp: vi.fn().mockResolvedValue(null),
   getMessageCount: vi.fn().mockResolvedValue(0),
-  saveRoomMessageWithResult: vi.fn().mockResolvedValue(true),
-  saveRoomMessage: vi.fn().mockResolvedValue(undefined),
-  saveRoomMessages: vi.fn().mockResolvedValue(undefined),
-  getRoomMessages: vi.fn().mockResolvedValue([]),
-  getRoomMessage: vi.fn().mockResolvedValue(null),
-  getRoomMessageByStanzaId: vi.fn().mockResolvedValue(null),
-  updateRoomMessage: vi.fn().mockResolvedValue(undefined),
-  deleteRoomMessage: vi.fn().mockResolvedValue(undefined),
-  deleteRoomMessages: vi.fn().mockResolvedValue(undefined),
-  getRoomMessageCount: vi.fn().mockResolvedValue(0),
 }))
 
 import { XMPPClient } from './XMPPClient'
@@ -476,6 +470,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       expect(count).toBe(1)
       // Written back to the DURABLE cache with plaintext + cleared stash.
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'chat',
         'carol@example.com',
         'durable-1',
         expect.objectContaining({ body: 'hello', encryptedPayload: undefined }),
@@ -762,7 +757,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
         tiebreak: { kind: 'chat', id: 'archive-anchor' },
       })
       // Only the genuinely-unread message remains once the reaction ghost drops.
-      vi.mocked(messageCache.countUnreadInArchive).mockResolvedValueOnce({ unread: 1 })
+      archiveCounts.chat.mockResolvedValueOnce({ unread: 1 })
 
       await xmppClient.retryPendingDecrypts()
 
@@ -1039,7 +1034,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
         tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'archive-anchor' },
       })
       // Only one message is genuinely unread once the archive is consulted.
-      vi.mocked(messageCache.countRoomUnreadInArchive).mockResolvedValueOnce({ unread: 1 })
+      archiveCounts.room.mockResolvedValueOnce({ unread: 1 })
 
       await xmppClient.retryPendingDecrypts()
 

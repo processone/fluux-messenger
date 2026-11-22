@@ -224,7 +224,7 @@ describe('a reused nick after a retraction, through the live room path', () => {
     expect(bob?.isRetracted, 'Bob\'s message is not displayed as deleted').toBeFalsy()
     expect(bob?.occupantId).toBe(evidence.bob)
 
-    const cached = await messageCache.getRoomMessages(ROOM)
+    const cached = await messageCache.getMessages('room', ROOM)
     const cachedBob = cached.find((message) => message.body === BOB_BODY)
     expect(cachedBob, 'Bob\'s message survives in the cache with its body').toBeDefined()
     expect(cachedBob?.isRetracted).toBeFalsy()
@@ -275,7 +275,7 @@ describe('a reused nick after a retraction, through the live room path', () => {
       await playWithArchiveCopy()
 
       expectBobIntact(roomWindow(ROOM))
-      expectBobIntact(await messageCache.getRoomMessages(ROOM))
+      expectBobIntact(await messageCache.getMessages('room', ROOM))
 
       _clearRetractedIdentitiesForTesting()
       seedRoomWindow(ROOM, [])

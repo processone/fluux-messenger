@@ -1256,7 +1256,7 @@ export async function backfillFromMessageCache(): Promise<void> {
     let chatCount = 0
     let roomCount = 0
 
-    await messageCache.iterateAllMessages(BACKFILL_BATCH_SIZE, async (batch) => {
+    await messageCache.iterateAllMessages('chat', BACKFILL_BATCH_SIZE, async (batch) => {
       scope.assertCurrent()
       await indexMessages(batch, { fromCache: true }, scope.jid)
       scope.assertCurrent()
@@ -1264,7 +1264,7 @@ export async function backfillFromMessageCache(): Promise<void> {
     })
 
     scope.assertCurrent()
-    await messageCache.iterateAllRoomMessages(BACKFILL_BATCH_SIZE, async (batch) => {
+    await messageCache.iterateAllMessages('room', BACKFILL_BATCH_SIZE, async (batch) => {
       scope.assertCurrent()
       await indexMessages(batch, { fromCache: true }, scope.jid)
       scope.assertCurrent()
@@ -1312,13 +1312,13 @@ export async function rebuildSearchIndex(
 
     // Count total messages for progress reporting
     const totalMessages =
-      (await messageCache.getTotalMessageCount()) +
-      (await messageCache.getTotalRoomMessageCount())
+      (await messageCache.getTotalMessageCount('chat')) +
+      (await messageCache.getTotalMessageCount('room'))
 
     let indexed = 0
     scope.assertCurrent()
 
-    await messageCache.iterateAllMessages(BACKFILL_BATCH_SIZE, async (batch) => {
+    await messageCache.iterateAllMessages('chat', BACKFILL_BATCH_SIZE, async (batch) => {
       scope.assertCurrent()
       await indexMessages(batch, { fromCache: true }, scope.jid)
       scope.assertCurrent()
@@ -1327,7 +1327,7 @@ export async function rebuildSearchIndex(
     })
 
     scope.assertCurrent()
-    await messageCache.iterateAllRoomMessages(BACKFILL_BATCH_SIZE, async (batch) => {
+    await messageCache.iterateAllMessages('room', BACKFILL_BATCH_SIZE, async (batch) => {
       scope.assertCurrent()
       await indexMessages(batch, { fromCache: true }, scope.jid)
       scope.assertCurrent()

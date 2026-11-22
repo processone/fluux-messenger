@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { act } from 'react'
 import { chatStore, roomStore } from '@fluux/sdk/stores'
-import { saveMessage, saveRoomMessage, clearAllMessages } from '@fluux/sdk/cache'
+import { saveMessage, clearAllMessages } from '@fluux/sdk/cache'
 import type { Message, RoomMessage } from '@fluux/sdk'
 import { useWrapIdentityAliases } from './useWrapIdentityAliases'
 import { useWrappedCodeBlocksStore } from '@/stores/wrappedCodeBlocksStore'
@@ -53,12 +53,12 @@ describe('useWrapIdentityAliases', () => {
   it('chat: wrap → switch chat → cache enriched → return drops the choice instead of guessing', async () => {
     renderHook(() => useWrapIdentityAliases())
     const original = dm()
-    await saveMessage(original)
+    await saveMessage('chat', original)
     await act(async () => { await chatStore.getState().activateConversation('bob@x.org') })
     toggle(original)
     await act(async () => { await chatStore.getState().activateConversation('carol@x.org') })
     expect(chatStore.getState().messages.get('bob@x.org')).toBeUndefined()
-    await saveMessage(dm({ stanzaId: 'A', originId: 'o1' }))
+    await saveMessage('chat', dm({ stanzaId: 'A', originId: 'o1' }))
     await act(async () => { await chatStore.getState().activateConversation('bob@x.org') })
     const returned = (chatStore.getState().messages.get('bob@x.org') ?? []).find((m) => m.stanzaId === 'A')
     expect(returned).toBeDefined()
@@ -71,11 +71,11 @@ describe('useWrapIdentityAliases', () => {
     for (const jid of ['room@conf.x.org', 'other@conf.x.org']) {
       act(() => roomStore.getState().addRoom({ jid, name: jid, nickname: 'me', joined: true, isBookmarked: false, occupants: new Map(), messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set() } as never))
     }
-    await saveRoomMessage(original)
+    await saveMessage('room', original)
     await act(async () => { await roomStore.getState().activateRoom('room@conf.x.org') })
     toggle(original)
     await act(async () => { await roomStore.getState().activateRoom('other@conf.x.org') })
-    await saveRoomMessage(roomMsg({ stanzaId: 'A', originId: 'o1' }))
+    await saveMessage('room', roomMsg({ stanzaId: 'A', originId: 'o1' }))
     await act(async () => { await roomStore.getState().activateRoom('room@conf.x.org') })
     const returned = (roomStore.getState().messages.get('room@conf.x.org') ?? []).find((m) => m.stanzaId === 'A')
     expect(returned).toBeDefined()

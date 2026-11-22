@@ -33,10 +33,10 @@ beforeEach(() => {
 })
 
 it('resolves cached Spam past an resident client-ID collision and preserves the legacy quotation', async () => {
-  await cache.saveRoomMessage(original)
+  await cache.saveMessage('room', original)
   const legacy = { ...original, id: original.stanzaId!, stanzaId: 'legacy-archive', from: `${ROOM}/Bob`,
     occupantId: 'bob', body: 'Keep legacy quotation', isRetracted: false, isModerated: false, moderationReason: undefined }
-  await cache.saveRoomMessage(legacy)
+  await cache.saveMessage('room', legacy)
   roomStore.setState({ messages: new Map([[ROOM, [legacy]]]) })
   const { result } = renderHook(() => useReferencedMessage({ type: 'groupchat', roomJid: ROOM,
     id: original.stanzaId, from: original.from, cache: true }))
@@ -55,7 +55,7 @@ describe('cached room reply references', () => {
   })
 
   it('applies known moderation before its cache write completes', async () => {
-    await cache.saveRoomMessage({ ...original, isRetracted: false, isModerated: false, moderationReason: undefined })
+    await cache.saveMessage('room', { ...original, isRetracted: false, isModerated: false, moderationReason: undefined })
     const { result } = renderHook(() => useReferencedMessage({
       type: 'groupchat', roomJid: ROOM, id: original.stanzaId, from: original.from, cache: true,
     }))
@@ -68,7 +68,7 @@ describe('cached room reply references', () => {
   })
 
   it('waits for local cache knowledge and resolves a Spam target after resident history is cleared', async () => {
-    await cache.saveRoomMessage(original)
+    await cache.saveMessage('room', original)
     const { result } = renderHook(() => useReferencedMessage({
       type: 'groupchat', roomJid: ROOM, id: 'archive', from: original.from, cache: true,
     }))
@@ -80,7 +80,7 @@ describe('cached room reply references', () => {
   })
 
   it.each(['client', 'origin'])('does not use a different author with a colliding %s id as moderation evidence', async id => {
-    await cache.saveRoomMessage({ ...original, originId: 'origin' })
+    await cache.saveMessage('room', { ...original, originId: 'origin' })
     const { result } = renderHook(() => useReferencedMessage({
       type: 'groupchat', roomJid: ROOM, id, from: `${ROOM}/Bob`, cache: true,
     }))
@@ -89,7 +89,7 @@ describe('cached room reply references', () => {
   })
 
   it('does not use ambiguous reused nick identities as moderation evidence', async () => {
-    await cache.saveRoomMessages([original, {
+    await cache.saveMessages('room', [original, {
       ...original, stanzaId: 'other-archive', occupantId: 'another-alice', isRetracted: false, isModerated: false,
     }])
     const { result } = renderHook(() => useReferencedMessage({
@@ -100,7 +100,7 @@ describe('cached room reply references', () => {
   })
 
   it('keeps identical archive references scoped to the room and active account', async () => {
-    await cache.saveRoomMessage(original)
+    await cache.saveMessage('room', original)
     const { result, rerender } = renderHook(({ roomJid }) => useReferencedMessage({
       type: 'groupchat', roomJid, id: 'archive', from: original.from, cache: true,
     }), { initialProps: { roomJid: ROOM } })
@@ -120,7 +120,7 @@ describe('cached room reply references', () => {
 describe('archive authority across resident and cached references', () => {
   it.each(['client', 'origin'])('keeps an authoritative cached original ahead of a resident %s alias', async tier => {
     const legitimate = { ...original, isRetracted: false, isModerated: false, moderationReason: undefined, body: 'Legitimate original' }
-    await cache.saveRoomMessage(legitimate)
+    await cache.saveMessage('room', legitimate)
     const collision = { ...original, id: tier === 'client' ? original.stanzaId! : 'collision',
       originId: tier === 'origin' ? original.stanzaId : undefined, stanzaId: 'other-archive', occupantId: 'reused-nick' }
     roomStore.setState({ messages: new Map([[ROOM, [collision]]]) })
@@ -130,7 +130,7 @@ describe('archive authority across resident and cached references', () => {
   })
 
   it('hides an authoritative cached Spam original despite a legitimate resident alias', async () => {
-    await cache.saveRoomMessage(original)
+    await cache.saveMessage('room', original)
     const collision = { ...original, id: original.stanzaId!, stanzaId: 'other-archive', occupantId: 'reused-nick',
       isRetracted: false, isModerated: false, moderationReason: undefined }
     roomStore.setState({ messages: new Map([[ROOM, [collision]]]) })
@@ -140,7 +140,7 @@ describe('archive authority across resident and cached references', () => {
   })
 
   it('preserves legacy resident-only alias resolution even when a cached archive owner exists', async () => {
-    await cache.saveRoomMessage(original)
+    await cache.saveMessage('room', original)
     const collision = { ...original, id: original.stanzaId!, stanzaId: 'other-archive', occupantId: 'reused-nick' }
     roomStore.setState({ messages: new Map([[ROOM, [collision]]]) })
     const { result } = renderHook(() => useReferencedMessage({ type: 'groupchat', roomJid: ROOM,
@@ -153,7 +153,7 @@ describe('archive authority across resident and cached references', () => {
 it('uses an uncached search snapshot archive owner ahead of cached and resident aliases', async () => {
   const legitimate = { ...original, isRetracted: false, isModerated: false, moderationReason: undefined, body: 'Snapshot original' }
   const collision = { ...original, id: original.stanzaId!, stanzaId: 'collision-archive', occupantId: 'reused-nick' }
-  await cache.saveRoomMessage(collision)
+  await cache.saveMessage('room', collision)
   roomStore.setState({ messages: new Map([[ROOM, [collision]]]) })
   const messages = [legitimate, collision]
   const { result } = renderHook(() => useReferencedMessage({ type: 'groupchat', roomJid: ROOM,
@@ -177,8 +177,8 @@ it('keeps a cached quotation stable through unrelated pending records and snapsh
   const target = { ...original, isRetracted: false, isModerated: false, moderationReason: undefined }
   const unrelated: RoomMessage = { ...target, id: 'unrelated', stanzaId: 'unrelated-archive' }
 
-  await cache.saveRoomMessages([target, unrelated])
-  const reads = vi.spyOn(cache, 'getRoomMessageByReference')
+  await cache.saveMessages('room', [target, unrelated])
+  const reads = vi.spyOn(cache, 'getMessageByReference')
   let renders = 0
   const { result, rerender } = renderHook(({ messages }: { messages: RoomMessage[] }) => {
     renders++
@@ -203,8 +203,8 @@ it('keeps a cached quotation stable through unrelated pending records and snapsh
 it.each(['stanza', 'client', 'origin'])('applies relevant moderation to a cache-only %s reference without another read', async tier => {
   const target = { ...original, id: `client-${tier}`, stanzaId: `archive-${tier}`, originId: `origin-${tier}`, isRetracted: false, isModerated: false, moderationReason: undefined }
 
-  await cache.saveRoomMessage(target)
-  const reads = vi.spyOn(cache, 'getRoomMessageByReference')
+  await cache.saveMessage('room', target)
+  const reads = vi.spyOn(cache, 'getMessageByReference')
   const { result } = renderHook(() => useReferencedMessage({ type: 'groupchat', roomJid: ROOM,
     id: tier === 'stanza' ? target.stanzaId : tier === 'client' ? target.id : target.originId, from: target.from, cache: true }))
   await waitFor(() => expect(result.current?.isRetracted).toBe(false))
@@ -221,8 +221,8 @@ it.each(['stanza', 'client', 'origin'])('applies relevant moderation to a cache-
 it.each(['room', 'actor'])('ignores pending moderation with an unrelated %s identity', async kind => {
   const target = { ...original, id: `negative-${kind}`, stanzaId: `negative-archive-${kind}`, isRetracted: false, isModerated: false }
 
-  await cache.saveRoomMessage(target)
-  const reads = vi.spyOn(cache, 'getRoomMessageByReference')
+  await cache.saveMessage('room', target)
+  const reads = vi.spyOn(cache, 'getMessageByReference')
   const { result } = renderHook(() => useReferencedMessage({ type: 'groupchat', roomJid: ROOM,
     id: target.stanzaId, from: target.from, cache: true }))
   await waitFor(() => expect(result.current?.isRetracted).toBe(false))
@@ -241,7 +241,7 @@ it('applies pending moderation received during a cache read through a client ali
   const target = { ...original, id: 'in-flight-client', stanzaId: 'in-flight-archive', isRetracted: false, isModerated: false }
 
   let finish!: (message: RoomMessage) => void
-  const reads = vi.spyOn(cache, 'getRoomMessageByReference').mockImplementation(() => new Promise(resolve => { finish = resolve }))
+  const reads = vi.spyOn(cache, 'getMessageByReference').mockImplementation((() => new Promise(resolve => { finish = resolve })) as never)
   const { result } = renderHook(() => useReferencedMessage({ type: 'groupchat', roomJid: ROOM,
     id: target.id, from: target.from, cache: true }))
   expect(result.current).toBeNull()

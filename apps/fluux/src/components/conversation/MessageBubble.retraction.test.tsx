@@ -60,7 +60,7 @@ const props = (message: Message): MessageBubbleProps => ({
   onReply: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn().mockResolvedValue(undefined), formatTime: () => '14:30', timeFormat: '24h',
 })
 const resident = (id: string) => chatStore.getState().messages.get(peer)?.find(m => m.id === id) as Message
-const row = async (id: string) => (await messageCache.getMessages(peer, {})).find(m => m.id === id)
+const row = async (id: string) => (await messageCache.getMessages('chat', peer, {})).find(m => m.id === id)
 
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory()
