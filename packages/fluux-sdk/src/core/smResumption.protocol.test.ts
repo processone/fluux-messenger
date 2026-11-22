@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { parse } from 'ltx'
 import type { AddressInfo, Socket } from 'node:net'
-import { XMPPClient, bindStoresForTesting } from './XMPPClient'
+import { XMPPClient, bindStoresForTesting, getInternalSurfaceForTesting } from './XMPPClient'
 import { createMockStores } from './test-utils'
 import type { SessionState, StorageAdapter } from './types'
 import { roomStore } from '../stores/roomStore'
@@ -519,6 +519,19 @@ describe('stream management resumption against a controlled XMPP server', { time
       await sleep(150)
     }
     const expected = (messageId: string) => [{ conversationId: 'bob@example.com', messageId }]
+    /** Until the session replacing `previous` is enabled, a message goes out uncounted. */
+    const untilNewSession = (previous: string | undefined) => until(() => {
+      const id = client.getStreamManagementState()?.id
+      return id !== undefined && id !== previous
+    })
+    /** Resolves after the next resumption, past the point where its unconfirmed messages are reported. */
+    const nextResumption = () => new Promise<void>((resolve) => {
+      const stop = getInternalSurfaceForTesting(client).on('sessionPhase', (phase) => {
+        if (phase.kind !== 'resumed') return
+        stop()
+        resolve()
+      })
+    })
 
     beforeEach(() => {
       server.inline = inline
@@ -550,18 +563,19 @@ describe('stream management resumption against a controlled XMPP server', { time
       markIsSaved = false
       server.losingMessages = true
       const id = await client.messages.sendMessage('bob@example.com', 'lost words')
+      const lostSession = client.getStreamManagementState()?.id
       server.resumable = false
       server.drop()
       await until(() => notDelivered.length === 1)
-      await until(() => client.getStreamManagementState() !== null)
+      await untilNewSession(lostSession)
 
       server.losingMessages = false
       server.resumable = true
       await client.messages.resendMessage('bob@example.com', 'lost words', id)
       await until(() => server.messages.includes(id))
+      const resumed = nextResumption()
       server.drop()
-      await sleep(400)
-      await until(() => client.getStreamManagementState() !== null)
+      await resumed
 
       expect(notDelivered).toEqual(expected(id))
       expect(held.has(SAVED_KEY)).toBe(false)
@@ -572,11 +586,12 @@ describe('stream management resumption against a controlled XMPP server', { time
       await openPage(storage)
       server.losingMessages = true
       const id = await client.messages.sendMessage('bob@example.com', 'lost words')
+      const lostSession = client.getStreamManagementState()?.id
       server.resumable = false
       server.drop()
       await until(() => notDelivered.length === 1)
       await until(() => !held.has(SAVED_KEY))
-      await until(() => client.getStreamManagementState() !== null)
+      await untilNewSession(lostSession)
       server.losingMessages = false
       server.resumable = true
       return id
