@@ -13,18 +13,17 @@ import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/stora
 
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
 
+// The kind-keyed archive functions correlate their arguments to `kind` only at the call site, so a
+// wrapper forwarding a spread argument list to the original needs the loosely-typed call signature.
+const forward = <F extends (...args: never[]) => unknown>(fn: F) => fn as unknown as (...args: unknown[]) => ReturnType<F>
+
 let holdSnapshot: (() => Promise<void>) | undefined
 vi.mock('../utils/messageCache', async importOriginal => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
   return {
     ...actual,
     getMessages: async (...args: Parameters<typeof actual.getMessages>) => {
-      const rows = await actual.getMessages(...args)
-      await holdSnapshot?.()
-      return rows
-    },
-    getRoomMessages: async (...args: Parameters<typeof actual.getRoomMessages>) => {
-      const rows = await actual.getRoomMessages(...args)
+      const rows = await forward(actual.getMessages)(...args)
       await holdSnapshot?.()
       return rows
     },
@@ -62,8 +61,8 @@ for (const kind of ['chat', 'room'] as const) {
       body: 'Original', timestamp: new Date(1000), isOutgoing: false,
       ...(kind === 'chat' ? { type: 'chat', conversationId: CHAT } : { type: 'groupchat', roomJid: ROOM, nick: 'Peer' }),
     } as Message | RoomMessage
-    const seed = () => kind === 'chat' ? cache.saveMessages([message as Message]) : cache.saveRoomMessages([message as RoomMessage])
-    const read = () => kind === 'chat' ? cache.getMessage(jid, message.id) : cache.getRoomMessage(jid, message.id)
+    const seed = () => kind === 'chat' ? cache.saveMessages('chat', [message as Message]) : cache.saveMessages('room', [message as RoomMessage])
+    const read = () => kind === 'chat' ? cache.getMessage('chat', jid, message.id) : cache.getMessage('room', jid, message.id)
     const hydrate = () => kind === 'chat' ? chatStore.getState().loadMessagesFromCache(jid) : roomStore.getState().loadMessagesFromCache(jid)
     const resident = () => (kind === 'chat' ? chatStore : roomStore).getState().messages.get(jid)?.find(row => row.id === message.id)
     const emit = (id = message.id) => {
@@ -129,14 +128,14 @@ for (const kind of ['chat', 'room'] as const) {
     })
 
     if (kind === 'room') it.each([false, true])('keeps a synchronous poll tally ahead of an older reaction completion (edited: %s)', async edited => {
-      await cache.saveRoomMessages([{ ...message as RoomMessage, ...(edited && { isEdited: true, correctionRevision: { ids: ['stanza:edited'], supersedes: [] }, correctionStanzaIds: ['edited'] }) }])
+      await cache.saveMessages('room', [{ ...message as RoomMessage, ...(edited && { isEdited: true, correctionRevision: { ids: ['stanza:edited'], supersedes: [] }, correctionStanzaIds: ['edited'] }) }])
       await hydrate()
-      const actual = cache.updateRoomMessage
+      const actual = forward(cache.updateMessage)
       let release!: () => void
       let persisted!: () => void
       const durable = new Promise<void>(resolve => { persisted = resolve })
       const gate = new Promise<void>(resolve => { release = resolve })
-      vi.spyOn(cache, 'updateRoomMessage').mockImplementationOnce(async (...args) => {
+      vi.spyOn(cache, 'updateMessage').mockImplementationOnce(async (...args) => {
         await actual(...args)
         persisted()
         await gate
@@ -189,8 +188,8 @@ for (const kind of ['chat', 'room'] as const) {
 
     it('keeps a retracted target free of preview content', async () => {
       const retracted = { ...message, body: '', isRetracted: true }
-      if (kind === 'chat') await cache.saveMessages([retracted as Message])
-      else await cache.saveRoomMessages([retracted as RoomMessage])
+      if (kind === 'chat') await cache.saveMessages('chat', [retracted as Message])
+      else await cache.saveMessages('room', [retracted as RoomMessage])
       await hydrate()
       emit()
       await (kind === 'chat' ? chatStore : roomStore).getState().loadMessagesFromCache(jid, { peek: true })
@@ -213,21 +212,12 @@ for (const kind of ['chat', 'room'] as const) {
       const writeStarted = new Promise<void>(resolve => { writing = resolve })
       let releaseWrite!: () => void
       const writeGate = new Promise<void>(resolve => { releaseWrite = resolve })
-      if (kind === 'chat') {
-        const original = cache.updateMessage
-        vi.spyOn(cache, 'updateMessage').mockImplementationOnce(async (...args) => {
-          writing()
-          await writeGate
-          return original(...args)
-        })
-      } else {
-        const original = cache.updateRoomMessage
-        vi.spyOn(cache, 'updateRoomMessage').mockImplementationOnce(async (...args) => {
-          writing()
-          await writeGate
-          return original(...args)
-        })
-      }
+      const original = forward(cache.updateMessage)
+      vi.spyOn(cache, 'updateMessage').mockImplementationOnce(async (...args) => {
+        writing()
+        await writeGate
+        return original(...args)
+      })
       const newerPreview = { ...preview, title: 'Newer card' }
       const send = (newer: boolean) => {
         const updates = { linkPreview: newer ? newerPreview : preview }
@@ -265,11 +255,11 @@ for (const kind of ['chat', 'room'] as const) {
         const reconciliationStarted = new Promise<void>(resolve => { reconciling = resolve })
         let releaseArrival!: () => void
         const arrivalGate = new Promise<void>(resolve => { releaseArrival = resolve })
-        const reconcile = cache.reconcileRoomHistoryMessages
-        vi.spyOn(cache, 'reconcileRoomHistoryMessages').mockImplementationOnce(async (...args) => {
+        const reconcile = forward(cache.reconcileHistoryMessages)
+        vi.spyOn(cache, 'reconcileHistoryMessages').mockImplementationOnce(async (...args) => {
           reconciling()
           await arrivalGate
-          return reconcile(...args)
+          return reconcile(...args) as Promise<Message[]>
         })
         const arrival = roomStore.getState().addMessage(jid, {
           ...message, id: 'delayed-arrival', stanzaId: 'delayed-archive', isDelayed: true, timestamp: new Date(2000),

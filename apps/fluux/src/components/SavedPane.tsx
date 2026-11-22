@@ -16,7 +16,7 @@ import {
   connectionStore, findLatestCopy, findMessageRowIndex, getBareJid, messageRowRef, useContactIdentities,
   type Message, type RoomMessage, type SavedMessage,
 } from '@fluux/sdk'
-import { getMessagesAround, getRoomMessagesAround } from '@fluux/sdk/cache'
+import { getMessagesAround } from '@fluux/sdk/cache'
 import { useChatStore, useConnectionStore, useRoomStore, useRosterStore, useSavedStore } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
 import { RoomAvatar } from './RoomAvatar'
@@ -54,8 +54,8 @@ function useSavedContext(entry: SavedMessage): Context {
         const options = { before: CONTEXT_SIZE, after: CONTEXT_SIZE }
         const messages: (Message | RoomMessage)[] = target
           ? await (isRoom
-            ? getRoomMessagesAround(entry.conversationJid, messageRowRef(target), options)
-            : getMessagesAround(entry.conversationJid, messageRowRef(target), options))
+            ? getMessagesAround('room', entry.conversationJid, messageRowRef(target), options)
+            : getMessagesAround('chat', entry.conversationJid, messageRowRef(target), options))
           : []
         // The exact accepted row: another row may share the client id (different archive id or occupant).
         const index = target ? findMessageRowIndex(messages, messageRowRef(target)) : -1

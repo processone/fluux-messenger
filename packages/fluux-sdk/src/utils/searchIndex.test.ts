@@ -90,10 +90,10 @@ describe('searchIndex', () => {
     })
     const replay = { ...legacy, stanzaId: 'archive' }
     const confirmed = { ...replay }
-    await messageCache.saveRoomMessage(legacy)
+    await messageCache.saveMessage('room', legacy)
     await indexMessage(legacy)
     expect(await search('Searchable')).toHaveLength(1)
-    await messageCache.saveRoomMessage(confirmed)
+    await messageCache.saveMessage('room', confirmed)
     await indexMessage(confirmed)
     const results = await search('Searchable')
     expect(results).toHaveLength(1)
@@ -108,9 +108,9 @@ describe('searchIndex', () => {
     })
     const later = { ...legacy, stanzaId: 'later-archive', ...(difference === 'body' ? { body: 'Searchable later content' } : { timestamp: new Date(2000) }) }
     const confirmed = { ...later }
-    await messageCache.saveRoomMessage(legacy)
+    await messageCache.saveMessage('room', legacy)
     await indexMessage(legacy)
-    await messageCache.saveRoomMessage(confirmed)
+    await messageCache.saveMessage('room', confirmed)
     await indexMessage(confirmed)
     expect(await search('Searchable')).toHaveLength(2)
     await removeMessage(confirmed)
@@ -990,14 +990,14 @@ describe('searchIndex', () => {
 
     it('promotes an indexed row even when its twin is cached in the same transaction', async () => {
       const bare = createChatMessage('alice@example.com', { id: 'reused', body: 'original first' })
-      await messageCache.saveMessage(bare)
+      await messageCache.saveMessage('chat', bare)
       await indexMessage(bare)
       const first = { ...bare, stanzaId: 'archive-first' }
       const second = { ...bare, stanzaId: 'archive-second', body: 'untouched second' }
 
-      await messageCache.saveMessages([first, second])
+      await messageCache.saveMessages('chat', [first, second])
       await indexMessages([first, second])
-      const corrected = await messageCache.applyChatCorrection(first.conversationId, first.stanzaId, {
+      const corrected = await messageCache.applyCorrection('chat', first.conversationId, first.stanzaId, {
         body: 'corrected first', isEdited: true,
       }, { actorJid: first.from })
       expect(corrected).toBeTruthy()
@@ -1007,7 +1007,7 @@ describe('searchIndex', () => {
       expect(await search('corrected')).toHaveLength(1)
       expect(await search('untouched')).toHaveLength(1)
       expect(await indexedIds()).toHaveLength(2)
-      const [copy] = await messageCache.findChatMessageCopies(first.conversationId, corrected!)
+      const [copy] = await messageCache.findMessageCopies('chat', first.conversationId, corrected!)
       await removeMessage(copy.message, undefined, copy)
       expect(await search('first')).toEqual([])
       expect(await search('untouched')).toHaveLength(1)
@@ -1016,16 +1016,16 @@ describe('searchIndex', () => {
 
     it.each(['stanzaId', 'originId'] as const)('rekeys a document before revoking its cached %s alias', async tier => {
       const original = createChatMessage('alice@example.com', { id: 'revoked', [tier]: 'rejected', body: 'obsolete content' })
-      await messageCache.saveMessage(original)
+      await messageCache.saveMessage('chat', original)
       await indexMessage(original)
-      await messageCache.updateMessage(original.conversationId, original.id, { [tier]: undefined }, original.from)
-      const current = await messageCache.getMessage(original.conversationId, original.id)
+      await messageCache.updateMessage('chat', original.conversationId, original.id, { [tier]: undefined }, original.from)
+      const current = await messageCache.getMessage('chat', original.conversationId, original.id)
       expect(current?.[tier]).toBeUndefined()
       expect(await search('obsolete')).toEqual([expect.objectContaining({ [tier]: undefined })])
       await indexMessage(original)
       expect(await indexedIds()).toHaveLength(1)
       expect(await search('obsolete')).toEqual([expect.objectContaining({ [tier]: undefined })])
-      const corrected = await messageCache.applyChatCorrection(original.conversationId, original.id, {
+      const corrected = await messageCache.applyCorrection('chat', original.conversationId, original.id, {
         body: 'replacement content', isEdited: true,
       }, { actorJid: original.from })
       await updateMessage(corrected!)
@@ -1038,9 +1038,9 @@ describe('searchIndex', () => {
     it('finds both twins in one conversation', async () => {
       const first = twin('alice@example.com', 'archive-1', 'twin first')
       const second = twin('alice@example.com', 'archive-2', 'twin second')
-      await messageCache.saveMessage(first)
+      await messageCache.saveMessage('chat', first)
       await indexMessage(first)
-      await messageCache.saveMessage(second)
+      await messageCache.saveMessage('chat', second)
       await indexMessage(second)
 
       expect((await search('twin')).map(r => r.body).sort()).toEqual(['twin first', 'twin second'])
@@ -1064,7 +1064,7 @@ describe('searchIndex', () => {
       const second = twin('alice@example.com', 'archive-2', 'twin second')
       const elsewhere = twin('bob@example.com', 'archive-3', 'twin elsewhere')
       for (const message of [first, second, elsewhere]) {
-        await messageCache.saveMessage(message)
+        await messageCache.saveMessage('chat', message)
         await indexMessage(message)
       }
       expect(await indexedIds()).toHaveLength(3)
@@ -1083,10 +1083,10 @@ describe('searchIndex', () => {
 
     it('keeps one document for a message whose archive id arrives after it was indexed', async () => {
       const bare = createChatMessage('alice@example.com', { id: 'late-archive', body: 'late archive body' })
-      await messageCache.saveMessage(bare)
+      await messageCache.saveMessage('chat', bare)
       await indexMessage(bare)
       const confirmed = { ...bare, stanzaId: 'archive-late' }
-      await messageCache.saveMessage(confirmed)
+      await messageCache.saveMessage('chat', confirmed)
       await indexMessage(confirmed)
 
       expect(await search('late')).toHaveLength(1)
@@ -1098,11 +1098,11 @@ describe('searchIndex', () => {
 
     it('removes a document keyed by a tier the surviving row absorbed', async () => {
       const bare = createChatMessage('alice@example.com', { id: 'absorbed', body: 'absorbed body' })
-      await messageCache.saveMessage(bare)
+      await messageCache.saveMessage('chat', bare)
       await indexMessage(bare)
       const confirmed = { ...bare, stanzaId: 'archive-absorbed' }
-      await messageCache.saveMessage(confirmed)
-      const [copy] = await messageCache.findChatMessageCopies('alice@example.com', confirmed)
+      await messageCache.saveMessage('chat', confirmed)
+      const [copy] = await messageCache.findMessageCopies('chat', 'alice@example.com', confirmed)
 
       await removeMessage(copy.message, undefined, { ids: copy.ids, identityKeys: copy.identityKeys })
 
@@ -1111,7 +1111,7 @@ describe('searchIndex', () => {
 
     it('keeps another twin that holds a conflicting archive id when a lower rung is dropped', async () => {
       const other = twin('alice@example.com', 'archive-other', 'twin other')
-      await messageCache.saveMessage(other)
+      await messageCache.saveMessage('chat', other)
       await indexMessage(other)
 
       await removeMessage({ ...other, stanzaId: 'archive-mine', body: 'twin mine' })
@@ -1122,8 +1122,8 @@ describe('searchIndex', () => {
     it.each([true, false])('rebuilds a legacy index with completion marker %s', async completed => {
       const first = twin('alice@example.com', 'archive-1', 'twin first')
       const second = twin('alice@example.com', 'archive-2', 'twin second')
-      await messageCache.saveMessage(first)
-      await messageCache.saveMessage(second)
+      await messageCache.saveMessage('chat', first)
+      await messageCache.saveMessage('chat', second)
       await initSearchIndex('test@example.com')
       const db = await openDB('fluux-search-index:test@example.com')
       const tx = db.transaction(['search-tokens', 'search-docs', 'search-meta'], 'readwrite')
@@ -1152,17 +1152,17 @@ describe('searchIndex', () => {
     it.each(['index', 'update', 'remove', 'closure'] as const)(
       'preserves an unpromoted fallback owned by another cached row during %s', async operation => {
         const bare = createChatMessage('alice@example.com', { id: 'reused', body: 'twin original' })
-        await messageCache.saveMessage(bare)
+        await messageCache.saveMessage('chat', bare)
         await indexMessage(bare)
-        await messageCache.saveMessage({ ...bare, stanzaId: 'archive-original' })
+        await messageCache.saveMessage('chat', { ...bare, stanzaId: 'archive-original' })
         const other = { ...bare, stanzaId: 'archive-other', body: 'twin other' }
-        await messageCache.saveMessage(other)
+        await messageCache.saveMessage('chat', other)
 
         if (operation === 'index') await indexMessage(other)
         if (operation === 'update') await updateMessage({ ...other, body: 'twin corrected', isEdited: true })
         if (operation === 'remove') await removeMessage(other)
         if (operation === 'closure') {
-          const [copy] = await messageCache.findChatMessageCopies(other.conversationId, other)
+          const [copy] = await messageCache.findMessageCopies('chat', other.conversationId, other)
           await removeMessage(copy.message, undefined, copy)
         }
 
@@ -1175,10 +1175,10 @@ describe('searchIndex', () => {
       const original = createChatMessage('alice@example.com', {
         id: 'z', [tier === 'promotedOrigin' ? 'originId' : tier]: 'stable-identity', body: 'original text',
       })
-      await messageCache.saveMessage(original)
+      await messageCache.saveMessage('chat', original)
       await indexMessage(original)
-      await messageCache.saveMessage({ ...original, id: 'a', ...(tier === 'promotedOrigin' ? { stanzaId: 'archive' } : {}) })
-      const corrected = await messageCache.applyChatCorrection(original.conversationId, 'a', {
+      await messageCache.saveMessage('chat', { ...original, id: 'a', ...(tier === 'promotedOrigin' ? { stanzaId: 'archive' } : {}) })
+      const corrected = await messageCache.applyCorrection('chat', original.conversationId, 'a', {
         body: 'corrected text', isEdited: true,
       }, { actorJid: original.from })
       expect(corrected?.id).toBe('a')
@@ -1351,8 +1351,8 @@ describe('searchIndex', () => {
         ? createChatMessage('peer@example.com', { id: `m-${i}`, body: 'shared original', timestamp: new Date(i) })
         : createRoomMessage('room@example.com', { id: `m-${i}`, stanzaId: `archive-${i}`, body: 'shared original', timestamp: new Date(i) }))
       const saveRows = async (messages: typeof rows) => {
-        if (kind === 'chat') await messageCache.saveMessages(messages as StoredMessage[])
-        else await messageCache.saveRoomMessages(messages as RoomMessage[])
+        if (kind === 'chat') await messageCache.saveMessages('chat', messages as StoredMessage[])
+        else await messageCache.saveMessages('room', messages as RoomMessage[])
       }
       await saveRows(rows)
       const get = IDBObjectStore.prototype.get, put = IDBObjectStore.prototype.put, remove = IDBObjectStore.prototype.delete
@@ -1403,7 +1403,7 @@ describe('searchIndex', () => {
     await indexMessage(original)
     await indexMessage(current)
     expect(await search('obsolete')).toHaveLength(1)
-    await messageCache.saveRoomMessages([current])
+    await messageCache.saveMessages('room', [current])
     const put = vi.spyOn(IDBObjectStore.prototype, 'put')
     try {
       await indexMessages([original, current])
@@ -1428,8 +1428,8 @@ describe('searchIndex', () => {
         const rows = Array.from({ length: 552 }, (_, i) => kind === 'chat'
           ? createChatMessage('peer@example.com', { id: `m-${String(i).padStart(3, '0')}`, body: 'searchable fixture', timestamp: new Date(i) })
           : createRoomMessage('room@example.com', { id: `m-${String(i).padStart(3, '0')}`, body: 'searchable fixture', timestamp: new Date(i) }))
-        if (kind === 'chat') await messageCache.saveMessages(rows as StoredMessage[])
-        else await messageCache.saveRoomMessages(rows as RoomMessage[])
+        if (kind === 'chat') await messageCache.saveMessages('chat', rows as StoredMessage[])
+        else await messageCache.saveMessages('room', rows as RoomMessage[])
         const resolve = messageCache.resolveMessagesForIndex
         let calls = 0
         const fault = vi.spyOn(messageCache, 'resolveMessagesForIndex').mockImplementation((...args) => {
@@ -1463,21 +1463,21 @@ describe('searchIndex', () => {
         createChatMessage('alice@example.com', { id: 'first', body: 'searchable first' }),
         createChatMessage('alice@example.com', { id: 'second', body: 'searchable second' }),
       ]
-      await messageCache.saveMessages(rows)
+      await messageCache.saveMessages('chat', rows)
       let start!: () => void
       let release!: () => void
       const started = new Promise<void>(resolve => { start = resolve })
       const released = new Promise<void>(resolve => { release = resolve })
       const iterate = messageCache.iterateAllMessages
       let scans = 0
-      const pause = vi.spyOn(messageCache, 'iterateAllMessages').mockImplementation(async (size, batch) => {
-        if (++scans === 1) {
-          await batch([rows[0]])
+      const pause = vi.spyOn(messageCache, 'iterateAllMessages').mockImplementation(async (kind, size, batch) => {
+        if (kind === 'chat' && ++scans === 1) {
+          await batch([rows[0]] as never)
           start()
           await released
-          await batch([rows[1]])
+          await batch([rows[1]] as never)
         } else {
-          await iterate(size, batch)
+          await iterate(kind, size, batch as never)
         }
       })
       const run = (kind: string) => kind === 'backfill' ? backfillFromMessageCache() : rebuildSearchIndex()
@@ -1512,11 +1512,11 @@ describe('searchIndex', () => {
 
     it('should index existing chat messages from messageCache', async () => {
       // Seed messageCache with some messages
-      await messageCache.saveMessage(createChatMessage('alice@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('alice@example.com', {
         id: 'old-chat-1',
         body: 'Historical chat message one',
       }))
-      await messageCache.saveMessage(createChatMessage('bob@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('bob@example.com', {
         id: 'old-chat-2',
         body: 'Historical chat message two',
       }))
@@ -1528,7 +1528,7 @@ describe('searchIndex', () => {
     })
 
     it('should index existing room messages from messageCache', async () => {
-      await messageCache.saveRoomMessage(createRoomMessage('dev@conference.example.com', {
+      await messageCache.saveMessage('room', createRoomMessage('dev@conference.example.com', {
         id: 'old-room-1',
         stanzaId: 'stanza-old-1',
         body: 'Historical room discussion',
@@ -1542,7 +1542,7 @@ describe('searchIndex', () => {
     })
 
     it('should not run twice (idempotent)', async () => {
-      await messageCache.saveMessage(createChatMessage('alice@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('alice@example.com', {
         id: 'backfill-msg',
         body: 'Backfill test message',
       }))
@@ -1551,7 +1551,7 @@ describe('searchIndex', () => {
       expect(await search('backfill')).toHaveLength(1)
 
       // Add another message to messageCache after backfill
-      await messageCache.saveMessage(createChatMessage('alice@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('alice@example.com', {
         id: 'post-backfill-msg',
         body: 'Post backfill only message',
       }))
@@ -1565,11 +1565,11 @@ describe('searchIndex', () => {
     })
 
     it('should handle mixed chat and room messages', async () => {
-      await messageCache.saveMessage(createChatMessage('alice@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('alice@example.com', {
         id: 'mixed-chat',
         body: 'Searchable content in chat',
       }))
-      await messageCache.saveRoomMessage(createRoomMessage('room@conference.example.com', {
+      await messageCache.saveMessage('room', createRoomMessage('room@conference.example.com', {
         id: 'mixed-room',
         stanzaId: 'stanza-mixed',
         body: 'Searchable content in room',
@@ -1609,7 +1609,7 @@ describe('searchIndex', () => {
       expect(await search('directly')).toHaveLength(1)
 
       // Seed messageCache with different messages
-      await messageCache.saveMessage(createChatMessage('bob@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('bob@example.com', {
         id: 'cache-msg',
         body: 'Message from cache only',
       }))
@@ -1625,13 +1625,13 @@ describe('searchIndex', () => {
     })
 
     it('should return total count of messages indexed', async () => {
-      await messageCache.saveMessage(createChatMessage('alice@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('alice@example.com', {
         id: 'count-1', body: 'First message',
       }))
-      await messageCache.saveMessage(createChatMessage('alice@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('alice@example.com', {
         id: 'count-2', body: 'Second message',
       }))
-      await messageCache.saveRoomMessage(createRoomMessage('room@conference.example.com', {
+      await messageCache.saveMessage('room', createRoomMessage('room@conference.example.com', {
         id: 'count-3', stanzaId: 'stanza-count-3', body: 'Third message',
       }))
 
@@ -1641,14 +1641,14 @@ describe('searchIndex', () => {
 
     it('should allow backfill to run again after rebuild', async () => {
       // First backfill
-      await messageCache.saveMessage(createChatMessage('alice@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('alice@example.com', {
         id: 'phase1', body: 'Phase one message',
       }))
       await backfillFromMessageCache()
       expect(await search('phase')).toHaveLength(1)
 
       // Add more messages
-      await messageCache.saveMessage(createChatMessage('alice@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('alice@example.com', {
         id: 'phase2', body: 'Phase two message',
       }))
 
@@ -1677,7 +1677,7 @@ describe('searchIndex', () => {
       // index database.
       const totalMessages = 520
       for (let i = 0; i < totalMessages; i++) {
-        await messageCache.saveMessage(createChatMessage('alice@example.com', {
+        await messageCache.saveMessage('chat', createChatMessage('alice@example.com', {
           id: `bulk-${i}`,
           body: `Searchable bulk message number ${i}`,
           timestamp: new Date(Date.now() - i * 1000),
@@ -1695,7 +1695,7 @@ describe('searchIndex', () => {
     it('should complete when room message count exceeds batch size', async () => {
       const totalMessages = 520
       for (let i = 0; i < totalMessages; i++) {
-        await messageCache.saveRoomMessage(createRoomMessage('dev@conference.example.com', {
+        await messageCache.saveMessage('room', createRoomMessage('dev@conference.example.com', {
           id: `bulk-room-${i}`,
           stanzaId: `stanza-bulk-${i}`,
           body: `Searchable bulk room message ${i}`,
@@ -1711,13 +1711,13 @@ describe('searchIndex', () => {
     })
 
     it('should invoke onProgress callback with indexed count and total', async () => {
-      await messageCache.saveMessage(createChatMessage('alice@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('alice@example.com', {
         id: 'prog-1', body: 'First progress message',
       }))
-      await messageCache.saveMessage(createChatMessage('bob@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('bob@example.com', {
         id: 'prog-2', body: 'Second progress message',
       }))
-      await messageCache.saveRoomMessage(createRoomMessage('room@conference.example.com', {
+      await messageCache.saveMessage('room', createRoomMessage('room@conference.example.com', {
         id: 'prog-3', stanzaId: 'stanza-prog-3', body: 'Third progress message',
       }))
 
@@ -1737,7 +1737,7 @@ describe('searchIndex', () => {
     })
 
     it('should not fail when onProgress is not provided', async () => {
-      await messageCache.saveMessage(createChatMessage('alice@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('alice@example.com', {
         id: 'no-prog', body: 'No progress callback',
       }))
 
@@ -1775,7 +1775,7 @@ describe('searchIndex', () => {
 
       // Seed messageCache with a message after clear
       const messageCache = await import('./messageCache')
-      await messageCache.saveMessage(createChatMessage('alice@example.com', {
+      await messageCache.saveMessage('chat', createChatMessage('alice@example.com', {
         id: 'post-clear',
         body: 'Post clear backfill message',
       }))

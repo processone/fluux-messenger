@@ -190,7 +190,7 @@ describe('XEP-0490 stashed marker lock', () => {
 
   describe('a room', () => {
     it('orders a marker deep in the cached archive, releasing the recount and the publisher', async () => {
-      await messageCache.saveRoomMessages([ANCHOR, DEEP, P0, U1, U2])
+      await messageCache.saveMessages('room', [ANCHOR, DEEP, P0, U1, U2])
       addRoom()
       readRoomUpTo(roomPointerOn(P0), 9)
 
@@ -213,7 +213,7 @@ describe('XEP-0490 stashed marker lock', () => {
     })
 
     it('still lets a genuinely newer marker, ordered from the cache, advance the read pointer', async () => {
-      await messageCache.saveRoomMessages([ANCHOR, P0, U1, U2])
+      await messageCache.saveMessages('room', [ANCHOR, P0, U1, U2])
       addRoom()
       readRoomUpTo(roomPointerOn(P0), 9)
       const { client, cleanup } = await connectWithNode([{ conversationJid: ROOM, stanzaId: P0.stanzaId! }])
@@ -232,7 +232,7 @@ describe('XEP-0490 stashed marker lock', () => {
     })
 
     it('clears a cached marker behind a floor pointer without moving it', async () => {
-      await messageCache.saveRoomMessages([ANCHOR, DEEP, P0, U1, U2])
+      await messageCache.saveMessages('room', [ANCHOR, DEEP, P0, U1, U2])
       addRoom()
       readRoomUpTo(floorPointerOn(P0), 2)
 
@@ -246,7 +246,7 @@ describe('XEP-0490 stashed marker lock', () => {
     })
 
     it('advances a floor pointer to a cached marker ahead of it', async () => {
-      await messageCache.saveRoomMessages([ANCHOR, P0, U1, U2])
+      await messageCache.saveMessages('room', [ANCHOR, P0, U1, U2])
       addRoom()
       readRoomUpTo(floorPointerOn(P0), 2)
 
@@ -260,7 +260,7 @@ describe('XEP-0490 stashed marker lock', () => {
     })
 
     it('resumes the recount once a later marker is ordered, keeping the stash it superseded', async () => {
-      await messageCache.saveRoomMessages([ANCHOR, P0, U1, U2])
+      await messageCache.saveMessages('room', [ANCHOR, P0, U1, U2])
       addRoom([P0, U1, U2])
       readRoomUpTo(roomPointerOn(P0), 9)
       const verdicts = recountVerdicts(ROOM)
@@ -283,7 +283,7 @@ describe('XEP-0490 stashed marker lock', () => {
     })
 
     it('still advances to a superseded stash once it can be ordered and is ahead', async () => {
-      await messageCache.saveRoomMessages([ANCHOR, P0, U1, U2])
+      await messageCache.saveMessages('room', [ANCHOR, P0, U1, U2])
       addRoom([P0, U1, U2])
       readRoomUpTo(roomPointerOn(P0), 9)
       const { client, cleanup } = await connectWithNode([{ conversationJid: ROOM, stanzaId: 's-hole' }])
@@ -300,7 +300,7 @@ describe('XEP-0490 stashed marker lock', () => {
     })
 
     it('keeps holding the publisher and the recount on a current marker nothing can order', async () => {
-      await messageCache.saveRoomMessages([ANCHOR, P0, U1, U2])
+      await messageCache.saveMessages('room', [ANCHOR, P0, U1, U2])
       addRoom()
       readRoomUpTo(roomPointerOn(P0), 9)
       const verdicts = recountVerdicts(ROOM)
@@ -318,13 +318,17 @@ describe('XEP-0490 stashed marker lock', () => {
     })
 
     it('defers a released recount when a new marker becomes pending', async () => {
-      await messageCache.saveRoomMessages([ANCHOR, P0, U1, U2])
+      await messageCache.saveMessages('room', [ANCHOR, P0, U1, U2])
       addRoom([P0, U1, U2])
       readRoomUpTo(roomPointerOn(P0), 9)
       const verdicts = recountVerdicts(ROOM)
       let releaseCount!: (value: { unread: number }) => void
       const count = new Promise<{ unread: number }>((resolve) => { releaseCount = resolve })
-      const countUnread = vi.spyOn(messageCache, 'countRoomUnreadInArchive').mockImplementationOnce(() => count)
+      // One kind-keyed function serves both kinds: only the room kind is held, counted and observed here.
+      const countAny = messageCache.countUnreadInArchive as (...args: unknown[]) => Promise<unknown>
+      const countUnread = vi.fn((...args: unknown[]) => countAny('room', ...args)).mockImplementationOnce(() => count)
+      vi.spyOn(messageCache, 'countUnreadInArchive').mockImplementation(((kind: string, ...args: unknown[]) =>
+        kind === 'room' ? countUnread(...args) : countAny(kind, ...args)) as typeof messageCache.countUnreadInArchive)
 
       const { client, cleanup } = await connectWithNode([{ conversationJid: ROOM, stanzaId: 's-hole' }])
       await vi.waitFor(() => expect(roomMeta()?.pendingRemoteDisplayedStanzaId).toBe('s-hole'), WAIT)
@@ -342,7 +346,7 @@ describe('XEP-0490 stashed marker lock', () => {
     })
 
     it('publishes after a superseding node marker resolves behind the local pointer', async () => {
-      await messageCache.saveRoomMessages([ANCHOR, DEEP, P0, U1, U2])
+      await messageCache.saveMessages('room', [ANCHOR, DEEP, P0, U1, U2])
       addRoom([DEEP, P0, U1, U2])
       readRoomUpTo(roomPointerOn(P0), 2)
 
@@ -384,7 +388,7 @@ describe('XEP-0490 stashed marker lock', () => {
     }
 
     it('orders a marker deep in the cached archive, releasing the recount and the publisher', async () => {
-      await messageCache.saveMessages([C_ANCHOR, C_DEEP, C_P0, C_U1, C_U2])
+      await messageCache.saveMessages('chat', [C_ANCHOR, C_DEEP, C_P0, C_U1, C_U2])
       readChatUpTo(makeReadPointer(C_P0, 'chat'), 9)
 
       const { client, cleanup } = await connectWithNode([{ conversationJid: CID, stanzaId: C_DEEP.stanzaId! }])
@@ -399,7 +403,7 @@ describe('XEP-0490 stashed marker lock', () => {
     })
 
     it('clears a cached marker behind a floor pointer without moving it', async () => {
-      await messageCache.saveMessages([C_ANCHOR, C_DEEP, C_P0, C_U1, C_U2])
+      await messageCache.saveMessages('chat', [C_ANCHOR, C_DEEP, C_P0, C_U1, C_U2])
       readChatUpTo(floorPointerOn(C_P0), 2)
 
       const { cleanup } = await connectWithNode([{ conversationJid: CID, stanzaId: C_DEEP.stanzaId! }])
@@ -412,7 +416,7 @@ describe('XEP-0490 stashed marker lock', () => {
     })
 
     it('advances a floor pointer to a cached marker ahead of it', async () => {
-      await messageCache.saveMessages([C_ANCHOR, C_P0, C_U1, C_U2])
+      await messageCache.saveMessages('chat', [C_ANCHOR, C_P0, C_U1, C_U2])
       readChatUpTo(floorPointerOn(C_P0), 2)
 
       const { cleanup } = await connectWithNode([{ conversationJid: CID, stanzaId: C_U1.stanzaId! }])
@@ -425,7 +429,7 @@ describe('XEP-0490 stashed marker lock', () => {
     })
 
     it('resumes the recount once a later marker is ordered, keeping the stash it superseded', async () => {
-      await messageCache.saveMessages([C_ANCHOR, C_P0, C_U1, C_U2])
+      await messageCache.saveMessages('chat', [C_ANCHOR, C_P0, C_U1, C_U2])
       readChatUpTo(makeReadPointer(C_P0, 'chat'), 9)
       chatStore.setState((state) => ({ messages: new Map(state.messages).set(CID, [C_P0, C_U1, C_U2]) }))
       const { client, cleanup } = await connectWithNode([{ conversationJid: CID, stanzaId: 'c-s-hole' }])

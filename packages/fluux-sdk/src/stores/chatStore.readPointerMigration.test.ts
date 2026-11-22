@@ -22,8 +22,8 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
   return {
     ...actual,
-    getMessage: (conversationId: string, id: string) => (
-      getMessageGate ? getMessageGate(id) : actual.getMessage(conversationId, id)
+    getMessage: (kind: 'chat' | 'room', conversationId: string, id: string) => (
+      getMessageGate ? getMessageGate(id) : actual.getMessage(kind, conversationId, id)
     ),
   }
 })
@@ -45,7 +45,7 @@ beforeEach(async () => {
   // with no open window still writes synchronously. Assertions that instead
   // land inside a burst call `flushThrottledStorage()` before reading.
   _resetForTesting()
-  await messageCache.saveMessages([
+  await messageCache.saveMessages('chat', [
     { type: 'chat', id: 'm1', conversationId: CONV, from: CONV, body: 'a', timestamp: at(1000), isOutgoing: false },
     { type: 'chat', id: 'm2', conversationId: CONV, from: CONV, body: 'b', timestamp: at(2000), isOutgoing: false },
     { type: 'chat', id: 'm3', conversationId: CONV, from: CONV, body: 'c', timestamp: at(3000), isOutgoing: false },
@@ -59,7 +59,7 @@ describe('read pointer migration', () => {
   })
 
   it('keeps the archive identity when the cached row is resolved by id', async () => {
-    await messageCache.updateMessage(CONV, 'm2', { stanzaId: 'archive-m2' }, CONV)
+    await messageCache.updateMessage('chat', CONV, 'm2', { stanzaId: 'archive-m2' }, CONV)
     const p = await migrateReadPointer(CONV, { lastSeenMessageId: 'm2' })
     expect(p).toEqual({
       order: { role: 'exact', timestamp: 2000, tiebreak: { kind: 'chat', id: 'm2' } },
@@ -71,7 +71,7 @@ describe('read pointer migration', () => {
   // here. That is ahead of where the user was, and the pointer is forward-only,
   // so it would destroy the position unrecoverably.
   it('keeps a timestamp-resolved cached row local without moving its order', async () => {
-    await messageCache.updateMessage(CONV, 'm2', { stanzaId: 'archive-m2' }, CONV)
+    await messageCache.updateMessage('chat', CONV, 'm2', { stanzaId: 'archive-m2' }, CONV)
     const p = await migrateReadPointer(CONV, { lastReadAt: at(2500) })
     expect(p).toEqual({
       order: { role: 'exact', timestamp: 2000, tiebreak: { kind: 'chat', id: 'm2' } },
@@ -143,7 +143,7 @@ describe('post-rehydrate readPointer backfill', () => {
   })
 
   it('backfills every restored conversation, whichever legacy field survived', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       { type: 'chat', id: 'o1', conversationId: OTHER, from: OTHER, body: 'x', timestamp: at(1500), isOutgoing: false },
     ] as never)
     persistConversations([
@@ -231,7 +231,7 @@ describe('post-rehydrate readPointer backfill', () => {
   // the time OTHER's pointer lands, CONV's write — correct (none) or wrong — has
   // already flushed.
   it('leaves an existing pointer alone even when the legacy fields point further ahead', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       { type: 'chat', id: 'o1', conversationId: OTHER, from: OTHER, body: 'x', timestamp: at(1500), isOutgoing: false },
     ] as never)
     persistConversations([
@@ -423,7 +423,7 @@ describe('unmigrated legacy read state survives the persist', () => {
     expect(legacyOnDisk(LATE).lastReadAt).toBe(at(1800).toISOString())
 
     // Next launch, with a cache that can answer.
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       { type: 'chat', id: 'late1', conversationId: LATE, from: LATE, body: 'y', timestamp: at(1500), isOutgoing: false },
     ] as never)
 
@@ -605,7 +605,7 @@ describe('catch-up hydration does not fabricate a pointer over un-migrated read 
     await settle()
     expect(pointerOf(LATE)).toBeUndefined()
 
-    await messageCache.saveMessages(archivePage(LATE, 'l', [1500, 2500, 3500]) as never)
+    await messageCache.saveMessages('chat', archivePage(LATE, 'l', [1500, 2500, 3500]) as never)
     await chatStore.getState().recomputeUnreadForConversation(LATE)
 
     expect(pointerOf(LATE)).toBeUndefined()

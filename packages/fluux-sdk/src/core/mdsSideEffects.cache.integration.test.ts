@@ -117,7 +117,7 @@ describe('mdsSideEffects real IndexedDB cache integration', () => {
   })
 
   it('publishes exact chat, conservative chat fallback, and exact room positions from the real cache', async () => {
-    await messageCache.saveMessages([
+    await messageCache.saveMessages('chat', [
       chatMessage(EXACT_CHAT, 'exact-7', 'exact-stanza-7', 7_000),
       chatMessage(FALLBACK_CHAT, 'fallback-3', 'fallback-stanza-3', 3_000),
       chatMessage(FALLBACK_CHAT, 'own-4', undefined, 4_000, true),
@@ -127,7 +127,7 @@ describe('mdsSideEffects real IndexedDB cache integration', () => {
 
     const alice = `${ROOM}/alice`
     const bob = `${ROOM}/bob`
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       roomMessage('shared-id', 'alice-stanza', alice),
       roomMessage('shared-id', 'bob-stanza', bob),
     ])

@@ -25,6 +25,10 @@ import { getRoomModerationId } from '../../utils/roomStanzaId'
 import { findMessageRowIndex, messageRowRef } from '../../utils/messageIdentity'
 import { reconcileRoomMessageSnapshots, resolveRoomMessageSnapshot } from '../../utils/roomMessageSnapshots'
 
+// The kind-keyed archive functions correlate their arguments to `kind` only at the call site, so a
+// wrapper forwarding a spread argument list to the original needs the loosely-typed call signature.
+const forward = <F extends (...args: never[]) => unknown>(fn: F) => fn as unknown as (...args: unknown[]) => ReturnType<F>
+
 const ROOM = 'moderation@conference.example.com'
 const ACCOUNT = 'me@example.com'
 const NS = 'urn:xmpp:mam:2'
@@ -97,7 +101,7 @@ it.each([
   ['live', true], ['MAM', true], ['live', false], ['MAM', false],
 ] as const)('confirms the exact room ID through normal %s ingestion and cache reload with legacy occupant ID %s', async (path, hasOccupantId) => {
   const legacy = { ...original, stanzaId: undefined, occupantId: hasOccupantId ? original.occupantId : undefined }
-  await cache.saveRoomMessage(legacy)
+  await cache.saveMessage('room', legacy)
   roomStore.getState().addRoom(room, [legacy, unrelated])
   roomStore.setState({ activeRoomJid: ROOM })
   const h = harness([{ archiveId: original.stanzaId!, message: liveOriginal() }])
@@ -106,10 +110,10 @@ it.each([
   await vi.waitFor(() => expect(roomStore.getState().messages.get(ROOM)?.find(row => row.stanzaId === original.stanzaId)?.stanzaId).toBe(original.stanzaId))
   const row = roomStore.getState().messages.get(ROOM)!.find(row => row.stanzaId === original.stanzaId)!
   expect(getRoomModerationId(row)).toBe(original.stanzaId)
-  await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!)).toMatchObject({ stanzaId: original.stanzaId }))
+  await vi.waitFor(async () => expect(await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!)).toMatchObject({ stanzaId: original.stanzaId }))
   expect(roomStore.getState().messages.get(ROOM)?.find(row => row.occupantId === unrelated.occupantId)).toEqual(unrelated)
   roomStore.getState().reset()
-  const reloaded = await cache.getRoomMessages(ROOM, {})
+  const reloaded = await cache.getMessages('room', ROOM, {})
   expect(reloaded.find(row => row.stanzaId === original.stanzaId)).toMatchObject({ stanzaId: original.stanzaId })
   expect(h.sendIQ).toHaveBeenCalledTimes(path === 'live' ? 0 : 1)
 })
@@ -117,7 +121,7 @@ it.each([
 describe('legacy identity preservation regressions', () => {
   it.each(['live', 'MAM'] as const)('preserves a missing-occupant legacy row after %s reuses its nickname and client ID', async path => {
     const legacy = { ...original, stanzaId: 'earlier-archive', occupantId: undefined, body: 'Keep ambiguous legacy content' }
-    await cache.saveRoomMessage(legacy)
+    await cache.saveMessage('room', legacy)
     roomStore.getState().addRoom(room, [legacy])
     roomStore.setState({ activeRoomJid: ROOM })
     const h = harness([{ archiveId: original.stanzaId!, message: liveOriginal() }])
@@ -130,7 +134,7 @@ describe('legacy identity preservation regressions', () => {
     expect(getRoomModerationId(resident.find(row => row.occupantId === original.occupantId)!)).toBe(original.stanzaId)
     h.chat.handle(signal())
     await vi.waitFor(async () => {
-      const cached = await cache.getRoomMessages(ROOM, {})
+      const cached = await cache.getMessages('room', ROOM, {})
       expect(cached).toHaveLength(2)
       expect(cached.find(row => !row.occupantId)).toMatchObject({ body: legacy.body })
       expect(cached.find(row => !row.occupantId)?.isRetracted).not.toBe(true)
@@ -147,7 +151,7 @@ describe('legacy identity preservation regressions', () => {
 
   it.each([0, 1])('preserves cached legacy content when normal MAM loads a v%s Spam tombstone', async version => {
     const legacy = { ...original, id: 'legacy-client', stanzaId: 'earlier-archive', body: 'Keep tombstone collision' }
-    await cache.saveRoomMessage(legacy)
+    await cache.saveMessage('room', legacy)
     roomStore.getState().addRoom(room, [legacy])
     const archived = archivedTombstone(version)
     const tombstone = xml('message', archived.attrs, ...archived.children,
@@ -155,15 +159,15 @@ describe('legacy identity preservation regressions', () => {
     const h = harness([{ archiveId: original.stanzaId!, message: tombstone }])
     await h.mam.queryRoomArchive({ roomJid: ROOM, max: 1, before: '' })
     await vi.waitFor(async () => {
-      const cached = await cache.getRoomMessages(ROOM, {})
+      const cached = await cache.getMessages('room', ROOM, {})
       expect(cached).toHaveLength(2)
       expect(cached.find(row => row.id === legacy.id)).toMatchObject({ body: legacy.body })
       expect(cached.find(row => row.id === legacy.id)?.isRetracted).not.toBe(true)
       expect(cached.find(row => row.id === original.id)).toMatchObject({ body: '', isRetracted: true, moderationReason: 'Spam' })
       expect(getRoomModerationId(cached.find(row => row.id === original.id)!)).toBe(original.stanzaId)
     })
-    await cache.saveRoomMessage(legacy)
-    expect((await cache.getRoomMessages(ROOM, {})).find(row => row.id === legacy.id)?.body).toBe(legacy.body)
+    await cache.saveMessage('room', legacy)
+    expect((await cache.getMessages('room', ROOM, {})).find(row => row.id === legacy.id)?.body).toBe(legacy.body)
     expect(h.sendIQ).toHaveBeenCalledTimes(1)
   })
 
@@ -172,10 +176,10 @@ describe('legacy identity preservation regressions', () => {
     const spam = { ...original, body: '', isRetracted: true, isModerated: true, moderationReason: 'Spam' }
     roomStore.getState().addRoom(room, path === 'resident' ? [spam] : [])
     let result: RoomMessage[]
-    if (path === 'resident') result = await cache.reconcileRoomHistoryMessages([legacy, spam], () => [spam])
+    if (path === 'resident') result = await cache.reconcileHistoryMessages('room', [legacy, spam], () => [spam])
     else {
-      expect(await cache.saveRoomMessages([legacy, spam])).toBe(true)
-      if (path === 'batch') result = await cache.reconcileRoomHistoryMessages([legacy, spam], () => [])
+      expect(await cache.saveMessages('room', [legacy, spam])).toBe(true)
+      if (path === 'batch') result = await cache.reconcileHistoryMessages('room', [legacy, spam], () => [])
       else {
         await roomStore.getState().loadMessagesFromCache(ROOM)
         result = roomStore.getState().messages.get(ROOM)!
@@ -191,14 +195,14 @@ describe('legacy identity preservation regressions', () => {
     const legacy = { ...original, id: 'legacy-client', stanzaId: 'earlier-archive', body: 'Preserved searchable legacy' }
     roomStore.getState().addRoom(room, [legacy])
     const rows = order === 'legacy-first' ? [legacy, original] : [original, legacy]
-    await cache.saveRoomMessages(rows)
+    await cache.saveMessages('room', rows)
     await searchIndex.indexMessages(rows)
     expect(await searchIndex.search('searchable')).toHaveLength(1)
     expect(await searchIndex.search('Original')).toHaveLength(1)
     const h = harness([])
     h.chat.handle(signal())
-    await vi.waitFor(async () => expect((await cache.getRoomMessages(ROOM, {})).find(row => row.id === original.id)?.isRetracted).toBe(true))
-    const spam = (await cache.getRoomMessages(ROOM, {})).find(row => row.id === original.id)!
+    await vi.waitFor(async () => expect((await cache.getMessages('room', ROOM, {})).find(row => row.id === original.id)?.isRetracted).toBe(true))
+    const spam = (await cache.getMessages('room', ROOM, {})).find(row => row.id === original.id)!
     await searchIndex.removeMessage(spam)
     expect(await searchIndex.search('searchable')).toEqual([expect.objectContaining({ messageId: legacy.id, body: legacy.body })])
     expect(await searchIndex.search('Original')).toEqual([])
@@ -215,27 +219,27 @@ describe('confirmation boundary regressions', () => {
   it('restores the exact archived row when client and occupant IDs are reused', async () => {
     const second = { ...original, stanzaId: 'second-archive', timestamp: new Date(2000) }
 
-    await cache.saveRoomMessages([original, second])
+    await cache.saveMessages('room', [original, second])
     const anchor = { id: second.id, occupantId: second.occupantId, stanzaId: second.stanzaId }
-    const restored = await cache.getRoomMessagesAround(ROOM, anchor, { before: 0, after: 0 })
+    const restored = await cache.getMessagesAround('room', ROOM, anchor, { before: 0, after: 0 })
     expect(restored.map(message => message.stanzaId)).toEqual([second.stanzaId])
-    const missing = await cache.getRoomMessagesAround(ROOM, { ...anchor, stanzaId: 'missing' }, { before: 0, after: 0 })
+    const missing = await cache.getMessagesAround('room', ROOM, { ...anchor, stanzaId: 'missing' }, { before: 0, after: 0 })
     expect(missing).toEqual([])
   })
 
   it.each(['live', 'MAM', 'cache'].flatMap(path => ['earlier-archive'].map(stanzaId => [path, stanzaId] as const)))(
   'keeps an uncorroborated legacy row separate during %s confirmation with prior ID %s', async (path, stanzaId) => {
     const legacy = { ...original, stanzaId, occupantId: undefined, body: 'Keep uncorroborated content' }
-    await cache.saveRoomMessage(legacy)
+    await cache.saveMessage('room', legacy)
     roomStore.getState().addRoom(room, path === 'cache' ? [] : [legacy])
     roomStore.setState({ activeRoomJid: ROOM })
     const h = harness([{ archiveId: original.stanzaId!, message: liveOriginal() }])
-    if (path === 'cache') await cache.saveRoomMessage(original)
+    if (path === 'cache') await cache.saveMessage('room', original)
     else if (path === 'live') h.chat.handle(liveOriginal())
     else await h.mam.queryRoomArchive({ roomJid: ROOM, max: 1, before: '' })
     await roomStore.getState().waitForMessageArrivals(ROOM)
     await vi.waitFor(async () => {
-      const stored = await cache.getRoomMessages(ROOM, {})
+      const stored = await cache.getMessages('room', ROOM, {})
       expect(stored).toHaveLength(2)
       const retained = stored.find(message => !message.occupantId)!
       expect(retained).toMatchObject({ body: legacy.body, stanzaId })
@@ -244,7 +248,7 @@ describe('confirmation boundary regressions', () => {
     })
     h.chat.handle(signal())
     await vi.waitFor(async () => {
-      const stored = await cache.getRoomMessages(ROOM, {})
+      const stored = await cache.getMessages('room', ROOM, {})
       expect(stored.find(message => !message.occupantId)).toMatchObject({ body: legacy.body })
       expect(stored.find(message => !message.occupantId)?.isRetracted).not.toBe(true)
       expect(stored.find(message => message.occupantId === original.occupantId)).toMatchObject({ body: '', isRetracted: true, moderationReason: 'Spam' })
@@ -262,7 +266,7 @@ describe('confirmation boundary regressions', () => {
   'retains pending Spam on the surviving %s duplicate with prior ID %s', async (path, stanzaId) => {
     const legacy = { ...original, stanzaId }
     const uncertain = { ...original, id: 'uncertain-client', stanzaId: 'other-archive', occupantId: 'uncertain-author', body: 'Keep uncertain companion' }
-    await cache.saveRoomMessages([legacy, uncertain])
+    await cache.saveMessages('room', [legacy, uncertain])
     roomStore.getState().addRoom(room, [legacy, uncertain])
     roomStore.setState({ activeRoomJid: ROOM })
     const h = harness([{ archiveId: original.stanzaId!, message: liveOriginal() }])
@@ -283,7 +287,7 @@ describe('confirmation boundary regressions', () => {
     expect(snapshots[0]).toMatchObject({ body: '', isRetracted: true, moderationReason: 'Spam' })
     expect(snapshots[1]).toMatchObject({ body: uncertain.body })
     await vi.waitFor(async () => {
-      const stored = await cache.getRoomMessages(ROOM, {})
+      const stored = await cache.getMessages('room', ROOM, {})
       expect(stored.find(message => message.id === original.id)).toMatchObject({ body: '', isRetracted: true, moderationReason: 'Spam' })
       expect(stored.find(message => message.id === uncertain.id)?.body).toBe(uncertain.body)
     })
@@ -293,11 +297,11 @@ describe('confirmation boundary regressions', () => {
   it('preserves the legacy anchor through cache load-around beside confirmed Spam', async () => {
     const spam = { ...original, body: '', isRetracted: true, isModerated: true, moderationReason: 'Spam' }
     const legacy = { ...original, id: 'legacy-anchor', stanzaId: 'earlier-archive', body: 'Keep anchor content', timestamp: new Date(2000) }
-    await cache.saveRoomMessages([spam, legacy])
+    await cache.saveMessages('room', [spam, legacy])
     roomStore.getState().addRoom(room, [])
     const h = harness([])
     const anchor = { id: legacy.id, occupantId: legacy.occupantId }
-    for (const messages of [await cache.getRoomMessagesAround(ROOM, anchor),
+    for (const messages of [await cache.getMessagesAround('room', ROOM, anchor),
       await roomStore.getState().loadMessagesAroundFromCache(ROOM, anchor)]) {
       expect(messages).toHaveLength(2)
       expect(messages.find(message => message.id === legacy.id)).toMatchObject({ body: legacy.body })
@@ -312,24 +316,24 @@ describe('confirmation boundary regressions', () => {
     const legacy = { ...original, stanzaId: undefined,
       originId: 'retained-origin', correctionStanzaIds: ['retained-correction'] }
     const spam = { ...unrelated, body: '', isRetracted: true, isModerated: true, moderationReason: 'Spam' }
-    await cache.saveRoomMessages([legacy, spam])
+    await cache.saveMessages('room', [legacy, spam])
     roomStore.getState().addRoom(room, path === 'cache' ? [] : [legacy])
     roomStore.setState({ activeRoomJid: ROOM })
     const h = harness([{ archiveId: original.stanzaId!, message: liveOriginal() }])
-    if (path === 'cache') await cache.saveRoomMessage(original)
+    if (path === 'cache') await cache.saveMessage('room', original)
     else if (path === 'live') h.chat.handle(liveOriginal())
     else await h.mam.queryRoomArchive({ roomJid: ROOM, max: 1, before: '' })
     await roomStore.getState().waitForMessageArrivals(ROOM)
-    await vi.waitFor(async () => expect(await cache.getRoomMessage(ROOM, original.id, original.from, original.occupantId))
+    await vi.waitFor(async () => expect(await cache.getMessage('room', ROOM, original.id, original.from, original.occupantId))
       .toMatchObject({ stanzaId: original.stanzaId, body: original.body }))
-    expect(await cache.getRoomMessageByReference(ROOM, spam.stanzaId!, spam.from))
+    expect(await cache.getMessageByReference('room', ROOM, spam.stanzaId!, spam.from))
       .toMatchObject({ id: spam.id, body: '', isRetracted: true, moderationReason: 'Spam' })
     for (const reference of [original.stanzaId!, original.id, 'retained-origin', 'retained-correction']) {
-      const resolved = await cache.getRoomMessageByReference(ROOM, reference, original.from)
+      const resolved = await cache.getMessageByReference('room', ROOM, reference, original.from)
       expect(resolved).toMatchObject({ id: original.id, stanzaId: original.stanzaId, body: original.body })
       expect(resolved?.isRetracted).not.toBe(true)
     }
-    expect(await cache.getRoomMessages(ROOM, {})).toHaveLength(2)
+    expect(await cache.getMessages('room', ROOM, {})).toHaveLength(2)
     expect(h.sendIQ).toHaveBeenCalledTimes(path === 'MAM' ? 1 : 0)
   })
 })
@@ -341,7 +345,7 @@ describe('room archive identity persistence', () => {
     h.chat.handle(liveOriginal())
     await roomStore.getState().waitForMessageArrivals(ROOM)
     const row = roomStore.getState().getMessage(ROOM, original.stanzaId!)!
-    await vi.waitFor(async () => expect(await cache.getRoomMessage(ROOM, row.id)).not.toBeNull())
+    await vi.waitFor(async () => expect(await cache.getMessage('room', ROOM, row.id)).not.toBeNull())
     expect(getRoomModerationId(row)).toBe(original.stanzaId)
     return { h, row }
   }
@@ -350,15 +354,15 @@ describe('room archive identity persistence', () => {
     const { row } = await confirmed()
     expect(getRoomModerationId({ ...row, roomJid: 'other@conference.example.com' })).toBeUndefined()
     setStorageScopeJid('other@example.com')
-    expect(await cache.getRoomMessages(ROOM, {})).toEqual([])
+    expect(await cache.getMessages('room', ROOM, {})).toEqual([])
     expect(getRoomModerationId(row, ACCOUNT)).toBeUndefined()
     setStorageScopeJid(ACCOUNT)
-    expect(getRoomModerationId((await cache.getRoomMessages(ROOM, {}))[0])).toBe(row.stanzaId)
+    expect(getRoomModerationId((await cache.getMessages('room', ROOM, {}))[0])).toBe(row.stanzaId)
   })
 
   it('retains the room ID through duplicate hydration and renamed authors', async () => {
     const { h, row } = await confirmed()
-    await cache.saveRoomMessage({ ...row })
+    await cache.saveMessage('room', { ...row })
     roomStore.getState().reset()
     roomStore.getState().addRoom(room, [])
     await roomStore.getState().loadMessagesFromCache(ROOM)
@@ -375,7 +379,7 @@ describe('room archive identity persistence', () => {
     else h.emitEvent('room:message-updated', { roomJid: ROOM, messageId: row.id, updates: { stanzaId: 'replacement-id' } })
     h.emitEvent('room:message-updated', { roomJid: ROOM, messageId: row.id, updates: { stanzaId: row.stanzaId } })
     expect(getRoomModerationId(roomStore.getState().getMessage(ROOM, row.id)!)).toBe(row.stanzaId)
-    await vi.waitFor(async () => expect(await cache.getRoomMessage(ROOM, row.id)).not.toHaveProperty('stanzaIdAuthority'))
+    await vi.waitFor(async () => expect(await cache.getMessage('room', ROOM, row.id)).not.toHaveProperty('stanzaIdAuthority'))
     expect(h.sendIQ).not.toHaveBeenCalled()
   })
 
@@ -386,9 +390,9 @@ describe('room archive identity persistence', () => {
       occupantId: tier !== 'origin' ? 'other-author' : row.occupantId,
       ...(tier === 'origin' ? { originId: 'shared-origin' } : {}),
     }
-    if (tier === 'origin') await cache.saveRoomMessage({ ...row, originId: 'shared-origin' })
-    await cache.saveRoomMessage(collision)
-    const cached = await cache.getRoomMessages(ROOM, {})
+    if (tier === 'origin') await cache.saveMessage('room', { ...row, originId: 'shared-origin' })
+    await cache.saveMessage('room', collision)
+    const cached = await cache.getMessages('room', ROOM, {})
     expect(cached).toHaveLength(2)
     expect(getRoomModerationId(cached.find(m => m.body === collision.body)!)).toBe(collision.stanzaId)
     expect(getRoomModerationId(cached.find(m => m.body === row.body)!)).toBe(row.stanzaId)
@@ -397,17 +401,17 @@ describe('room archive identity persistence', () => {
 
   it('preserves both rows when their known authors conflict', async () => {
     const legacy = { ...original,  id: 'legacy-client', occupantId: 'legacy-author', body: 'Legacy visible content' }
-    await cache.saveRoomMessage(legacy)
+    await cache.saveMessage('room', legacy)
     roomStore.getState().addRoom(room, [legacy])
     const h = harness([])
     h.chat.handle(liveOriginal())
     await roomStore.getState().waitForMessageArrivals(ROOM)
-    await vi.waitFor(async () => expect(await cache.getRoomMessages(ROOM, {})).toHaveLength(2))
-    const cached = await cache.getRoomMessages(ROOM, {})
+    await vi.waitFor(async () => expect(await cache.getMessages('room', ROOM, {})).toHaveLength(2))
+    const cached = await cache.getMessages('room', ROOM, {})
     expect(cached.find(row => row.id === legacy.id)).toMatchObject({ body: legacy.body, stanzaId: legacy.stanzaId })
     expect(getRoomModerationId(cached.find(row => row.id === legacy.id)!)).toBe(legacy.stanzaId)
     expect(getRoomModerationId(cached.find(row => row.id === original.id)!)).toBe(original.stanzaId)
-    expect(await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!)).toBeNull()
+    expect(await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!)).toBeNull()
     expect(h.sendIQ).not.toHaveBeenCalled()
   })
 
@@ -420,7 +424,7 @@ describe('room archive identity persistence', () => {
     // cache order key's — archive id, which is total and therefore stable —
     // rather than arrival order.
     expect(roomStore.getState().messages.get(ROOM)?.map(message => getRoomModerationId(message))).toEqual(['next-archive', row.stanzaId])
-    await vi.waitFor(async () => expect(await cache.getRoomMessages(ROOM, {})).toHaveLength(2))
+    await vi.waitFor(async () => expect(await cache.getMessages('room', ROOM, {})).toHaveLength(2))
     expect(h.sendIQ).not.toHaveBeenCalled()
   })
 })
@@ -428,19 +432,19 @@ describe('room archive identity persistence', () => {
 it.each(['resident', 'cached', 'pending'].flatMap(path => ['different', 'missing', 'same'].map(author => [path, author] as const)))('preserves a different archive entry during %s incoming moderation with %s author identity', async (path, author) => {
   const occupantId = author === 'same' ? original.occupantId : author === 'different' ? 'legacy-author' : undefined
   const legacy = { ...original, stanzaId: 'earlier-archive', id: 'legacy-client', occupantId, body: 'Keep uncertain history' }
-  await cache.saveRoomMessage(legacy)
+  await cache.saveMessage('room', legacy)
   roomStore.getState().addRoom({ ...room, lastMessage: legacy }, path === 'cached' ? [] : [legacy])
   const h = harness([])
   if (path !== 'pending') {
     h.chat.handle(liveOriginal())
     await roomStore.getState().waitForMessageArrivals(ROOM)
-    await vi.waitFor(async () => expect(await cache.getRoomMessages(ROOM, {})).toHaveLength(2))
+    await vi.waitFor(async () => expect(await cache.getMessages('room', ROOM, {})).toHaveLength(2))
     if (path === 'cached') roomStore.setState({ messages: new Map([[ROOM, []]]) })
   }
 
   h.chat.handle(signal())
   await vi.waitFor(async () => {
-    const cached = await cache.getRoomMessages(ROOM, {})
+    const cached = await cache.getMessages('room', ROOM, {})
     expect(cached.find(row => row.id === legacy.id)).toMatchObject({ body: legacy.body })
     expect(cached.find(row => row.id === legacy.id)?.isRetracted).not.toBe(true)
     if (path !== 'pending') expect(cached.find(row => row.id === original.id)?.isRetracted).toBe(true)
@@ -450,10 +454,10 @@ it.each(['resident', 'cached', 'pending'].flatMap(path => ['different', 'missing
     expect(roomStore.getState().messages.get(ROOM)?.find(row => row.id === legacy.id)?.isRetracted).not.toBe(true)
     h.chat.handle(liveOriginal())
     await roomStore.getState().waitForMessageArrivals(ROOM)
-    await vi.waitFor(async () => expect((await cache.getRoomMessages(ROOM, {})).find(row => row.id === original.id)?.isRetracted).toBe(true))
+    await vi.waitFor(async () => expect((await cache.getMessages('room', ROOM, {})).find(row => row.id === original.id)?.isRetracted).toBe(true))
   }
-  await cache.saveRoomMessage(legacy)
-  const cached = await cache.getRoomMessages(ROOM, {})
+  await cache.saveMessage('room', legacy)
+  const cached = await cache.getMessages('room', ROOM, {})
   expect(cached.find(row => row.id === legacy.id)).toMatchObject({ body: legacy.body })
   expect(cached.find(row => row.id === legacy.id)?.isRetracted).not.toBe(true)
   const residents = roomStore.getState().messages.get(ROOM) ?? []
@@ -475,7 +479,7 @@ async function invoke(h: ReturnType<typeof harness>, path: 'search' | 'correctio
 
 it.each([0, 1])('uses the room MAM identity instead of a foreign stanza ID for a v%s tombstone', async version => {
   roomStore.getState().addRoom(room, [original, unrelated])
-  await cache.saveRoomMessages([original, unrelated])
+  await cache.saveMessages('room', [original, unrelated])
   const moderated = xml('moderated', { xmlns: `urn:xmpp:message-moderate:${version}`, by: `${ROOM}/Admin` })
   const retracted = xml('retracted', { xmlns: `urn:xmpp:message-retract:${version}`, stamp: '2026-09-11T08:00:00Z' })
   const tombstone = version === 1
@@ -487,26 +491,26 @@ it.each([0, 1])('uses the room MAM identity instead of a foreign stanza ID for a
   const result = await h.mam.queryRoomArchive({ roomJid: ROOM, max: 1, before: '' })
   expect(result.messages[0]).toMatchObject({ stanzaId: original.stanzaId, isModerated: true, moderationReason: 'Spam' })
   expect(roomStore.getState().messages.get(ROOM)?.find(row => row.stanzaId === unrelated.stanzaId)).toEqual(unrelated)
-  await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))
+  await vi.waitFor(async () => expect(await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!))
     .toMatchObject({ body: '', isRetracted: true, isModerated: true, moderationReason: 'Spam' }))
-  expect(await cache.getRoomMessageByStanzaId(ROOM, unrelated.stanzaId!)).toMatchObject({ body: unrelated.body })
-  expect((await cache.getRoomMessageByStanzaId(ROOM, unrelated.stanzaId!))?.isRetracted).not.toBe(true)
+  expect(await cache.getMessageByStanzaId('room', ROOM, unrelated.stanzaId!)).toMatchObject({ body: unrelated.body })
+  expect((await cache.getMessageByStanzaId('room', ROOM, unrelated.stanzaId!))?.isRetracted).not.toBe(true)
   expect(h.sendIQ).toHaveBeenCalledTimes(1)
 })
 
 describe.each(['search', 'correction'] as const)('%s MAM moderation', path => {
   it.each([true, false])('propagates a verified dual-version signal to storage (resident: %s)', async resident => {
     roomStore.getState().addRoom(room, resident ? [original, unrelated] : [unrelated])
-    await cache.saveRoomMessages([original, unrelated])
+    await cache.saveMessages('room', [original, unrelated])
     const h = harness([{ archiveId: 'moderation-event', message: signal() }])
     await invoke(h, path)
     expect(h.emit).toHaveBeenCalledWith('room:message-updated', expect.objectContaining({ roomJid: ROOM, messageId: original.stanzaId,
       updates: expect.objectContaining({ isRetracted: true, isModerated: true, moderationReason: 'Spam', moderatedBy: 'Admin' }) }))
-    await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))
+    await vi.waitFor(async () => expect(await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!))
       .toMatchObject({ body: '', isRetracted: true, isModerated: true, moderationReason: 'Spam' }))
     if (resident) expect(roomStore.getState().messages.get(ROOM)?.find(row => row.id === original.id))
       .toMatchObject({ isRetracted: true, isModerated: true, moderationReason: 'Spam' })
-    expect(await cache.getRoomMessageByStanzaId(ROOM, unrelated.stanzaId!)).toMatchObject({ body: unrelated.body })
+    expect(await cache.getMessageByStanzaId('room', ROOM, unrelated.stanzaId!)).toMatchObject({ body: unrelated.body })
     expect(h.sendIQ).toHaveBeenCalledTimes(1)
   })
 
@@ -516,32 +520,32 @@ describe.each(['search', 'correction'] as const)('%s MAM moderation', path => {
     { from: ROOM, type: 'chat' },
   ])('rejects an unauthorized moderation sender %j', async ({ from, type }) => {
     roomStore.getState().addRoom(room, [original])
-    await cache.saveRoomMessage(original)
+    await cache.saveMessage('room', original)
     const h = harness([{ archiveId: 'forged-event', message: signal(from, type) }])
     await invoke(h, path, false)
     expect(h.emit.mock.calls.filter(([event]) => event === 'room:message-updated' || event === 'room:retraction-pending')).toEqual([])
     expect(roomStore.getState().messages.get(ROOM)).toEqual([original])
-    expect(await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!)).toMatchObject({ body: original.body })
-    expect((await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
+    expect(await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!)).toMatchObject({ body: original.body })
+    expect((await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
     expect(h.sendIQ).toHaveBeenCalledTimes(path === 'search' ? 1 : 2)
   })
 })
 
 it('keeps room archive search from propagating unrelated author mutations', async () => {
   roomStore.getState().addRoom(room, [original])
-  await cache.saveRoomMessage(original)
+  await cache.saveMessage('room', original)
   const h = harness([{ archiveId: 'ordinary-retraction', message: xml('message', { from: original.from, type: 'groupchat' },
     xml('retract', { xmlns: 'urn:xmpp:message-retract:1', id: original.stanzaId! })) }])
   await h.mam.searchRoomArchive({ roomJid: ROOM, query: 'body' })
   expect(h.emit.mock.calls.filter(([event]) => event === 'room:message-updated' || event === 'room:retraction-pending')).toEqual([])
   expect(roomStore.getState().messages.get(ROOM)).toEqual([original])
-  expect((await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
+  expect((await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
 })
 
 
 it('discards collected moderation when the account changes before MAM completion', async () => {
   roomStore.getState().addRoom(room, [original])
-  await cache.saveRoomMessage(original)
+  await cache.saveMessage('room', original)
   const h = harness([{ archiveId: 'moderation-event', message: signal() }])
   const respond = h.sendIQ.getMockImplementation()!
   let complete!: () => void
@@ -550,13 +554,13 @@ it('discards collected moderation when the account changes before MAM completion
   const query = h.mam.searchRoomArchive({ roomJid: ROOM, query: 'body' })
   const rejected = expect(query).rejects.toMatchObject({ name: 'AbortError' })
   setStorageScopeJid('other@example.com')
-  await cache.saveRoomMessage(original)
+  await cache.saveMessage('room', original)
   complete()
   await rejected
   expect(h.emit).not.toHaveBeenCalled()
-  expect((await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
+  expect((await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
   setStorageScopeJid(ACCOUNT)
-  expect((await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
+  expect((await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
   expect(h.sendIQ).toHaveBeenCalledTimes(1)
 })
 
@@ -571,7 +575,7 @@ it('removes the content of a resident row an archived tombstone names only by it
   const echo: RoomMessage = { ...original, id: 'local-client', stanzaId: undefined, originId: 'shared-origin' }
   roomStore.getState().addRoom(room, [echo])
   roomStore.setState({ activeRoomJid: ROOM })
-  await cache.saveRoomMessages([echo])
+  await cache.saveMessages('room', [echo])
   const h = harness([{ archiveId: original.stanzaId!, message: xml('message', { from: original.from, type: 'groupchat', id: 'rewritten-client' },
     xml('retracted', { xmlns: 'urn:xmpp:message-retract:1', stamp: '2026-09-11T08:00:00Z' },
       xml('moderated', { xmlns: 'urn:xmpp:message-moderate:1', by: `${ROOM}/Admin` }), xml('reason', {}, 'Spam')),
@@ -584,7 +588,7 @@ it('removes the content of a resident row an archived tombstone names only by it
   expect(resident.filter(row => row.body === original.body)).toEqual([])
   expect(resident).toHaveLength(1)
   expect(resident[0]).toMatchObject({ originId: 'shared-origin', isRetracted: true, moderationReason: 'Spam' })
-  await vi.waitFor(async () => expect((await cache.getRoomMessages(ROOM, {})).filter(row => row.body === original.body)).toEqual([]))
+  await vi.waitFor(async () => expect((await cache.getMessages('room', ROOM, {})).filter(row => row.body === original.body)).toEqual([]))
 })
 
 function archivedTombstone(version = 1, from = original.from, type = 'groupchat') {
@@ -599,7 +603,7 @@ function archivedTombstone(version = 1, from = original.from, type = 'groupchat'
 
 it('uses the ingested room archive identity for an actual removal request', async () => {
   roomStore.getState().addRoom(room, [unrelated])
-  await cache.saveRoomMessage(unrelated)
+  await cache.saveMessage('room', unrelated)
   const h = harness([{ archiveId: original.stanzaId!, message: archivedOriginal() }])
   const result = await h.mam.queryRoomArchive({ roomJid: ROOM, max: 1, before: '' })
   const target = result.messages[0]
@@ -609,9 +613,9 @@ it('uses the ingested room archive identity for an actual removal request', asyn
   expect(request.attrs.to).toBe(ROOM)
   expect(request.getChild('moderate', 'urn:xmpp:message-moderate:1')?.attrs.id).toBe(original.stanzaId)
   expect(roomStore.getState().messages.get(ROOM)?.find(row => row.stanzaId === unrelated.stanzaId)).toEqual(unrelated)
-  await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))
+  await vi.waitFor(async () => expect(await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!))
     .toMatchObject({ isRetracted: true, moderationReason: 'Spam' }))
-  expect((await cache.getRoomMessageByStanzaId(ROOM, unrelated.stanzaId!))?.isRetracted).not.toBe(true)
+  expect((await cache.getMessageByStanzaId('room', ROOM, unrelated.stanzaId!))?.isRetracted).not.toBe(true)
 })
 
 it.each([false, true])('accepts only room-owned IDs in live room ingestion (room ID: %s)', roomId => {
@@ -647,7 +651,7 @@ async function invokeRoom(h: ReturnType<typeof harness>, path: RoomPath, accepte
 describe.each(paths)('%s room MAM consumer', path => {
   it.each(['broadcast', 'v0 tombstone', 'v1 tombstone'])('propagates %s before publishing content', async form => {
     roomStore.getState().addRoom(room, path === 'byId' ? [unrelated] : [original, unrelated])
-    await cache.saveRoomMessages([original, unrelated])
+    await cache.saveMessages('room', [original, unrelated])
     const h = harness([
       { archiveId: original.stanzaId!, message: archivedOriginal() },
       { archiveId: form === 'broadcast' ? 'moderation-event' : original.stanzaId!,
@@ -656,9 +660,9 @@ describe.each(paths)('%s room MAM consumer', path => {
     const result = await invokeRoom(h, path)
     expect(h.emit).toHaveBeenCalledWith('room:message-updated', expect.objectContaining({ roomJid: ROOM, messageId: original.stanzaId,
       updates: expect.objectContaining({ isRetracted: true, isModerated: true, moderationReason: 'Spam' }) }))
-    await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))
+    await vi.waitFor(async () => expect(await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!))
       .toMatchObject({ body: '', isRetracted: true, moderationReason: 'Spam' }))
-    expect((await cache.getRoomMessageByStanzaId(ROOM, unrelated.stanzaId!))?.isRetracted).not.toBe(true)
+    expect((await cache.getMessageByStanzaId('room', ROOM, unrelated.stanzaId!))?.isRetracted).not.toBe(true)
     if (path === 'query' || path === 'byId') {
       expect(result.length).toBeGreaterThan(0)
       expect(result.every(row => row.isRetracted && row.moderationReason === 'Spam')).toBe(true)
@@ -672,7 +676,7 @@ describe.each(paths)('%s room MAM consumer', path => {
 
   it.each(['broadcast', 'tombstone'])('discards buffered %s after an account switch', async form => {
     roomStore.getState().addRoom(room, path === 'byId' ? [] : [original])
-    await cache.saveRoomMessage(original)
+    await cache.saveMessage('room', original)
     const h = harness([{ archiveId: original.stanzaId!, message: form === 'broadcast' ? signal() : archivedTombstone() }])
     const respond = h.sendIQ.getMockImplementation()!
     let complete!: () => void
@@ -682,15 +686,15 @@ describe.each(paths)('%s room MAM consumer', path => {
     await vi.waitFor(() => expect(h.sendIQ).toHaveBeenCalledTimes(1))
     const earlyMutations = h.emit.mock.calls.filter(([event]) => event !== 'room:history-loading')
     setStorageScopeJid('other@example.com')
-    await cache.saveRoomMessage(original)
+    await cache.saveMessage('room', original)
     complete()
     await query
     expect(earlyMutations).toEqual([])
     expect(h.emit.mock.calls.filter(([event]) => event !== 'room:history-loading')).toEqual([])
     expect(h.stores.room.updateLastMessagePreview).not.toHaveBeenCalled()
-    expect((await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
+    expect((await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
     setStorageScopeJid(ACCOUNT)
-    expect((await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
+    expect((await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
     expect(h.sendIQ).toHaveBeenCalledTimes(1)
   })
 
@@ -701,11 +705,11 @@ describe.each(paths)('%s room MAM consumer', path => {
     { form: 'tombstone', from: original.from, type: 'chat' },
   ])('rejects untrusted moderation %j', async ({ form, from, type }) => {
     roomStore.getState().addRoom(room, path === 'byId' ? [] : [original])
-    await cache.saveRoomMessage(original)
+    await cache.saveMessage('room', original)
     const h = harness([{ archiveId: 'forged-event', message: form === 'broadcast' ? signal(from, type) : archivedTombstone(1, from, type) }])
     await invokeRoom(h, path, false)
     expect(h.emit.mock.calls.filter(([event]) => event === 'room:message-updated' || event === 'room:retraction-pending')).toEqual([])
-    expect((await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
+    expect((await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!))?.isRetracted).not.toBe(true)
     // The lookup by id pages to the id's predecessor, then past it: a forged entry is never its answer.
     expect(h.sendIQ).toHaveBeenCalledTimes(path === 'correction' || path === 'byId' ? 2 : 1)
   })
@@ -741,17 +745,17 @@ it.each(['Spam', 'Ordinary', 'foreign identity'])('reconciles pending %s receive
   else expect(published).toMatchObject({ isRetracted: true, isModerated: true, moderationReason: kind })
   expect(roomStore.getState().pendingRetractions.get(ROOM)).toEqual(pending)
   expect(h.sendIQ).toHaveBeenCalledTimes(1)
-  expect(await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!)).toBeNull()
+  expect(await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!)).toBeNull()
 })
 
 it.each(['before', 'during'])('observes pending moderation %s awaited history reconciliation without consuming it', async when => {
   roomStore.getState().addRoom(room, [])
-  const reconcile = cache.reconcileRoomHistoryMessages
+  const reconcile = forward(cache.reconcileHistoryMessages)
   let complete!: () => void
   const completion = new Promise<void>(resolve => { complete = resolve })
-  vi.spyOn(cache, 'reconcileRoomHistoryMessages').mockImplementation(async (...args) => {
+  vi.spyOn(cache, 'reconcileHistoryMessages').mockImplementation(async (...args) => {
     await completion
-    return reconcile(...args)
+    return reconcile(...args) as never
   })
   const h = harness([])
   if (when === 'before') h.chat.handle(signal())
@@ -769,9 +773,9 @@ it.each([false, true])('suppresses a delayed replay before publication after evi
   roomStore.getState().setActiveRoom(ROOM)
   const h = harness([])
   h.chat.handle(liveOriginal(stanzaId))
-  await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, stanzaId)).toMatchObject({ body: original.body }))
+  await vi.waitFor(async () => expect(await cache.getMessageByStanzaId('room', ROOM, stanzaId)).toMatchObject({ body: original.body }))
   h.chat.handle(signal(ROOM, 'groupchat', stanzaId))
-  await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, stanzaId))
+  await vi.waitFor(async () => expect(await cache.getMessageByStanzaId('room', ROOM, stanzaId))
     .toMatchObject({ body: '', isRetracted: true, moderationReason: 'Spam' }))
   expect(roomStore.getState().pendingRetractions.get(ROOM)).toBeUndefined()
   roomStore.getState().setActiveRoom(null)
@@ -790,7 +794,7 @@ it.each([false, true])('suppresses a delayed replay before publication after evi
   expect(roomStore.getState().messages.get(ROOM)?.find(row => row.stanzaId === stanzaId))
     .toMatchObject({ body: '', isRetracted: true, moderationReason: 'Spam' })
   expect(roomStore.getState().rooms.get(ROOM)?.lastMessage).toMatchObject({ isRetracted: true, moderationReason: 'Spam' })
-  expect(await cache.getRoomMessageByStanzaId(ROOM, stanzaId)).toMatchObject({ body: '', moderationReason: 'Spam' })
+  expect(await cache.getMessageByStanzaId('room', ROOM, stanzaId)).toMatchObject({ body: '', moderationReason: 'Spam' })
   expect(h.sendIQ).not.toHaveBeenCalled()
 })
 
@@ -798,10 +802,10 @@ it.each(['archive', 'occupant', 'room', 'account'])('does not transfer retained 
   const seed = { ...original, id: `identity-${kind}`, stanzaId: `archive-${kind}` }
 
   roomStore.getState().addRoom(room, [seed])
-  await cache.saveRoomMessage(seed)
+  await cache.saveMessage('room', seed)
   const h = harness([])
   h.chat.handle(signal(ROOM, 'groupchat', seed.stanzaId))
-  await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, seed.stanzaId)).toMatchObject({ isRetracted: true }))
+  await vi.waitFor(async () => expect(await cache.getMessageByStanzaId('room', ROOM, seed.stanzaId)).toMatchObject({ isRetracted: true }))
   roomStore.setState({ messages: new Map() })
   const stanza = liveOriginal(kind === 'archive' ? 'legitimate-archive' : seed.stanzaId, { id: seed.id })
   if (kind === 'occupant') stanza.getChild('occupant-id', 'urn:xmpp:occupant-id:0')!.attrs.id = 'other-occupant'
@@ -852,7 +856,7 @@ describe.each(['preview', 'byId'] as const)('%s retraction-only cache reconcilia
       correctionRevision: { ids: ['stanza:edited'], supersedes: [], archiveTimestamp: 5000 },
       reactions: { '👍': ['Bob'] } }
     roomStore.getState().addRoom(room, source === 'resident' && path !== 'byId' ? [edited] : [])
-    if (source === 'cache') await cache.saveRoomMessage(edited)
+    if (source === 'cache') await cache.saveMessage('room', edited)
     const h = harness([{ archiveId: original.stanzaId!, message: liveOriginal() }])
     if (source === 'resident' && path === 'byId') {
       const respond = h.sendIQ.getMockImplementation()!
@@ -879,7 +883,7 @@ describe.each(['preview', 'byId'] as const)('%s retraction-only cache reconcilia
   it.each(['cached Spam', 'pending Spam', 'cached ordinary'] as const)('retains %s with the real store', async kind => {
     roomStore.getState().addRoom(room, [])
     if (kind !== 'pending Spam') {
-      await cache.saveRoomMessage({ ...original, body: '', isRetracted: true, retractedAt: new Date(4000),
+      await cache.saveMessage('room', { ...original, body: '', isRetracted: true, retractedAt: new Date(4000),
         ...(kind === 'cached Spam' && { isModerated: true, moderationReason: 'Spam' }) })
       _clearRetractedIdentitiesForTesting()
     }
@@ -891,7 +895,7 @@ describe.each(['preview', 'byId'] as const)('%s retraction-only cache reconcilia
     if (kind !== 'cached ordinary') expect(result).toMatchObject({ isModerated: true, moderationReason: 'Spam' })
     else expect(result?.isModerated).not.toBe(true)
     if (path === 'byId') await vi.waitFor(async () => {
-      const stored = await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!)
+      const stored = await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!)
       expect(stored?.isRetracted).toBe(true)
       if (kind === 'cached ordinary') expect(stored?.isModerated).not.toBe(true)
       else expect(stored).toMatchObject({ isModerated: true, moderationReason: 'Spam' })
@@ -908,12 +912,12 @@ it.each([
   roomStore.getState().addRoom({ ...room, supportsMAM: false }, [])
   const h = harness([])
   h.chat.handle(liveOriginal(stanzaId))
-  await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, stanzaId)).toMatchObject({ body: original.body }))
+  await vi.waitFor(async () => expect(await cache.getMessageByStanzaId('room', ROOM, stanzaId)).toMatchObject({ body: original.body }))
   h.chat.handle(signal(ROOM, 'groupchat', stanzaId))
-  await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, stanzaId))
+  await vi.waitFor(async () => expect(await cache.getMessageByStanzaId('room', ROOM, stanzaId))
     .toMatchObject({ body: '', isModerated: true, moderationReason: 'Spam' }))
   expect(roomStore.getState().pendingRetractions.get(ROOM)).toBeUndefined()
-  await cache.saveRoomMessage({ ...unrelated, timestamp: new Date('2026-09-11T09:00:00Z') })
+  await cache.saveMessage('room', { ...unrelated, timestamp: new Date('2026-09-11T09:00:00Z') })
   roomStore.getState().reset()
   _clearRetractedIdentitiesForTesting()
   cache._resetDBForTesting()
@@ -938,20 +942,20 @@ it.each([
       .toMatchObject({ body: '', isRetracted: true, moderationReason: 'Spam' }))
     expect(flashes).toEqual([])
     expect(roomStore.getState().rooms.get(ROOM)?.lastMessage?.body).not.toBe(original.body)
-    expect(await cache.getRoomMessageByStanzaId(ROOM, stanzaId)).toMatchObject({ body: '', moderationReason: 'Spam' })
+    expect(await cache.getMessageByStanzaId('room', ROOM, stanzaId)).toMatchObject({ body: '', moderationReason: 'Spam' })
     expect(h.sendIQ).not.toHaveBeenCalled()
   } finally { unsubscribe() }
 })
 
 it('holds delayed replay publication and subsequent arrivals until scoped cache reconciliation finishes', async () => {
   roomStore.getState().addRoom(room, [])
-  await cache.saveRoomMessage({ ...original, body: '', isRetracted: true, retractedAt: new Date(4000), isModerated: true, moderationReason: 'Spam' })
+  await cache.saveMessage('room', { ...original, body: '', isRetracted: true, retractedAt: new Date(4000), isModerated: true, moderationReason: 'Spam' })
   _clearRetractedIdentitiesForTesting()
-  const reconcile = cache.reconcileRoomHistoryMessages
+  const reconcile = forward(cache.reconcileHistoryMessages)
   let complete!: () => void
   const completion = new Promise<void>(resolve => { complete = resolve })
-  const reads = vi.spyOn(cache, 'reconcileRoomHistoryMessages').mockImplementation(async (...args) => {
-    const result = await reconcile(...args)
+  const reads = vi.spyOn(cache, 'reconcileHistoryMessages').mockImplementation(async (...args) => {
+    const result = (await reconcile(...args)) as never
     await completion
     return result
   })
@@ -981,12 +985,12 @@ it('holds delayed replay publication and subsequent arrivals until scoped cache 
 
 it.each(['pending', 'account', 'reset', 'remove'] as const)('guards delayed publication when %s changes during cache lookup', async change => {
   roomStore.getState().addRoom(room, [])
-  const reconcile = cache.reconcileRoomHistoryMessages
+  const reconcile = forward(cache.reconcileHistoryMessages)
   let buffered = false
   let complete!: () => void
   const completion = new Promise<void>(resolve => { complete = resolve })
-  const reads = vi.spyOn(cache, 'reconcileRoomHistoryMessages').mockImplementation(async (...args) => {
-    const result = await reconcile(...args)
+  const reads = vi.spyOn(cache, 'reconcileHistoryMessages').mockImplementation(async (...args) => {
+    const result = (await reconcile(...args)) as never as RoomMessage[]
     buffered = true
     await completion
     return result
@@ -1008,12 +1012,12 @@ it.each(['pending', 'account', 'reset', 'remove'] as const)('guards delayed publ
   await reads.mock.results[0].value
   if (change === 'pending') {
     await vi.waitFor(() => expect(roomStore.getState().messages.get(ROOM)?.[0]).toMatchObject({ body: '', moderationReason: 'Spam' }))
-    await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!)).toMatchObject({ body: '', moderationReason: 'Spam' }))
+    await vi.waitFor(async () => expect(await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!)).toMatchObject({ body: '', moderationReason: 'Spam' }))
   } else {
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(roomStore.getState().messages.get(ROOM) ?? []).toEqual([])
     expect(roomStore.getState().rooms.get(ROOM)?.lastMessage).toBeUndefined()
-    expect(await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!)).toBeNull()
+    expect(await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!)).toBeNull()
   }
   expect(h.sendIQ).not.toHaveBeenCalled()
 })
@@ -1021,7 +1025,7 @@ it.each(['pending', 'account', 'reset', 'remove'] as const)('guards delayed publ
 it.each(['ordinary', 'archive', 'occupant', 'room', 'account'] as const)('scopes persisted replay moderation after restart: %s', async kind => {
   const seed = { ...original, id: `durable-${kind}`, stanzaId: `durable-archive-${kind}` }
   roomStore.getState().addRoom(room, [])
-  await cache.saveRoomMessage({ ...seed, body: '', isRetracted: true, retractedAt: new Date(4000),
+  await cache.saveMessage('room', { ...seed, body: '', isRetracted: true, retractedAt: new Date(4000),
     ...(kind !== 'ordinary' && { isModerated: true, moderationReason: 'Spam' }) })
   _clearRetractedIdentitiesForTesting()
   const h = harness([])
@@ -1055,15 +1059,15 @@ function roomReaction(emoji: string) {
 }
 
 function holdReplayRead(call = 1) {
-  const reconcile = cache.reconcileRoomHistoryMessages
+  const reconcile = forward(cache.reconcileHistoryMessages)
   let release!: () => void
   let started!: () => void
   const held = new Promise<void>(resolve => { release = resolve })
   const ready = new Promise<void>(resolve => { started = resolve })
   let reads = 0
-  vi.spyOn(cache, 'reconcileRoomHistoryMessages').mockImplementation(async (...args) => {
+  vi.spyOn(cache, 'reconcileHistoryMessages').mockImplementation(async (...args) => {
     if (++reads === call) { started(); await held }
-    return reconcile(...args)
+    return reconcile(...args) as never
   })
   return { ready, release }
 }
@@ -1100,7 +1104,7 @@ describe('queued whisper corrections', () => {
       if (delayed) correction.children.push(xml('delay', { xmlns: 'urn:xmpp:delay', stamp: wireTimestamp.toISOString() }))
       h.chat.handle(correction)
       expect(roomStore.getState().getMessage(ROOM, 'orphan')).toBeUndefined()
-      expect(await cache.getRoomMessage(ROOM, 'orphan')).toBeNull()
+      expect(await cache.getMessage('room', ROOM, 'orphan')).toBeNull()
       expect(h.emit).not.toHaveBeenCalledWith('room:whisper', expect.anything())
       expect(h.deps.emit).not.toHaveBeenCalledWith('message', expect.objectContaining({ id: 'orphan' }))
       vi.setSystemTime(nextReceivedAt)
@@ -1118,8 +1122,8 @@ describe('queued whisper corrections', () => {
       expect.soft(roomStore.getState().getMessage(ROOM, 'orphan')?.isDelayed).toBe(delayed || undefined)
       expect(roomStore.getState().getMessage(ROOM, 'next')?.timestamp).toEqual(nextReceivedAt)
       expect.soft(roomStore.getState().messages.get(ROOM)?.filter(row => ['orphan', 'next'].includes(row.id)).map(row => row.id)).toEqual(['orphan', 'next'])
-      await vi.waitFor(async () => expect((await cache.getRoomMessages(ROOM, {})).filter(row => ['orphan', 'next'].includes(row.id))).toHaveLength(2))
-      const persisted = await cache.getRoomMessages(ROOM, {})
+      await vi.waitFor(async () => expect((await cache.getMessages('room', ROOM, {})).filter(row => ['orphan', 'next'].includes(row.id))).toHaveLength(2))
+      const persisted = await cache.getMessages('room', ROOM, {})
       expect.soft(persisted.find(row => row.id === 'orphan')).toMatchObject(expected)
       expect.soft(persisted.find(row => row.id === 'orphan')?.isDelayed).toBe(delayed || undefined)
       expect.soft(persisted.filter(row => ['orphan', 'next'].includes(row.id)).map(row => row.id)).toEqual(['orphan', 'next'])
@@ -1154,8 +1158,8 @@ describe('queued whisper corrections', () => {
         whisperWithOccupantId: outgoing ? 'bob' : occupantId,
       }
       expect.soft(roomStore.getState().getMessage(ROOM, 'orphan')).toMatchObject(expected)
-      await vi.waitFor(async () => expect(await cache.getRoomMessage(ROOM, 'orphan')).not.toBeNull())
-      expect.soft(await cache.getRoomMessage(ROOM, 'orphan')).toMatchObject(expected)
+      await vi.waitFor(async () => expect(await cache.getMessage('room', ROOM, 'orphan')).not.toBeNull())
+      expect.soft(await cache.getMessage('room', ROOM, 'orphan')).toMatchObject(expected)
       expect.soft(h.emit).toHaveBeenCalledWith('room:whisper', expect.objectContaining({
         message: expect.objectContaining(expected), incrementUnread: !outgoing, incrementMentions: !outgoing,
       }))
@@ -1182,8 +1186,8 @@ describe('queued whisper corrections', () => {
       h.chat.handle(whisperStanza('edit-2', 'Final edit', correctedNick, occupantId, 'whisper'))
       expect(roomStore.getState().getMessage(ROOM, 'whisper')).toBeUndefined()
       expect(h.emit.mock.calls.filter(([event]) => event === 'room:whisper').map(([, payload]) => (payload as { message: RoomMessage }).message.id)).toEqual(['whisper'])
-      expect(await cache.getRoomMessage(ROOM, 'edit-1')).toBeNull()
-      expect(await cache.getRoomMessage(ROOM, 'edit-2')).toBeNull()
+      expect(await cache.getMessage('room', ROOM, 'edit-1')).toBeNull()
+      expect(await cache.getMessage('room', ROOM, 'edit-2')).toBeNull()
       h.chat.handle(signal())
       expect(roomStore.getState().pendingRetractions.get(ROOM)).toHaveLength(1)
       const published = roomStore.getState().waitForMessageArrivals(ROOM)
@@ -1197,7 +1201,7 @@ describe('queued whisper corrections', () => {
       expect(roomStore.getState().messages.get(ROOM)?.filter(row => row.isPrivate)).toEqual([expect.objectContaining(expected)])
       expect(roomStore.getState().getMessage(ROOM, original.stanzaId!)).toMatchObject({ isRetracted: true, moderationReason: 'Spam' })
       await vi.waitFor(async () => {
-        const messages = await cache.getRoomMessages(ROOM, {})
+        const messages = await cache.getMessages('room', ROOM, {})
         expect(messages.filter(row => row.isPrivate)).toEqual([expect.objectContaining(expected)])
       })
       expect(h.sendIQ).not.toHaveBeenCalled()
@@ -1215,8 +1219,8 @@ describe('queued whisper corrections', () => {
       h.chat.handle(whisperStanza('forged-edit', 'Different author', 'Alice', 'mallory', 'whisper'))
       gate.release()
       await vi.waitFor(async () => {
-        expect(await cache.getRoomMessage(ROOM, 'forged-edit')).toMatchObject({ body: 'Different author', occupantId: 'mallory', isPrivate: true })
-        expect(await cache.getRoomMessage(ROOM, 'whisper')).toMatchObject({ body: 'Private original', occupantId: 'alice', isPrivate: true })
+        expect(await cache.getMessage('room', ROOM, 'forged-edit')).toMatchObject({ body: 'Different author', occupantId: 'mallory', isPrivate: true })
+        expect(await cache.getMessage('room', ROOM, 'whisper')).toMatchObject({ body: 'Private original', occupantId: 'alice', isPrivate: true })
       })
       expect(roomStore.getState().getMessage(ROOM, 'whisper')).toMatchObject({ body: 'Private original', occupantId: 'alice', isPrivate: true })
       expect(roomStore.getState().getMessage(ROOM, 'whisper')?.isEdited).not.toBe(true)
@@ -1233,7 +1237,7 @@ describe('queued whisper corrections', () => {
       h.chat.handle(whisperStanza('orphan', 'Orphaned correction', 'Alice', 'alice', 'missing'))
       if (!pending) expect(roomStore.getState().getMessage(ROOM, 'orphan')).toMatchObject({ body: 'Orphaned correction', isPrivate: true })
       gate.release()
-      await vi.waitFor(async () => expect(await cache.getRoomMessage(ROOM, 'orphan')).toMatchObject({
+      await vi.waitFor(async () => expect(await cache.getMessage('room', ROOM, 'orphan')).toMatchObject({
         body: 'Orphaned correction', isPrivate: true, isOutgoing: false, occupantId: 'alice', whisperWith: 'Alice',
       }))
       expect(roomStore.getState().messages.get(ROOM)?.filter(row => row.isPrivate)).toHaveLength(1)
@@ -1263,8 +1267,8 @@ describe('queued whisper corrections', () => {
       expect(await published).toBe(false)
       expect(roomStore.getState().getMessage(ROOM, 'whisper')).toMatchObject({ body: 'Replacement', isPrivate: true })
       expect(roomStore.getState().getMessage(ROOM, 'edit')).toBeUndefined()
-      await vi.waitFor(async () => expect(await cache.getRoomMessage(ROOM, 'whisper')).toMatchObject({ body: 'Replacement', isPrivate: true }))
-      expect(await cache.getRoomMessage(ROOM, 'edit')).toBeNull()
+      await vi.waitFor(async () => expect(await cache.getMessage('room', ROOM, 'whisper')).toMatchObject({ body: 'Replacement', isPrivate: true }))
+      expect(await cache.getMessage('room', ROOM, 'edit')).toBeNull()
       expect(h.sendIQ).not.toHaveBeenCalled()
     } finally { gate.release() }
   })
@@ -1285,10 +1289,10 @@ describe('queued whisper corrections', () => {
       await published
       if (change !== 'transport') {
         expect(roomStore.getState().getMessage(ROOM, 'orphan')).toBeUndefined()
-        expect(await cache.getRoomMessage(ROOM, 'orphan')).toBeNull()
+        expect(await cache.getMessage('room', ROOM, 'orphan')).toBeNull()
       } else {
         expect(roomStore.getState().getMessage(ROOM, 'orphan')).toMatchObject({ body: 'Cancelled fallback', isPrivate: true })
-        await vi.waitFor(async () => expect(await cache.getRoomMessage(ROOM, 'orphan')).toMatchObject({ body: 'Cancelled fallback', isPrivate: true }))
+        await vi.waitFor(async () => expect(await cache.getMessage('room', ROOM, 'orphan')).toMatchObject({ body: 'Cancelled fallback', isPrivate: true }))
       }
       expect(h.sendIQ).not.toHaveBeenCalled()
     } finally { gate.release() }
@@ -1299,7 +1303,7 @@ describe('queued whisper corrections', () => {
     const previous = harness([])
     previous.chat.handle(whisperStanza('whisper', 'Private original'))
     previous.chat.handle(whisperStanza('old-edit', 'Previously edited', 'Alice', 'alice', 'whisper'))
-    await vi.waitFor(async () => expect(await cache.getRoomMessage(ROOM, 'whisper')).toMatchObject({ body: 'Previously edited', isEdited: true }))
+    await vi.waitFor(async () => expect(await cache.getMessage('room', ROOM, 'whisper')).toMatchObject({ body: 'Previously edited', isEdited: true }))
     unbind()
     roomStore.getState().reset()
     roomStore.getState().addRoom(room, [])
@@ -1317,8 +1321,8 @@ describe('queued whisper corrections', () => {
       const expected = { body: 'New-session text', isPrivate: true, isOutgoing: false, occupantId: 'alice', whisperWith: 'Renamed' }
       expect(roomStore.getState().getMessage(ROOM, 'new-edit')).toMatchObject(expected)
       expect(roomStore.getState().getMessage(ROOM, 'whisper')).toBeUndefined()
-      await vi.waitFor(async () => expect(await cache.getRoomMessage(ROOM, 'new-edit')).toMatchObject(expected))
-      expect(await cache.getRoomMessage(ROOM, 'whisper')).toMatchObject({ body: 'Previously edited', isPrivate: true })
+      await vi.waitFor(async () => expect(await cache.getMessage('room', ROOM, 'new-edit')).toMatchObject(expected))
+      expect(await cache.getMessage('room', ROOM, 'whisper')).toMatchObject({ body: 'Previously edited', isPrivate: true })
       expect(h.sendIQ).not.toHaveBeenCalled()
     } finally { gate.release() }
   })
@@ -1354,7 +1358,7 @@ describe('room replay dependent updates', () => {
       h.chat.handle(roomReaction('👍'))
       gate.release()
       await vi.waitFor(() => expect(roomStore.getState().getMessage(ROOM, original.stanzaId!)?.reactions).toEqual({ '👍': ['Bob'] }))
-      await vi.waitFor(async () => expect((await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))?.reactions).toEqual({ '👍': ['Bob'] }))
+      await vi.waitFor(async () => expect((await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!))?.reactions).toEqual({ '👍': ['Bob'] }))
       expect(h.sendIQ).not.toHaveBeenCalled()
     } finally { gate.release() }
   })
@@ -1424,7 +1428,7 @@ describe('room replay dependent updates', () => {
       else roomStore.getState().reset()
       roomStore.getState().addRoom(room, [{ ...original, body: 'Replacement room message' }])
       gate.release()
-      await vi.mocked(cache.reconcileRoomHistoryMessages).mock.results[0].value.catch(() => {})
+      await vi.mocked(cache.reconcileHistoryMessages).mock.results[0].value.catch(() => {})
       await new Promise(resolve => setTimeout(resolve, 0))
       const replacement = roomStore.getState().getMessage(ROOM, original.stanzaId!)
       expect(replacement?.body).toBe('Replacement room message')
@@ -1464,7 +1468,7 @@ describe('room replay dependent updates', () => {
         xml('tally', { emoji: '1', label: 'Pizza', count: '1' }))))
     await vi.waitFor(() => expect(roomStore.getState().getMessage(ROOM, original.stanzaId!)?.pollClosedAt).toBeInstanceOf(Date))
     expect(roomStore.getState().getMessage(ROOM, 'closed-poll')?.pollClosed).toBeDefined()
-    await vi.waitFor(async () => expect((await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!))?.pollClosedAt).toBeInstanceOf(Date))
+    await vi.waitFor(async () => expect((await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!))?.pollClosedAt).toBeInstanceOf(Date))
     expect(h.sendIQ).toHaveBeenCalledTimes(1)
   })
 
@@ -1532,8 +1536,8 @@ describe('queued poll lookup before MAM', () => {
       expect(found?.reactions).toEqual({ '2': ['Bob'] })
       expect(roomStore.getState().getMessage(ROOM, original.stanzaId!)).toMatchObject({ poll: found!.poll })
       await vi.waitFor(async () => {
-        const poll = await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!)
-        const closure = await cache.getRoomMessageByStanzaId(ROOM, 'closed-poll-archive')
+        const poll = await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!)
+        const closure = await cache.getMessageByStanzaId('room', ROOM, 'closed-poll-archive')
         expect(poll).not.toBeNull()
         expect(closure).not.toBeNull()
         expect(poll?.reactions).toEqual(expectedReactions)
@@ -1567,7 +1571,7 @@ describe('queued poll lookup before MAM', () => {
       pollClosedAt: new Date('2026-09-11T08:01:00Z'),
     }
     expect(roomStore.getState().getMessage(ROOM, original.stanzaId!)).toMatchObject(expected)
-    await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, original.stanzaId!)).toMatchObject(expected))
+    await vi.waitFor(async () => expect(await cache.getMessageByStanzaId('room', ROOM, original.stanzaId!)).toMatchObject(expected))
     expect(h.sendIQ).not.toHaveBeenCalled()
   })
 
@@ -1578,7 +1582,7 @@ describe('queued poll lookup before MAM', () => {
     const fetch = vi.spyOn(h.mam, 'fetchRoomMessageById')
     h.chat.handle(replayedPollClosure('mallory', 'Mallory'))
     expect(await fetch.mock.results[0].value).toBeNull()
-    await vi.waitFor(async () => expect((await cache.getRoomMessageByStanzaId(ROOM, 'closed-poll-archive'))?.pollClosed).toBeDefined())
+    await vi.waitFor(async () => expect((await cache.getMessageByStanzaId('room', ROOM, 'closed-poll-archive'))?.pollClosed).toBeDefined())
     expect(roomStore.getState().getMessage(ROOM, original.stanzaId!)).toBeUndefined()
     expect(h.sendIQ).toHaveBeenCalledTimes(1)
   })
@@ -1618,12 +1622,12 @@ describe('same-occupant client ID reuse', () => {
     'keeps legacy content separate through %s ingestion when %s differs', async (path, difference) => {
       const legacy = { ...original, stanzaId: 'foreign-legacy',
         ...(difference === 'body' ? { body: 'Earlier legitimate content' } : { timestamp: new Date(500) }) }
-      await cache.saveRoomMessage(legacy)
+      await cache.saveMessage('room', legacy)
       roomStore.getState().addRoom(room, [legacy])
       roomStore.setState({ activeRoomJid: ROOM })
       const h = harness([{ archiveId: original.stanzaId!, message: liveOriginal() }])
       if (path === 'cache') {
-        await cache.saveRoomMessage(original)
+        await cache.saveMessage('room', original)
         await roomStore.getState().loadMessagesFromCache(ROOM)
       } else if (path === 'live') h.chat.handle(liveOriginal())
       else await h.mam.queryRoomArchive({ roomJid: ROOM, max: 1, before: '' })
@@ -1635,7 +1639,7 @@ describe('same-occupant client ID reuse', () => {
       expect(getRoomModerationId(residents.find(row => row.stanzaId === original.stanzaId)!)).toBe(original.stanzaId)
       h.chat.handle(signal())
       await vi.waitFor(async () => {
-        const cached = await cache.getRoomMessages(ROOM, {})
+        const cached = await cache.getMessages('room', ROOM, {})
         expect(cached).toHaveLength(2)
         expect(cached.find(row => row.stanzaId === legacy.stanzaId)).toMatchObject({ body: legacy.body })
         expect(cached.find(row => row.stanzaId === legacy.stanzaId)?.isRetracted).not.toBe(true)
@@ -1650,25 +1654,25 @@ describe('same-occupant client ID reuse', () => {
     const legacy = { ...original, stanzaId: undefined }
     const saved = messageRowRef(legacy)
     const oldSaved = { id: legacy.id, occupantId: legacy.occupantId, stanzaId: legacy.stanzaId }
-    await cache.saveRoomMessage(legacy)
+    await cache.saveMessage('room', legacy)
     roomStore.getState().addRoom(room, [legacy])
     roomStore.setState({ activeRoomJid: ROOM })
     const h = harness([{ archiveId: original.stanzaId!, message: liveOriginal() }])
-    if (path === 'cache') await cache.saveRoomMessage(original)
+    if (path === 'cache') await cache.saveMessage('room', original)
     else if (path === 'live') h.chat.handle(liveOriginal())
     else await h.mam.queryRoomArchive({ roomJid: ROOM, max: 1, before: '' })
     await roomStore.getState().waitForMessageArrivals(ROOM)
     await vi.waitFor(async () => {
-      const restored = await cache.getRoomMessagesAround(ROOM, saved, { before: 0, after: 0 })
+      const restored = await cache.getMessagesAround('room', ROOM, saved, { before: 0, after: 0 })
       expect(restored).toHaveLength(1)
       expect(restored[0]).toMatchObject({ stanzaId: original.stanzaId, localRowRef: saved })
       expect(findMessageRowIndex(restored, saved)).toBe(0)
       expect(findMessageRowIndex(restored, oldSaved)).toBe(0)
       expect(await cache.getRoomMessageByRowRef(ROOM, oldSaved)).toMatchObject({ stanzaId: original.stanzaId })
-      expect(await cache.getRoomMessagesAround(ROOM, oldSaved, { before: 0, after: 0 })).toHaveLength(1)
+      expect(await cache.getMessagesAround('room', ROOM, oldSaved, { before: 0, after: 0 })).toHaveLength(1)
       expect(await cache.getRoomMessageByRowRef(ROOM, { ...oldSaved, unconfirmed: false })).toMatchObject({ stanzaId: original.stanzaId })
     })
-    expect(await cache.getRoomMessagesAround('another@conference.example.com', saved)).toEqual([])
+    expect(await cache.getMessagesAround('room', 'another@conference.example.com', saved)).toEqual([])
   })
 
   it('sends the selected archive reference without resolving a reused client ID', async () => {
@@ -1690,11 +1694,11 @@ describe('colliding room cache ownership', () => {
   it('persists reactions to the later confirmed row without changing its sibling', async () => {
     const later = { ...original, stanzaId: 'later-archive', body: 'Later body', timestamp: new Date(2000) }
 
-    await cache.saveRoomMessages([original, later])
+    await cache.saveMessages('room', [original, later])
     roomStore.getState().addRoom(room, [original, later])
     await roomStore.getState().updateReactions(ROOM, later.stanzaId!, 'Me', ['👍'])
     await vi.waitFor(async () => {
-      const reloaded = await cache.getRoomMessages(ROOM)
+      const reloaded = await cache.getMessages('room', ROOM)
       expect(reloaded).toHaveLength(2)
       expect(reloaded.find(message => message.stanzaId === original.stanzaId)?.reactions).toBeUndefined()
       expect(reloaded.find(message => message.stanzaId === later.stanzaId)?.reactions).toEqual({ '👍': ['Me'] })
@@ -1704,11 +1708,11 @@ describe('colliding room cache ownership', () => {
   it.each(['body', 'timestamp'])('restores distinct archive anchors when %s differs', async difference => {
     const legacy = { ...original, stanzaId: 'earlier-archive',
       ...(difference === 'body' ? { body: 'Uncertain content' } : { timestamp: new Date(500) }) }
-    await cache.saveRoomMessages([legacy, original])
+    await cache.saveMessages('room', [legacy, original])
     for (const message of [legacy, original]) {
       const ref = messageRowRef(message)
       expect(await cache.getRoomMessageByRowRef(ROOM, ref)).toMatchObject({ body: message.body, timestamp: message.timestamp })
-      const window = await cache.getRoomMessagesAround(ROOM, ref)
+      const window = await cache.getMessagesAround('room', ROOM, ref)
       expect(findMessageRowIndex(window, ref)).toBeGreaterThanOrEqual(0)
       expect(window[findMessageRowIndex(window, ref)]).toMatchObject({ body: message.body, timestamp: message.timestamp })
     }
@@ -1722,7 +1726,7 @@ it('crosses cached spam and multiple real MAM pages while retaining durable tomb
   const cachedSpam = Array.from({ length: 100 }, (_, i) => ({ ...original,
     id: `cached-${i}`, stanzaId: `cached-archive-${i}`, timestamp: new Date(2000 + i * 1000),
     body: '', isRetracted: true, isModerated: true, moderationReason: ' sPaM ' }))
-  await cache.saveRoomMessages(cachedSpam)
+  await cache.saveMessages('room', cachedSpam)
   roomStore.getState().addRoom(room, [anchor])
   roomStore.setState({ activeRoomJid: ROOM })
   connectionStore.setState({ status: 'online' })
@@ -1752,8 +1756,8 @@ it('crosses cached spam and multiple real MAM pages while retaining durable tomb
     expect(resident.length).toBeLessThanOrEqual(8)
     const cursors = h.sendIQ.mock.calls.map(([iq]) => iq.getChild('query', NS)?.getChild('set', 'http://jabber.org/protocol/rsm')?.getChildText('before'))
     expect(cursors).toEqual(['cached-archive-0', 'server-spam'])
-    await vi.waitFor(async () => expect(await cache.getRoomMessageByStanzaId(ROOM, 'server-spam')).toMatchObject({ isModerated: true, moderationReason: 'SPAM' }))
-    expect((await cache.getRoomMessages(ROOM)).filter(isSpamModerated)).toHaveLength(101)
+    await vi.waitFor(async () => expect(await cache.getMessageByStanzaId('room', ROOM, 'server-spam')).toMatchObject({ isModerated: true, moderationReason: 'SPAM' }))
+    expect((await cache.getMessages('room', ROOM)).filter(isSpamModerated)).toHaveLength(101)
   } finally {
     setResidentWindowSize(5000)
   }

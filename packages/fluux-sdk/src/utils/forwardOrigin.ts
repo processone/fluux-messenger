@@ -1,7 +1,7 @@
 import type { BaseMessage, FileAttachment } from '../core/types'
 import { getBareJid } from '../core/jid'
 import { parseRoomMessageLink, type RoomMessageLink } from './roomMessageLink'
-import { getMessagesByForwardedId, getMessages, getRoomMessages, type ForwardedIdReference } from './messageCache'
+import { getMessagesByForwardedId, getMessages, type ForwardedIdReference } from './messageCache'
 import { captureStorageScope } from './storageScope'
 import { messageRowRef } from './roomStanzaId'
 import type { MessageRowRef } from '../core/types/messageRow'
@@ -101,7 +101,7 @@ export async function findForwardedOrigin(
     if (!from || !window) return null
     const slash = copy.from?.indexOf('/') ?? -1
     const nick = slash >= 0 ? copy.from!.slice(slash + 1) : copy.author
-    const rows = await getRoomMessages(from, window)
+    const rows = await getMessages('room', from, window)
     scope.assertCurrent()
     const hit = uniqueClosest(rows.flatMap(row => {
       const kind = !row.isPrivate && !!row.stanzaId && row.nick === nick ? textMatch(row.body, copy.text) : null
@@ -137,7 +137,7 @@ export async function findForwardedOrigin(
   if (!window) return null
   const matches: { row: { id: string; stanzaId?: string; originId?: string; conversationId: string }; kind: 'exact' | 'prefix'; at: number }[] = []
   for (const conversationId of candidates) {
-    const rows = await getMessages(conversationId, window)
+    const rows = await getMessages('chat', conversationId, window)
     scope.assertCurrent()
     for (const row of rows) {
       const kind = valid(row) ? textMatch(row.body, copy.text) : null

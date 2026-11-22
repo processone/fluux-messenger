@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { clearAllMessages, saveRoomMessage, getRoomMessage } from '@fluux/sdk/cache'
+import { clearAllMessages, saveMessage, getMessage } from '@fluux/sdk/cache'
 import { roomStore } from '@fluux/sdk/stores'
 import type { ComponentProps } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -121,7 +121,7 @@ describe('message delete dialog bulk entry', () => {
 it('constructs room quotations from the cached archive owner ahead of a resident Spam alias', async () => {
   await clearAllMessages()
   const original = { ...target, body: 'Legitimate cached original' }
-  await saveRoomMessage(original)
+  await saveMessage('room', original)
   const collision = { ...target, id: target.stanzaId!, stanzaId: 'other-archive', occupantId: 'other',
     isRetracted: true, isModerated: true, moderationReason: 'Spam' }
   roomStore.setState({ messages: new Map([[room.jid, [collision]]]), pendingRetractions: new Map() })
@@ -202,8 +202,8 @@ it.each([undefined, 'legacy-stanza-id'])('preserves self-retraction with unverif
 it.each(['Enter', 'button'])('moderates an existing cached message through %s without refetching it', async trigger => {
   await clearAllMessages()
   const legacy = { ...target, id: `legacy-client-${trigger}`, stanzaId: `legacy-archive-${trigger}`, body: 'Legacy body' }
-  await saveRoomMessage(legacy)
-  const cached = (await getRoomMessage(room.jid, legacy.id, legacy.from))!
+  await saveMessage('room', legacy)
+  const cached = (await getMessage('room', room.jid, legacy.id, legacy.from))!
   const client = new ModerationClient({ debug: false })
   ingestionClient = client
   const other = { ...legacy, id: 'other', stanzaId: 'other-archive', occupantId: 'other', body: 'Keep' }

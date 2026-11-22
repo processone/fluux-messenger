@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { IDBIndex } from 'fake-indexeddb'
-import { clearAllMessages, saveRoomMessage } from '@fluux/sdk/cache'
+import { clearAllMessages, saveMessage } from '@fluux/sdk/cache'
 import { roomStore } from '@fluux/sdk/stores'
 import type { Room, RoomMessage } from '@fluux/sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -62,7 +62,7 @@ describe.each(['timeline', 'search'] as const)('%s quotation parent', view => {
   })
 
   it.each(['spam', 'ordinary', 'missing'])('performs one cache resolution and preserves eligible fallback (%s)', async mode => {
-    if (mode !== 'missing') await saveRoomMessage({ ...original, body: '', isRetracted: true, isModerated: true,
+    if (mode !== 'missing') await saveMessage('room', { ...original, body: '', isRetracted: true, isModerated: true,
       moderationReason: mode === 'spam' ? 'Spam' : 'Off topic' })
     let completed = 0
     const getAll = IDBIndex.prototype.getAll

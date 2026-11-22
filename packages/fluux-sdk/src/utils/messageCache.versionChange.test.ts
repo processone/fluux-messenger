@@ -47,7 +47,7 @@ describe('message cache under another client upgrade', () => {
   })
 
   it('lets a newer client upgrade instead of blocking it', async () => {
-    await cache.saveMessages([row('a')])
+    await cache.saveMessages('chat', [row('a')])
     const version = await currentVersion()
 
     const newer = await upgradeFromAnotherTab(version + 1)
@@ -55,11 +55,11 @@ describe('message cache under another client upgrade', () => {
     expect(newer.version).toBe(version + 1)
     newer.close()
     // The released connection is not reused; a read settles instead of hanging.
-    await expect(cache.getMessages(PEER)).resolves.toEqual([])
+    await expect(cache.getMessages('chat', PEER)).resolves.toEqual([])
   })
 
   it('reopens after another tab deletes the database', async () => {
-    await cache.saveMessages([row('a')])
+    await cache.saveMessages('chat', [row('a')])
     const version = await currentVersion()
     // Another tab clearing local data deletes the database, which this
     // client's open connection must not block.
@@ -69,7 +69,7 @@ describe('message cache under another client upgrade', () => {
       request.onerror = () => reject(request.error)
     })
 
-    expect(await cache.getMessages(PEER)).toEqual([])
+    expect(await cache.getMessages('chat', PEER)).toEqual([])
     expect(await currentVersion()).toBe(version)
   })
 
@@ -83,7 +83,7 @@ describe('message cache under another client upgrade', () => {
       const holder = await upgradeFromAnotherTab(1)
       const pendingUpgrade = upgradeFromAnotherTab(2)
 
-      await expect(cache.saveMessages([row('a')])).resolves.toBe(false)
+      await expect(cache.saveMessages('chat', [row('a')])).resolves.toBe(false)
 
       holder.close()
       ;(await pendingUpgrade).close()

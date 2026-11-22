@@ -88,7 +88,7 @@ describe('linked room message lookup', () => {
     const reference = tier === 'client' ? quote.id : quote.originId
     const h = harness()
     expect(await h.mam.resolveRoomMessagePreviewTarget(quote, reference)).toMatchObject({ kind: 'found', message: { id: quote.id, stanzaId: quote.stanzaId } })
-    expect(await cache.getRoomMessages(ROOM)).toEqual([])
+    expect(await cache.getMessages('room', ROOM)).toEqual([])
     expect(h.emitSDK).not.toHaveBeenCalled()
   })
 
@@ -108,7 +108,7 @@ describe('linked room message lookup', () => {
     const h = harness(undefined, undefined, 'correction-retraction')
     expect(await h.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toEqual({ kind: 'absent' })
     expect(h.emitSDK).not.toHaveBeenCalled()
-    expect(await cache.getRoomMessages(ROOM)).toEqual([])
+    expect(await cache.getMessages('room', ROOM)).toEqual([])
   })
 
   it('does not demote an unknown correction archive alias to a coincidentally equal client id', async () => {
@@ -120,7 +120,7 @@ describe('linked room message lookup', () => {
   it.each(['cache', 'archive'] as const)('resolves a live reference against the %s archive tier before a detached client-id alias', async source => {
     const quote = { ...rows[40], id: rows[60].stanzaId }
     const other = rows[60]
-    if (source === 'cache') await cache.saveRoomMessages([other])
+    if (source === 'cache') await cache.saveMessages('room', [other])
     const h = harness()
     const canonical = await h.mam.resolveRoomMessagePreviewTarget(quote, quote.id)
     expect(canonical).toMatchObject({ kind: 'found', message: { stanzaId: other.stanzaId } })
@@ -204,7 +204,7 @@ describe('linked room message lookup', () => {
     const h = harness()
     expect(await h.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toMatchObject({ kind: 'found', message: { body: rows[40].body, stanzaId: rows[40].stanzaId } })
     expect(roomStore.getState()).toBe(before)
-    expect(await cache.getRoomMessages(ROOM)).toEqual([])
+    expect(await cache.getMessages('room', ROOM)).toEqual([])
     expect(h.emitSDK).not.toHaveBeenCalled()
     // Subsequent archive pages reconstruct modifications without storing context.
     expect(h.sendIQ.mock.calls.some(([iq]) => iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('after') === rows[40].stanzaId)).toBe(true)
@@ -218,12 +218,12 @@ describe('linked room message lookup', () => {
     else expect(result).toEqual({ kind: 'absent' })
     expect(h.emitSDK).not.toHaveBeenCalled()
     expect(roomStore.getState()).toBe(before)
-    expect(await cache.getRoomMessages(ROOM)).toEqual([])
+    expect(await cache.getMessages('room', ROOM)).toEqual([])
   })
 
   it.each(['resident', 'cache'] as const)('reads a %s quote and hides it after membership is lost', async source => {
     if (source === 'resident') roomStore.getState().addRoom(room, [rows[40]])
-    else await cache.saveRoomMessages([rows[40]])
+    else await cache.saveMessages('room', [rows[40]])
     const h = harness()
     expect(await h.mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toMatchObject({ kind: 'found', message: rows[40] })
     roomStore.getState().addRoom({ ...room, joined: false })
@@ -467,13 +467,13 @@ describe('linked room message lookup', () => {
   })
 
   it('does not confuse a deleted quote with a failed archive request', async () => {
-    await cache.saveRoomMessages([{ ...rows[40], isRetracted: true, body: '' }])
+    await cache.saveMessages('room', [{ ...rows[40], isRetracted: true, body: '' }])
     expect(await harness().mam.readRoomMessagePreview(ROOM, rows[40].stanzaId)).toEqual({ kind: 'absent' })
     expect(await harness('network').mam.readRoomMessagePreview(ROOM, rows[41].stanzaId)).toEqual({ kind: 'unknown' })
   })
 
   it('checks membership before even reading a cached message', async () => {
-    await cache.saveRoomMessages([rows[40]])
+    await cache.saveMessages('room', [rows[40]])
     roomStore.getState().addRoom({ ...room, joined: false })
     const h = harness()
     expect(await h.mam.locateRoomMessage(ROOM, rows[40].stanzaId!)).toEqual({ kind: 'unknown' })
@@ -482,7 +482,7 @@ describe('linked room message lookup', () => {
 
   it.each(['resident', 'cache'] as const)('resolves %s history without querying the archive', async source => {
     if (source === 'resident') roomStore.getState().addRoom(room, [rows[40]])
-    else await cache.saveRoomMessages([rows[40]])
+    else await cache.saveMessages('room', [rows[40]])
     const h = harness()
     expect(await h.mam.locateRoomMessage(ROOM, rows[40].stanzaId!)).toMatchObject({ kind: 'found', message: rows[40], source })
     expect(h.sendIQ).not.toHaveBeenCalled()
@@ -490,12 +490,12 @@ describe('linked room message lookup', () => {
   })
 
   it('stores the target plus 25 either side without live arrival, read or coverage changes', async () => {
-    await cache.saveRoomMessages([rows.at(-1)!])
+    await cache.saveMessages('room', [rows.at(-1)!])
     roomStore.getState().addRoom(room, [rows.at(-1)!])
     const before = roomStore.getState()
     const h = harness()
     expect(await h.mam.locateRoomMessage(ROOM, rows[40].stanzaId!)).toMatchObject({ kind: 'found', message: { stanzaId: rows[40].stanzaId }, source: 'archive' })
-    const stored = await cache.getRoomMessages(ROOM)
+    const stored = await cache.getMessages('room', ROOM)
     expect(stored.map(row => row.stanzaId)).toEqual([...rows.slice(15, 66), rows.at(-1)!].map(row => row.stanzaId))
     const after = roomStore.getState()
     expect(after.messages).toBe(before.messages)
@@ -525,7 +525,7 @@ describe('linked room message lookup', () => {
   })
 
   it('does not write old room context into an account switched during gap publication', async () => {
-    await cache.saveRoomMessages([rows.at(-1)!])
+    await cache.saveMessages('room', [rows.at(-1)!])
     const h = harness()
     const unsubscribe = roomStore.subscribe(state => {
       if (!state.roomGaps.get(ROOM)?.length) return
@@ -535,7 +535,7 @@ describe('linked room message lookup', () => {
     })
     try {
       expect(await h.mam.locateRoomMessage(ROOM, rows[40].stanzaId)).toEqual({ kind: 'unknown' })
-      expect(await cache.getRoomMessages(ROOM)).toEqual([])
+      expect(await cache.getMessages('room', ROOM)).toEqual([])
     } finally { unsubscribe() }
   })
 
@@ -553,7 +553,7 @@ describe('linked room message lookup', () => {
   })
 
   it('does not navigate to a retracted cached entry', async () => {
-    await cache.saveRoomMessages([{ ...rows[40], isRetracted: true, body: '' }])
+    await cache.saveMessages('room', [{ ...rows[40], isRetracted: true, body: '' }])
     const h = harness()
     expect(await h.mam.locateRoomMessage(ROOM, rows[40].stanzaId!)).toEqual({ kind: 'absent' })
     expect(h.sendIQ).not.toHaveBeenCalled()

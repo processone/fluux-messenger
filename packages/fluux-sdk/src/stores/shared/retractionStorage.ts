@@ -61,8 +61,8 @@ export async function retractChatMessageInStorage(
   const retractedAt = message.retractedAt ?? updates.retractedAt ?? new Date()
   const scope: RetractionScope = { kind: 'chat', entityId: conversationId, accountScope: storageScope }
   noteRetractedIdentity(scope, chatRetractionAliases(message), message, retractedAt.getTime())
-  const resolution = await messageCache.findChatRetractionTargets(
-    conversationId,
+  const resolution = await messageCache.findRetractionTargets(
+    'chat', conversationId,
     targetReference,
     storageScope
   )
@@ -72,8 +72,8 @@ export async function retractChatMessageInStorage(
   )
   const targets = new Map<string, messageCache.ChatMessageCopy>()
   for (const seed of seeds) {
-    const copies = await messageCache.findChatMessageCopies(
-      conversationId,
+    const copies = await messageCache.findMessageCopies(
+      'chat', conversationId,
       seed,
       storageScope
     )
@@ -107,7 +107,7 @@ export async function retractChatMessageInStorage(
       await messageCache.scrubChatArchiveSignals(conversationId, correctionReferences(target, ids).references, storageScope)
     }
     await messageCache.updateMessage(
-      target.conversationId,
+      'chat', target.conversationId,
       target.id,
       { ...updates, isRetracted: true, retractedAt: targetRetractedAt },
       target.from,
@@ -131,8 +131,8 @@ export async function retractRoomMessageInStorage(
   const scope: RetractionScope = { kind: 'room', entityId: roomJid, accountScope: storageScope }
   noteRetractedIdentity(scope, roomRetractionAliases(message), message, retractedAt.getTime(), moderationMetadata({ ...message, ...updates }))
   const actor = { actorJid: message.from, actorOccupantId: message.occupantId }
-  const copies = (await messageCache.findRoomMessageCopies(
-    roomJid,
+  const copies = (await messageCache.findMessageCopies(
+    'room', roomJid,
     message,
     storageScope
   )).filter((copy) => roomMessageAuthor(copy.message, actor))
@@ -153,8 +153,8 @@ export async function retractRoomMessageInStorage(
       targetRetractedAt.getTime(),
       moderationMetadata({ ...target.message, ...updates })
     )
-    await messageCache.updateRoomMessage(
-      roomJid,
+    await messageCache.updateMessage(
+      'room', roomJid,
       target.message.id,
       { ...updates, isRetracted: true, retractedAt: targetRetractedAt },
       target.message.from,
@@ -186,8 +186,8 @@ export async function retractUnresidentChatTarget(
   const scope: RetractionScope = { kind: 'chat', entityId: conversationId, accountScope: storageScope }
   notePendingRetractionIdentity(scope, record.targetId, record)
 
-  const resolution = await messageCache.findChatRetractionTargets(
-    conversationId,
+  const resolution = await messageCache.findRetractionTargets(
+    'chat', conversationId,
     record.targetId,
     storageScope
   )
@@ -237,8 +237,8 @@ export async function retractUnresidentRoomTarget(
   const scope: RetractionScope = { kind: 'room', entityId: roomJid, accountScope: storageScope }
   notePendingRetractionIdentity(scope, record.targetId, record)
 
-  const resolution = await messageCache.findRoomRetractionTargets(
-    roomJid,
+  const resolution = await messageCache.findRetractionTargets(
+    'room', roomJid,
     record.targetId,
     storageScope
   )

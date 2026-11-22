@@ -185,7 +185,7 @@ describe('app read/displayed ID union deltas', () => {
       navType: 'conversation', navTarget: selected.conversationId, messageId: selected.id, accountId: lab.account,
     } }, ref)
     await vi.waitFor(() => expect(lab.invoke).toHaveBeenCalled())
-    expect(lab.getMessage).toHaveBeenCalledWith(selected.conversationId, selected.id, ref)
+    expect(lab.getMessage).toHaveBeenCalledWith('chat', selected.conversationId, selected.id, ref)
     lab.messages.set(selected.conversationId, [message('reused', 1, 'archive-first'), { ...selected, isRetracted: true }])
     finish({ allowed: true })
     await posting

@@ -18,7 +18,7 @@ import { generateMatchSnippet, type MatchSnippet } from '../utils/searchUtils'
 import { chatStore } from './chatStore'
 import { roomStore } from './roomStore'
 import { connectionStore } from './connectionStore'
-import { areRetractedInCache, getMessages, getRoomMessages } from '../utils/messageCache'
+import { areRetractedInCache, getMessages } from '../utils/messageCache'
 import type { XMPPClient } from '../core/XMPPClient'
 import type { Message, RoomMessage } from '../core/types'
 import { moderationMetadata, roomRetractionAuthorized } from '../utils/moderation'
@@ -519,8 +519,8 @@ async function fetchResultContexts(results: SearchResult[], query: string): Prom
 
         if (result.isRoom) {
           const [beforeMsgs, afterMsgs] = await Promise.all([
-            getRoomMessages(result.conversationId, { before: ts, limit: 1 }),
-            getRoomMessages(result.conversationId, { after: ts, limit: 2 }),
+            getMessages('room', result.conversationId, { before: ts, limit: 1 }),
+            getMessages('room', result.conversationId, { after: ts, limit: 2 }),
           ])
           const selected = selectRoomSearchTarget(
             { ...searchResultIdentity(result), roomJid: result.conversationId }, [...beforeMsgs, ...afterMsgs])
@@ -533,8 +533,8 @@ async function fetchResultContexts(results: SearchResult[], query: string): Prom
             .map(m => roomContextMessage(m, result.conversationId))
         } else {
           const [beforeMsgs, afterMsgs] = await Promise.all([
-            getMessages(result.conversationId, { before: ts, limit: 1 }),
-            getMessages(result.conversationId, { after: ts, limit: 2 }),
+            getMessages('chat', result.conversationId, { before: ts, limit: 1 }),
+            getMessages('chat', result.conversationId, { after: ts, limit: 2 }),
           ])
           before = beforeMsgs
             .filter(m => !sameChatSearchResultMessage(result, m))

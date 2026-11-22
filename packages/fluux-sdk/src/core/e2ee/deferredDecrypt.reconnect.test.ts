@@ -54,7 +54,7 @@ describe('deferred signal recovery after reconnect', () => {
   afterEach(() => { _resetForTesting(); cache._resetDBForTesting(); vi.restoreAllMocks() })
   async function seed(resident: boolean, active = false, archived = false) {
     const signal = archived ? { ...pending, ownArchiveId: 's-signal', ownArchiveBy: OWN } : pending
-    await cache.saveMessages([own, signal])
+    await cache.saveMessages('chat', [own, signal])
     chatStore.getState().addConversation({ id: PEER, name: 'Synthetic', type: 'chat', unreadCount: 1,
       lastMessage: own, readPointer: makeReadPointer(own, 'chat') })
     chatStore.setState({ activeConversationId: active ? PEER : null,
@@ -68,8 +68,8 @@ describe('deferred signal recovery after reconnect', () => {
     const pointer = chatStore.getState().conversationMeta.get(PEER)!.readPointer
     await engine.retryForPeer(PEER)
     await vi.waitFor(async () => {
-      expect((await cache.getMessages(PEER)).map(m => m.id)).toEqual(['own'])
-      expect((await cache.getMessages(PEER))[0].reactions).toEqual({ '👍': [PEER] })
+      expect((await cache.getMessages('chat', PEER)).map(m => m.id)).toEqual(['own'])
+      expect((await cache.getMessages('chat', PEER))[0].reactions).toEqual({ '👍': [PEER] })
       expect(count()).toBe(0)
     })
     expect(chatStore.getState().conversationMeta.get(PEER)!.readPointer).toBe(pointer)
@@ -80,8 +80,8 @@ describe('deferred signal recovery after reconnect', () => {
     else decrypt.mockResolvedValue({ plaintext: new TextEncoder().encode(serialize([xml('retract', { xmlns: 'urn:xmpp:message-retract:1', id: 'own' })])),
       senderDevice: { jid: PEER, deviceId: 'fixture' }, securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' } })
     await engine.retryForPeer(PEER)
-    await vi.waitFor(async () => { expect((await cache.getMessages(PEER)).map(m => m.id)).toEqual(['own']); expect(count()).toBe(0) })
-    expect((await cache.getMessages(PEER))[0].isRetracted).not.toBe(true)
+    await vi.waitFor(async () => { expect((await cache.getMessages('chat', PEER)).map(m => m.id)).toEqual(['own']); expect(count()).toBe(0) })
+    expect((await cache.getMessages('chat', PEER))[0].isRetracted).not.toBe(true)
   })
   it.each(['resident', 'cache', 'preview'].flatMap(source =>
     [true, false].map(authored => ({ source, authored })),
@@ -89,10 +89,10 @@ describe('deferred signal recovery after reconnect', () => {
     'recovers retractions from $source signals with evicted targets, authored=$authored', async ({ source, authored }) => {
       await seed(false)
       const target = { ...own, from: authored ? PEER : OWN, isOutgoing: !authored }
-      await cache.saveMessage(target)
+      await cache.saveMessage('chat', target)
       if (source === 'resident') chatStore.setState({ messages: new Map([[PEER, [pending]]]) })
       if (source === 'preview') {
-        await cache.deleteMessage(PEER, pending.id, pending.from)
+        await cache.deleteMessage('chat', PEER, pending.id, pending.from)
         const meta = chatStore.getState().conversationMeta.get(PEER)!
         chatStore.setState({ conversationMeta: new Map([[PEER, { ...meta, lastMessage: pending }]]) })
       }
@@ -103,7 +103,7 @@ describe('deferred signal recovery after reconnect', () => {
       })
       await engine.retryForPeer(PEER)
       await vi.waitFor(async () => {
-        const messages = await cache.getMessages(PEER)
+        const messages = await cache.getMessages('chat', PEER)
         expect(messages.map(m => m.id)).toEqual(['own'])
         expect(!!messages[0].isRetracted).toBe(authored)
       })
@@ -113,13 +113,13 @@ describe('deferred signal recovery after reconnect', () => {
     await seed(true, true)
     const pointer = chatStore.getState().conversationMeta.get(PEER)!.readPointer
     await (mode === 'all' ? engine.retryPending() : engine.retryForPeer(PEER))
-    expect((await cache.getMessages(PEER)).map(m => m.id)).toEqual(['own']); expect(count()).toBe(0)
+    expect((await cache.getMessages('chat', PEER)).map(m => m.id)).toEqual(['own']); expect(count()).toBe(0)
     expect(chatStore.getState().conversationMeta.get(PEER)!.readPointer).toBe(pointer)
   })
   it('keeps the active count while archive coverage cannot prove a recount', async () => {
     await seed(true, true); chatStore.setState({ conversationCoverage: new Map() })
     await engine.retryPending()
-    expect((await cache.getMessages(PEER)).map(m => m.id)).toEqual(['own']); expect(count()).toBe(1)
+    expect((await cache.getMessages('chat', PEER)).map(m => m.id)).toEqual(['own']); expect(count()).toBe(1)
   })
   it('does not clear the badge before the durable deletion completes', async () => {
     await seed(true, true)
@@ -140,7 +140,7 @@ describe('deferred signal recovery after reconnect', () => {
     expect(count()).toBe(1)
     expect(chatStore.getState().getMessage(PEER, pending)).toBeDefined()
     open.mockRestore(); cache._resetDBForTesting()
-    expect((await cache.getMessages(PEER)).some(m => m.id === 'signal')).toBe(true)
+    expect((await cache.getMessages('chat', PEER)).some(m => m.id === 'signal')).toBe(true)
   })
   it('does not repair another conversation on a peer key update', async () => {
     await seed(false); await engine.retryForPeer('other@example.test')
@@ -151,7 +151,7 @@ describe('deferred signal recovery after reconnect', () => {
     const result = await decrypt.getMockImplementation()!({ name: 'plain', attrs: {}, children: [] }, { kind: 'direct', peer: PEER })
     decrypt.mockImplementation(async () => { manager = {} as E2EEManager; return result })
     await engine.retryForPeer(PEER)
-    expect(count()).toBe(1); expect((await cache.getMessages(PEER)).some(m => m.id === 'signal')).toBe(true)
+    expect(count()).toBe(1); expect((await cache.getMessages('chat', PEER)).some(m => m.id === 'signal')).toBe(true)
   })
   it.each([false, true])('preserves a newer correction arriving during signal decryption, resident=%s', async resident => {
     await seed(resident)
@@ -159,13 +159,13 @@ describe('deferred signal recovery after reconnect', () => {
       correctionRevision: { ids: ['new-correction'], supersedes: [] } }
     const result = await decrypt.getMockImplementation()!({ name: 'plain', attrs: {}, children: [] }, { kind: 'direct', peer: PEER })
     decrypt.mockImplementation(async () => {
-      await cache.saveMessage(edited)
+      await cache.saveMessage('chat', edited)
       if (resident) chatStore.setState({ messages: new Map([[PEER, [own, edited]]]) })
       return result
     })
     await engine.retryForPeer(PEER)
-    expect((await cache.getMessages(PEER)).find(m => m.id === 'signal')).toMatchObject({ body: 'newer revision', encryptedPayload: undefined })
-    expect((await cache.getMessages(PEER))[0].reactions).toBeUndefined()
+    expect((await cache.getMessages('chat', PEER)).find(m => m.id === 'signal')).toMatchObject({ body: 'newer revision', encryptedPayload: undefined })
+    expect((await cache.getMessages('chat', PEER))[0].reactions).toBeUndefined()
     expect(count()).toBe(1)
   })
 
@@ -179,15 +179,15 @@ describe('deferred signal recovery after reconnect', () => {
       correctionRevision: { ids: ['new-correction'], supersedes: [] } }
     const result = await decrypt.getMockImplementation()!({ name: 'plain', attrs: {}, children: [] }, { kind: 'direct', peer: PEER })
     decrypt.mockImplementation(async () => {
-      await cache.saveMessage(edited)
+      await cache.saveMessage('chat', edited)
       if (resident) chatStore.setState({ messages: new Map([[PEER, [own, edited]]]) })
       return result
     })
     expect(await retry(mode)).toBe(mode === 'all' ? 0 : undefined)
     cache._resetDBForTesting()
     expect(await cache.getArchiveSignal(PEER, 's-signal', PEER)).toBeUndefined()
-    expect((await cache.getMessages(PEER)).find(m => m.id === 'signal')).toMatchObject({ body: 'newer revision' })
-    expect((await cache.getMessages(PEER))[0].reactions).toBeUndefined()
+    expect((await cache.getMessages('chat', PEER)).find(m => m.id === 'signal')).toMatchObject({ body: 'newer revision' })
+    expect((await cache.getMessages('chat', PEER))[0].reactions).toBeUndefined()
     expect(count()).toBe(1)
   })
 
@@ -195,12 +195,12 @@ describe('deferred signal recovery after reconnect', () => {
     await seed(false, true, true)
     const correction: StoredMessage = { ...pending, ownArchiveId: 's-signal', ownArchiveBy: OWN, isEdited: true,
       correctionRevision: { ids: ['stanza:s-correction'], supersedes: [], archiveTimestamp: 2000 } }
-    await cache.saveMessage(correction)
+    await cache.saveMessage('chat', correction)
     if (resident) chatStore.setState({ messages: new Map([[PEER, [own, correction]]]) })
     decrypt.mockImplementation(async () => {
       const newer: StoredMessage = { ...correction, body: 'newer edit', encryptedPayload: undefined,
         correctionRevision: { ids: ['new-correction'], supersedes: ['stanza:s-correction'] } }
-      await cache.saveMessage(newer)
+      await cache.saveMessage('chat', newer)
       if (resident) chatStore.setState({ messages: new Map([[PEER, [own, newer]]]) })
       return { plaintext: new TextEncoder().encode(serialize([
         xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'signal' }), xml('body', {}, 'superseded edit'),
@@ -210,7 +210,7 @@ describe('deferred signal recovery after reconnect', () => {
     expect(await retry(mode)).toBe(mode === 'all' ? 0 : undefined)
     cache._resetDBForTesting()
     expect(await cache.getArchiveSignal(PEER, 's-correction', PEER)).toBeUndefined()
-    expect((await cache.getMessages(PEER)).find(m => m.id === 'signal')).toMatchObject({ body: 'newer edit', encryptedPayload: undefined })
+    expect((await cache.getMessages('chat', PEER)).find(m => m.id === 'signal')).toMatchObject({ body: 'newer edit', encryptedPayload: undefined })
     expect(count()).toBe(1)
   })
 
@@ -227,7 +227,7 @@ describe('deferred signal recovery after reconnect', () => {
     fault.mockRestore()
     cache._resetDBForTesting()
     expect(await cache.getArchiveSignal(PEER, 's-signal', PEER)).toBeUndefined()
-    const messages = await cache.getMessages(PEER)
+    const messages = await cache.getMessages('chat', PEER)
     expect(messages.find(m => m.id === 'signal')?.encryptedPayload).toBeTruthy()
     expect(messages.find(m => m.id === 'own')?.reactions).toBeUndefined()
     if (resident) expect(chatStore.getState().getMessage(PEER, pending)?.encryptedPayload).toBeTruthy()
@@ -237,7 +237,7 @@ describe('deferred signal recovery after reconnect', () => {
     expect(await retry(mode)).toBe(mode === 'all' ? 1 : undefined)
     expect(count()).toBe(0)
     expect(await cache.getArchiveSignal(PEER, 's-signal', PEER)).toBeDefined()
-    expect((await cache.getMessages(PEER))[0].reactions).toEqual({ '👍': [PEER] })
+    expect((await cache.getMessages('chat', PEER))[0].reactions).toEqual({ '👍': [PEER] })
   })
 
   it.each(['all', 'peer'] as const)('preserves a qualified archive signal when IndexedDB cannot open on %s retry', async mode => {
@@ -250,8 +250,8 @@ describe('deferred signal recovery after reconnect', () => {
     expect(chatStore.getState().getMessage(PEER, pending)?.encryptedPayload).toBeTruthy()
     open.mockRestore(); cache._resetDBForTesting()
     expect(await cache.getArchiveSignal(PEER, 's-signal', PEER)).toBeUndefined()
-    expect((await cache.getMessages(PEER)).find(m => m.id === 'own')?.reactions).toBeUndefined()
-    expect((await cache.getMessages(PEER)).some(m => m.id === 'signal')).toBe(true)
+    expect((await cache.getMessages('chat', PEER)).find(m => m.id === 'own')?.reactions).toBeUndefined()
+    expect((await cache.getMessages('chat', PEER)).some(m => m.id === 'signal')).toBe(true)
     warning.mockRestore()
   })
 

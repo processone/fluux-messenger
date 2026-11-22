@@ -53,7 +53,7 @@ it.each([undefined, 1000, 2000])(
     const unread = nextTimestamp === undefined ? undefined : {
       ...readMessage, stanzaId: 'archive-b', timestamp: new Date(nextTimestamp), body: 'Still unread',
     }
-    await cache.saveRoomMessages(unread ? [readMessage, unread] : [readMessage])
+    await cache.saveMessages('room', unread ? [readMessage, unread] : [readMessage])
     const before = roomStore.getState().roomMeta.get(ROOM)!.readPointer!
 
     // No viewport report or new read: opening must honor the saved position.
@@ -63,7 +63,7 @@ it.each([undefined, 1000, 2000])(
     const pointer = roomStore.getState().roomMeta.get(ROOM)!.readPointer!
     expect(pointer.identity).toBe(before.identity)
     expect(pointer.order.timestamp).toBe(before.order.timestamp)
-    expect(await cache.countRoomUnreadInArchive(ROOM, {
+    expect(await cache.countUnreadInArchive('room', ROOM, {
       floor: new Date(0), pointer: pointer.order,
     })).toEqual({ unread: unread ? 1 : 0 })
 
@@ -78,7 +78,7 @@ it.each([undefined, 1000, 2000])(
 
 it('keeps the saved pointer when only another occurrence of its client ID is cached', async () => {
   const unread = { ...readMessage, stanzaId: 'archive-b', body: 'Another occurrence' }
-  await cache.saveRoomMessage(unread)
+  await cache.saveMessage('room', unread)
   const before = roomStore.getState().roomMeta.get(ROOM)!.readPointer!
 
   await roomStore.getState().activateRoom(ROOM)

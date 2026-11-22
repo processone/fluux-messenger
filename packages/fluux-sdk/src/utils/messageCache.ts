@@ -358,8 +358,8 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
         // assigned per-archive and repeat across rooms, so a scalar index on either
         // would let a lookup cross rooms — and nothing queries them anyway. Every
         // stanzaId/originId query goes through the room-scoped `identityKeys` alias
-        // instead (see tierKey / getRoomMessageByStanzaId /
-        // updateRoomMessageReactions).
+        // instead (see tierKey / roomGetMessageByStanzaId /
+        // roomUpdateMessageReactions).
         s.createIndex('identityKeys', 'identityKeys', { unique: false, multiEntry: true })
         s.createIndex('ids', 'ids', { unique: false, multiEntry: true })
         s.createIndex('room_timestamp', ['roomJid', 'timestamp'], { unique: false })
@@ -769,7 +769,7 @@ async function findRoomIdentityComponent(
  * globally-first match and can land in the wrong room. Fetch every id match and keep
  * the one in this room; when the caller knows the sender, also match `from`. Returns
  * undefined when no row in the room carries the id. Shared by every room-aware
- * by-id lookup (getRoomMessage, updateRoomMessage, deleteRoomMessage).
+ * by-id lookup (roomGetMessage, roomUpdateMessage, roomDeleteMessage).
  */
 async function findRoomRowById(
   idsIndex: { getAll(key: string): Promise<StoredRoomMessage[]> },
@@ -819,7 +819,7 @@ async function findRoomRowsByReference(
  * Core: resolve every existing row sharing any tier with `incoming` (echo,
  * live/MAM, bridge), merge them and `incoming` into one, delete the losers, put
  * the survivor. `incoming` is an already-serialized StoredRoomMessage, so callers
- * that need to PRESERVE accumulated aliases (updateRoomMessage) union them in
+ * that need to PRESERVE accumulated aliases (roomUpdateMessage) union them in
  * first. `excludeKey` skips a specific existing row from the merge — used when the
  * caller already holds that row's data in `incoming` and must not merge its
  * pre-update copy back in (which the union would do, re-adding a removed reaction).
@@ -832,7 +832,7 @@ async function upsertStoredRoomRow(
 ): Promise<StoredRoomMessage> {
   const matches = await findRoomRowsByIdentity(store, incoming, excludeKey)
   let merged = incoming
-  for (const row of matches) merged = mergeRoomRows(merged, row)
+  for (const row of matches) merged = roomMergeRows(merged, row)
   const collision = await store.get(merged.cacheKey)
   if (collision && collision.cacheKey !== excludeKey && !matches.some(row => row.cacheKey === collision.cacheKey)) {
     const fallbackKey = (row: StoredRoomMessage) => canonicalKey(roomScope(row.roomJid), { ...row, stanzaId: undefined, originId: undefined })
@@ -1222,7 +1222,7 @@ function mergeCanonicalRows<T extends CanonicalRow>(
   const retracted = !!(a.isRetracted || b.isRetracted)
   const moderated = !!(a.isModerated || b.isModerated)
   // isMention is set only on the live stanza path and never recomputed for a MAM
-  // copy of the same message (see countRoomUnreadInArchive's doc), so it must be
+  // copy of the same message (see roomCountUnreadInArchive's doc), so it must be
   // treated as MONOTONIC evidence here: an absent/false flag on one copy must
   // never erase a `true` established by the other. OR it independently of
   // contentOwner — taking it from `owner` alone would silently drop a live-set
@@ -1267,7 +1267,7 @@ function reconciledRoomIdentityKeys(row: StoredRoomMessage): string[] {
 }
 
 /** {@link mergeCanonicalRows} bound to the room store's namespaced keys. */
-export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
+function roomMergeRows(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
   a = withoutLegacyRoomAuthority(a)
   b = withoutLegacyRoomAuthority(b)
   const merged = mergeCanonicalRows(a, b, (row) => ({
@@ -1279,7 +1279,7 @@ export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): Store
 }
 
 /** {@link mergeCanonicalRows} bound to the chat store's conversation-scoped keys. */
-export function mergeChatRows(a: StoredMessage, b: StoredMessage): StoredMessage {
+function chatMergeRows(a: StoredMessage, b: StoredMessage): StoredMessage {
   return mergeCanonicalRows(a, b, (row) => ({
     cacheKey: chatCacheKey(row),
     identityKeys: unionSorted(row.identityKeys, [...identityKeys(CHAT_SCOPE, row), ...correctionReferenceKeys(CHAT_SCOPE, row)]),
@@ -1307,7 +1307,7 @@ async function upsertStoredChatRow(
   const accepted: StoredMessage[] = []
   for (const row of matches) {
     if (chatArchiveConflict(merged, row)) continue
-    merged = mergeChatRows(merged, row)
+    merged = chatMergeRows(merged, row)
     accepted.push(row)
   }
   if (excludeKey && excludeKey !== merged.cacheKey) await store.delete(excludeKey)
@@ -1415,7 +1415,7 @@ async function reconcileHistoryCacheRows<T extends (StoredMessage | StoredRoomMe
   }
 }
 
-export async function reconcileChatHistoryMessages(
+async function chatReconcileHistoryMessages(
   messages: Message[],
   resident: () => readonly Message[],
   scopeJid: string | null = getStorageScopeJid(),
@@ -1490,7 +1490,7 @@ function reconcileRoomRetractionRow(page: StoredRoomMessage, held: StoredRoomMes
   })
 }
 
-export async function reconcileRoomHistoryMessages(
+async function roomReconcileHistoryMessages(
   messages: RoomMessage[],
   resident: () => readonly RoomMessage[],
   scopeJid: string | null = getStorageScopeJid(),
@@ -1789,7 +1789,7 @@ async function commitArchiveSignal(
 /**
  * Save a chat message to IndexedDB.
  */
-export async function saveMessageWithResult(message: Message): Promise<boolean> {
+async function chatSaveMessageWithResult(message: Message): Promise<boolean> {
   const scopeJid = getStorageScopeJid()
   try {
     const db = await getDB(scopeJid)
@@ -1815,10 +1815,6 @@ export async function saveMessageWithResult(message: Message): Promise<boolean> 
   }
 }
 
-export async function saveMessage(message: Message): Promise<void> {
-  await saveMessageWithResult(message)
-}
-
 /**
  * Save multiple chat messages to IndexedDB in a single transaction.
  *
@@ -1827,7 +1823,7 @@ export async function saveMessage(message: Message): Promise<void> {
  * transitions) must gate on the result: a cursor persisted past a page whose
  * write silently failed would skip that page forever.
  */
-export async function saveMessages(messages: Message[]): Promise<boolean> {
+async function chatSaveMessages(messages: Message[]): Promise<boolean> {
   if (messages.length === 0) return true
 
   const scopeJid = getStorageScopeJid()
@@ -1894,7 +1890,7 @@ export async function getMessagesWithEncryptedPayload(): Promise<CachedChatMessa
  * Get a conversation-scoped message by its client-generated ID. A `selected`
  * row (see {@link ChatRowSelector}) picks among archive-distinct rows.
  */
-export async function getMessage(
+async function chatGetMessage(
   conversationId: string,
   id: string,
   selected?: ChatRowSelector
@@ -1918,7 +1914,7 @@ export async function getMessage(
 }
 
 /** Resolve an unselected update using the resident store's reference policy. */
-export async function getMessageByReference(
+async function chatGetMessageByReference(
   conversationId: string,
   reference: string,
 ): Promise<Message | null> {
@@ -2018,7 +2014,7 @@ export async function getMessagesByReferences(
 /**
  * Get a conversation-scoped message by its server-assigned stanzaId (for MAM deduplication).
  */
-export async function getMessageByStanzaId(
+async function chatGetMessageByStanzaId(
   conversationId: string,
   stanzaId: string
 ): Promise<Message | null> {
@@ -2065,7 +2061,7 @@ export interface GetMessagesOptions {
  * skip foreign rows but cannot STOP on them — `results.length < limit` never
  * trips once the walk has left the entity, and an unlimited read has no stop
  * condition at all — so the cursor walks the rest of the store, one awaited
- * `continue()` per row. On the activation path (`getMessagesAround` issues one
+ * `continue()` per row. On the activation path (`chatGetMessagesAround` issues one
  * range of each shape) that turns a ~150-row read into a full-archive scan.
  *
  * Bounds carry the caller's exclusivity: `before` is an exclusive upper bound,
@@ -2100,18 +2096,18 @@ const CACHE_UNAVAILABLE: CacheRead<never> = { status: 'unavailable' }
  * Messages are returned in chronological order (oldest first).
  * The optional filter runs before counting toward the limit; the cursor stops
  * as soon as enough matching renderable messages have been collected.
- * Returns `[]` when the cache cannot be read; see {@link readMessages}.
+ * Returns `[]` when the cache cannot be read; see {@link chatReadMessages}.
  */
-export async function getMessages(
+async function chatGetMessages(
   conversationId: string,
   options: GetMessagesOptions & { filter?: (message: Message) => boolean } = {}
 ): Promise<Message[]> {
-  const read = await readMessages(conversationId, options)
+  const read = await chatReadMessages(conversationId, options)
   return read.status === 'ok' ? read.value : []
 }
 
-/** {@link getMessages}, reporting an unreadable cache instead of an empty result. */
-export async function readMessages(
+/** {@link chatGetMessages}, reporting an unreadable cache instead of an empty result. */
+async function chatReadMessages(
   conversationId: string,
   options: GetMessagesOptions & { filter?: (message: Message) => boolean } = {}
 ): Promise<CacheRead<Message[]>> {
@@ -2205,15 +2201,15 @@ export interface GetMessagesAroundOptions {
  *   (e.g. a navigation target) also resolves.
  *   1:1 messages have no XEP-0421 occupant, so `occupantId` is not consulted here.
  */
-export async function getMessagesAround(
+async function chatGetMessagesAround(
   conversationId: string,
   anchorRow: MessageRowRef,
   options: GetMessagesAroundOptions = {}
 ): Promise<Message[]> {
   const { before = AROUND_CONTEXT_BEFORE, after } = options
 
-  let anchor = await getMessage(conversationId, anchorRow.id, anchorRow)
-  if (!anchor && !anchorRow.stanzaId && !anchorRow.originId) anchor = await getMessageByStanzaId(conversationId, anchorRow.id)
+  let anchor = await chatGetMessage(conversationId, anchorRow.id, anchorRow)
+  if (!anchor && !anchorRow.stanzaId && !anchorRow.originId) anchor = await chatGetMessageByStanzaId(conversationId, anchorRow.id)
   if (!anchor) return []
 
   const t = anchor.timestamp.getTime()
@@ -2226,8 +2222,8 @@ export async function getMessagesAround(
   const following = tied.slice(anchorIndex + 1)
   const olderCount = Math.max(0, before - preceding.length)
   const newerCount = after === undefined ? undefined : Math.max(0, after - following.length)
-  const older = olderCount === 0 ? [] : await getMessages(conversationId, { before: new Date(t), limit: olderCount })
-  const newer = newerCount === 0 ? [] : await getMessages(conversationId, {
+  const older = olderCount === 0 ? [] : await chatGetMessages(conversationId, { before: new Date(t), limit: olderCount })
+  const newer = newerCount === 0 ? [] : await chatGetMessages(conversationId, {
     after: new Date(t), ...(newerCount !== undefined ? { limit: newerCount } : {}),
   })
   const beforeRows = [...older, ...preceding]
@@ -2239,7 +2235,7 @@ export async function getMessagesAround(
 /**
  * Get the count of messages for a conversation.
  */
-export async function getMessageCount(conversationId: string): Promise<number> {
+async function chatGetMessageCount(conversationId: string): Promise<number> {
   try {
     const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(MESSAGES_STORE, 'readonly')
@@ -2327,7 +2323,7 @@ function isStrictlyAfterPointer(position: ExactPosition, pointerPosition: Pointe
  * Returns `null` on any IndexedDB error, so callers can distinguish "zero
  * unread" from "could not determine."
  */
-export async function countUnreadInArchive(
+async function chatCountUnreadInArchive(
   conversationId: string,
   args: UnreadCountArgs
 ): Promise<ArchiveCount | null> {
@@ -2367,30 +2363,6 @@ export async function countUnreadInArchive(
       console.warn('Failed to count unread in archive:', error)
     }
     return null
-  }
-}
-
-/**
- * Count all chat messages across all conversations.
- */
-export async function getTotalMessageCount(): Promise<number> {
-  try {
-    const db = await getDB(getStorageScopeJid())
-    return await db.count(MESSAGES_STORE)
-  } catch {
-    return 0
-  }
-}
-
-/**
- * Count all room messages across all rooms.
- */
-export async function getTotalRoomMessageCount(): Promise<number> {
-  try {
-    const db = await getDB(getStorageScopeJid())
-    return await db.count(ROOM_MESSAGES_STORE)
-  } catch {
-    return 0
   }
 }
 
@@ -2437,7 +2409,7 @@ export async function getCorrectionReferences(
   }
 }
 
-export async function applyChatCorrection(
+async function chatApplyCorrection(
   conversationId: string, targetId: string, updates: Partial<Message> & MessageImplState, actor: MessageActor,
   scopeJid: string | null = getStorageScopeJid(),
   selected?: Pick<Message, 'id' | 'stanzaId' | 'originId'>,
@@ -2482,7 +2454,7 @@ export async function applyChatCorrection(
   return result
 }
 
-export async function applyRoomCorrection(
+async function roomApplyCorrection(
   roomJid: string, targetId: string, updates: Partial<RoomMessage> & MessageImplState, actor: MessageActor,
   scopeJid: string | null = getStorageScopeJid(),
 ): Promise<(RoomMessage & MessageImplState) | null | undefined> {
@@ -2526,7 +2498,7 @@ export async function applyRoomCorrection(
  * still finds it. `selected` (see {@link ChatRowSelector}) picks the intended row
  * when a same-sender client id has several archive-distinct rows.
  *
- * Chat twin of {@link updateRoomMessage}, and it splits the same two ways when an
+ * Chat twin of {@link roomUpdateMessage}, and it splits the same two ways when an
  * update carries an identity FIELD:
  *   - Expansion (a stanza-id landing on a local echo, as `confirmSentMessage`
  *     sends) — the existing row's accumulated aliases are unioned into the updated
@@ -2535,7 +2507,7 @@ export async function applyRoomCorrection(
  *     cleared tier's alias is REMOVED, so a later message carrying that stanza-id
  *     no longer resolves to this row and is not wrongly merged into it.
  */
-export async function updateMessage(
+async function chatUpdateMessage(
   conversationId: string,
   id: string,
   updates: Partial<Message> & MessageImplState,
@@ -2617,7 +2589,7 @@ export async function updateMessage(
  *
  * @returns true if the message was found and updated, false otherwise.
  */
-export async function updateMessageReactions(
+async function chatUpdateMessageReactions(
   conversationId: string,
   messageId: string,
   reactorJid: string,
@@ -2676,7 +2648,7 @@ export interface RetractionTargetResolution<T> {
  * Confined to `conversationId`: a client id is a name in one stream and repeats
  * across conversations.
  */
-export async function findChatRetractionTargets(
+async function chatFindRetractionTargets(
   conversationId: string,
   targetId: string,
   scopeJid: string | null = getStorageScopeJid()
@@ -2715,9 +2687,9 @@ export interface ChatMessageCopy {
  * SEARCH INDEX keys a chat document by the canonical key the row had when it was
  * indexed: once the cache merges two rows, a document written under the key that
  * lost is reachable only through these lists. Chat twin of
- * {@link findRoomMessageCopies}.
+ * {@link roomFindMessageCopies}.
  */
-export async function findChatMessageCopies(
+async function chatFindMessageCopies(
   conversationId: string,
   message: Message,
   scopeJid: string | null = getStorageScopeJid()
@@ -2768,7 +2740,7 @@ export async function findChatMessageCopies(
  * Every cached room message a `<retract id="…">` reference could name, most
  * specific tier first.
  *
- * Room twin of {@link findChatRetractionTargets}, resolved entirely through the
+ * Room twin of {@link chatFindRetractionTargets}, resolved entirely through the
  * room-scoped `identityKeys` aliases plus the `ids` index. Every lookup is
  * confined to `roomJid`: stanza ids and origin ids are assigned per archive and
  * repeat across rooms, and client ids repeat everywhere.
@@ -2779,7 +2751,7 @@ export async function findChatMessageCopies(
  * client id. The caller's XEP-0424 authorship gate (occupant-id first) decides
  * among rows within that tier, exactly as it does for a resident window.
  */
-export async function findRoomRetractionTargets(
+async function roomFindRetractionTargets(
   roomJid: string,
   targetId: string,
   scopeJid: string | null = getStorageScopeJid()
@@ -2806,7 +2778,7 @@ export interface RoomMessageCopy {
   message: RoomMessage
 }
 
-export async function findRoomMessageCopies(
+async function roomFindMessageCopies(
   roomJid: string,
   message: RoomMessage,
   scopeJid: string | null = getStorageScopeJid()
@@ -2889,7 +2861,7 @@ export async function areRetractedInCache(
  * Delete a conversation- and sender-scoped message by client ID. A `selected`
  * row (see {@link ChatRowSelector}) picks among archive-distinct rows.
  */
-export async function deleteMessage(
+async function chatDeleteMessage(
   conversationId: string,
   id: string,
   from: string,
@@ -2937,7 +2909,7 @@ export async function deleteMessageForRecovery(
 /**
  * Delete all messages for a conversation.
  */
-export async function deleteConversationMessages(conversationId: string): Promise<void> {
+async function chatDeleteConversationMessages(conversationId: string): Promise<void> {
   try {
     const db = await getDB(getStorageScopeJid())
     const tx = db.transaction([MESSAGES_STORE, ARCHIVE_SIGNALS_STORE], 'readwrite')
@@ -2965,23 +2937,6 @@ export async function deleteConversationMessages(conversationId: string): Promis
 // =============================================================================
 
 /**
- * Save a room message to IndexedDB.
- *
- * Writes directly to the store — no batching. A live message must reach IDB
- * before the next `window.location.reload()` (e.g. long-sleep detection),
- * otherwise the message is lost from the cache and the subsequent MAM
- * catch-up cursor may skip past it. Batched writes for history replay
- * should use {@link saveRoomMessages} instead.
- */
-export async function saveRoomMessageWithResult(message: RoomMessage): Promise<boolean> {
-  return saveRoomMessages([message])
-}
-
-export async function saveRoomMessage(message: RoomMessage): Promise<void> {
-  await saveRoomMessageWithResult(message)
-}
-
-/**
  * Save multiple room messages to IndexedDB in a single transaction.
  *
  * Resolves `true` iff the transaction committed — errors are absorbed (warn)
@@ -2989,7 +2944,7 @@ export async function saveRoomMessage(message: RoomMessage): Promise<void> {
  * transitions) must gate on the result: a cursor persisted past a page whose
  * write silently failed would skip that page forever.
  */
-export async function saveRoomMessages(messages: RoomMessage[]): Promise<boolean> {
+async function roomSaveMessages(messages: RoomMessage[]): Promise<boolean> {
   if (messages.length === 0) return true
 
   const scopeJid = getStorageScopeJid()
@@ -3021,7 +2976,7 @@ export async function saveRoomMessages(messages: RoomMessage[]): Promise<boolean
  * sender. A MERGED row carries every absorbed client id in `ids[]`, so it stays
  * findable by ANY of them. See {@link findRoomRowById}.
  */
-export async function getRoomMessage(
+async function roomGetMessage(
   roomJid: string,
   id: string,
   from?: string,
@@ -3045,7 +3000,7 @@ export async function getRoomMessage(
   }
 }
 
-export async function getRoomMessageByReference(
+async function roomGetMessageByReference(
   roomJid: string,
   reference: string,
   from?: string,
@@ -3076,7 +3031,7 @@ export async function getRoomMessageByReference(
  * `identityKeys[]` even when the survivor's own `stanzaId` scalar came from a
  * different copy).
  */
-export async function getRoomMessageByStanzaId(
+async function roomGetMessageByStanzaId(
   roomJid: string,
   stanzaId: string
 ): Promise<RoomMessage | null> {
@@ -3095,20 +3050,11 @@ export async function getRoomMessageByStanzaId(
 }
 
 /**
- * Get messages for a room with optional pagination.
- * Messages are returned in chronological order (oldest first).
- * Returns `[]` when the cache cannot be read; see {@link readRoomMessages}.
+ * Get messages for a room with optional pagination, oldest first, reporting an
+ * unreadable cache instead of an empty result (the public `getMessages` maps
+ * that to `[]`).
  */
-export async function getRoomMessages(
-  roomJid: string,
-  options: GetMessagesOptions = {}
-): Promise<RoomMessage[]> {
-  const read = await readRoomMessages(roomJid, options)
-  return read.status === 'ok' ? read.value : []
-}
-
-/** {@link getRoomMessages}, reporting an unreadable cache instead of an empty result. */
-export async function readRoomMessages(
+async function roomReadMessages(
   roomJid: string,
   options: GetMessagesOptions = {}
 ): Promise<CacheRead<RoomMessage[]>> {
@@ -3124,7 +3070,7 @@ export async function readRoomMessages(
 
     const results: RoomMessage[] = []
 
-    // Determine cursor direction (same logic as getMessages)
+    // Determine cursor direction (same logic as chatGetMessages)
     const goBackwards = before || (latest && !after)
     let cursor = await index.openCursor(range, goBackwards ? 'prev' : 'next')
 
@@ -3132,7 +3078,7 @@ export async function readRoomMessages(
       const stored = cursor.value
       if (stored.roomJid === roomJid) {
         const message = deserializeRoomMessage(stored)
-        // Skip legacy blank rows (see getMessages / isRenderableStoredMessage):
+        // Skip legacy blank rows (see chatGetMessages / isRenderableStoredMessage):
         // the "empty Cynthia row" lived in a room archive exactly like this.
         if (isRenderableStoredMessage(message)) {
           results.push(message)
@@ -3173,7 +3119,7 @@ export async function getRoomMessageByRowRef(
   roomJid: string,
   ref: MessageRowRef,
 ): Promise<RoomMessage | null> {
-  if (!ref.stanzaId) return getRoomMessage(roomJid, ref.id, undefined, ref.occupantId)
+  if (!ref.stanzaId) return roomGetMessage(roomJid, ref.id, undefined, ref.occupantId)
   const candidates = await getRoomMessageCandidates(roomJid, ref.id)
   if (!candidates) return null
   const index = findMessageRowIndex(candidates, ref)
@@ -3184,7 +3130,7 @@ export async function getRoomMessageByRowRef(
  * Load cached neighbors around an exact room row, preserving tied-timestamp order.
  * See docs/MESSAGE_IDENTIFIERS.md, section 5, for window and legacy-anchor semantics.
  */
-export async function getRoomMessagesAround(
+async function roomGetMessagesAround(
   roomJid: string,
   anchorRow: MessageRowRef,
   options: GetMessagesAroundOptions = {}
@@ -3193,7 +3139,7 @@ export async function getRoomMessagesAround(
   const storageScope = captureStorageScope()
   let anchor = await getRoomMessageByRowRef(roomJid, anchorRow)
   storageScope.assertCurrent()
-  if (!anchor && !anchorRow.stanzaId) anchor = await getRoomMessageByStanzaId(roomJid, anchorRow.id)
+  if (!anchor && !anchorRow.stanzaId) anchor = await roomGetMessageByStanzaId(roomJid, anchorRow.id)
   storageScope.assertCurrent()
   if (!anchor) return []
 
@@ -3254,7 +3200,7 @@ export async function getRoomMessagesAround(
 /**
  * Get the count of messages for a room.
  */
-export async function getRoomMessageCount(roomJid: string): Promise<number> {
+async function roomGetMessageCount(roomJid: string): Promise<number> {
   try {
     const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(ROOM_MESSAGES_STORE, 'readonly')
@@ -3271,7 +3217,7 @@ export async function getRoomMessageCount(roomJid: string): Promise<number> {
 
 /**
  * Count unread room messages in the durable archive, independent of what is
- * resident in memory. Room counterpart of {@link countUnreadInArchive} — see it
+ * resident in memory. Room counterpart of {@link chatCountUnreadInArchive} — see it
  * for the general shape.
  * The optional `isVisible` predicate excludes hidden rows before applying the
  * unread cap; it does not change the read boundary.
@@ -3302,7 +3248,7 @@ export async function getRoomMessageCount(roomJid: string): Promise<number> {
  * Returns `null` on any IndexedDB error, so callers can distinguish "zero
  * unread" from "could not determine."
  */
-export async function countRoomUnreadInArchive(
+async function roomCountUnreadInArchive(
   roomJid: string, args: UnreadCountArgs,
   isVisible?: (message: RoomMessage) => boolean,
 ): Promise<ArchiveCount | null> {
@@ -3352,7 +3298,7 @@ export async function countRoomUnreadInArchive(
  * the lookup goes through the stanza-id path, never the client-generated
  * `id`. Rooms reuse their own per-archive id sequence, so a bare `stanzaId`
  * index lookup could return a DIFFERENT room's row — {@link
- * getRoomMessageByStanzaId} confines it to `entityId` (room-scoping
+ * roomGetMessageByStanzaId} confines it to `entityId` (room-scoping
  * footgun, see that function's doc). The chat lookup is likewise confined to
  * `entityId`.
  *
@@ -3366,8 +3312,8 @@ export async function resolveArchivePosition(
   isRoom: boolean
 ): Promise<ExactPosition | null> {
   const message = isRoom
-    ? await getRoomMessageByStanzaId(entityId, archiveId)
-    : await getMessageByStanzaId(entityId, archiveId)
+    ? await roomGetMessageByStanzaId(entityId, archiveId)
+    : await chatGetMessageByStanzaId(entityId, archiveId)
   if (!message) return null
   return exactPosition(message, isRoom ? 'room' : 'chat')
 }
@@ -3387,7 +3333,7 @@ export async function resolveArchivePosition(
  *     carrying that stanzaId no longer resolves to this row and is not wrongly
  *     merged in.
  */
-export async function updateRoomMessage(
+async function roomUpdateMessage(
   roomJid: string,
   id: string,
   updates: Partial<RoomMessage> & MessageImplState,
@@ -3462,7 +3408,7 @@ export async function updateRoomMessage(
  *
  * @returns true if the message was found and updated, false otherwise.
  */
-export async function updateRoomMessageReactions(
+async function roomUpdateMessageReactions(
   roomJid: string,
   messageId: string,
   reactorNick: string,
@@ -3481,7 +3427,7 @@ export async function updateRoomMessageReactions(
     // The `ids` multiEntry index is store-wide and non-unique, and cacheKeys sort
     // by room JID, so getFromIndex('ids', …) could return a DIFFERENT room's
     // message when a client id collides; take every id match and keep the one in
-    // this room. (Mirrors getRoomMessageByStanzaId's room-scoping.)
+    // this room. (Mirrors roomGetMessageByStanzaId's room-scoping.)
     const resolution = await findRoomRowsByReference(store, roomJid, messageId)
     const existing = resolution && canMergeOccupantSet(resolution.candidates)
       ? resolution.candidates[0]
@@ -3509,7 +3455,7 @@ export async function updateRoomMessageReactions(
     }
 
     // Authoritative: apply the change to the found row and put under its OWN
-    // cacheKey — never route through mergeRoomRows, whose reaction-union would
+    // cacheKey — never route through roomMergeRows, whose reaction-union would
     // resurrect a reactor this call just removed.
     const updated = {
       ...existing,
@@ -3533,7 +3479,7 @@ export async function updateRoomMessageReactions(
  * a merged row, and a colliding id in another room is not deleted), then deletes by
  * its cacheKey (the primary key). Pass `from` to also pin the sender.
  */
-export async function deleteRoomMessage(
+async function roomDeleteMessage(
   roomJid: string,
   id: string,
   from?: string,
@@ -3556,7 +3502,7 @@ export async function deleteRoomMessage(
 /**
  * Delete all messages for a room.
  */
-export async function deleteRoomMessages(roomJid: string): Promise<void> {
+async function roomDeleteMessages(roomJid: string): Promise<void> {
   try {
     const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(ROOM_MESSAGES_STORE, 'readwrite')
@@ -3603,7 +3549,7 @@ export async function clearAllMessages(): Promise<void> {
 /**
  * Get the oldest message timestamp for a conversation (for determining if more history exists in IndexedDB).
  */
-export async function getOldestMessageTimestamp(
+async function chatGetOldestMessageTimestamp(
   conversationId: string
 ): Promise<Date | null> {
   try {
@@ -3631,7 +3577,7 @@ export async function getOldestMessageTimestamp(
 /**
  * Get the oldest room message timestamp (for determining if more history exists in IndexedDB).
  */
-export async function getOldestRoomMessageTimestamp(
+async function roomGetOldestMessageTimestamp(
   roomJid: string
 ): Promise<Date | null> {
   try {
@@ -3689,7 +3635,7 @@ async function readInPages<Raw>(
  * @param batchSize - Number of messages per batch (default: 500)
  * @param onBatch - Callback invoked with each batch of deserialized messages
  */
-export async function iterateAllMessages(
+async function chatIterateAllMessages(
   batchSize: number,
   onBatch: (messages: Message[]) => Promise<void>
 ): Promise<void> {
@@ -3699,17 +3645,160 @@ export async function iterateAllMessages(
 
 /**
  * Iterate all stored room messages in batches.
- * Used for search index backfill. Same paged-read strategy as `iterateAllMessages`.
+ * Used for search index backfill. Same paged-read strategy as `chatIterateAllMessages`.
  *
  * @param batchSize - Number of messages per batch (default: 500)
  * @param onBatch - Callback invoked with each batch of deserialized messages
  */
-export async function iterateAllRoomMessages(
+async function roomIterateAllMessages(
   batchSize: number,
   onBatch: (messages: RoomMessage[]) => Promise<void>
 ): Promise<void> {
   await readInPages<Parameters<typeof deserializeRoomMessage>[0]>(ROOM_MESSAGES_STORE, batchSize,
     rows => onBatch(rows.map(deserializeRoomMessage)))
+}
+
+// =============================================================================
+// Kind-keyed archive API
+// =============================================================================
+
+/**
+ * Which archive an operation addresses: one-to-one `chat` rows (keyed by
+ * conversation) or multi-user `room` rows (keyed by room JID). Every exported
+ * archive operation takes the kind first and then the arguments of that kind's
+ * implementation, so a caller never names a store by function name.
+ */
+export type ArchiveKind = 'chat' | 'room'
+
+/**
+ * The per-kind implementations. A function appears here only when the two kinds
+ * genuinely differ (their stores, indexes and identity rules do); the rest are
+ * written once below. Both members of each pair keep their own arguments, e.g. a
+ * room row is pinned by `from`/`occupantId` where a chat row is pinned by a row selector.
+ */
+const archiveOps = {
+  chat: {
+    saveMessageWithResult: chatSaveMessageWithResult,
+    saveMessages: chatSaveMessages,
+    getMessage: chatGetMessage,
+    getMessageByReference: chatGetMessageByReference,
+    getMessageByStanzaId: chatGetMessageByStanzaId,
+    readMessages: chatReadMessages,
+    getMessagesAround: chatGetMessagesAround,
+    getMessageCount: chatGetMessageCount,
+    countUnreadInArchive: chatCountUnreadInArchive,
+    applyCorrection: chatApplyCorrection,
+    findRetractionTargets: chatFindRetractionTargets,
+    findMessageCopies: chatFindMessageCopies,
+    updateMessage: chatUpdateMessage,
+    updateMessageReactions: chatUpdateMessageReactions,
+    deleteMessage: chatDeleteMessage,
+    deleteConversationMessages: chatDeleteConversationMessages,
+    getOldestMessageTimestamp: chatGetOldestMessageTimestamp,
+    iterateAllMessages: chatIterateAllMessages,
+    reconcileHistoryMessages: chatReconcileHistoryMessages,
+    mergeRows: chatMergeRows,
+  },
+  room: {
+    /**
+     * Writes directly to the store, with no batching: a live message must reach
+     * IndexedDB before the next `window.location.reload()` (long-sleep detection),
+     * or the message is lost from the cache and the MAM catch-up cursor may skip it.
+     */
+    saveMessageWithResult: (message: RoomMessage) => roomSaveMessages([message]),
+    saveMessages: roomSaveMessages,
+    getMessage: roomGetMessage,
+    getMessageByReference: roomGetMessageByReference,
+    getMessageByStanzaId: roomGetMessageByStanzaId,
+    readMessages: roomReadMessages,
+    getMessagesAround: roomGetMessagesAround,
+    getMessageCount: roomGetMessageCount,
+    countUnreadInArchive: roomCountUnreadInArchive,
+    applyCorrection: roomApplyCorrection,
+    findRetractionTargets: roomFindRetractionTargets,
+    findMessageCopies: roomFindMessageCopies,
+    updateMessage: roomUpdateMessage,
+    updateMessageReactions: roomUpdateMessageReactions,
+    deleteMessage: roomDeleteMessage,
+    deleteConversationMessages: roomDeleteMessages,
+    getOldestMessageTimestamp: roomGetOldestMessageTimestamp,
+    iterateAllMessages: roomIterateAllMessages,
+    reconcileHistoryMessages: roomReconcileHistoryMessages,
+    mergeRows: roomMergeRows,
+  },
+} as const
+
+type ArchiveOps = typeof archiveOps
+type ArchiveOpName = keyof ArchiveOps['chat'] & keyof ArchiveOps['room']
+
+function byKind<N extends ArchiveOpName>(name: N) {
+  return <K extends ArchiveKind>(kind: K, ...args: Parameters<ArchiveOps[K][N]>): ReturnType<ArchiveOps[K][N]> =>
+    (archiveOps[kind][name] as (...args: unknown[]) => ReturnType<ArchiveOps[K][N]>)(...args)
+}
+
+/** Save one message; `true` iff the write committed (errors are absorbed and warned). */
+export const saveMessageWithResult = byKind('saveMessageWithResult')
+/**
+ * Save many messages in one transaction. Resolves `true` iff it committed: callers
+ * advancing a durable cursor (gap or coverage transitions) must gate on it, since a
+ * cursor persisted past a page whose write silently failed would skip that page forever.
+ */
+export const saveMessages = byKind('saveMessages')
+/** Get a message by client id inside one entity; a merged row is found by any id it absorbed. */
+export const getMessage = byKind('getMessage')
+/** Resolve a reference (any identity tier) to one message inside one entity. */
+export const getMessageByReference = byKind('getMessageByReference')
+/** Get a message by server stanza id inside one entity (stanza ids repeat across archives). */
+export const getMessageByStanzaId = byKind('getMessageByStanzaId')
+/** Messages of one entity in chronological order, telling an empty result from an unreadable cache. */
+export const readMessages = byKind('readMessages')
+/** A contiguous window of cached messages around an anchor row, in chronological order. */
+export const getMessagesAround = byKind('getMessagesAround')
+export const getMessageCount = byKind('getMessageCount')
+/** Unread count in the durable archive; `null` when it cannot be determined. */
+export const countUnreadInArchive = byKind('countUnreadInArchive')
+export const applyCorrection = byKind('applyCorrection')
+export const findRetractionTargets = byKind('findRetractionTargets')
+export const findMessageCopies = byKind('findMessageCopies')
+export const updateMessage = byKind('updateMessage')
+export const updateMessageReactions = byKind('updateMessageReactions')
+export const deleteMessage = byKind('deleteMessage')
+/** Delete every message of one conversation or room. */
+export const deleteConversationMessages = byKind('deleteConversationMessages')
+export const getOldestMessageTimestamp = byKind('getOldestMessageTimestamp')
+/** Read the whole store a page at a time, in primary-key order; see {@link readInPages}. */
+export const iterateAllMessages = byKind('iterateAllMessages')
+export const reconcileHistoryMessages = byKind('reconcileHistoryMessages')
+export const mergeRows = byKind('mergeRows')
+
+/** Save one message, discarding the commit result. */
+export async function saveMessage<K extends ArchiveKind>(
+  kind: K,
+  ...args: Parameters<ArchiveOps[K]['saveMessageWithResult']>
+): Promise<void> {
+  await (archiveOps[kind].saveMessageWithResult as (...args: unknown[]) => Promise<boolean>)(...args)
+}
+
+/**
+ * Messages of one entity in chronological order (oldest first).
+ * Returns `[]` when the cache cannot be read; see {@link readMessages}.
+ */
+export async function getMessages<K extends ArchiveKind>(
+  kind: K,
+  ...args: Parameters<ArchiveOps[K]['readMessages']>
+): Promise<Array<K extends 'chat' ? Message : RoomMessage>> {
+  const read = await (archiveOps[kind].readMessages as (...args: unknown[]) => Promise<CacheRead<never[]>>)(...args)
+  return read.status === 'ok' ? read.value : []
+}
+
+/** Count every stored message of one kind, across all entities. */
+export async function getTotalMessageCount(kind: ArchiveKind): Promise<number> {
+  try {
+    const db = await getDB(getStorageScopeJid())
+    return await db.count(kind === 'chat' ? MESSAGES_STORE : ROOM_MESSAGES_STORE)
+  } catch {
+    return 0
+  }
 }
 
 /**
@@ -3737,7 +3826,7 @@ export function _resetDBForTesting(): void {
 /**
  * Expose {@link contentProjection} so tests can assert its contract directly
  * (which fields it omits/includes) rather than only exercising it indirectly
- * through {@link mergeRoomRows}. For testing only.
+ * through {@link roomMergeRows}. For testing only.
  * @internal
  */
 export function _contentProjectionForTesting(m: CanonicalRow): unknown {

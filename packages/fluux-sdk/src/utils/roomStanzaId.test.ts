@@ -6,7 +6,7 @@ import { getRoomModerationId, roomStanzaIdsMergeable } from './roomStanzaId'
 import { roomRetractionAuthorized } from './moderation'
 import { findMessageRowIndex, messageRowRef, sameMessageRow } from './messageIdentity'
 import { makeReadPointer, pointerRowRef } from '../stores/shared/readPointer'
-import { getRoomMessage, saveRoomMessage, clearAllMessages, _resetDBForTesting } from './messageCache'
+import { getMessage, saveMessage, clearAllMessages, _resetDBForTesting } from './messageCache'
 import { setStorageScopeJid } from './storageScope'
 
 const roomJid = 'room@conference.example.com'
@@ -20,8 +20,8 @@ beforeEach(async () => { setStorageScopeJid(null); await clearAllMessages() })
 afterEach(() => { _resetDBForTesting(); setStorageScopeJid(null) })
 
 it('moderates an existing cached room message without additional identity metadata', async () => {
-  await saveRoomMessage(message)
-  const cached = (await getRoomMessage(roomJid, message.id, message.from))!
+  await saveMessage('room', message)
+  const cached = (await getMessage('room', roomJid, message.id, message.from))!
   expect(getRoomModerationId(cached)).toBe('room-id')
   expect(roomRetractionAuthorized(cached, {
     actorJid: roomJid, targetId: 'room-id', moderation: { isModerated: true, moderationReason: 'Spam' },
@@ -53,22 +53,22 @@ it.each([true, false])('restores an old reference with unconfirmed=%s to the sam
 
 it('ignores obsolete metadata when reading and writing room messages', async () => {
   const old = { ...message, stanzaIdAuthority: { stanzaId: 'stale', roomJid: 'old@example.com' } }
-  await saveRoomMessage(old)
-  const cached = (await getRoomMessage(roomJid, message.id, message.from))!
+  await saveMessage('room', old)
+  const cached = (await getMessage('room', roomJid, message.id, message.from))!
   expect(cached).not.toHaveProperty('stanzaIdAuthority')
   expect(getRoomModerationId(cached)).toBe(message.stanzaId)
 })
 
 it('reads an old raw cache record without trusting or exposing its obsolete metadata', async () => {
-  await saveRoomMessage(message)
+  await saveMessage('room', message)
   const db = await openDB('fluux-message-cache')
   const [record] = await db.getAll('room-messages-canonical')
   await db.put('room-messages-canonical', { ...record,
     stanzaIdAuthority: { stanzaId: 'stale', roomJid: 'other@example.com', accountJid: 'old@example.com' } })
-  const cached = (await getRoomMessage(roomJid, message.id, message.from))!
+  const cached = (await getMessage('room', roomJid, message.id, message.from))!
   expect(cached).not.toHaveProperty('stanzaIdAuthority')
   expect(getRoomModerationId(cached)).toBe(message.stanzaId)
-  await saveRoomMessage(cached)
+  await saveMessage('room', cached)
   expect((await db.getAll('room-messages-canonical'))[0]).not.toHaveProperty('stanzaIdAuthority')
   db.close()
 })

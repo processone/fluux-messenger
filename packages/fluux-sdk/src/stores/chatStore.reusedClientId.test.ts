@@ -127,7 +127,7 @@ describe('resident chat window with a reused client id', () => {
     chatStore.getState().addMessage(first())
     chatStore.getState().addMessage(second())
     expect(resident().map(m => [m.stanzaId, m.body])).toEqual([['s1', 'first'], ['s2', 'second']])
-    expect(vi.mocked(messageCache.saveMessageWithResult).mock.calls.map(c => c[0].stanzaId)).toEqual(['s1', 's2'])
+    expect(vi.mocked(messageCache.saveMessageWithResult).mock.calls.map(c => c[1].stanzaId)).toEqual(['s1', 's2'])
     expect(vi.mocked(searchIndex.indexMessage).mock.calls.map(c => c[0].stanzaId)).toEqual(['s1', 's2'])
   })
 
@@ -135,7 +135,7 @@ describe('resident chat window with a reused client id', () => {
     chatStore.getState().addMessage(first())
     chatStore.getState().mergeMAMMessages(A, [second()], { last: 's2' }, true, 'forward')
     expect(resident().map(m => [m.stanzaId, m.body])).toEqual([['s1', 'first'], ['s2', 'second']])
-    expect(vi.mocked(messageCache.saveMessages).mock.calls.flatMap(c => c[0].map(m => m.stanzaId))).toEqual(['s2'])
+    expect(vi.mocked(messageCache.saveMessages).mock.calls.flatMap(c => c[1].map(m => m.stanzaId))).toEqual(['s2'])
   })
 
   it('persists both when the conversation is not resident', () => {
@@ -143,7 +143,7 @@ describe('resident chat window with a reused client id', () => {
     chatStore.getState().addMessage(first())
     chatStore.setState({ messages: new Map() })
     chatStore.getState().addMessage(second())
-    expect(vi.mocked(messageCache.saveMessageWithResult).mock.calls.map(c => c[0].stanzaId)).toEqual(['s1', 's2'])
+    expect(vi.mocked(messageCache.saveMessageWithResult).mock.calls.map(c => c[1].stanzaId)).toEqual(['s1', 's2'])
   })
 
   it('loads both cached rows into the window', async () => {
@@ -167,8 +167,8 @@ describe('resident mutators addressing one of two twins', () => {
     chatStore.getState().updateMessage(A, 's2', { body: 'decrypted second', encryptedPayload: undefined })
     expect(resident().map(m => [m.stanzaId, m.body])).toEqual([['s1', 'first'], ['s2', 'decrypted second']])
     const [call] = vi.mocked(messageCache.updateMessage).mock.calls
-    expect(call[1]).toBe('X')
-    expect(call[5]).toMatchObject({ stanzaId: 's2' })
+    expect(call[2]).toBe('X')
+    expect(call[6]).toMatchObject({ stanzaId: 's2' })
   })
 
   it('getMessage and removeMessage by the archive reference pick the named twin', () => {
@@ -176,15 +176,15 @@ describe('resident mutators addressing one of two twins', () => {
     chatStore.getState().removeMessage(A, 's2')
     expect(resident().map(m => m.stanzaId)).toEqual(['s1'])
     const [call] = vi.mocked(messageCache.deleteMessage).mock.calls
-    expect(call[1]).toBe('X')
-    expect(call[4]).toMatchObject({ stanzaId: 's2' })
+    expect(call[2]).toBe('X')
+    expect(call[5]).toMatchObject({ stanzaId: 's2' })
   })
 
   it('updateReactions naming the archive id lands on that twin, in memory and in the cache', () => {
     chatStore.getState().updateReactions(A, 's2', 'bob@example.test', ['👍'])
     expect(resident().map(m => [m.stanzaId, Object.keys(m.reactions ?? {})])).toEqual([['s1', []], ['s2', ['👍']]])
     expect(messageCache.updateMessageReactions).toHaveBeenCalledWith(
-      A, 's2', 'bob@example.test', ['👍'],
+      'chat', A, 's2', 'bob@example.test', ['👍'],
       expect.objectContaining({ id: 'X', stanzaId: 's2' }), expect.any(Number),
     )
   })

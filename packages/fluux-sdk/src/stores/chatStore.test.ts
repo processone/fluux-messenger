@@ -964,7 +964,7 @@ describe('chatStore', () => {
 
       chatStore.getState().deleteConversation('alice@example.com')
 
-      expect(messageCache.deleteConversationMessages).toHaveBeenCalledWith('alice@example.com')
+      expect(messageCache.deleteConversationMessages).toHaveBeenCalledWith('chat', 'alice@example.com')
     })
 
     it('purges the deleted conversation from the search index', () => {
@@ -1151,7 +1151,7 @@ describe('chatStore', () => {
       chatStore.getState().addConversation(createConversation('bob@example.com'))
 
       let resolveAlice: (value: Message[]) => void = () => {}
-      vi.mocked(messageCache.getMessages).mockImplementation((conversationId) =>
+      vi.mocked(messageCache.getMessages).mockImplementation((_kind, conversationId, _options?) =>
         conversationId === 'alice@example.com'
           ? new Promise((resolve) => { resolveAlice = resolve })
           : Promise.resolve([])
@@ -1276,7 +1276,7 @@ describe('chatStore', () => {
 
       await chatStore.getState().activateConversation(A)
 
-      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(A, { id: 'msg-150' }, expect.any(Object))
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith('chat', A, { id: 'msg-150' }, expect.any(Object))
       const resident = chatStore.getState().messages.get(A)
       expect(resident?.some((m) => m.id === 'msg-150')).toBe(true)
       expect(chatStore.getState().firstNewMessageMarkers.get(A)).toEqual({ id:'msg-151' })
@@ -1308,7 +1308,7 @@ describe('chatStore', () => {
       const latest = msgAt(A, 'newer-5', 5)
       chatStore.setState({ activeConversationId: A, messages: new Map([[A, [latest]]]) })
       let finish!: (rows: Message[]) => void
-      vi.mocked(messageCache.getMessagesAround).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      vi.mocked(messageCache.getMessagesAround).mockImplementationOnce(() => new Promise<Message[]>(resolve => { finish = resolve }))
       const request = new AbortController()
       const pending = chatStore.getState().loadMessagesAroundFromCache(A, { id: 'anchor' }, undefined, request.signal)
       await vi.waitFor(() => expect(messageCache.getMessagesAround).toHaveBeenCalledTimes(1))
@@ -1333,7 +1333,7 @@ describe('chatStore', () => {
 
       const returned = await chatStore.getState().loadMessagesAroundFromCache(A, { id: 'anchor' })
 
-      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(A, { id: 'anchor' }, expect.any(Object))
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith('chat', A, { id: 'anchor' }, expect.any(Object))
       const resident = chatStore.getState().messages.get(A)
       expect(resident?.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5', 'newer-6'])
       expect(returned.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5', 'newer-6'])
@@ -1395,7 +1395,7 @@ describe('chatStore', () => {
         setResidentWindowSize(5000)
       }
 
-      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(A, { id: 'anchor' }, { after: 3 })
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith('chat', A, { id: 'anchor' }, { after: 3 })
       expect(chatStore.getState().messages.get(A)?.map((m) => m.id)).toEqual(['anchor', 'newer-5', 'newer-6'])
       expect(chatStore.getState().windowAtLiveEdge.get(A)).toBe(false)
     })
@@ -1741,7 +1741,7 @@ describe('chatStore', () => {
 
       chatStore.getState().addMessage(msg)
 
-      expect(messageCache.saveMessageWithResult).toHaveBeenCalledWith(msg)
+      expect(messageCache.saveMessageWithResult).toHaveBeenCalledWith('chat', msg)
     })
 
     it('should not save message to IndexedDB when noLocalStore is true (XEP-0334)', () => {
@@ -1937,7 +1937,7 @@ describe('chatStore', () => {
       if (history === 'parked') chatStore.setState({ windowAtLiveEdge: new Map([[id, false]]) })
       chatStore.getState().updateLastMessagePreview(id, signal)
       const resident = chatStore.getState().messages.get(id)?.filter(m => m.id !== signal.id)
-      vi.mocked(messageCache.getMessages).mockImplementationOnce(async (_id, options) => {
+      vi.mocked(messageCache.getMessages).mockImplementationOnce(async (_kind, _id, options?: { latest?: boolean; limit?: number; filter?: (message: Message) => boolean }) => {
         expect(options?.latest).toBe(true)
         expect(options?.limit).toBe(1)
         return [signal, { ...signal, id: 'bodiless', body: '' }, cached]
@@ -2096,6 +2096,7 @@ describe('chatStore', () => {
 
       expect(chatStore.getState().getMessage('alice@example.com', msg.id)?.stanzaId).toBeUndefined()
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'chat',
         'alice@example.com',
         msg.id,
         { stanzaId: undefined },
@@ -2969,7 +2970,7 @@ describe('chatStore', () => {
 
       // Conversation-scoped: the chat cache resolves the reference through the
       // shared ladder, which repeats across conversations without that scope.
-      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith('alice@example.com', msg.id, 'bob@example.com', ['👍'], undefined, expect.any(Number))
+      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith('chat', 'alice@example.com', msg.id, 'bob@example.com', ['👍'], undefined, expect.any(Number))
       // No resident array to update — the reaction lands in the cache only,
       // to be picked up next time the conversation is activated.
       expect(chatStore.getState().messages.get('alice@example.com')).toBeUndefined()
@@ -3497,6 +3498,7 @@ describe('chatStore', () => {
         // fire-and-forget update: a coverage bottom may name this row, so its
         // write has to be the one the gap/coverage commit gates on.
         expect(messageCache.saveMessages).toHaveBeenCalledWith(
+          'chat',
           expect.arrayContaining([
             expect.objectContaining({ id: 'uuid-sent', stanzaId: 'archive-99' }),
           ])
@@ -3536,6 +3538,7 @@ describe('chatStore', () => {
         expect(messages?.length).toBe(1)
         expect(messages?.[0].stanzaId).toBe('archive-carbon')
         expect(messageCache.updateMessage).toHaveBeenCalledWith(
+          'chat',
           'alice@example.com',
           'uuid-2',
           expect.objectContaining({ stanzaId: 'archive-carbon' }),
@@ -4975,7 +4978,7 @@ describe('chatStore', () => {
       expect(messages.length).toBe(before.length)
       expect(messages[messages.length - 1].id).toBe(before[before.length - 1].id)
       // ...but the message is still persisted to IndexedDB...
-      expect(messageCache.saveMessageWithResult).toHaveBeenCalledWith(expect.objectContaining({ id: 'live-1' }))
+      expect(messageCache.saveMessageWithResult).toHaveBeenCalledWith('chat', expect.objectContaining({ id: 'live-1' }))
       // ...and meta (sidebar preview + unread badge) still update.
       expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage?.id).toBe('live-1')
       expect(chatStore.getState().conversationMeta.get(conversationId)?.unreadCount).toBe(1)
@@ -5041,8 +5044,8 @@ describe('chatStore', () => {
       // Attaching either page would splice it after resident-4999 and hide every cached message between.
       expect(chatStore.getState().messages.get(conversationId)).toBe(parked)
       expect(chatStore.getState().windowAtLiveEdge.get(conversationId)).toBe(false)
-      expect(messageCache.saveMessages).toHaveBeenCalledWith([expect.objectContaining({ id: 'caught-up-1' })])
-      expect(messageCache.saveMessages).toHaveBeenCalledWith([expect.objectContaining({ id: 'fetch-latest-1' })])
+      expect(messageCache.saveMessages).toHaveBeenCalledWith('chat', [expect.objectContaining({ id: 'caught-up-1' })])
+      expect(messageCache.saveMessages).toHaveBeenCalledWith('chat', [expect.objectContaining({ id: 'fetch-latest-1' })])
       expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage?.id).toBe('fetch-latest-1')
     })
   })
@@ -5113,7 +5116,7 @@ describe('chatStore', () => {
       await chatStore.getState().loadNewerMessagesFromCache(conversationId, 50)
 
       const newestInMemory = chatMsgAt(`resident-${RESIDENT_WINDOW_SIZE - 1}`, RESIDENT_WINDOW_SIZE - 1)
-      expect(messageCache.getMessages).toHaveBeenCalledWith(conversationId, {
+      expect(messageCache.getMessages).toHaveBeenCalledWith('chat', conversationId, {
         after: newestInMemory.timestamp,
         limit: 50,
       })
@@ -5384,6 +5387,7 @@ describe('chatStore', () => {
       // microtasks after the synchronous store update.
       await flushRetractionStorage()
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'chat',
         convId,
         'msg-1',
         expect.objectContaining({ isRetracted: true }),
@@ -5415,6 +5419,7 @@ describe('chatStore', () => {
       // Written through, so the tombstone survives a reload without the record.
       await flushRetractionStorage()
       expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'chat',
         convId,
         'msg-1',
         expect.objectContaining({ isRetracted: true }),
@@ -5438,7 +5443,7 @@ describe('chatStore', () => {
       })
       expect(chatStore.getState().pendingRetractions.get(convId) ?? []).toHaveLength(0)
       // The tombstone rides the archive write instead of racing it.
-      expect(messageCache.saveMessages).toHaveBeenCalledWith([
+      expect(messageCache.saveMessages).toHaveBeenCalledWith('chat', [
         expect.objectContaining({ id: 'msg-1', isRetracted: true }),
       ])
     })
@@ -5511,7 +5516,7 @@ describe('chatStore parity drift regressions', () => {
 
       chatStore.getState().updateReactions(convId, 'evicted-1', 'bob@example.com', ['👍'])
 
-      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith(convId, 'evicted-1', 'bob@example.com', ['👍'], undefined, expect.any(Number))
+      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith('chat', convId, 'evicted-1', 'bob@example.com', ['👍'], undefined, expect.any(Number))
       // The resident array is untouched — only the durable copy is patched.
       expect(chatStore.getState().messages.get(convId)).toBe(residentBefore)
     })
@@ -5684,7 +5689,7 @@ describe('chatStore delayed live arrivals (#1176)', () => {
     // ...yet it WAS written to IndexedDB, so it is durable-only: invisible in
     // the timeline until a cache slice pages it back in.
     expect(messageCache.saveMessageWithResult).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(messageCache.saveMessageWithResult).mock.calls[0][0]).toMatchObject({ id: 'offline-replay' })
+    expect(vi.mocked(messageCache.saveMessageWithResult).mock.calls[0][1]).toMatchObject({ id: 'offline-replay' })
   })
 
   it('positions a delayed arrival inside the resident window in timestamp order', () => {

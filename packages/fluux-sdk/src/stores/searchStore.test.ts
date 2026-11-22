@@ -23,12 +23,17 @@ vi.mock('../utils/searchIndex', async () => {
 })
 
 // Mock messageCache to avoid IDB dependency
+// getMessages is kind-keyed: the chat and room reads keep separate mocks behind one dispatching function.
+const { chatGetMessages, roomGetMessages } = vi.hoisted(() => ({
+  chatGetMessages: vi.fn().mockResolvedValue([]),
+  roomGetMessages: vi.fn().mockResolvedValue([]),
+}))
 vi.mock('../utils/messageCache', () => ({
-  getMessages: vi.fn().mockResolvedValue([]),
+  getMessages: vi.fn((kind: 'chat' | 'room', ...args: unknown[]) =>
+    kind === 'room' ? roomGetMessages(...args) : chatGetMessages(...args)),
   areRetractedInCache: vi.fn().mockImplementation(async (messages: unknown[]) =>
     messages.map(() => false)
   ),
-  getRoomMessages: vi.fn().mockResolvedValue([]),
 }))
 
 // Mock localStorage for chatStore/roomStore (they use persist middleware)
@@ -902,7 +907,7 @@ describe('searchStore', () => {
         from: result.from, stanzaId: result.stanzaId, originId: undefined, body: result.body,
         timestamp: new Date(result.timestamp), isOutgoing: false }
       vi.mocked(searchIndex.search).mockResolvedValueOnce([result])
-      vi.mocked(messageCache.getMessages)
+      chatGetMessages
         .mockResolvedValueOnce([{ ...message, stanzaId: 'before', body: 'earlier twin', timestamp: new Date(1000) }])
         .mockResolvedValueOnce([message, { ...message, stanzaId: 'after', body: 'later twin', timestamp: new Date(3000) }])
       searchStore.getState().search('searchable')
@@ -930,7 +935,7 @@ describe('searchStore', () => {
       vi.mocked(searchIndex.search).mockResolvedValueOnce(mockResults)
 
       // Set up messageCache to return context messages
-      vi.mocked(messageCache.getMessages)
+      chatGetMessages
         .mockResolvedValueOnce([
           { id: 'msg-1', stanzaId: undefined, originId: undefined, conversationId: 'alice@example.com', from: 'alice@example.com', body: 'Previous message', timestamp: new Date(now - 5000), isOutgoing: false, type: 'chat' as const },
         ]) // before
@@ -970,7 +975,7 @@ describe('searchStore', () => {
       vi.mocked(searchIndex.search).mockResolvedValueOnce(mockResults)
 
       // "after" query returns the matched message + a next message
-      vi.mocked(messageCache.getMessages)
+      chatGetMessages
         .mockResolvedValueOnce([]) // before: nothing
         .mockResolvedValueOnce([
           { id: 'msg-2', stanzaId: undefined, originId: undefined, conversationId: 'alice@example.com', from: 'alice@example.com', body: 'Hello from Alice', timestamp: new Date(now), isOutgoing: false, type: 'chat' as const },
@@ -1013,7 +1018,7 @@ describe('searchStore', () => {
           timestamp: now + 5_000, isRoom: true, body: 'carol launchcode',
         },
       ])
-      vi.mocked(messageCache.getRoomMessages).mockImplementation(async (_jid, options) =>
+      roomGetMessages.mockImplementation(async (_jid, options) =>
         options?.before && +options.before === now + 5_000 ? [bobArchived] : [])
 
       searchStore.getState().search('launchcode')
@@ -1039,7 +1044,7 @@ describe('searchStore', () => {
         stanzaId: undefined, originId: undefined, occupantId: undefined,
         timestamp: stamp, receivedAt: 3000, isDelayed: true, isRoom: true, body: 'delayed launchcode',
       }])
-      vi.mocked(messageCache.getRoomMessages).mockImplementation(async (_jid, options) =>
+      roomGetMessages.mockImplementation(async (_jid, options) =>
         options?.before ? [alice] : [bob])
       searchStore.getState().search('launchcode')
       await vi.runAllTimersAsync()
@@ -1062,7 +1067,7 @@ describe('searchStore', () => {
         isRoom: true,
         body: 'Matched message',
       }])
-      vi.mocked(messageCache.getRoomMessages)
+      roomGetMessages
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{
           id: 'shared',
@@ -1100,7 +1105,7 @@ describe('searchStore', () => {
         isRoom: false,
         body: 'Hello from Alice',
       }])
-      vi.mocked(messageCache.getMessages)
+      chatGetMessages
         .mockResolvedValueOnce([{
           id: 'msg-1',
           stanzaId: undefined, originId: undefined,
@@ -1145,7 +1150,7 @@ describe('searchStore', () => {
         isRoom: false,
         body: 'Hello from Alice',
       }])
-      vi.mocked(messageCache.getMessages)
+      chatGetMessages
         .mockResolvedValueOnce([{
           id: 'cached-tombstone',
           stanzaId: undefined, originId: undefined,
@@ -1183,7 +1188,7 @@ describe('searchStore', () => {
         messageId: 'matched', conversationId: roomJid, from: `${roomJid}/Other`, nick: 'Other',
         timestamp: now, isRoom: true, body: 'legitimate match',
       }])
-      vi.mocked(messageCache.getRoomMessages)
+      roomGetMessages
         .mockResolvedValueOnce([source === 'cache' ? tombstones[0] : before])
         .mockResolvedValueOnce([source === 'cache' ? tombstones[1] : after])
       if (source === 'resident') roomStore.setState({ messages: new Map([[roomJid, tombstones]]) })

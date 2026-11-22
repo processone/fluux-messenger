@@ -8,7 +8,7 @@
  * occupants (`from`) are two distinct cache positions, not one.
  *
  * Unlike roomStore.test.ts / roomStore.internal.mds.test.ts, this file does NOT fully
- * mock `../utils/messageCache` — `countRoomUnreadInArchive` and
+ * mock `../utils/messageCache` — `roomCountUnreadInArchive` and
  * `resolveArchivePosition` run for REAL against fake-indexeddb (wrapped in
  * `vi.fn(actual)` only so the latest-wins test can control resolution order
  * for one call). Everything else in messageCache is the real implementation.
@@ -51,10 +51,10 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     ...actual,
     // Real by default; wrapped so individual tests can control resolution
     // order (vi.fn.mockImplementationOnce) without disabling the real cursor.
-    getRoomMessages: vi.fn(actual.getRoomMessages),
-    countRoomUnreadInArchive: vi.fn(actual.countRoomUnreadInArchive),
-    saveRoomMessageWithResult: vi.fn(actual.saveRoomMessageWithResult),
-    saveRoomMessages: vi.fn(actual.saveRoomMessages),
+    getMessages: vi.fn(actual.getMessages),
+    countUnreadInArchive: vi.fn(actual.countUnreadInArchive),
+    saveMessageWithResult: vi.fn(actual.saveMessageWithResult),
+    saveMessages: vi.fn(actual.saveMessages),
   }
 })
 import * as messageCache from '../utils/messageCache'
@@ -64,9 +64,9 @@ import { _clearAllViewportEvidenceForTesting, currentViewportGeneration, reportV
 import { connectionStore } from './connectionStore'
 import { roomWindow } from './roomStore.testHelpers'
 
-const countRoomUnreadInArchiveImplementation = vi.mocked(messageCache.countRoomUnreadInArchive).getMockImplementation()!
-const saveRoomMessageWithResultImplementation = vi.mocked(messageCache.saveRoomMessageWithResult).getMockImplementation()!
-const saveRoomMessagesImplementation = vi.mocked(messageCache.saveRoomMessages).getMockImplementation()!
+const countRoomUnreadInArchiveImplementation = vi.mocked(messageCache.countUnreadInArchive).getMockImplementation()!
+const saveRoomMessageWithResultImplementation = vi.mocked(messageCache.saveMessageWithResult).getMockImplementation()!
+const saveRoomMessagesImplementation = vi.mocked(messageCache.saveMessages).getMockImplementation()!
 
 /**
  * A transient entry's position.
@@ -167,13 +167,13 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     roomStore.getState().addRoom(createRoom(ROOM))
     // Reset queued one-shot implementations as well as call history so a
     // deliberately failing race test cannot contaminate the next test.
-    vi.mocked(messageCache.getRoomMessages).mockClear()
-    vi.mocked(messageCache.countRoomUnreadInArchive).mockReset()
-    vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementation(countRoomUnreadInArchiveImplementation)
-    vi.mocked(messageCache.saveRoomMessageWithResult).mockReset()
-    vi.mocked(messageCache.saveRoomMessageWithResult).mockImplementation(saveRoomMessageWithResultImplementation)
-    vi.mocked(messageCache.saveRoomMessages).mockReset()
-    vi.mocked(messageCache.saveRoomMessages).mockImplementation(saveRoomMessagesImplementation)
+    vi.mocked(messageCache.getMessages).mockClear()
+    vi.mocked(messageCache.countUnreadInArchive).mockReset()
+    vi.mocked(messageCache.countUnreadInArchive).mockImplementation(countRoomUnreadInArchiveImplementation)
+    vi.mocked(messageCache.saveMessageWithResult).mockReset()
+    vi.mocked(messageCache.saveMessageWithResult).mockImplementation(saveRoomMessageWithResultImplementation)
+    vi.mocked(messageCache.saveMessages).mockReset()
+    vi.mocked(messageCache.saveMessages).mockImplementation(saveRoomMessagesImplementation)
     // The transient overlay is a module-level singleton (never cleared on
     // deactivation by design) — reset it between tests explicitly.
     clearTransientScope(getStorageScopeJid() ?? '')
@@ -186,7 +186,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // ---------------------------------------------------------------------
 
   it('backgrounded deep pointer with proven coverage derives an exact count from the archive', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       archiveMsg('u1', 1001),
@@ -209,7 +209,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // reflected/relayed id collision from two different occupants must count
   // as two distinct positions, never deduped to one.
   it('two messages sharing an id but sent by different occupants count as two distinct positions', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       archiveMsg('dup', 1001, { from: `${ROOM}/bob`, nick: 'bob', stanzaId: 's-bob-dup' }),
@@ -228,7 +228,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   })
 
   it('a migrated pointer with no tiebreak over-counts same-millisecond rows rather than reporting zero', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       // Same millisecond as the pointer's own message — an unresolved pointer
@@ -263,7 +263,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // ---------------------------------------------------------------------
 
   it('a forward MAM merge into a non-active room with new messages triggers a recount', async () => {
-    await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 's-anchor' }), archiveMsg('p0', 1000)])
+    await messageCache.saveMessages('room', [archiveMsg('anchor', 500, { stanzaId: 's-anchor' }), archiveMsg('p0', 1000)])
     setMeta({ unreadCount: 0, readPointer: makeReadPointer(archiveMsg('p0', 1000), 'room') })
     seedCoverage('s-anchor')
 
@@ -326,7 +326,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // (nothing archived after p0) if this guard were missing — isolating the
     // active-room check from pointerlessDefers, which would otherwise defer
     // this scenario on its own and hide a missing guard.
-    await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
+    await messageCache.saveMessages('room', [archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
     setMeta({
       unreadCount: 5,
       readPointer: makeReadPointer(archiveMsg('p0', 1000), 'room'),
@@ -349,7 +349,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // drives a REAL archive derivation (fake-indexeddb) end to end and asserts
   // the committed number, not just that a call happened.
   it('a remote marker advancing the ACTIVE room re-derives its unread count', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000, { stanzaId: 's-p0' }),
       archiveMsg('u1', 1001, { stanzaId: 's-u1' }),
@@ -390,7 +390,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // The count is re-derived from the archive (u1, u2, u3), not left
     // at the stale 99 a guard that still exempted the active room would
     // produce. The recount is fire-and-forget (cache read, coverage resolve,
-    // and countRoomUnreadInArchive are all real async calls against
+    // and roomCountUnreadInArchive are all real async calls against
     // fake-indexeddb) — poll for the derived value instead of guessing a tick
     // count, which under full-suite load can resolve before the recount lands.
     await vi.waitFor(() => {
@@ -416,7 +416,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // ONLY thing that can stand this recount down. Counterpart to chatStore's
   // "NONZERO persisted count still defers via pointerlessDefers".
   it('a pointerless room with a nonzero persisted count defers at pointerlessDefers, not at the coverage gate', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('anchor', 400, { stanzaId: 'anchor-stanza' }),
       archiveMsg('m1', 1000),
       archiveMsg('m2', 1001),
@@ -431,7 +431,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // Assert the mechanism, not just the outcome: the guard must stop the
     // derivation before it ever reads the archive, not merely produce a count
     // that happens to match the seed.
-    expect(vi.mocked(messageCache.countRoomUnreadInArchive)).not.toHaveBeenCalled()
+    expect(vi.mocked(messageCache.countUnreadInArchive)).not.toHaveBeenCalled()
     // #1174 + #1214: proves the `pointerless-defer` reason is still emitted,
     // and still reachable, now that the duplicate guard is gone. (It does NOT
     // pin the number of call sites: a guard that returns emits once whether
@@ -453,7 +453,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // outgoing message in the counted range must no longer drag the
   // forward-only read position onto itself.
   it('CRITICAL: not caught up defers, the persisted count survives, and the recount never moves the pointer onto an outgoing message', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       archiveMsg('out1', 1001, { isOutgoing: true }), // the user replied from another device
@@ -480,7 +480,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   })
 
   it('a missing coverage record defers (not-yet-covered is not the same as nothing to worry about)', async () => {
-    await messageCache.saveRoomMessages([archiveMsg('p0', 1000), archiveMsg('u1', 1001)])
+    await messageCache.saveMessages('room', [archiveMsg('p0', 1000), archiveMsg('u1', 1001)])
     setMeta({
       unreadCount: 7,
       readPointer: makeReadPointer(archiveMsg('p0', 1000), 'room'),
@@ -498,7 +498,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   })
 
   it('an unresolvable coverage bottom defers AND invalidates the stale record', async () => {
-    await messageCache.saveRoomMessages([archiveMsg('p0', 1000), archiveMsg('u1', 1001)])
+    await messageCache.saveMessages('room', [archiveMsg('p0', 1000), archiveMsg('u1', 1001)])
     setMeta({
       unreadCount: 6,
       readPointer: makeReadPointer(archiveMsg('p0', 1000), 'room'),
@@ -522,7 +522,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // count is a distinguishing 8, not 0, so a broken gate that proceeds to
   // derive+commit the real (different) archive count is caught.
   it('a resolved coverage bottom sitting above the floor defers (coverage does not reach the floor)', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('p0', 1000),
       archiveMsg('u1', 1001),
       // The coverage record's bottom — proven contiguous from here to the
@@ -565,7 +565,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // occupant's `(from, id)` tie-break — arrival order deliberately disagrees with
   // cache order, the exact case the fix reconciles.
   it('two same-millisecond live arrivals land in cache order, so the viewport-advance pointer and derived count are both correct', async () => {
-    await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
+    await messageCache.saveMessages('room', [archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
     seedCoverage('anchor-stanza')
     roomStore.setState({ activeRoomJid: ROOM })
 
@@ -622,7 +622,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // archived, the next EXACT recount — deriving purely from the archive —
   // silently dropped its contribution back to 0.
   it('an active-but-scrolled-up noLocalStore arrival is recorded in the overlay and survives an exact recount', async () => {
-    await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
+    await messageCache.saveMessages('room', [archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
     setMeta({
       unreadCount: 0,
       readPointer: makeReadPointer(archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), 'room'),
@@ -672,7 +672,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   })
 
   it('latest-wins: a slow recount started before a fast one must not overwrite the fast one', async () => {
-    await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
+    await messageCache.saveMessages('room', [archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
     setMeta({
       unreadCount: 0,
       readPointer: makeReadPointer(archiveMsg('p0', 1000), 'room'),
@@ -680,7 +680,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     seedCoverage('anchor-stanza')
 
     let releaseSlow!: (v: { unread: number }) => void
-    vi.mocked(messageCache.countRoomUnreadInArchive)
+    vi.mocked(messageCache.countUnreadInArchive)
       .mockImplementationOnce(() => new Promise((resolve) => { releaseSlow = resolve }))
       .mockImplementationOnce(async () => ({ unread: 2 }))
 
@@ -703,7 +703,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   it('holds an invalidated active pointer recount until forward catch-up durably completes', async () => {
     const p0 = archiveMsg('p0', 1000)
     const p1 = archiveMsg('p1', 1500)
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       p0,
       p1,
@@ -719,7 +719,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     seedCoverage('anchor-stanza')
 
     let releaseCount!: (v: { unread: number }) => void
-    vi.mocked(messageCache.countRoomUnreadInArchive)
+    vi.mocked(messageCache.countUnreadInArchive)
       .mockImplementationOnce(() => new Promise((resolve) => { releaseCount = resolve }))
       .mockImplementationOnce(async () => ({ unread: 7 }))
 
@@ -741,7 +741,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     releaseCount({ unread: 3 })
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    expect(messageCache.countRoomUnreadInArchive).toHaveBeenCalledTimes(1)
+    expect(messageCache.countUnreadInArchive).toHaveBeenCalledTimes(1)
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
 
     roomStore.getState().mergeRoomMAMMessages(
@@ -756,13 +756,13 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(7)
     })
     expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(7)
-    expect(messageCache.countRoomUnreadInArchive).toHaveBeenCalledTimes(2)
+    expect(messageCache.countUnreadInArchive).toHaveBeenCalledTimes(2)
     expect(readRecountDeferrals()['room:input-version-changed']).toBe(1)
     expect(readRecountDeferrals()['room:context-changed']).toBeUndefined()
   })
 
   it('retains a failed live cache write in the unread recount overlay', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       ...Array.from({ length: 5 }, (_, index) => archiveMsg(`u${index + 1}`, 1100 + index)),
@@ -775,10 +775,10 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     roomStore.setState({ activeRoomJid: ROOM })
 
     let releaseCount!: (v: { unread: number }) => void
-    vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(
+    vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(
       () => new Promise((resolve) => { releaseCount = resolve })
     )
-    vi.mocked(messageCache.saveRoomMessageWithResult).mockResolvedValueOnce(false)
+    vi.mocked(messageCache.saveMessageWithResult).mockResolvedValueOnce(false)
 
     const stale = roomStore.getState().recomputeUnreadForRoom(ROOM, { allowActive: true })
     await vi.waitFor(() => expect(releaseCount).toBeDefined())
@@ -789,14 +789,14 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     await stale
 
     await vi.waitFor(() => {
-      expect(messageCache.countRoomUnreadInArchive).toHaveBeenCalledTimes(2)
+      expect(messageCache.countUnreadInArchive).toHaveBeenCalledTimes(2)
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
     })
     expect(transientCounts(scopeKey(), undefined).unread).toBe(1)
   })
 
   it('resumes a held active recount after a backward archive write commits', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('older', 700),
       archiveMsg('p0', 1000),
@@ -809,11 +809,11 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     roomStore.setState({ activeRoomJid: ROOM })
 
     let releaseCount!: (v: { unread: number }) => void
-    vi.mocked(messageCache.countRoomUnreadInArchive)
+    vi.mocked(messageCache.countUnreadInArchive)
       .mockImplementationOnce(() => new Promise((resolve) => { releaseCount = resolve }))
       .mockImplementationOnce(async () => ({ unread: 7 }))
     let releaseSave!: (committed: boolean) => void
-    vi.mocked(messageCache.saveRoomMessages).mockImplementationOnce(
+    vi.mocked(messageCache.saveMessages).mockImplementationOnce(
       () => new Promise((resolve) => { releaseSave = resolve })
     )
 
@@ -830,11 +830,11 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     await stale
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    expect(messageCache.countRoomUnreadInArchive).toHaveBeenCalledTimes(1)
+    expect(messageCache.countUnreadInArchive).toHaveBeenCalledTimes(1)
     releaseSave(true)
 
     await vi.waitFor(() => {
-      expect(messageCache.countRoomUnreadInArchive).toHaveBeenCalledTimes(2)
+      expect(messageCache.countUnreadInArchive).toHaveBeenCalledTimes(2)
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(7)
     })
   })
@@ -844,7 +844,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     roomStore.getState().addRoom(createRoom(otherRoom))
     roomStore.setState({ activeRoomJid: ROOM })
     let releaseSave!: (committed: boolean) => void
-    vi.mocked(messageCache.saveRoomMessageWithResult).mockImplementationOnce(
+    vi.mocked(messageCache.saveMessageWithResult).mockImplementationOnce(
       () => new Promise((resolve) => { releaseSave = resolve })
     )
 
@@ -875,7 +875,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     setStorageScopeJid(accountA)
     roomStore.getState().switchAccount(accountA)
     roomStore.getState().addRoom(createRoom(ROOM))
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
     ])
@@ -886,7 +886,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     seedCoverage('anchor-stanza')
 
     let releaseCount!: (v: { unread: number }) => void
-    vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(
+    vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(
       () => new Promise((resolve) => { releaseCount = resolve })
     )
 
@@ -913,7 +913,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // recompute; it does nothing here. Re-reading the pointer at commit time is
   // what closes this gap.
   it('a stale allowActive recompute does not clobber a pointer/count that moved via a direct write while it awaited the archive read', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       archiveMsg('u1', 1001),
@@ -926,7 +926,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     roomStore.setState({ activeRoomJid: ROOM })
 
     let releaseCount!: (v: { unread: number }) => void
-    vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(
+    vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(
       () => new Promise((resolve) => { releaseCount = resolve })
     )
 
@@ -963,7 +963,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   it('rejects a recount after markAsRead moves between same-id occupants', async () => {
     const occupantA = archiveMsg('shared', 1000, { occupantId: 'occupant-a' })
     const occupantB = archiveMsg('shared', 1001, { occupantId: 'occupant-b' })
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
     ])
     roomStore.getState().setActiveRoom(ROOM)
@@ -983,7 +983,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     seedCoverage('anchor-stanza')
 
     let releaseCount!: (value: { unread: number }) => void
-    vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(
+    vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(
       () => new Promise((resolve) => { releaseCount = resolve }),
     )
 
@@ -1036,7 +1036,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
     const p0 = archiveMsg('p0', 1000)
     const u1 = archiveMsg('u1', 1001)
-    await messageCache.saveRoomMessages([anchor, p0, u1])
+    await messageCache.saveMessages('room', [anchor, p0, u1])
     setMeta({
       unreadCount: 99,
       readPointer: makeReadPointer(archiveMsg('p0', 1000), 'room'),
@@ -1062,7 +1062,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
     const p0 = archiveMsg('p0', 1000)
     const u1 = archiveMsg('u1', 1001)
-    await messageCache.saveRoomMessages([anchor, p0, u1])
+    await messageCache.saveMessages('room', [anchor, p0, u1])
     setMeta({
       unreadCount: 1,
       readPointer: makeReadPointer(archiveMsg('p0', 1000), 'room'),
@@ -1095,7 +1095,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   it('deletes the divider marker when the derived count is zero', async () => {
     const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
     const p0 = archiveMsg('p0', 1000)
-    await messageCache.saveRoomMessages([anchor, p0])
+    await messageCache.saveMessages('room', [anchor, p0])
     setMeta({
       unreadCount: 99,
       readPointer: makeReadPointer(archiveMsg('p0', 1000), 'room'),
@@ -1125,7 +1125,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     const SEEDED_MENTIONS = 7
 
     it.each([0, 5])('clears stale mentions when exact unread is zero and the prior count is %i', async (unreadCount) => {
-      await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
+      await messageCache.saveMessages('room', [archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
       roomStore.getState().updateRoom(ROOM, {
         unreadCount,
         mentionsCount: SEEDED_MENTIONS,
@@ -1147,7 +1147,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     it.each(['archive', 'transient'] as const)('preserves mentions while unread messages remain in the %s', async (source) => {
       const pointer = archiveMsg('p0', 1000)
       const unread = archiveMsg('u1', 1100)
-      await messageCache.saveRoomMessages([
+      await messageCache.saveMessages('room', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         pointer,
         ...(source === 'archive' ? [unread] : []),
@@ -1179,14 +1179,14 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     })
 
     it('unavailable outcome', async () => {
-      await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
+      await messageCache.saveMessages('room', [archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
       setMeta({
         unreadCount: 3,
         mentionsCount: SEEDED_MENTIONS,
         readPointer: makeReadPointer(archiveMsg('p0', 1000), 'room'),
       })
       seedCoverage('anchor-stanza')
-      vi.mocked(messageCache.countRoomUnreadInArchive).mockResolvedValueOnce(null)
+      vi.mocked(messageCache.countUnreadInArchive).mockResolvedValueOnce(null)
 
       await roomStore.getState().recomputeUnreadForRoom(ROOM)
 
@@ -1201,7 +1201,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // ---------------------------------------------------------------------
 
   it('the transient overlay is summed into the committed unread count', async () => {
-    await messageCache.saveRoomMessages([
+    await messageCache.saveMessages('room', [
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
       archiveMsg('u1', 1001),
@@ -1235,7 +1235,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // No archived unread in any of these — the committed count is driven
     // purely by the transient overlay, so the assertions are unambiguous.
     beforeEach(async () => {
-      await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
+      await messageCache.saveMessages('room', [archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
       setMeta({
         unreadCount: 0,
         readPointer: makeReadPointer(archiveMsg('p0', 1000), 'room'),
@@ -1282,7 +1282,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
       // The same logical message now lands in the archive, through the real
       // production path rather than a hand-called removeTransient.
-      await messageCache.saveRoomMessages([durable])
+      await messageCache.saveMessages('room', [durable])
       roomStore.getState().mergeRoomMAMMessages(ROOM, [durable], { first: 'm1', last: 'm1' }, true, 'forward')
       await vi.waitFor(() =>
         expect(transientCounts(key, undefined).unread).toBe(0)
@@ -1374,7 +1374,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       const m1 = archiveMsg('m1', 1000)
       const m2 = archiveMsg('m2', 1001)
       const m3 = archiveMsg('m3', 1002)
-      await messageCache.saveRoomMessages([anchor, m1, m2, m3])
+      await messageCache.saveMessages('room', [anchor, m1, m2, m3])
       setMeta({
         unreadCount: 5, // stale — distinct from the correct 0 derived below
         mentionsCount: 1,
@@ -1407,7 +1407,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       const m1 = archiveMsg('m1', 1000)
       const m2 = archiveMsg('m2', 1001)
       const m3 = archiveMsg('m3', 1002)
-      await messageCache.saveRoomMessages([anchor, m1, m2, m3])
+      await messageCache.saveMessages('room', [anchor, m1, m2, m3])
       setMeta({
         unreadCount: 5, // stale — distinct from BOTH 0 and the correct 2
         readPointer: makeReadPointer(archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), 'room'),
@@ -1431,7 +1431,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     it('reading a room to the bottom then deactivating reconciles the stale badge instead of leaving it stuck', async () => {
       const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
       const m1 = archiveMsg('m1', 1000)
-      await messageCache.saveRoomMessages([anchor, m1])
+      await messageCache.saveMessages('room', [anchor, m1])
       // The pointer already sits at the newest message (as if the user had
       // read to the bottom through some OTHER path than advanceReadPointer —
       // isolating the deactivation trigger from the advance trigger tested
@@ -1471,7 +1471,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       const p0 = archiveMsg('p0', 1000)
       const u1 = archiveMsg('u1', 1001)
       const u2 = archiveMsg('u2', 1002)
-      await messageCache.saveRoomMessages([anchor, p0, u1, u2])
+      await messageCache.saveMessages('room', [anchor, p0, u1, u2])
       // The pointer is seeded directly at p0 — NOT the newest message — so u1
       // and u2 are genuinely still unread. This isolates the deactivation
       // trigger from the advance trigger (advanceReadPointer is never called
@@ -1510,7 +1510,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // Archive recounts are asynchronous. Wait for a changed count or mention value before
     // checking the pointer, so an assertion cannot pass merely because nothing ran yet.
     it('a forward merge + recount does NOT snap a fresh room pointer to the newest message', async () => {
-      await messageCache.saveRoomMessages([
+      await messageCache.saveMessages('room', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         archiveMsg('h1', 600),
         archiveMsg('h2', 700),
@@ -1544,7 +1544,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // The OTHER two call sites: the guard pass inside the derivation itself.
     // Reached with no merge at all, so it needs its own control.
     it('the recount itself does NOT snap a fresh room pointer to the newest message', async () => {
-      await messageCache.saveRoomMessages([
+      await messageCache.saveMessages('room', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         archiveMsg('h1', 600),
         archiveMsg('h2', 700),
@@ -1559,7 +1559,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     })
 
     it('the recount itself does NOT advance the pointer to an outgoing message', async () => {
-      await messageCache.saveRoomMessages([
+      await messageCache.saveMessages('room', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         archiveMsg('p0', 1000),
         archiveMsg('u1', 1100),
@@ -1583,7 +1583,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     })
 
     it('a forward merge does NOT advance the pointer to an outgoing message', async () => {
-      await messageCache.saveRoomMessages([
+      await messageCache.saveMessages('room', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         archiveMsg('p0', 1000),
         archiveMsg('u1', 1100),
@@ -1616,7 +1616,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     })
 
     it('messages arriving after creation and merged during catch-up count as unread', async () => {
-      await messageCache.saveRoomMessages([
+      await messageCache.saveMessages('room', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         archiveMsg('n1', 2000),
         archiveMsg('n2', 3000),
@@ -1643,7 +1643,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // closed. This PIN proves the input-version guard is load-bearing, so a later
     // refactor cannot quietly drop it.
     it('a live arrival during an in-flight recount is not clobbered by the stale result', async () => {
-      await messageCache.saveRoomMessages([
+      await messageCache.saveMessages('room', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         archiveMsg('p0', 1000),
         archiveMsg('u1', 1100),
@@ -1657,9 +1657,9 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       // Let the recount reach its archive read, then land an arrival that raises
       // the count WITHOUT moving the pointer — the case the pointer-identity
       // guard alone cannot see.
-      vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(async (jid, args) => {
+      vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(async (kind, jid, args, _isVisible?) => {
         const actual = await vi.importActual<typeof import('../utils/messageCache')>('../utils/messageCache')
-        const res = await actual.countRoomUnreadInArchive(jid, args)
+        const res = await actual.countUnreadInArchive(kind, jid, args)
         roomStore.getState().addMessage(ROOM, archiveMsg('u2', 1200))
         return res
       })
@@ -1695,7 +1695,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     it('opening a room whose pointer is already at the newest message clears the stale badge', async () => {
       const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
       const m1 = archiveMsg('m1', 1000)
-      await messageCache.saveRoomMessages([anchor, m1])
+      await messageCache.saveMessages('room', [anchor, m1])
       // Fully read: the pointer already sits on the newest message, so the
       // viewport observer has nothing left to advance and advanceReadPointer
       // can never schedule a recount. This is the reported defect.
@@ -1732,7 +1732,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       const p0 = archiveMsg('p0', 1000)
       const u1 = archiveMsg('u1', 1001)
       const u2 = archiveMsg('u2', 1002)
-      await messageCache.saveRoomMessages([anchor, p0, u1, u2])
+      await messageCache.saveMessages('room', [anchor, p0, u1, u2])
       setMeta({
         unreadCount: 5, // stale — distinct from BOTH 0 (naive force-zero) and the correct 2
         readPointer: makeReadPointer(archiveMsg('p0', 1000), 'room'),
@@ -1754,7 +1754,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     })
 
     it('opening a room whose badge is already clear does not read the archive', async () => {
-      await messageCache.saveRoomMessages([
+      await messageCache.saveMessages('room', [
         archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
         archiveMsg('m1', 1000),
       ])
@@ -1763,14 +1763,14 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
         readPointer: makeReadPointer(archiveMsg('m1', 1000), 'room'),
       })
       seedCoverage('anchor-stanza')
-      vi.mocked(messageCache.countRoomUnreadInArchive).mockClear()
+      vi.mocked(messageCache.countUnreadInArchive).mockClear()
 
       roomStore.getState().setActiveRoom(ROOM)
 
       // The guard keeps the common case (opening an already-read room) free of
       // a cache read; an arrival would recount anyway.
       await new Promise((resolve) => setTimeout(resolve, 50))
-      expect(messageCache.countRoomUnreadInArchive).not.toHaveBeenCalled()
+      expect(messageCache.countUnreadInArchive).not.toHaveBeenCalled()
     })
   })
 
@@ -1783,7 +1783,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     const u1 = archiveMsg('u1', 1001, { stanzaId: 'u1-stanza' })
 
     async function enterRoomWithStaleMarker(pointer: RoomMessage): Promise<void> {
-      await messageCache.saveRoomMessages([anchor, p0, u1])
+      await messageCache.saveMessages('room', [anchor, p0, u1])
       seedCoverage('anchor-stanza')
       roomStore.setState((state) => ({ messages: new Map(state.messages).set(ROOM, [anchor, p0, u1]) }))
       setMeta({
@@ -1856,7 +1856,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     })
 
     it('a read-through supersedes an archive recount already in flight', async () => {
-      await messageCache.saveRoomMessages([anchor, p0, u1])
+      await messageCache.saveMessages('room', [anchor, p0, u1])
       seedCoverage('anchor-stanza')
       roomStore.setState((state) => ({ messages: new Map(state.messages).set(ROOM, [anchor, p0, u1]) }))
       const pointer = makeReadPointer(u1, 'room')
@@ -1866,7 +1866,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
       // Hold an older cache snapshot across the direct read acknowledgement.
       let releaseCount!: (result: { unread: number }) => void
-      vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(
+      vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(
         () => new Promise((resolve) => { releaseCount = resolve })
       )
       const recount = roomStore.getState().recomputeUnreadForRoom(ROOM, { allowActive: true })
@@ -1930,7 +1930,7 @@ describe('roomStore — `start`-filtered catch-up bootstraps coverage from its w
     clearTransientScope(getStorageScopeJid() ?? '')
     roomStore.getState().addRoom(createRoom(ROOM))
 
-    await messageCache.saveRoomMessages([edgeMsg()])
+    await messageCache.saveMessages('room', [edgeMsg()])
     roomStore.setState({ activeRoomJid: 'someone-else@conference.example.com' })
     setMeta({ unreadCount: 4, readPointer: POINTER_ON_EDGE })
     markCaughtUpWithoutCoverage()
@@ -1954,9 +1954,9 @@ describe('roomStore — `start`-filtered catch-up bootstraps coverage from its w
   it('gates an active dedupe backfill and then recomputes it once', async () => {
     let releaseWrite!: () => void
     const writeGate = new Promise<void>((resolve) => { releaseWrite = resolve })
-    vi.mocked(messageCache.saveRoomMessages).mockClear()
-    vi.mocked(messageCache.saveRoomMessages).mockImplementationOnce(async (messages) => {
-      const committed = await saveRoomMessagesImplementation(messages)
+    vi.mocked(messageCache.saveMessages).mockClear()
+    vi.mocked(messageCache.saveMessages).mockImplementationOnce(async (...args) => {
+      const committed = await saveRoomMessagesImplementation(...args)
       await writeGate
       return committed
     })
@@ -1967,7 +1967,7 @@ describe('roomStore — `start`-filtered catch-up bootstraps coverage from its w
 
     catchUp(true)
     await vi.waitFor(() => {
-      expect(messageCache.saveRoomMessages).toHaveBeenCalled()
+      expect(messageCache.saveMessages).toHaveBeenCalled()
     })
     expect(roomStore.getState().getRoomCoverage(ROOM)).toBeUndefined()
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(4)

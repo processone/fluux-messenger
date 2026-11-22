@@ -29,9 +29,9 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 it('visits every cached room message once, in pages no larger than the batch size', async () => {
-  await cache.saveRoomMessages(Array.from({ length: 23 }, (_, i) => room(i)))
+  await cache.saveMessages('room', Array.from({ length: 23 }, (_, i) => room(i)))
   const pages: string[][] = []
-  await cache.iterateAllRoomMessages(10, async (batch) => { pages.push(batch.map(m => m.id)) })
+  await cache.iterateAllMessages('room', 10, async (batch) => { pages.push(batch.map(m => m.id)) })
   expect(pages.map(p => p.length)).toEqual([10, 10, 3])
   const seen = pages.flat()
   expect(new Set(seen).size).toBe(23)
@@ -39,23 +39,23 @@ it('visits every cached room message once, in pages no larger than the batch siz
 })
 
 it('visits every cached chat message once and handles an exact multiple of the page size', async () => {
-  await cache.saveMessages(Array.from({ length: 20 }, (_, i) => chat(i)))
+  await cache.saveMessages('chat', Array.from({ length: 20 }, (_, i) => chat(i)))
   const sizes: number[] = []
   const seen: string[] = []
-  await cache.iterateAllMessages(10, async (batch) => { sizes.push(batch.length); seen.push(...batch.map(m => m.id)) })
+  await cache.iterateAllMessages('chat', 10, async (batch) => { sizes.push(batch.length); seen.push(...batch.map(m => m.id)) })
   expect(sizes).toEqual([10, 10])
   expect(new Set(seen).size).toBe(20)
 })
 
 it('calls back nothing for an empty archive, and asks the store for one page per read', async () => {
   const onBatch = vi.fn(async () => {})
-  await cache.iterateAllMessages(10, onBatch)
-  await cache.iterateAllRoomMessages(10, onBatch)
+  await cache.iterateAllMessages('chat', 10, onBatch)
+  await cache.iterateAllMessages('room', 10, onBatch)
   expect(onBatch).not.toHaveBeenCalled()
 
-  await cache.saveRoomMessages(Array.from({ length: 25 }, (_, i) => room(i)))
+  await cache.saveMessages('room', Array.from({ length: 25 }, (_, i) => room(i)))
   const getAll = vi.spyOn(IDBObjectStore.prototype, 'getAll')
-  await cache.iterateAllRoomMessages(10, async () => {})
+  await cache.iterateAllMessages('room', 10, async () => {})
   expect(getAll.mock.calls.length).toBeGreaterThan(0)
   expect(getAll.mock.calls.every(([, count]) => count === 10)).toBe(true)
 })

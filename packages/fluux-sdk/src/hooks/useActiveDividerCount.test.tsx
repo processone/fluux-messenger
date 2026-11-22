@@ -142,7 +142,7 @@ describe('active divider count while a read awaits its recount', () => {
   ])('room: reconciles an evicted counted row after confirmed $label', async ({ moderation, expected }) => {
     const messages = Array.from({ length: 3 }, (_, i) => ({ ...roomMessage(i), stanzaId: `s${i}` }))
     const anchor = { id: 'm0', stanzaId: 's0' }
-    await messageCache.saveRoomMessages(messages)
+    await messageCache.saveMessages('room', messages)
     act(() => {
       roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
       roomStore.getState().setActiveRoom(ROOM)
@@ -173,7 +173,7 @@ describe('active divider count while a read awaits its recount', () => {
       await vi.waitFor(() => expect(roomStore.getState().pendingRetractions.get(ROOM)).toBeUndefined())
     })
     expect(result.current.firstNewMessageCount).toBe(expected)
-    const tombstone = await messageCache.getRoomMessage(ROOM, 'm2')
+    const tombstone = await messageCache.getMessage('room', ROOM, 'm2')
     expect(tombstone?.isRetracted).toBe(true)
     act(() => { roomStore.setState({ messages: new Map([[ROOM, [...messages.slice(0, 2), tombstone!]]]) }) })
     expect(result.current.firstNewMessageCount).toBe(expected)
@@ -219,7 +219,7 @@ describe('active divider count while a read awaits its recount', () => {
     expect(result.current.activeRoom?.unreadCount).toBe(9)
     expect(result.current.firstNewMessageCount).toBe(9)
 
-    await messageCache.saveRoomMessages([anchor, ...messages, roomMessage(10)])
+    await messageCache.saveMessages('room', [anchor, ...messages, roomMessage(10)])
     act(() => {
       roomStore.setState((state) => ({
         mamQueryStates: new Map(state.mamQueryStates).set(ROOM, {
@@ -272,7 +272,7 @@ describe('active divider count while a read awaits its recount', () => {
     expect(result.current.activeConversation?.unreadCount).toBe(9)
     expect(result.current.firstNewMessageCount).toBe(9)
 
-    await messageCache.saveMessages([anchor, ...messages, chatMessage(10)])
+    await messageCache.saveMessages('chat', [anchor, ...messages, chatMessage(10)])
     act(() => {
       chatStore.setState((state) => ({
         mamQueryStates: new Map(state.mamQueryStates).set(PEER, {

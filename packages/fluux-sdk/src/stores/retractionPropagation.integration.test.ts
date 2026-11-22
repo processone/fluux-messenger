@@ -55,6 +55,10 @@ const OTHER_CHAT = 'benvolio@montague.example'
 const ROOM = 'balcony@conference.montague.example'
 const OTHER_ROOM = 'square@conference.verona.example'
 
+// The kind-keyed archive functions correlate their arguments to `kind` only at the call site, so a
+// wrapper forwarding a spread argument list to the original needs the loosely-typed call signature.
+const forward = <F extends (...args: never[]) => unknown>(fn: F) => fn as unknown as (...args: unknown[]) => ReturnType<F>
+
 /** The word every test hides in a body and then demands the storage forget. */
 const SECRET = 'plutonium'
 
@@ -205,7 +209,7 @@ describe('retraction propagates to the cache and the search index', () => {
   describe('target not resident', () => {
     it('promotes a search document when a live duplicate enriches the cached row', async () => {
       const original = chatMessage({ id: 'live-enrichment', body: 'searchable live' })
-      await messageCache.saveMessage(original)
+      await messageCache.saveMessage('chat', original)
       await searchIndex.indexMessage(original)
       chatStore.setState({ activeConversationId: CHAT, messages: new Map([[CHAT, [original]]]) })
 
@@ -226,7 +230,7 @@ describe('retraction propagates to the cache and the search index', () => {
 
     it('preserves both client-ID twins after MAM promotes the first search document', async () => {
       const first = chatMessage({ id: 'reused', body: 'twin first' })
-      await messageCache.saveMessage(first)
+      await messageCache.saveMessage('chat', first)
       await searchIndex.indexMessage(first)
       chatStore.setState({ activeConversationId: CHAT, messages: new Map([[CHAT, [first]]]) })
       const archived = { ...first, stanzaId: 'archive-first', isDelayed: true }
@@ -237,7 +241,7 @@ describe('retraction propagates to the cache and the search index', () => {
       })
       chatStore.setState({ activeConversationId: null, messages: new Map() })
       const second = { ...first, stanzaId: 'archive-second', body: 'twin second', timestamp: new Date(+first.timestamp + 1000) }
-      await messageCache.saveMessage(second)
+      await messageCache.saveMessage('chat', second)
       await searchIndex.indexMessage(second)
 
       expect((await searchIndex.search('twin')).map(result => result.body).sort()).toEqual(['twin first', 'twin second'])
@@ -249,11 +253,11 @@ describe('retraction propagates to the cache and the search index', () => {
 
     it('does not retract an unpromoted fallback belonging to another archived twin', async () => {
       const first = chatMessage({ id: 'reused', body: 'preserved first' })
-      await messageCache.saveMessage(first)
+      await messageCache.saveMessage('chat', first)
       await searchIndex.indexMessage(first)
-      await messageCache.saveMessage({ ...first, stanzaId: 'archive-first' })
+      await messageCache.saveMessage('chat', { ...first, stanzaId: 'archive-first' })
       const second = { ...first, stanzaId: 'archive-second', body: 'retracted second' }
-      await messageCache.saveMessage(second)
+      await messageCache.saveMessage('chat', second)
 
       await retractChatMessageInStorage(CHAT, second)
 
@@ -264,7 +268,7 @@ describe('retraction propagates to the cache and the search index', () => {
 
     it('erases a cached 1:1 message the resident window no longer holds', async () => {
       const message = chatMessage()
-      await messageCache.saveMessage(message)
+      await messageCache.saveMessage('chat', message)
       await searchIndex.indexMessage(message)
       expect(await searchIndex.search(SECRET)).toHaveLength(1)
 
@@ -274,7 +278,7 @@ describe('retraction propagates to the cache and the search index', () => {
       chatStore.getState().recordPendingRetraction(CHAT, message.id, CHAT)
       await settle()
 
-      const stored = await messageCache.getMessage(CHAT, message.id)
+      const stored = await messageCache.getMessage('chat', CHAT, message.id)
       expect(stored?.isRetracted).toBe(true)
       expect(stored?.body).toBe('')
       await expectNoTraceOf(SECRET)
@@ -283,14 +287,14 @@ describe('retraction propagates to the cache and the search index', () => {
     it('erases every chat row sharing the authorized stanza identity', async () => {
       const first = chatMessage({ id: 'copy-a', stanzaId: 'shared-archive', body: 'holmium copy' })
       const second = chatMessage({ id: 'copy-b', stanzaId: 'shared-archive', body: 'thulium copy' })
-      await messageCache.saveMessages([first, second])
+      await messageCache.saveMessages('chat', [first, second])
       await searchIndex.indexMessages([first, second])
 
       chatStore.getState().recordPendingRetraction(CHAT, 'shared-archive', CHAT)
       await settle()
 
-      expect((await messageCache.getMessage(CHAT, first.id))?.isRetracted).toBe(true)
-      expect((await messageCache.getMessage(CHAT, second.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('chat', CHAT, first.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('chat', CHAT, second.id))?.isRetracted).toBe(true)
       expect(await searchIndex.search('holmium')).toEqual([])
       expect(await searchIndex.search('thulium')).toEqual([])
     })
@@ -308,15 +312,15 @@ describe('retraction propagates to the cache and the search index', () => {
         originId: 'resident-origin',
         body: 'thulium resident',
       })
-      await messageCache.saveMessages([first, second])
+      await messageCache.saveMessages('chat', [first, second])
       await searchIndex.indexMessages([first, second])
       chatStore.setState({ messages: new Map([[CHAT, [first]]]) })
 
       chatStore.getState().recordPendingRetraction(CHAT, first.originId!, first.from)
       await settle()
 
-      expect((await messageCache.getMessage(CHAT, first.id))?.isRetracted).toBe(true)
-      expect((await messageCache.getMessage(CHAT, second.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('chat', CHAT, first.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('chat', CHAT, second.id))?.isRetracted).toBe(true)
       expect(await searchIndex.search('holmium')).toEqual([])
       expect(await searchIndex.search('thulium')).toEqual([])
     })
@@ -337,7 +341,7 @@ describe('retraction propagates to the cache and the search index', () => {
         body: 'fermium room closure',
       })
       await searchIndex.indexMessages([first, second])
-      await messageCache.saveRoomMessages([first, second])
+      await messageCache.saveMessages('room', [first, second])
 
       roomStore.getState().recordPendingRetraction(
         ROOM,
@@ -347,7 +351,7 @@ describe('retraction propagates to the cache and the search index', () => {
       )
       await settle()
 
-      expect((await messageCache.getRoomMessage(ROOM, first.id, first.from))?.body).toBe('')
+      expect((await messageCache.getMessage('room', ROOM, first.id, first.from))?.body).toBe('')
       expect(await searchIndex.search('curium')).toEqual([])
       expect(await searchIndex.search('fermium')).toEqual([])
     })
@@ -360,17 +364,17 @@ describe('retraction propagates to the cache and the search index', () => {
         from: target.from,
         body: 'other-conversation terbium',
       })
-      await messageCache.saveMessage(otherConversation)
+      await messageCache.saveMessage('chat', otherConversation)
       await searchIndex.indexMessage(otherConversation)
 
       await retractChatMessageInStorage(CHAT, target, { retractedAt: new Date() })
 
-      expect(await messageCache.getMessage(OTHER_CHAT, target.id)).toMatchObject({
+      expect(await messageCache.getMessage('chat', OTHER_CHAT, target.id)).toMatchObject({
         conversationId: OTHER_CHAT,
         from: target.from,
         body: 'other-conversation terbium',
       })
-      expect((await messageCache.getMessage(OTHER_CHAT, target.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage('chat', OTHER_CHAT, target.id))?.isRetracted).toBeFalsy()
       expect(await searchIndex.search('terbium')).toHaveLength(1)
 
       const otherSender = chatMessage({
@@ -378,7 +382,7 @@ describe('retraction propagates to the cache and the search index', () => {
         from: 'mallory@montague.example',
         body: 'other-sender ytterbium',
       })
-      await messageCache.saveMessage(otherSender)
+      await messageCache.saveMessage('chat', otherSender)
       await searchIndex.indexMessage(otherSender)
 
       await retractChatMessageInStorage(
@@ -387,18 +391,18 @@ describe('retraction propagates to the cache and the search index', () => {
         { retractedAt: new Date() }
       )
 
-      expect(await messageCache.getMessage(CHAT, otherSender.id)).toMatchObject({
+      expect(await messageCache.getMessage('chat', CHAT, otherSender.id)).toMatchObject({
         conversationId: CHAT,
         from: otherSender.from,
         body: 'other-sender ytterbium',
       })
-      expect((await messageCache.getMessage(CHAT, otherSender.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage('chat', CHAT, otherSender.id))?.isRetracted).toBeFalsy()
       expect(await searchIndex.search('ytterbium')).toHaveLength(1)
     })
 
     it('erases a cached room message the resident window no longer holds', async () => {
       const message = roomMessage({ stanzaId: 'archive-1', occupantId: 'occ-alice' })
-      await messageCache.saveRoomMessage(message)
+      await messageCache.saveMessage('room', message)
       await searchIndex.indexMessage(message)
       expect(await searchIndex.search(SECRET)).toHaveLength(1)
 
@@ -407,7 +411,7 @@ describe('retraction propagates to the cache and the search index', () => {
       roomStore.getState().recordPendingRetraction(ROOM, 'archive-1', message.from, 'occ-alice')
       await settle()
 
-      const stored = await messageCache.getRoomMessage(ROOM, message.id)
+      const stored = await messageCache.getMessage('room', ROOM, message.id)
       expect(stored?.isRetracted).toBe(true)
       expect(stored?.body).toBe('')
       await expectNoTraceOf(SECRET)
@@ -415,7 +419,7 @@ describe('retraction propagates to the cache and the search index', () => {
 
     it('removes the pending record once the cached tombstone protects reload', async () => {
       const message = chatMessage()
-      await messageCache.saveMessage(message)
+      await messageCache.saveMessage('chat', message)
 
       chatStore.getState().recordPendingRetraction(CHAT, message.id, CHAT)
       await settle()
@@ -425,13 +429,13 @@ describe('retraction propagates to the cache and the search index', () => {
 
     it('leaves a cached message alone when the retraction is not from its author', async () => {
       const message = roomMessage({ stanzaId: 'archive-1', occupantId: 'occ-alice' })
-      await messageCache.saveRoomMessage(message)
+      await messageCache.saveMessage('room', message)
       await searchIndex.indexMessage(message)
 
       roomStore.getState().recordPendingRetraction(ROOM, 'archive-1', `${ROOM}/mallory`, 'occ-mallory')
       await settle()
 
-      const stored = await messageCache.getRoomMessage(ROOM, message.id)
+      const stored = await messageCache.getMessage('room', ROOM, message.id)
       expect(stored?.isRetracted).toBeFalsy()
       expect(stored?.body).toContain(SECRET)
       expect(await searchIndex.search(SECRET)).toHaveLength(1)
@@ -443,10 +447,10 @@ describe('retraction propagates to the cache and the search index', () => {
       roomStore.getState().recordPendingRetraction(ROOM, 'archive-late', message.from, 'occ-mallory')
       await settle()
 
-      await messageCache.saveRoomMessage(message)
+      await messageCache.saveMessage('room', message)
       await searchIndex.indexMessage(message)
 
-      expect((await messageCache.getRoomMessage(ROOM, message.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage('room', ROOM, message.id))?.isRetracted).toBeFalsy()
       expect(await searchIndex.search(SECRET)).toHaveLength(1)
     })
 
@@ -456,19 +460,19 @@ describe('retraction propagates to the cache and the search index', () => {
       chatStore.getState().recordPendingRetraction(CHAT, message.id, 'mallory@montague.example')
       await settle()
 
-      await messageCache.saveMessage(message)
+      await messageCache.saveMessage('chat', message)
       await searchIndex.indexMessage(message)
 
-      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage('chat', CHAT, message.id))?.isRetracted).toBeFalsy()
       expect(await searchIndex.search(SECRET)).toHaveLength(1)
     })
 
     it('removes the search document for an already-tombstoned chat target', async () => {
       const message = chatMessage()
-      await messageCache.saveMessage(message)
+      await messageCache.saveMessage('chat', message)
       await searchIndex.indexMessage(message)
       await messageCache.updateMessage(
-        CHAT,
+        'chat', CHAT,
         message.id,
         { isRetracted: true, retractedAt: new Date() },
         message.from
@@ -482,10 +486,10 @@ describe('retraction propagates to the cache and the search index', () => {
 
     it('removes the search document for an already-tombstoned room target', async () => {
       const message = roomMessage({ stanzaId: 'already-tombstoned', occupantId: 'occ-alice' })
-      await messageCache.saveRoomMessage(message)
+      await messageCache.saveMessage('room', message)
       await searchIndex.indexMessage(message)
-      await messageCache.updateRoomMessage(
-        ROOM,
+      await messageCache.updateMessage(
+        'room', ROOM,
         message.id,
         { isRetracted: true, retractedAt: new Date() },
         message.from
@@ -505,9 +509,9 @@ describe('retraction propagates to the cache and the search index', () => {
     it('preserves a resident chat tombstone timestamp during duplicate cleanup', async () => {
       const message = chatMessage()
       const retractedAt = new Date('2026-07-22T03:53:00Z')
-      await messageCache.saveMessage(message)
+      await messageCache.saveMessage('chat', message)
       await searchIndex.indexMessage(message)
-      await messageCache.updateMessage(CHAT, message.id, { isRetracted: true, retractedAt }, message.from)
+      await messageCache.updateMessage('chat', CHAT, message.id, { isRetracted: true, retractedAt }, message.from)
       chatStore.setState({
         messages: new Map([[CHAT, [{ ...message, isRetracted: true, retractedAt }]]]),
       })
@@ -515,7 +519,7 @@ describe('retraction propagates to the cache and the search index', () => {
       chatStore.getState().recordPendingRetraction(CHAT, message.id, message.from)
       await settle()
 
-      expect((await messageCache.getMessage(CHAT, message.id))?.retractedAt).toEqual(retractedAt)
+      expect((await messageCache.getMessage('chat', CHAT, message.id))?.retractedAt).toEqual(retractedAt)
       expect(chatStore.getState().messages.get(CHAT)?.[0].retractedAt).toEqual(retractedAt)
       expect(await searchIndex.search(SECRET)).toEqual([])
     })
@@ -523,10 +527,10 @@ describe('retraction propagates to the cache and the search index', () => {
     it('preserves a resident room tombstone timestamp during duplicate cleanup', async () => {
       const message = roomMessage({ stanzaId: 'duplicate-room', occupantId: 'occ-alice' })
       const retractedAt = new Date('2026-07-22T03:53:00Z')
-      await messageCache.saveRoomMessage(message)
+      await messageCache.saveMessage('room', message)
       await searchIndex.indexMessage(message)
-      await messageCache.updateRoomMessage(
-        ROOM,
+      await messageCache.updateMessage(
+        'room', ROOM,
         message.id,
         { isRetracted: true, retractedAt },
         message.from
@@ -541,7 +545,7 @@ describe('retraction propagates to the cache and the search index', () => {
       )
       await settle()
 
-      expect((await messageCache.getRoomMessage(ROOM, message.id))?.retractedAt).toEqual(retractedAt)
+      expect((await messageCache.getMessage('room', ROOM, message.id))?.retractedAt).toEqual(retractedAt)
       expect(roomStore.getState().messages.get(ROOM)?.[0].retractedAt).toEqual(retractedAt)
       expect(await searchIndex.search(SECRET)).toEqual([])
     })
@@ -549,9 +553,9 @@ describe('retraction propagates to the cache and the search index', () => {
     it('finishes chat index cleanup when restored replay finds a tombstone', async () => {
       const message = chatMessage()
       const retractedAt = new Date()
-      await messageCache.saveMessage(message)
+      await messageCache.saveMessage('chat', message)
       await searchIndex.indexMessage(message)
-      await messageCache.updateMessage(CHAT, message.id, { isRetracted: true, retractedAt }, message.from)
+      await messageCache.updateMessage('chat', CHAT, message.id, { isRetracted: true, retractedAt }, message.from)
       _clearRetractedIdentitiesForTesting()
       chatStore.setState({
         messages: new Map(),
@@ -570,10 +574,10 @@ describe('retraction propagates to the cache and the search index', () => {
     it('finishes room index cleanup when restored replay finds a tombstone', async () => {
       const message = roomMessage({ stanzaId: 'restored-room', occupantId: 'occ-alice' })
       const retractedAt = new Date()
-      await messageCache.saveRoomMessage(message)
+      await messageCache.saveMessage('room', message)
       await searchIndex.indexMessage(message)
-      await messageCache.updateRoomMessage(
-        ROOM,
+      await messageCache.updateMessage(
+        'room', ROOM,
         message.id,
         { isRetracted: true, retractedAt },
         message.from
@@ -613,13 +617,13 @@ describe('retraction propagates to the cache and the search index', () => {
       body: 'newcomer occupant',
       timestamp: new Date(departed.timestamp.getTime() + 1),
     })
-    await messageCache.saveRoomMessages([departed, newcomer])
+    await messageCache.saveMessages('room', [departed, newcomer])
     roomStore.getState().addRoom(room(), [departed, newcomer])
 
     roomStore.getState().updateReactions(ROOM, newcomer.stanzaId!, 'bob', ['👍'])
     await settle()
 
-    const stored = await messageCache.getRoomMessages(ROOM, {})
+    const stored = await messageCache.getMessages('room', ROOM, {})
     expect(stored.find((message) => message.occupantId === 'occupant-departed')?.reactions).toBeUndefined()
     expect(stored.find((message) => message.occupantId === 'occupant-newcomer')?.reactions).toEqual({
       '👍': ['bob'],
@@ -635,12 +639,12 @@ describe('retraction propagates to the cache and the search index', () => {
       // Indexed while the message had no archive id: its document lives under
       // `room:<roomJid>:<from>:<id>` and can never be found under the stanza form.
       const early = roomMessage({ occupantId: 'occ-alice' })
-      await messageCache.saveRoomMessage(early)
+      await messageCache.saveMessage('room', early)
       await searchIndex.indexMessage(early)
 
       // The MAM copy arrives and merges the archive id onto the same row.
-      await messageCache.saveRoomMessage({ ...early, stanzaId: 'archive-late' })
-      expect((await messageCache.getRoomMessage(ROOM, early.id))?.stanzaId).toBe('archive-late')
+      await messageCache.saveMessage('room', { ...early, stanzaId: 'archive-late' })
+      expect((await messageCache.getMessage('room', ROOM, early.id))?.stanzaId).toBe('archive-late')
 
       roomStore.getState().recordPendingRetraction(ROOM, 'archive-late', early.from, 'occ-alice')
       await settle()
@@ -650,11 +654,11 @@ describe('retraction propagates to the cache and the search index', () => {
 
     it('erases a 1:1 message whose archive id reached the cache after indexing', async () => {
       const early = chatMessage()
-      await messageCache.saveMessage(early)
+      await messageCache.saveMessage('chat', early)
       await searchIndex.indexMessage(early)
 
-      await messageCache.updateMessage(CHAT, early.id, { stanzaId: 'archive-late' }, early.from)
-      expect((await messageCache.getMessage(CHAT, early.id))?.stanzaId).toBe('archive-late')
+      await messageCache.updateMessage('chat', CHAT, early.id, { stanzaId: 'archive-late' }, early.from)
+      expect((await messageCache.getMessage('chat', CHAT, early.id))?.stanzaId).toBe('archive-late')
 
       chatStore.getState().recordPendingRetraction(CHAT, 'archive-late', CHAT)
       await settle()
@@ -689,7 +693,7 @@ describe('retraction propagates to the cache and the search index', () => {
         stanzaId: 'archive-recent',
         timestamp: new Date(1_700_000_500_000),
       })
-      await messageCache.saveRoomMessage(reassigned)
+      await messageCache.saveMessage('room', reassigned)
       await searchIndex.indexMessage(reassigned)
 
       await retractRoomMessageInStorage(ROOM, reassigned, { retractedAt: new Date() })
@@ -706,7 +710,7 @@ describe('retraction propagates to the cache and the search index', () => {
         occupantId: 'occ-alice-1',
         body: `the ${OTHER_SECRET} cache shipment`,
       })
-      await messageCache.saveRoomMessage(departed)
+      await messageCache.saveMessage('room', departed)
       await searchIndex.indexMessage(departed)
 
       const reassigned = roomMessage({
@@ -716,11 +720,11 @@ describe('retraction propagates to the cache and the search index', () => {
       })
       await retractRoomMessageInStorage(ROOM, reassigned, { retractedAt: new Date() })
 
-      expect(await messageCache.getRoomMessage(ROOM, departed.id, departed.from)).toMatchObject({
+      expect(await messageCache.getMessage('room', ROOM, departed.id, departed.from)).toMatchObject({
         occupantId: departed.occupantId,
         body: departed.body,
       })
-      expect((await messageCache.getRoomMessage(ROOM, departed.id, departed.from))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage('room', ROOM, departed.id, departed.from))?.isRetracted).toBeFalsy()
       expect(await searchIndex.search(OTHER_SECRET)).toHaveLength(1)
     })
 
@@ -738,11 +742,11 @@ describe('retraction propagates to the cache and the search index', () => {
         occupantId: 'occ-alice-2',
         body: 'innocent ytterbium',
       })
-      await messageCache.saveRoomMessage(reassigned)
+      await messageCache.saveMessage('room', reassigned)
       await searchIndex.indexMessage(reassigned)
 
-      expect((await messageCache.getRoomMessage(ROOM, reassigned.id))?.body).toBe('innocent ytterbium')
-      expect((await messageCache.getRoomMessage(ROOM, reassigned.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage('room', ROOM, reassigned.id))?.body).toBe('innocent ytterbium')
+      expect((await messageCache.getMessage('room', ROOM, reassigned.id))?.isRetracted).toBeFalsy()
       expect(await searchIndex.search('ytterbium')).toHaveLength(1)
     })
 
@@ -766,7 +770,7 @@ describe('retraction propagates to the cache and the search index', () => {
         occupantId: 'occ-alice-2',
         body: 'compatible body',
       })
-      await messageCache.getRoomMessages(ROOM, {})
+      await messageCache.getMessages('room', ROOM, {})
       const db = await openDB(`fluux-message-cache:${SCOPE}`)
       const tx = db.transaction('room-messages-canonical', 'readwrite')
       for (const message of [departed, target, compatible]) {
@@ -781,7 +785,7 @@ describe('retraction propagates to the cache and the search index', () => {
         { retractedAt: new Date() }
       )
 
-      const stored = await messageCache.getRoomMessages(ROOM, {})
+      const stored = await messageCache.getMessages('room', ROOM, {})
       expect(stored.find((message) => message.stanzaId === 'component-old')).toMatchObject({
         occupantId: 'occ-alice-1',
         body: 'departed body',
@@ -806,9 +810,9 @@ describe('retraction propagates to the cache and the search index', () => {
         timestamp: new Date(1_700_000_005_000),
         receivedAt: new Date(1_700_000_005_000),
       })
-      await messageCache.saveRoomMessage(departed)
+      await messageCache.saveMessage('room', departed)
       await searchIndex.indexMessage(departed)
-      await messageCache.saveRoomMessage(newcomer)
+      await messageCache.saveMessage('room', newcomer)
       await searchIndex.indexMessage(newcomer)
       expect(await searchIndex.search(SECRET)).toHaveLength(1)
       expect(await searchIndex.search('chromium')).toHaveLength(1)
@@ -834,9 +838,9 @@ describe('retraction propagates to the cache and the search index', () => {
         timestamp: new Date(1_700_000_005_000),
         receivedAt: new Date(1_700_000_005_000),
       })
-      await messageCache.saveRoomMessage(departed)
+      await messageCache.saveMessage('room', departed)
       await searchIndex.indexMessage(departed)
-      await messageCache.saveRoomMessage(newcomer)
+      await messageCache.saveMessage('room', newcomer)
       await searchIndex.indexMessage(newcomer)
       await restart()
 
@@ -861,12 +865,12 @@ describe('retraction propagates to the cache and the search index', () => {
 
     it('does not claim a composite document that carries no ownership evidence', async () => {
       const legacy = roomMessage({ id: 'legacy-id' })
-      await messageCache.saveRoomMessage(legacy)
+      await messageCache.saveMessage('room', legacy)
       await searchIndex.indexMessage(legacy)
 
       await retractRoomMessageInStorage(ROOM, legacy, { retractedAt: new Date() })
 
-      expect((await messageCache.getRoomMessage(ROOM, legacy.id))?.body).toBe('')
+      expect((await messageCache.getMessage('room', ROOM, legacy.id))?.body).toBe('')
       const index = await openDB(`fluux-search-index:${SCOPE}`)
       try {
         expect((await index.getAll('search-docs')).map((doc) => doc.messageId)).toEqual([legacy.id])
@@ -887,7 +891,7 @@ describe('retraction propagates to the cache and the search index', () => {
         stanzaId: 'archive-recent',
         body: 'OK',
       })
-      await messageCache.saveRoomMessage(reassigned)
+      await messageCache.saveMessage('room', reassigned)
       await searchIndex.indexMessage(reassigned)
 
       await retractRoomMessageInStorage(ROOM, reassigned, { retractedAt: new Date() })
@@ -910,7 +914,7 @@ describe('retraction propagates to the cache and the search index', () => {
         occupantId: 'occ-alice-2',
         body: 'lower tier body',
       })
-      await messageCache.saveRoomMessages([authoritative, lowerTier])
+      await messageCache.saveMessages('room', [authoritative, lowerTier])
       await searchIndex.indexMessages([authoritative, lowerTier])
 
       roomStore.getState().recordPendingRetraction(
@@ -921,12 +925,12 @@ describe('retraction propagates to the cache and the search index', () => {
       )
       await settle()
 
-      await messageCache.saveRoomMessage(lowerTier)
+      await messageCache.saveMessage('room', lowerTier)
 
       expect(roomStore.getState().pendingRetractions.get(ROOM)).toBeUndefined()
-      expect((await messageCache.getRoomMessage(ROOM, authoritative.id))?.isRetracted).toBeFalsy()
-      expect((await messageCache.getRoomMessage(ROOM, lowerTier.id))?.isRetracted).toBeFalsy()
-      expect((await messageCache.getRoomMessage(ROOM, lowerTier.id))?.body).toBe('lower tier body')
+      expect((await messageCache.getMessage('room', ROOM, authoritative.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage('room', ROOM, lowerTier.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage('room', ROOM, lowerTier.id))?.body).toBe('lower tier body')
       expect(await searchIndex.search('lower tier')).toHaveLength(1)
     })
 
@@ -942,7 +946,7 @@ describe('retraction propagates to the cache and the search index', () => {
         from: 'mallory@montague.example',
         body: 'lower tier body',
       })
-      await messageCache.saveMessages([authoritative, lowerTier])
+      await messageCache.saveMessages('chat', [authoritative, lowerTier])
       await searchIndex.indexMessages([authoritative, lowerTier])
 
       chatStore.getState().recordPendingRetraction(
@@ -952,12 +956,12 @@ describe('retraction propagates to the cache and the search index', () => {
       )
       await settle()
 
-      await messageCache.saveMessage(lowerTier)
+      await messageCache.saveMessage('chat', lowerTier)
 
       expect(chatStore.getState().pendingRetractions.get(CHAT)).toBeUndefined()
-      expect((await messageCache.getMessage(CHAT, authoritative.id))?.isRetracted).toBeFalsy()
-      expect((await messageCache.getMessage(CHAT, lowerTier.id))?.isRetracted).toBeFalsy()
-      expect((await messageCache.getMessage(CHAT, lowerTier.id))?.body).toBe('lower tier body')
+      expect((await messageCache.getMessage('chat', CHAT, authoritative.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage('chat', CHAT, lowerTier.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage('chat', CHAT, lowerTier.id))?.body).toBe('lower tier body')
       expect(await searchIndex.search('lower tier')).toHaveLength(1)
     })
 
@@ -974,7 +978,7 @@ describe('retraction propagates to the cache and the search index', () => {
         stanzaId: 'shared-archive-id',
         occupantId: 'occ-alice',
       })
-      await messageCache.saveRoomMessage(target)
+      await messageCache.saveMessage('room', target)
       await retractRoomMessageInStorage(ROOM, target, { retractedAt: new Date() })
 
       expect(await searchIndex.search(OTHER_SECRET)).toHaveLength(1)
@@ -986,7 +990,7 @@ describe('retraction propagates to the cache and the search index', () => {
         stanzaId: 'archive-old',
         occupantId: 'occ-alice-1',
       })
-      await messageCache.saveRoomMessage(departed)
+      await messageCache.saveMessage('room', departed)
       await searchIndex.indexMessage(departed)
 
       // The nick's new owner cannot retract what the previous owner wrote, even
@@ -994,7 +998,7 @@ describe('retraction propagates to the cache and the search index', () => {
       roomStore.getState().recordPendingRetraction(ROOM, 'shared-id', departed.from, 'occ-alice-2')
       await settle()
 
-      expect((await messageCache.getRoomMessage(ROOM, 'shared-id'))?.body).toContain(SECRET)
+      expect((await messageCache.getMessage('room', ROOM, 'shared-id'))?.body).toContain(SECRET)
       expect(await searchIndex.search(SECRET)).toHaveLength(1)
     })
 
@@ -1004,7 +1008,7 @@ describe('retraction propagates to the cache and the search index', () => {
         stanzaId: 'archive-old',
         occupantId: 'occ-alice-1',
       })
-      await messageCache.saveRoomMessage(departed)
+      await messageCache.saveMessage('room', departed)
       await searchIndex.indexMessage(departed)
 
       roomStore.getState().recordPendingRetraction(ROOM, 'shared-id', departed.from, 'occ-alice-1')
@@ -1024,26 +1028,26 @@ describe('retraction propagates to the cache and the search index', () => {
       // The retraction reaches the cache first and finds nothing to tombstone;
       // the target's own write is still queued behind it.
       const retraction = retractChatMessageInStorage(CHAT, message, { retractedAt: new Date() })
-      const save = messageCache.saveMessage(message)
+      const save = messageCache.saveMessage('chat', message)
       const index = searchIndex.indexMessage(message)
 
       await Promise.all([retraction, save, index])
       await settle()
 
-      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('chat', CHAT, message.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
 
     it('does not let a room save that lands after the retraction store the body', async () => {
       const message = roomMessage({ stanzaId: 'archive-1', occupantId: 'occ-alice' })
       const retraction = retractRoomMessageInStorage(ROOM, message, { retractedAt: new Date() })
-      const save = messageCache.saveRoomMessage(message)
+      const save = messageCache.saveMessage('room', message)
       const index = searchIndex.indexMessage(message)
 
       await Promise.all([retraction, save, index])
       await settle()
 
-      expect((await messageCache.getRoomMessage(ROOM, message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('room', ROOM, message.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
 
@@ -1055,10 +1059,10 @@ describe('retraction propagates to the cache and the search index', () => {
 
       // MAM then fetches the range for a conversation the user never opens, so
       // the pending record is never replayed against a resident window.
-      await messageCache.saveMessages([message])
+      await messageCache.saveMessages('chat', [message])
       await searchIndex.indexMessages([message])
 
-      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('chat', CHAT, message.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
 
@@ -1067,10 +1071,10 @@ describe('retraction propagates to the cache and the search index', () => {
       roomStore.getState().recordPendingRetraction(ROOM, 'archive-1', message.from, 'occ-alice')
       await settle()
 
-      await messageCache.saveRoomMessages([message])
+      await messageCache.saveMessages('room', [message])
       await searchIndex.indexMessages([message])
 
-      expect((await messageCache.getRoomMessage(ROOM, message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('room', ROOM, message.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
 
@@ -1096,13 +1100,13 @@ describe('retraction propagates to the cache and the search index', () => {
         occupantId: 'occ-bob',
         body: 'innocent zirconium',
       })
-      await messageCache.saveRoomMessage(unrelated)
+      await messageCache.saveMessage('room', unrelated)
       await searchIndex.indexMessage(unrelated)
-      await messageCache.saveRoomMessage(target)
+      await messageCache.saveMessage('room', target)
       await searchIndex.indexMessage(target)
 
-      expect((await messageCache.getRoomMessage(ROOM, unrelated.id))?.body).toBe('innocent zirconium')
-      expect((await messageCache.getRoomMessage(ROOM, target.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('room', ROOM, unrelated.id))?.body).toBe('innocent zirconium')
+      expect((await messageCache.getMessage('room', ROOM, target.id))?.isRetracted).toBe(true)
       expect(await searchIndex.search('zirconium')).toHaveLength(1)
       await expectNoTraceOf(SECRET)
     })
@@ -1149,61 +1153,61 @@ describe('retraction propagates to the cache and the search index', () => {
         from: 'mallory@montague.example',
         body: 'innocent niobium',
       })
-      await messageCache.saveMessage(unrelated)
+      await messageCache.saveMessage('chat', unrelated)
       await searchIndex.indexMessage(unrelated)
 
       chatStore.getState().recordPendingRetraction(CHAT, target.stanzaId!, target.from)
       await settle()
-      await messageCache.saveMessage(target)
+      await messageCache.saveMessage('chat', target)
       await searchIndex.indexMessage(target)
 
-      expect((await messageCache.getMessage(CHAT, unrelated.id))?.body).toBe('innocent niobium')
-      expect((await messageCache.getMessage(CHAT, target.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('chat', CHAT, unrelated.id))?.body).toBe('innocent niobium')
+      expect((await messageCache.getMessage('chat', CHAT, target.id))?.isRetracted).toBe(true)
       expect(await searchIndex.search('niobium')).toHaveLength(1)
       await expectNoTraceOf(SECRET)
     })
 
     it('does not let a later MAM re-delivery resurrect a retracted body', async () => {
       const message = chatMessage()
-      await messageCache.saveMessage(message)
+      await messageCache.saveMessage('chat', message)
       await retractChatMessageInStorage(CHAT, message, { retractedAt: new Date() })
 
       // A later run has no ledger: the tombstoned row is the only evidence left.
       _clearRetractedIdentitiesForTesting()
 
       // The archive hands the message back, body and all.
-      await messageCache.saveMessage(message)
+      await messageCache.saveMessage('chat', message)
       await searchIndex.indexMessage(message)
 
-      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('chat', CHAT, message.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
 
     it('does not let a later MAM re-delivery resurrect a retracted room body', async () => {
       const message = roomMessage({ stanzaId: 'archive-1', occupantId: 'occ-alice' })
-      await messageCache.saveRoomMessage(message)
+      await messageCache.saveMessage('room', message)
       await retractRoomMessageInStorage(ROOM, message, { retractedAt: new Date() })
 
       _clearRetractedIdentitiesForTesting()
 
-      await messageCache.saveRoomMessage(message)
+      await messageCache.saveMessage('room', message)
       await searchIndex.indexMessage(message)
 
-      expect((await messageCache.getRoomMessage(ROOM, message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('room', ROOM, message.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
 
     it('finds an earlier room tombstone through a lower identity tier', async () => {
       const early = roomMessage({ occupantId: 'occ-alice' })
-      await messageCache.saveRoomMessage(early)
+      await messageCache.saveMessage('room', early)
       await retractRoomMessageInStorage(ROOM, early, { retractedAt: new Date() })
       _clearRetractedIdentitiesForTesting()
 
       const redelivered = { ...early, stanzaId: 'archive-late' }
       await searchIndex.indexMessage(redelivered)
-      await messageCache.saveRoomMessage(redelivered)
+      await messageCache.saveMessage('room', redelivered)
 
-      expect((await messageCache.getRoomMessage(ROOM, early.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('room', ROOM, early.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
 
@@ -1253,10 +1257,10 @@ describe('retraction propagates to the cache and the search index', () => {
         stanzaId: undefined,
         body: 'unrelated hafnium',
       })
-      await messageCache.saveMessage(unrelated)
+      await messageCache.saveMessage('chat', unrelated)
 
-      expect((await messageCache.getMessage(CHAT, unrelated.id))?.body).toBe('unrelated hafnium')
-      expect((await messageCache.getMessage(CHAT, unrelated.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage('chat', CHAT, unrelated.id))?.body).toBe('unrelated hafnium')
+      expect((await messageCache.getMessage('chat', CHAT, unrelated.id))?.isRetracted).toBeFalsy()
     })
 
     it('does not apply a verified stanza alias to an unrelated room client id', async () => {
@@ -1275,10 +1279,10 @@ describe('retraction propagates to the cache and the search index', () => {
         nick: 'bob',
         body: 'unrelated lutetium',
       })
-      await messageCache.saveRoomMessage(unrelated)
+      await messageCache.saveMessage('room', unrelated)
 
-      expect((await messageCache.getRoomMessage(ROOM, unrelated.id))?.body).toBe('unrelated lutetium')
-      expect((await messageCache.getRoomMessage(ROOM, unrelated.id))?.isRetracted).toBeFalsy()
+      expect((await messageCache.getMessage('room', ROOM, unrelated.id))?.body).toBe('unrelated lutetium')
+      expect((await messageCache.getMessage('room', ROOM, unrelated.id))?.isRetracted).toBeFalsy()
     })
 
     it('keeps competing pending actors until an authorized chat actor matches', async () => {
@@ -1288,10 +1292,10 @@ describe('retraction propagates to the cache and the search index', () => {
       chatStore.getState().recordPendingRetraction(CHAT, message.id, message.from)
       await settle()
 
-      await messageCache.saveMessage(message)
+      await messageCache.saveMessage('chat', message)
       await searchIndex.indexMessage(message)
 
-      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('chat', CHAT, message.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
 
@@ -1302,28 +1306,28 @@ describe('retraction propagates to the cache and the search index', () => {
       roomStore.getState().recordPendingRetraction(ROOM, message.id, message.from, message.occupantId)
       await settle()
 
-      await messageCache.saveRoomMessage(message)
+      await messageCache.saveMessage('room', message)
       await searchIndex.indexMessage(message)
 
-      expect((await messageCache.getRoomMessage(ROOM, message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('room', ROOM, message.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
 
     it('finds a chat tombstone through stanza and origin identity tiers', async () => {
       const stanzaTarget = chatMessage({ id: 'stanza-old', stanzaId: 'shared-stanza' })
       const originTarget = chatMessage({ id: 'origin-old', originId: 'shared-origin' })
-      await messageCache.saveMessages([stanzaTarget, originTarget])
+      await messageCache.saveMessages('chat', [stanzaTarget, originTarget])
       await retractChatMessageInStorage(CHAT, stanzaTarget, { retractedAt: new Date() })
       await retractChatMessageInStorage(CHAT, originTarget, { retractedAt: new Date() })
       _clearRetractedIdentitiesForTesting()
 
       const stanzaCopy = { ...stanzaTarget, id: 'stanza-new', body: 'stanza dysprosium' }
       const originCopy = { ...originTarget, id: 'origin-new', body: 'origin erbium' }
-      await messageCache.saveMessages([stanzaCopy, originCopy])
+      await messageCache.saveMessages('chat', [stanzaCopy, originCopy])
       await searchIndex.indexMessages([stanzaCopy, originCopy])
 
-      expect((await messageCache.getMessage(CHAT, stanzaCopy.id))?.isRetracted).toBe(true)
-      expect((await messageCache.getMessage(CHAT, originCopy.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('chat', CHAT, stanzaCopy.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('chat', CHAT, originCopy.id))?.isRetracted).toBe(true)
       expect(await searchIndex.search('dysprosium')).toEqual([])
       expect(await searchIndex.search('erbium')).toEqual([])
     })
@@ -1347,7 +1351,7 @@ describe('retraction propagates to the cache and the search index', () => {
         stanzaId: bridge.stanzaId,
         originId: 'closure-origin-2',
       })
-      await messageCache.saveMessages([first, bridge, last])
+      await messageCache.saveMessages('chat', [first, bridge, last])
       await searchIndex.indexMessages([first, bridge, last])
 
       await retractChatMessageInStorage(
@@ -1359,10 +1363,10 @@ describe('retraction propagates to the cache and the search index', () => {
       )
 
       for (const message of [bridge, last]) {
-        expect((await messageCache.getMessage(CHAT, message.id))?.body).toBe('')
-        expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBe(true)
+        expect((await messageCache.getMessage('chat', CHAT, message.id))?.body).toBe('')
+        expect((await messageCache.getMessage('chat', CHAT, message.id))?.isRetracted).toBe(true)
       }
-      const untouched = await messageCache.getMessage(CHAT, first.id)
+      const untouched = await messageCache.getMessage('chat', CHAT, first.id)
       expect(untouched?.body).toBe('an unrelated note')
       expect(untouched?.isRetracted).toBeFalsy()
       await expectNoTraceOf(SECRET)
@@ -1370,7 +1374,7 @@ describe('retraction propagates to the cache and the search index', () => {
 
     it('removes resolved chat pending state before a lower-tier id can reuse it', async () => {
       const target = chatMessage({ id: 'resolved-chat-target', stanzaId: 'reused-chat-reference' })
-      await messageCache.saveMessage(target)
+      await messageCache.saveMessage('chat', target)
 
       chatStore.getState().recordPendingRetraction(CHAT, target.stanzaId!, target.from)
       await settle()
@@ -1381,9 +1385,9 @@ describe('retraction propagates to the cache and the search index', () => {
         stanzaId: 'unrelated-chat-stanza',
         body: 'unrelated rhenium',
       })
-      await messageCache.saveMessage(unrelated)
-      expect((await messageCache.getMessage(CHAT, unrelated.id))?.body).toBe('unrelated rhenium')
-      expect((await messageCache.getMessage(CHAT, unrelated.id))?.isRetracted).toBeFalsy()
+      await messageCache.saveMessage('chat', unrelated)
+      expect((await messageCache.getMessage('chat', CHAT, unrelated.id))?.body).toBe('unrelated rhenium')
+      expect((await messageCache.getMessage('chat', CHAT, unrelated.id))?.isRetracted).toBeFalsy()
     })
 
     it('removes resolved room pending state before a lower-tier id can reuse it', async () => {
@@ -1392,7 +1396,7 @@ describe('retraction propagates to the cache and the search index', () => {
         stanzaId: 'reused-room-reference',
         occupantId: 'resolved-room-occupant',
       })
-      await messageCache.saveRoomMessage(target)
+      await messageCache.saveMessage('room', target)
 
       roomStore.getState().recordPendingRetraction(
         ROOM,
@@ -1409,9 +1413,9 @@ describe('retraction propagates to the cache and the search index', () => {
         occupantId: target.occupantId,
         body: 'unrelated osmium',
       })
-      await messageCache.saveRoomMessage(unrelated)
-      expect((await messageCache.getRoomMessage(ROOM, unrelated.id, unrelated.from))?.body).toBe('unrelated osmium')
-      expect((await messageCache.getRoomMessage(ROOM, unrelated.id, unrelated.from))?.isRetracted).toBeFalsy()
+      await messageCache.saveMessage('room', unrelated)
+      expect((await messageCache.getMessage('room', ROOM, unrelated.id, unrelated.from))?.body).toBe('unrelated osmium')
+      expect((await messageCache.getMessage('room', ROOM, unrelated.id, unrelated.from))?.isRetracted).toBeFalsy()
     })
 
     it('retains competing room actors for separate messages sharing a client id', async () => {
@@ -1431,13 +1435,13 @@ describe('retraction propagates to the cache and the search index', () => {
       roomStore.getState().recordPendingRetraction(ROOM, bob.id, bob.from, bob.occupantId)
       await settle()
 
-      await messageCache.saveRoomMessage(alice)
-      expect((await messageCache.getRoomMessage(ROOM, alice.id, alice.from))?.isRetracted).toBe(true)
+      await messageCache.saveMessage('room', alice)
+      expect((await messageCache.getMessage('room', ROOM, alice.id, alice.from))?.isRetracted).toBe(true)
 
-      await messageCache.saveRoomMessage(bob)
-      expect((await messageCache.getRoomMessage(ROOM, bob.id, bob.from))?.isRetracted).toBe(true)
-      expect((await messageCache.getRoomMessage(ROOM, alice.id, alice.from))?.body).toBe('')
-      expect((await messageCache.getRoomMessage(ROOM, bob.id, bob.from))?.body).toBe('')
+      await messageCache.saveMessage('room', bob)
+      expect((await messageCache.getMessage('room', ROOM, bob.id, bob.from))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('room', ROOM, alice.id, alice.from))?.body).toBe('')
+      expect((await messageCache.getMessage('room', ROOM, bob.id, bob.from))?.body).toBe('')
     })
   })
 
@@ -1470,17 +1474,17 @@ describe('retraction propagates to the cache and the search index', () => {
 
     it('removes from the account where the retraction started', async () => {
       const target = chatMessage({ id: 'shared-account-id', body: 'alpha tungsten' })
-      await messageCache.saveMessage(target)
+      await messageCache.saveMessage('chat', target)
       await searchIndex.indexMessage(target)
 
       setStorageScopeJid(OTHER_SCOPE)
       await searchIndex.initSearchIndex(OTHER_SCOPE)
       const other = chatMessage({ id: target.id, body: 'beta vanadium' })
-      await messageCache.saveMessage(other)
+      await messageCache.saveMessage('chat', other)
       await searchIndex.indexMessage(other)
 
       setStorageScopeJid(SCOPE)
-      const updateMessage = messageCache.updateMessage
+      const updateMessage = forward(messageCache.updateMessage)
       vi.spyOn(messageCache, 'updateMessage').mockImplementationOnce(async (...args) => {
         await updateMessage(...args)
         setStorageScopeJid(OTHER_SCOPE)
@@ -1494,10 +1498,10 @@ describe('retraction propagates to the cache and the search index', () => {
 
     it('settles a room pending record in the account where the probe started', async () => {
       const message = roomMessage({ stanzaId: 'archive-switch', occupantId: 'occ-alice' })
-      await messageCache.saveRoomMessage(message)
-      const updateRoomMessage = messageCache.updateRoomMessage
-      vi.spyOn(messageCache, 'updateRoomMessage').mockImplementationOnce(async (...args) => {
-        await updateRoomMessage(...args)
+      await messageCache.saveMessage('room', message)
+      const roomUpdateMessage = forward(messageCache.updateMessage)
+      vi.spyOn(messageCache, 'updateMessage').mockImplementationOnce(async (...args) => {
+        await roomUpdateMessage(...args)
         setStorageScopeJid(OTHER_SCOPE)
       })
 
@@ -1510,13 +1514,13 @@ describe('retraction propagates to the cache and the search index', () => {
       setStorageScopeJid(SCOPE)
       roomStore.getState().switchAccount(SCOPE)
       expect(roomStore.getState().pendingRetractions.get(ROOM) ?? []).toEqual([])
-      expect((await messageCache.getRoomMessage(ROOM, message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('room', ROOM, message.id))?.isRetracted).toBe(true)
     })
 
     it('settles a chat pending record in the account where the probe started', async () => {
       const message = chatMessage({ id: 'chat-switch', stanzaId: 'archive-chat-switch' })
-      await messageCache.saveMessage(message)
-      const updateMessage = messageCache.updateMessage
+      await messageCache.saveMessage('chat', message)
+      const updateMessage = forward(messageCache.updateMessage)
       vi.spyOn(messageCache, 'updateMessage').mockImplementationOnce(async (...args) => {
         await updateMessage(...args)
         setStorageScopeJid(OTHER_SCOPE)
@@ -1531,14 +1535,14 @@ describe('retraction propagates to the cache and the search index', () => {
       setStorageScopeJid(SCOPE)
       chatStore.getState().switchAccount(SCOPE)
       expect(chatStore.getState().pendingRetractions.get(CHAT) ?? []).toEqual([])
-      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('chat', CHAT, message.id))?.isRetracted).toBe(true)
     })
 
     it('keeps chat and room reaction writes in their starting account scope', async () => {
       const chat = chatMessage({ id: 'reaction-chat' })
       const roomTarget = roomMessage({ id: 'reaction-room', occupantId: 'occ-alice' })
-      await messageCache.saveMessage(chat)
-      await messageCache.saveRoomMessage(roomTarget)
+      await messageCache.saveMessage('chat', chat)
+      await messageCache.saveMessage('room', roomTarget)
       noteRetractedIdentity(
         { kind: 'chat', entityId: CHAT, accountScope: SCOPE },
         chatRetractionAliases(chat),
@@ -1554,22 +1558,22 @@ describe('retraction propagates to the cache and the search index', () => {
 
       setStorageScopeJid(SCOPE)
       await messageCache.updateMessageReactions(
-        CHAT,
+        'chat', CHAT,
         chat.id,
         'benvolio@example.com',
         switchScopeWhileIterating(OTHER_SCOPE)
       )
       setStorageScopeJid(SCOPE)
-      await messageCache.updateRoomMessageReactions(
-        ROOM,
+      await messageCache.updateMessageReactions(
+        'room', ROOM,
         roomTarget.id,
         `${ROOM}/benvolio`,
         switchScopeWhileIterating(OTHER_SCOPE)
       )
       setStorageScopeJid(SCOPE)
 
-      expect((await messageCache.getMessage(CHAT, chat.id))?.isRetracted).toBe(true)
-      expect((await messageCache.getRoomMessage(ROOM, roomTarget.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('chat', CHAT, chat.id))?.isRetracted).toBe(true)
+      expect((await messageCache.getMessage('room', ROOM, roomTarget.id))?.isRetracted).toBe(true)
       await expectNoTraceOf(SECRET)
     })
   })
@@ -1583,8 +1587,8 @@ describe('retraction propagates to the cache and the search index', () => {
       const message = kind === 'chat'
         ? chatMessage({ id: 'x', stanzaId: 'A' })
         : roomMessage({ id: 'x', stanzaId: 'A', occupantId: 'alice' })
-      if (message.type === 'chat') await messageCache.saveMessage(message)
-      else await messageCache.saveRoomMessage(message)
+      if (message.type === 'chat') await messageCache.saveMessage('chat', message)
+      else await messageCache.saveMessage('room', message)
       const scope = kind === 'chat' ? CHAT_SCOPE : roomScope(ROOM)
       const aliases = [...new Set([
         ...identityKeys(scope, message),
@@ -1629,8 +1633,8 @@ describe('retraction propagates to the cache and the search index', () => {
       const messages = [message, { ...message, id: `${message.id}-second`,
         stanzaId: message.stanzaId ? `${message.stanzaId}-second` : undefined }]
       for (const target of messages) {
-        if (target.type === 'chat') await messageCache.saveMessage(target)
-        else await messageCache.saveRoomMessage(target)
+        if (target.type === 'chat') await messageCache.saveMessage('chat', target)
+        else await messageCache.saveMessage('room', target)
         await searchIndex.indexMessage(target)
       }
       const removal = vi.spyOn(searchIndex, 'removeMessage').mockResolvedValue(undefined)
@@ -1662,7 +1666,7 @@ describe('retraction propagates to the cache and the search index', () => {
           : kind === 'room-origin' ? { originId: 'crash-origin' }
           : kind === 'room-occupant' ? { occupantId: 'occ-alice' }
           : { receivedAt: new Date(1_700_000_000_001) })
-      if (kind === 'room-receipt' && message.type === 'groupchat') await messageCache.saveRoomMessage(message)
+      if (kind === 'room-receipt' && message.type === 'groupchat') await messageCache.saveMessage('room', message)
       await searchIndex.indexMessage(message)
       expect(await searchIndex.search(SECRET)).toHaveLength(1)
       const removal = vi.spyOn(searchIndex, 'removeMessage').mockResolvedValueOnce(undefined)
@@ -1695,10 +1699,10 @@ describe('retraction propagates to the cache and the search index', () => {
       await restart()
 
       await searchIndex.indexMessage(message)
-      await messageCache.saveMessage(message)
+      await messageCache.saveMessage('chat', message)
 
       expect(await searchIndex.search(SECRET)).toEqual([])
-      const stored = await messageCache.getMessage(CHAT, message.id)
+      const stored = await messageCache.getMessage('chat', CHAT, message.id)
       expect(stored?.isRetracted).toBe(true)
       expect(stored?.body).toBe('')
       await expectNoTraceOf(SECRET)
@@ -1710,10 +1714,10 @@ describe('retraction propagates to the cache and the search index', () => {
       await restart()
 
       await searchIndex.indexMessage(message)
-      await messageCache.saveRoomMessage(message)
+      await messageCache.saveMessage('room', message)
 
       expect(await searchIndex.search(SECRET)).toEqual([])
-      const stored = await messageCache.getRoomMessage(ROOM, message.id)
+      const stored = await messageCache.getMessage('room', ROOM, message.id)
       expect(stored?.isRetracted).toBe(true)
       expect(stored?.body).toBe('')
       await expectNoTraceOf(SECRET)
@@ -1745,12 +1749,12 @@ describe('retraction propagates to the cache and the search index', () => {
       await restart(OTHER_SCOPE)
 
       setStorageScopeJid(OTHER_SCOPE)
-      await messageCache.saveMessage(message)
-      expect((await messageCache.getMessage(CHAT, message.id))?.body).toContain(SECRET)
+      await messageCache.saveMessage('chat', message)
+      expect((await messageCache.getMessage('chat', CHAT, message.id))?.body).toContain(SECRET)
 
       setStorageScopeJid(SCOPE)
-      await messageCache.saveMessage(message)
-      expect((await messageCache.getMessage(CHAT, message.id))?.body).toBe('')
+      await messageCache.saveMessage('chat', message)
+      expect((await messageCache.getMessage('chat', CHAT, message.id))?.body).toBe('')
     })
 
     it('drops the ledger with the cache on logout', async () => {
@@ -1763,8 +1767,8 @@ describe('retraction propagates to the cache and the search index', () => {
       const ledger = await openDB(`fluux-retraction-ledger:${SCOPE}`)
       try { expect(await ledger.count('retractions')).toBe(0) } finally { ledger.close() }
       await restart()
-      await messageCache.saveMessage(message)
-      expect((await messageCache.getMessage(CHAT, message.id))?.isRetracted).toBeFalsy()
+      await messageCache.saveMessage('chat', message)
+      expect((await messageCache.getMessage('chat', CHAT, message.id))?.isRetracted).toBeFalsy()
     })
   })
 
@@ -1830,7 +1834,7 @@ describe('retraction propagates to the cache and the search index', () => {
     ])('applies an overlapping archive tombstone to its original: %j', async ({ version, resident }) => {
       const original = roomMessageFixture({ id: 'client-spam', stanzaId: 'spam-archive', occupantId: 'occ-alice' })
       roomStore.getState().addRoom(room(), resident ? [original] : [])
-      await messageCache.saveRoomMessage(original)
+      await messageCache.saveMessage('room', original)
       await searchIndex.indexMessage(original)
       expect(await searchIndex.search(SECRET)).toHaveLength(1)
 
@@ -1843,7 +1847,7 @@ describe('retraction propagates to the cache and the search index', () => {
         })])
       }
       await settle()
-      expect(await messageCache.getRoomMessage(ROOM, original.id)).toMatchObject({
+      expect(await messageCache.getMessage('room', ROOM, original.id)).toMatchObject({
         body: '', isRetracted: true, isModerated: true, moderationReason: 'Spam', moderatedBy: 'admin',
       })
       await expectNoTraceOf(SECRET)
@@ -1859,7 +1863,7 @@ describe('retraction propagates to the cache and the search index', () => {
     ])('does not retract an original using a mismatched archive identity: %j', async ({ archiveId, from }) => {
       const original = roomMessageFixture({ id: 'client-spam', stanzaId: 'spam-archive', occupantId: 'occ-alice' })
       roomStore.getState().addRoom(room(), [original])
-      await messageCache.saveRoomMessage(original)
+      await messageCache.saveMessage('room', original)
 
       await queryTombstone(1, archiveId, from)
       await settle()
@@ -1867,7 +1871,7 @@ describe('retraction propagates to the cache and the search index', () => {
       const resident = roomStore.getState().messages.get(ROOM)?.find(message => message.stanzaId === original.stanzaId)
       expect(resident).toMatchObject({ body: original.body })
       expect(resident?.isRetracted).not.toBe(true)
-      const cached = await messageCache.getRoomMessages(ROOM, {})
+      const cached = await messageCache.getMessages('room', ROOM, {})
       const stored = cached.find(message => message.stanzaId === original.stanzaId)
       expect(stored).toMatchObject({ body: original.body })
       expect(stored?.isRetracted).not.toBe(true)
@@ -1876,7 +1880,7 @@ describe('retraction propagates to the cache and the search index', () => {
     it('reloads the tombstone from the cache into the resident window', async () => {
       const kept = chatMessage({ id: 'chat-kept', body: 'an ordinary line', timestamp: new Date(1_699_999_000_000) })
       const message = chatMessage()
-      await messageCache.saveMessages([kept, message])
+      await messageCache.saveMessages('chat', [kept, message])
       await searchIndex.indexMessages([kept, message])
 
       chatStore.getState().recordPendingRetraction(CHAT, message.id, CHAT)
@@ -1894,7 +1898,7 @@ describe('retraction propagates to the cache and the search index', () => {
       const message = roomMessageFixture({ stanzaId: 'spam-archive', occupantId: 'occ-alice' })
       roomStore.getState().addRoom(room(), [])
       if (arrival === 'cached') {
-        await messageCache.saveRoomMessage(message)
+        await messageCache.saveMessage('room', message)
         await searchIndex.indexMessage(message)
       }
       roomStore.getState().updateMessage(ROOM, 'spam-archive', {
@@ -1902,16 +1906,16 @@ describe('retraction propagates to the cache and the search index', () => {
       })
       await settle()
       if (arrival === 'later') {
-        await messageCache.saveRoomMessage(message)
+        await messageCache.saveMessage('room', message)
         await searchIndex.indexMessage(message)
       }
-      expect(await messageCache.getRoomMessage(ROOM, message.id)).toMatchObject({ body: '', isModerated: true, moderationReason: 'Spam' })
+      expect(await messageCache.getMessage('room', ROOM, message.id)).toMatchObject({ body: '', isModerated: true, moderationReason: 'Spam' })
       await roomStore.getState().loadMessagesFromCache(ROOM)
       await settle()
       const resident = roomStore.getState().messages.get(ROOM) ?? []
       expect(resident[0]).toMatchObject({ isRetracted: true, isModerated: true, moderationReason: 'Spam' })
-      await messageCache.saveRoomMessage(message)
-      const stored = await messageCache.getRoomMessage(ROOM, message.id)
+      await messageCache.saveMessage('room', message)
+      const stored = await messageCache.getMessage('room', ROOM, message.id)
       expect(stored).toMatchObject({ body: '', isModerated: true, moderationReason: 'Spam' })
       await expectNoTraceOf(SECRET)
     })
@@ -1924,7 +1928,7 @@ describe('retraction propagates to the cache and the search index', () => {
         ...message, body: '', isRetracted: true, retractedAt: new Date(),
         isModerated: true, moderationReason: 'Spam', moderatedBy: 'friar',
       }
-      await messageCache.saveRoomMessage(tombstone)
+      await messageCache.saveMessage('room', tombstone)
 
       await roomStore.getState().loadMessagesFromCache(ROOM)
 
@@ -1937,14 +1941,14 @@ describe('retraction propagates to the cache and the search index', () => {
     it('preserves Spam metadata when moderation finishes during cache hydration', async () => {
       const message = roomMessageFixture({ stanzaId: 'spam-archive', occupantId: 'occ-alice' })
       roomStore.getState().addRoom(room(), [])
-      await messageCache.saveRoomMessage(message)
+      await messageCache.saveMessage('room', message)
       await searchIndex.indexMessage(message)
-      const readMessages = messageCache.getRoomMessages
+      const readMessages = forward(messageCache.getMessages)
       let captured!: () => void
       let release!: () => void
       const snapshotReady = new Promise<void>(resolve => { captured = resolve })
       const resumeRead = new Promise<void>(resolve => { release = resolve })
-      vi.spyOn(messageCache, 'getRoomMessages').mockImplementationOnce(async (...args) => {
+      vi.spyOn(messageCache, 'getMessages').mockImplementationOnce(async (...args) => {
         const snapshot = await readMessages(...args)
         captured()
         await resumeRead
@@ -1960,7 +1964,7 @@ describe('retraction propagates to the cache and the search index', () => {
         await vi.waitFor(() => {
           expect(roomStore.getState().pendingRetractions.get(ROOM)).toBeUndefined()
         })
-        expect(await messageCache.getRoomMessage(ROOM, message.id)).toMatchObject({
+        expect(await messageCache.getMessage('room', ROOM, message.id)).toMatchObject({
           body: '', isRetracted: true, isModerated: true, moderationReason: 'Spam', moderatedBy: 'friar',
         })
       } finally {
@@ -1977,7 +1981,7 @@ describe('retraction propagates to the cache and the search index', () => {
 
     it('updates the preview when a moderated message is outside the resident window', async () => {
       const message = roomMessageFixture({ stanzaId: 'preview-archive', occupantId: 'occ-alice' })
-      await messageCache.saveRoomMessage(message)
+      await messageCache.saveMessage('room', message)
       roomStore.getState().addRoom({ ...room(), lastMessage: message }, [])
       roomStore.getState().updateMessage(ROOM, 'preview-archive', {
         isRetracted: true, isModerated: true, moderationReason: 'Spam',
@@ -2002,7 +2006,7 @@ describe('retraction propagates to the cache and the search index', () => {
 
     it('keeps the XEP-0425 moderator fields the same update carries', async () => {
       const message = roomMessageFixture({ stanzaId: 'archive-1', occupantId: 'occ-alice' })
-      await messageCache.saveRoomMessage(message)
+      await messageCache.saveMessage('room', message)
       await searchIndex.indexMessage(message)
       roomStore.getState().addRoom(room(), [message])
 
@@ -2015,7 +2019,7 @@ describe('retraction propagates to the cache and the search index', () => {
       })
       await settle()
 
-      const stored = await messageCache.getRoomMessage(ROOM, message.id)
+      const stored = await messageCache.getMessage('room', ROOM, message.id)
       expect(stored?.isModerated).toBe(true)
       expect(stored?.moderatedBy).toBe('friar')
       expect(stored?.moderationReason).toBe('off topic')
@@ -2025,14 +2029,14 @@ describe('retraction propagates to the cache and the search index', () => {
     it('leaves other room messages searchable and intact', async () => {
       const kept = roomMessage({ id: 'room-kept', stanzaId: 'archive-kept', body: 'an ordinary line', occupantId: 'occ-bob', from: `${ROOM}/bob`, nick: 'bob' })
       const message = roomMessage({ stanzaId: 'archive-1', occupantId: 'occ-alice' })
-      await messageCache.saveRoomMessages([kept, message])
+      await messageCache.saveMessages('room', [kept, message])
       await searchIndex.indexMessages([kept, message])
       roomStore.getState().addRoom(room(), [])
 
       roomStore.getState().recordPendingRetraction(ROOM, 'archive-1', message.from, 'occ-alice')
       await settle()
 
-      expect((await messageCache.getRoomMessage(ROOM, 'room-kept'))?.body).toBe('an ordinary line')
+      expect((await messageCache.getMessage('room', ROOM, 'room-kept'))?.body).toBe('an ordinary line')
       expect(await searchIndex.search('ordinary')).toHaveLength(1)
       await expectNoTraceOf(SECRET)
     })
@@ -2074,14 +2078,14 @@ describe('a reused client id after a retraction', () => {
 
   /** The rows of CHAT as a reader would see them, oldest first. */
   async function storedChat(): Promise<Message[]> {
-    return (await messageCache.getMessages(CHAT, { limit: 50 })).slice().sort(
+    return (await messageCache.getMessages('chat', CHAT, { limit: 50 })).slice().sort(
       (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
     )
   }
 
   it('keeps the later message intact when both copies carry an archive id', async () => {
     const retracted = chatMessage({ id: REUSED_ID, stanzaId: 'archive-first', timestamp: new Date(T0) })
-    await messageCache.saveMessage(retracted)
+    await messageCache.saveMessage('chat', retracted)
     await searchIndex.indexMessage(retracted)
 
     await retractChatMessageInStorage(CHAT, retracted)
@@ -2095,7 +2099,7 @@ describe('a reused client id after a retraction', () => {
       body: 'an innocent later message',
       timestamp: new Date(T0 + TWENTY_MINUTES),
     })
-    await messageCache.saveMessage(innocent)
+    await messageCache.saveMessage('chat', innocent)
     await settle()
 
     const rows = await storedChat()
@@ -2109,7 +2113,7 @@ describe('a reused client id after a retraction', () => {
 
   it('keeps the later archive-distinct message searchable', async () => {
     const retracted = chatMessage({ id: REUSED_ID, stanzaId: 'archive-first', timestamp: new Date(T0) })
-    await messageCache.saveMessage(retracted)
+    await messageCache.saveMessage('chat', retracted)
     await searchIndex.indexMessage(retracted)
     await retractChatMessageInStorage(CHAT, retracted)
 
@@ -2119,7 +2123,7 @@ describe('a reused client id after a retraction', () => {
       body: 'searchable innocent later message',
       timestamp: new Date(T0 + TWENTY_MINUTES),
     })
-    await messageCache.saveMessage(innocent)
+    await messageCache.saveMessage('chat', innocent)
     await searchIndex.indexMessage(innocent)
 
     expect((await searchIndex.search('searchable innocent')).map((message) => message.body))
@@ -2139,7 +2143,7 @@ describe('a reused client id after a retraction', () => {
       body: 'innocent archive-distinct sibling',
       timestamp: new Date(T0 + TWENTY_MINUTES),
     })
-    await messageCache.saveMessages([first, second])
+    await messageCache.saveMessages('chat', [first, second])
 
     await retractChatMessageInStorage(CHAT, first)
 
@@ -2171,7 +2175,7 @@ describe('a reused client id after a retraction', () => {
    */
   it('collapses onto the tombstone when neither copy carries an archive id', async () => {
     const retracted = chatMessage({ id: REUSED_ID, timestamp: new Date(T0) })
-    await messageCache.saveMessage(retracted)
+    await messageCache.saveMessage('chat', retracted)
     await searchIndex.indexMessage(retracted)
 
     await retractChatMessageInStorage(CHAT, retracted)
@@ -2183,7 +2187,7 @@ describe('a reused client id after a retraction', () => {
       body: 'an innocent later message',
       timestamp: new Date(T0 + TWENTY_MINUTES),
     })
-    await messageCache.saveMessage(innocent)
+    await messageCache.saveMessage('chat', innocent)
     await settle()
 
     const rows = await storedChat()
@@ -2200,7 +2204,7 @@ describe('a reused client id after a retraction', () => {
     const archived = chatMessage({ id: 'mam-id', stanzaId: 'S', originId: 'O', body: `the ${SECRET} plan` })
     await searchIndex.indexMessages([live, archived])
     expect(await searchIndex.search(SECRET)).toHaveLength(2)
-    await messageCache.saveMessages([live, archived])
+    await messageCache.saveMessages('chat', [live, archived])
     const promoted = await searchIndex.search(SECRET)
     expect(promoted).toHaveLength(1)
     expect(promoted[0]).toMatchObject({ stanzaId: 'S', originId: 'O' })
@@ -2217,7 +2221,7 @@ describe('a reused client id after a retraction', () => {
     // IS cached. The sibling must not shadow it out of the removal.
     const pending = chatMessage({ id: 'pending-id', originId: 'O', body: `the ${SECRET} plan` })
     const cached = chatMessage({ id: 'cached-id', originId: 'O', body: `the ${SECRET} plan` })
-    await messageCache.saveMessage(cached)
+    await messageCache.saveMessage('chat', cached)
     await searchIndex.indexMessages([pending, cached])
 
     await retractChatMessageInStorage(CHAT, pending)
@@ -2238,7 +2242,7 @@ describe('a reused client id after a retraction', () => {
    */
   it('collapses onto the tombstone when only the earlier copy carries an archive id', async () => {
     const retracted = chatMessage({ id: REUSED_ID, stanzaId: 'archive-first', timestamp: new Date(T0) })
-    await messageCache.saveMessage(retracted)
+    await messageCache.saveMessage('chat', retracted)
     await retractChatMessageInStorage(CHAT, retracted)
     await settle()
 
@@ -2247,7 +2251,7 @@ describe('a reused client id after a retraction', () => {
       body: 'an innocent later message',
       timestamp: new Date(T0 + TWENTY_MINUTES),
     })
-    await messageCache.saveMessage(innocent)
+    await messageCache.saveMessage('chat', innocent)
     await settle()
 
     const rows = await storedChat()
@@ -2258,7 +2262,7 @@ describe('a reused client id after a retraction', () => {
 
   it('keeps an attachment and a poll on the later message', async () => {
     const retracted = chatMessage({ id: REUSED_ID, stanzaId: 'archive-first', timestamp: new Date(T0) })
-    await messageCache.saveMessage(retracted)
+    await messageCache.saveMessage('chat', retracted)
     await retractChatMessageInStorage(CHAT, retracted)
     await settle()
 
@@ -2274,7 +2278,7 @@ describe('a reused client id after a retraction', () => {
         settings: { allowMultiple: false, hideResultsBeforeVote: false },
       },
     })
-    await messageCache.saveMessage(innocent)
+    await messageCache.saveMessage('chat', innocent)
     await settle()
 
     const survivor = (await storedChat()).find((row) => row.stanzaId === 'archive-second')
@@ -2400,7 +2404,7 @@ describe('the v7 upgrade scrubs bodies left on earlier tombstones', () => {
       return put.call(this, value, key)
     })
 
-    await messageCache.getMessages(CHAT)
+    await messageCache.getMessages('chat', CHAT)
 
     const db = await openDB(`fluux-message-cache:${SCOPE}`)
     expect(db.version).toBe(11)

@@ -1,7 +1,7 @@
 import type { RoomMessage } from '../core/types'
 import { roomStore, type RoomState } from '../stores/roomStore'
 import { applyPendingRetractions, type PendingRetraction } from '../stores/shared/pendingRetractions'
-import { getRoomMessage, getRoomMessageByReference, getRoomMessageByRowRef } from './messageCache'
+import { getMessage, getMessageByReference, getRoomMessageByRowRef } from './messageCache'
 import { archiveIdentityConflict, identityKeys, mergeableOccupantCandidates, roomMessageAuthor, roomScope, sameLogicalMessage, selectRoomMergeTargets, resolveMessageReference, messageRowRef, matchesMessageRowAlias } from './messageIdentity'
 import { moderationMetadata, roomRetractionAuthorized } from './moderation'
 import { captureStorageScope } from './storageScope'
@@ -110,8 +110,8 @@ export async function resolveRoomMessageSnapshot(message: RoomMessage): Promise<
     if (row && matchingSnapshot(message, row)) cached = row
     else {
       const candidate = await (message.stanzaId
-        ? getRoomMessageByReference(message.roomJid, message.stanzaId, message.from).catch(() => null)
-        : getRoomMessage(message.roomJid, message.id, message.from, message.occupantId))
+        ? getMessageByReference('room', message.roomJid, message.stanzaId, message.from).catch(() => null)
+        : getMessage('room', message.roomJid, message.id, message.from, message.occupantId))
       scope.assertCurrent()
       cached = candidate && matchingSnapshot(message, candidate) ? candidate : undefined
     }

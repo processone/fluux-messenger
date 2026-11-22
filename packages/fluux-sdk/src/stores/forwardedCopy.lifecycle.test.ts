@@ -70,7 +70,7 @@ describe('forwarded copy receive lifecycle', () => {
     chatStore.getState().mergeMAMMessages(peer, [replay!], {}, true, 'forward', { extras: { walkOriginTs: 0 } })
     expect(resident().filter(m => m.forwarded?.text === 'Ship it')).toHaveLength(1)
 
-    await messageCache.saveMessages(resident())
+    await messageCache.saveMessages('chat', resident())
     chatStore.setState({ messages: new Map() })
     await chatStore.getState().loadMessagesFromCache(peer, { limit: 50 })
     expect(resident()).toHaveLength(1)
@@ -84,12 +84,12 @@ describe('forwarded copy receive lifecycle', () => {
       isOutgoing: false, forwarded: { author: 'Bob', text: 'Ship it' } }
     if (mode === 'replayed') chatStore.getState().recordPendingRetraction(peer, 'gone', peer)
     chatStore.getState().addMessage(base)
-    await messageCache.saveMessages([base])
+    await messageCache.saveMessages('chat', [base])
     if (mode !== 'replayed') chatStore.getState().updateMessage(peer, 'gone', { isRetracted: true, retractedAt: new Date(1_700_000_005_000) })
     expect(resident().find(m => m.id === 'gone')).toMatchObject({ isRetracted: true, forwarded: undefined })
-    await messageCache.saveMessages(resident())
+    await messageCache.saveMessages('chat', resident())
     await vi.waitFor(async () => {
-      const row = (await messageCache.getMessages(peer, {})).find(m => m.id === 'gone')
+      const row = (await messageCache.getMessages('chat', peer, {})).find(m => m.id === 'gone')
       expect(row?.isRetracted).toBe(true)
       expect(row?.forwarded).toBeUndefined()
     })
@@ -122,7 +122,7 @@ describe('marked forward receive lifecycle', () => {
     chatStore.getState().mergeMAMMessages(peer, [replay!], {}, true, 'forward', { extras: { walkOriginTs: 0 } })
     expect(resident().filter(m => m.id === 'mk-1' || m.forwarded)).toHaveLength(1)
 
-    await messageCache.saveMessages(resident())
+    await messageCache.saveMessages('chat', resident())
     chatStore.setState({ messages: new Map() })
     await chatStore.getState().loadMessagesFromCache(peer, { limit: 50 })
     expect(hidden(resident()[0])).toEqual({ begin: 5, end: body.length })
@@ -145,7 +145,7 @@ describe('marked forward receive lifecycle', () => {
     expect(hidden(row)).toBeUndefined()
     expect(formatMessagePreview(row)).toBe(edited)
 
-    await messageCache.saveMessages(resident())
+    await messageCache.saveMessages('chat', resident())
     chatStore.setState({ messages: new Map() })
     await chatStore.getState().loadMessagesFromCache(peer, { limit: 50 })
     expect(resident().find(m => m.id === 'mk-1')).toMatchObject({ body: edited, forwarded: { text: 'Ship it' } })

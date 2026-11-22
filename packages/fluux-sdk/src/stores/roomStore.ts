@@ -499,7 +499,7 @@ export const roomReadTracker = createReadTracker('room', {
     void (options ? store.recomputeUnreadForRoom(roomJid, options) : store.recomputeUnreadForRoom(roomJid))
   },
   loadStashedMarkerRows: async (roomJid, stanzaId) => {
-    const marker = await messageCache.getRoomMessageByStanzaId(roomJid, stanzaId)
+    const marker = await messageCache.getMessageByStanzaId('room', roomJid, stanzaId)
     return marker ? withFloorPointerRow(roomJid, marker) : null
   },
   captureCacheRead: captureRoomCacheRead,
@@ -516,7 +516,7 @@ export const roomReadTracker = createReadTracker('room', {
   countUnreadFromArchive: (roomJid, range) => {
     const users = ignoreStore.getState().getIgnoredForRoom(roomJid)
     const cache = roomStore.getState().roomRuntime.get(roomJid)?.nickToJidCache
-    return messageCache.countRoomUnreadInArchive(roomJid, range,
+    return messageCache.countUnreadInArchive('room', roomJid, range,
       users.length ? (message => matchesRoomVisibility(message, users, cache)) : undefined)
   },
   archiveReadyForCounting: (roomJid) => {
@@ -567,7 +567,7 @@ const roomArchiveMerge = createArchiveMerge<RoomMessage>('room', {
     return replay.messages
   },
   lastHeldTimestamp: (roomJid) => roomStore.getState().getRoomLastTimestamp(roomJid),
-  saveRows: (rows) => messageCache.saveRoomMessages(rows),
+  saveRows: (rows) => messageCache.saveMessages('room', rows),
   saves: roomArchiveSaves,
   readTracker: roomReadTracker,
   pendingRemoteMarker: (roomJid) => roomReadView(roomStore.getState(), roomJid)?.pendingRemoteMarker,
@@ -959,7 +959,7 @@ function readLatestCachedRoomSlice(roomJid: string, limit: number): Promise<mess
   const isCurrent = captureRoomCacheRead(roomJid)
   return withMessageCacheOperation('room', roomJid, async () => {
     if (!isCurrent()) return { status: 'ok', value: [] }
-    const read = await messageCache.readRoomMessages(roomJid, { limit, latest: true })
+    const read = await messageCache.readMessages('room', roomJid, { limit, latest: true })
     if (read.status === 'unavailable') return read
     return { status: 'ok', value: await refreshCachedCorrections(read.value, isCurrent) }
   })
@@ -1576,7 +1576,7 @@ export const roomStore = createStore<RoomState>()(
   removeRoom: (roomJid) => {
     clearMessageIngressVersions('room', roomJid)
     // Delete messages from IndexedDB (non-blocking)
-    void messageCache.deleteRoomMessages(roomJid)
+    void messageCache.deleteConversationMessages('room', roomJid)
     // The search index keeps its own copy of every body: drop it too, or
     // search keeps finding the removed room's text.
     void searchIndex.removeConversation('room', roomJid)
@@ -2286,8 +2286,8 @@ export const roomStore = createStore<RoomState>()(
       if (append.kind === 'duplicate-backfilled') {
         // Persist the backfilled archive ids so pagination cursors survive a reload.
         for (const p of append.patched) {
-          void messageCache.updateRoomMessage(
-            roomJid,
+          void messageCache.updateMessage(
+            'room', roomJid,
             p.id,
             { stanzaId: p.stanzaId!, localRowRef: p.localRowRef, occupantId: p.occupantId, ...(p.originId ? { originId: p.originId } : {}),
               ...(p.isRetracted && { isRetracted: true, retractedAt: p.retractedAt, ...moderationMetadata(p) }) },
@@ -2424,7 +2424,7 @@ export const roomStore = createStore<RoomState>()(
     })
 
     const durableWrite = acceptedMessage && !isNoLocalStore(messageToAdd)
-      ? messageCache.saveRoomMessageWithResult(messageToAdd)
+      ? messageCache.saveMessageWithResult('room', messageToAdd)
       : undefined
     roomReadTracker.endArrival(arrivalNote, { accepted: acceptedMessage, durableWrite })
     if (durableWrite) {
@@ -2457,7 +2457,7 @@ export const roomStore = createStore<RoomState>()(
         applyResident: async (_result, isLatest) => {
           const target = get().getMessage(roomJid, messageId)
           const before = target?.reactions
-          const cached = residentUpdate ?? await messageCache.getRoomMessageByReference(roomJid, messageId, target?.from)
+          const cached = residentUpdate ?? await messageCache.getMessageByReference('room', roomJid, messageId, target?.from)
           if (!cached || !isCurrent() || !isLatest(cached, 'reactions')) return
           set(state => {
             const rows = state.messages.get(roomJid) ?? []
@@ -2515,8 +2515,8 @@ export const roomStore = createStore<RoomState>()(
       // Update IndexedDB (non-blocking) — use actual message id, not the lookup key
       if (updatedMessage) {
         const message = updatedMessage
-        persistReactions(() => messageCache.updateRoomMessage(
-          roomJid,
+        persistReactions(() => messageCache.updateMessage(
+          'room', roomJid,
           message.id,
           { reactions: message.reactions },
           message.from,
@@ -2527,7 +2527,7 @@ export const roomStore = createStore<RoomState>()(
         // Message not in memory — update reactions directly in IndexedDB cache
         // so the correct state is restored when the message is loaded later
         logInfo(`Reaction for message ${messageId} not in memory — updating in cache`)
-        persistReactions(() => messageCache.updateRoomMessageReactions(roomJid, messageId, reactorNick, emojis))
+        persistReactions(() => messageCache.updateMessageReactions('room', roomJid, messageId, reactorNick, emojis))
       }
 
       const written = withRoomMessageWindow(state, roomJid, newMessages)
@@ -2561,7 +2561,7 @@ export const roomStore = createStore<RoomState>()(
       }
       return rows
     }
-    const reconciled = await messageCache.reconcileRoomHistoryMessages(messages, () => {
+    const reconciled = await messageCache.reconcileHistoryMessages('room', messages, () => {
       scope.assertCurrent()
       return Array.from(rooms, jid => get().messages.get(jid) ?? []).flat()
     }, scope.jid, options?.retractionsOnly)
@@ -2594,10 +2594,10 @@ export const roomStore = createStore<RoomState>()(
         if (!isCurrent()) return null
         const rows = get().messages.get(roomJid) ?? []
         const target = rows[findMessageIndexById(rows, messageId)] ??
-          await messageCache.getRoomMessage(roomJid, messageId) ?? await messageCache.getRoomMessageByReference(roomJid, messageId)
+          await messageCache.getMessage('room', roomJid, messageId) ?? await messageCache.getMessageByReference('room', roomJid, messageId)
         if (!target || !isCurrent()) return null
         return target
-      }, target => messageCache.updateRoomMessage(roomJid, target.id, updates, target.from, scope.jid, target), target => applyResidentUpdate(target, updates, scope.jid))
+      }, target => messageCache.updateMessage('room', roomJid, target.id, updates, target.from, scope.jid, target), target => applyResidentUpdate(target, updates, scope.jid))
     }
     if (updates.isRetracted && updates.isModerated && !resolvedRetractionTarget) {
       get().recordPendingRetraction(roomJid, messageId, roomJid, undefined, moderationMetadata(updates))
@@ -2627,7 +2627,7 @@ export const roomStore = createStore<RoomState>()(
           get().updateMessage(roomJid, messageId, { ...pendingUpdates, liveCorrection: false }, undefined, undefined, correctionActor)
         } else if (!resolution?.authoritative) onCorrectionMissing()
       }
-      void messageCache.applyRoomCorrection(roomJid, targetId, pendingUpdates, correctionActor, scope.jid)
+      void messageCache.applyCorrection('room', roomJid, targetId, pendingUpdates, correctionActor, scope.jid)
         .then(message => {
           if (message) {
             noteSavedCopyChanged()
@@ -2719,8 +2719,8 @@ export const roomStore = createStore<RoomState>()(
           const scope = captureStorageScope()
           const reindex = updates.body !== undefined
           const message = updatedMessage
-          const persist = () => messageCache.updateRoomMessage(
-            roomJid,
+          const persist = () => messageCache.updateMessage(
+            'room', roomJid,
             message.id,
             { ...updates, ...(contentRecovery && { contentRecovery }) },
             message.from,
@@ -2791,8 +2791,8 @@ export const roomStore = createStore<RoomState>()(
       // The archive id is part of the same-millisecond order key; keep the window in cache order.
       const ordered = sortMessagesByTimestamp(newMessages, 'room')
 
-      void messageCache.updateRoomMessage(
-        roomJid,
+      void messageCache.updateMessage(
+        'room', roomJid,
         resident[targetIdx].id,
         { stanzaId: undefined },
         resident[targetIdx].from,
@@ -3080,14 +3080,14 @@ export const roomStore = createStore<RoomState>()(
 
   getMessageByReference: async (roomJid, reference, additional, from) => {
     const current = captureRoomCacheRead(roomJid)
-    const message = await messageCache.getRoomMessageByReference(roomJid, reference, from,
+    const message = await messageCache.getMessageByReference('room', roomJid, reference, from,
       [...(get().messages.get(roomJid) ?? []), ...additional])
     return current() ? message : null
   },
 
   getMessageByArchiveId: async (roomJid, stanzaId) => {
     const current = captureRoomCacheRead(roomJid)
-    const message = await messageCache.getRoomMessageByStanzaId(roomJid, stanzaId)
+    const message = await messageCache.getMessageByStanzaId('room', roomJid, stanzaId)
     if (!message || !current()) return null
     const [reconciled] = await get().reconcileHistoryMessages([message], { retractionsOnly: true })
     return current() ? reconciled : null
@@ -3100,10 +3100,10 @@ export const roomStore = createStore<RoomState>()(
     const last = rows.at(-1)
     if (!first || !last || rows.some(row => row.roomJid !== roomJid || row.isPrivate)) return false
     const [older, newer, heldFirst, heldLast] = await Promise.all([
-      messageCache.getRoomMessages(roomJid, { before: first.timestamp, limit: 1 }),
-      messageCache.getRoomMessages(roomJid, { after: last.timestamp, limit: 1 }),
-      messageCache.getRoomMessageByStanzaId(roomJid, first.stanzaId ?? ''),
-      messageCache.getRoomMessageByStanzaId(roomJid, last.stanzaId ?? ''),
+      messageCache.getMessages('room', roomJid, { before: first.timestamp, limit: 1 }),
+      messageCache.getMessages('room', roomJid, { after: last.timestamp, limit: 1 }),
+      messageCache.getMessageByStanzaId('room', roomJid, first.stanzaId ?? ''),
+      messageCache.getMessageByStanzaId('room', roomJid, last.stanzaId ?? ''),
     ])
     if (!current()) return false
     // Record uncertain seams BEFORE the cache island becomes visible. A crash can
@@ -3118,7 +3118,7 @@ export const roomStore = createStore<RoomState>()(
       saveGapsToStorage(roomGaps)
       return { roomGaps }
     })
-    if (!current() || !await messageCache.saveRoomMessages(rows) || !current()) return false
+    if (!current() || !await messageCache.saveMessages('room', rows) || !current()) return false
     await searchIndex.indexMessages(rows)
     return current()
   },
@@ -3479,7 +3479,7 @@ export const roomStore = createStore<RoomState>()(
           // `oldest` opts out: ascending oldest-N (the true cache bottom).
           latest: !options.before && !options.oldest,
         }
-        const cachedMessages = await messageCache.getRoomMessages(roomJid, queryOptions).then(messages => refreshCachedCorrections(messages, isCurrent))
+        const cachedMessages = await messageCache.getMessages('room', roomJid, queryOptions).then(messages => refreshCachedCorrections(messages, isCurrent))
         if (!isCurrent()) return []
         // `peek`: a pure read that returns the messages WITHOUT pulling them into the
         // store. Used to compute a catch-up cursor for a non-active room without
@@ -3527,7 +3527,7 @@ export const roomStore = createStore<RoomState>()(
         const bound = getResidentWindowSize()
         const contextBefore = options.before ?? messageCache.AROUND_CONTEXT_BEFORE
         const { slice, tailTruncated } = await readAroundBounded(options, bound, anchorRow,
-          (after) => messageCache.getRoomMessagesAround(roomJid, anchorRow, { ...options, ...(after === undefined ? {} : { after }) })
+          (after) => messageCache.getMessagesAround('room', roomJid, anchorRow, { ...options, ...(after === undefined ? {} : { after }) })
             .then(messages => refreshCachedCorrections(messages, canPublish)),
           (candidate) => {
             const resident = withoutRowsPastSlice(get().messages.get(roomJid) ?? [], candidate, true)
@@ -3569,7 +3569,7 @@ export const roomStore = createStore<RoomState>()(
         const beforeDate = oldestInMemory.timestamp
 
         // Load older messages from IndexedDB
-        const cachedMessages = await messageCache.getRoomMessages(roomJid, {
+        const cachedMessages = await messageCache.getMessages('room', roomJid, {
           before: beforeDate,
           limit,
         }).then(messages => refreshCachedCorrections(messages, isCurrent))
@@ -3629,7 +3629,7 @@ export const roomStore = createStore<RoomState>()(
           const afterDate = newestInMemory.timestamp
 
           // Load newer messages from IndexedDB
-          const read = await messageCache.readRoomMessages(roomJid, {
+          const read = await messageCache.readMessages('room', roomJid, {
             after: afterDate,
             limit,
           })
@@ -3720,7 +3720,7 @@ export const roomStore = createStore<RoomState>()(
 
     try {
       // Fetch a small batch so we can skip ignored users' messages
-      const cachedMessages = await messageCache.getRoomMessages(roomJid, {
+      const cachedMessages = await messageCache.getMessages('room', roomJid, {
         limit: 10,
         latest: true,
       })
@@ -3778,7 +3778,7 @@ export const roomStore = createStore<RoomState>()(
       rooms.map(async (room) => {
         const isCurrent = captureRoomCacheRead(room.jid)
         try {
-          const cachedMessages = await messageCache.getRoomMessages(room.jid, { limit: 10, latest: true })
+          const cachedMessages = await messageCache.getMessages('room', room.jid, { limit: 10, latest: true })
           if (!isCurrent() || cachedMessages.length === 0) return null
           return { roomJid: room.jid, cachedMessages, isCurrent }
         } catch {
