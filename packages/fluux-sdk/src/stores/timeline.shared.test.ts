@@ -316,8 +316,13 @@ describe.each([chatSurface, roomSurface])('timeline scenarios: $name store', (s)
       s.add(s.message('here', '2024-01-15T10:01:00Z'))
       const before = s.window()
       vi.mocked(messageCache.updateMessageReactions).mockClear()
-      await s.updateReactions('evicted', s.name === 'chat' ? 'bob@example.com' : 'bob', ['👍'])
+      const reactor = s.name === 'chat' ? 'bob@example.com' : 'bob'
+      await s.updateReactions('evicted', reactor, ['👍'])
       expect(messageCache.updateMessageReactions).toHaveBeenCalledTimes(1)
+      // The write names its entity, message, reactor and emojis; a chat also stamps the reaction time.
+      const args = [s.name, s.id, 'evicted', reactor, ['👍']]
+      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith(
+        ...(s.name === 'chat' ? [...args, undefined, expect.any(Number)] : args) as Parameters<typeof messageCache.updateMessageReactions>)
       expect(s.window()).toBe(before)
     })
   })
