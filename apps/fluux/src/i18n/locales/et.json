@@ -146,6 +146,7 @@
         "rename": "Nimeta ümber",
         "removeContact": "Eemalda kontakt",
         "removeFromRoster": "Eemalda minu kontaktidest",
+        "removeFromSelection": "Eemalda {{name}} valikust",
         "addContact": "Lisa kontakt",
         "renameContact": "Nimeta kontakt ümber",
         "displayName": "Kuvatav nimi",

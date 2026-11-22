@@ -146,6 +146,7 @@
         "rename": "Preimenuj",
         "removeContact": "Odstrani stik",
         "removeFromRoster": "Odstrani iz mojih stikov",
+        "removeFromSelection": "Odstrani {{name}} iz izbora",
         "addContact": "Dodaj stik",
         "renameContact": "Preimenuj stik",
         "displayName": "Prikazno ime",

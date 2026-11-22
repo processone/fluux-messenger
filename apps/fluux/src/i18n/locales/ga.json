@@ -144,6 +144,7 @@
         "rename": "Athainmnigh",
         "removeContact": "Bain teagmháil",
         "removeFromRoster": "Bain ó mo theagmhálacha",
+        "removeFromSelection": "Bain {{name}} den roghnúchán",
         "addContact": "Cuir Teagmháil Leis",
         "renameContact": "Athainmnigh Teagmháil",
         "displayName": "Ainm Taispeána",

@@ -144,6 +144,7 @@
         "rename": "Byt namn",
         "removeContact": "Ta bort kontakt",
         "removeFromRoster": "Ta bort från mina kontakter",
+        "removeFromSelection": "Ta bort {{name}} från urvalet",
         "addContact": "Lägg till kontakt",
         "renameContact": "Byt namn på kontakt",
         "displayName": "Visningsnamn",

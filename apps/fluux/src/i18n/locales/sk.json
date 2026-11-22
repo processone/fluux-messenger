@@ -145,6 +145,7 @@
         "rename": "Premenovať",
         "removeContact": "Odstrániť kontakt",
         "removeFromRoster": "Odstrániť z mojich kontaktov",
+        "removeFromSelection": "Odstrániť {{name}} z výberu",
         "addContact": "Pridať kontakt",
         "renameContact": "Premenovať kontakt",
         "displayName": "Zobrazované meno",

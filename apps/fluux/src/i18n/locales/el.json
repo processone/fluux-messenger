@@ -145,6 +145,7 @@
         "rename": "Μετονομασία",
         "removeContact": "Αφαίρεση επαφής",
         "removeFromRoster": "Αφαίρεση από τις επαφές μου",
+        "removeFromSelection": "Αφαίρεση {{name}} από την επιλογή",
         "addContact": "Προσθήκη επαφής",
         "renameContact": "Μετονομασία επαφής",
         "displayName": "Εμφανιζόμενο όνομα",

@@ -144,6 +144,7 @@
         "rename": "שנה שם",
         "removeContact": "הסר איש קשר",
         "removeFromRoster": "הסר מאנשי הקשר שלי",
+        "removeFromSelection": "הסר את {{name}} מהבחירה",
         "addContact": "הוסף איש קשר",
         "renameContact": "שינוי שם איש קשר",
         "displayName": "שם תצוגה",

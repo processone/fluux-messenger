@@ -146,6 +146,7 @@
         "rename": "Redenumește",
         "removeContact": "Elimină contactul",
         "removeFromRoster": "Elimină din contactele mele",
+        "removeFromSelection": "Elimină {{name}} din selecție",
         "addContact": "Adaugă contact",
         "renameContact": "Redenumește contactul",
         "displayName": "Nume afișat",

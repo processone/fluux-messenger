@@ -145,6 +145,7 @@
         "rename": "Renommer",
         "removeContact": "Supprimer le contact",
         "removeFromRoster": "Retirer de mes contacts",
+        "removeFromSelection": "Retirer {{name}} de la sélection",
         "addContact": "Ajouter un contact",
         "renameContact": "Renommer le contact",
         "displayName": "Nom d'affichage",

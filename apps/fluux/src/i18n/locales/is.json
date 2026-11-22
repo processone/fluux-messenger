@@ -144,6 +144,7 @@
         "rename": "Endurnefna",
         "removeContact": "Fjarlægja tengilið",
         "removeFromRoster": "Fjarlægja úr mínum tengiliðum",
+        "removeFromSelection": "Fjarlægja {{name}} úr vali",
         "addContact": "Bæta við tengilið",
         "renameContact": "Endurnefna tengilið",
         "displayName": "Birtingarheiti",
