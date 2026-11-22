@@ -178,8 +178,6 @@ export interface UseMessageListScrollOptions {
   readPointerId?: string
   targetMessageId?: string | MessageRowRef | null  // ID of a message to scroll to (e.g., from activity log click)
   onTargetMessageConsumed?: () => void  // Called after scrolling to target message
-  externalScrollerRef?: React.RefObject<HTMLElement | null>
-  externalIsAtBottomRef?: React.MutableRefObject<boolean>
   clearFirstNewMessageId?: () => void  // Called when user scrolls past the new message marker
   /** Load the next-older history slice. Any returned promise is treated as the load's lifetime:
    *  it bounds how long the directional-history snapshot may claim the next window shift. */
@@ -255,6 +253,10 @@ export interface UseMessageListScrollResult {
   setInteractionMenuOpen: (open: boolean) => void
   interactionMenuOpen: boolean
   observeKeyboardNavigation: (conversationId: string) => void
+  /** The list-owned at-bottom flag, read on demand. The flag itself never leaves the hook. */
+  isAtBottom: () => boolean
+  /** A keyboard selection moves the view: the reader is no longer at the live edge. */
+  assumeAwayFromBottomForKeyboard: () => void
   reassertUnreadMarker: () => void
   setScrollContainerRef: (element: HTMLDivElement | null) => void
   contentWrapperRef: React.RefCallback<HTMLDivElement>
@@ -303,8 +305,6 @@ export function useMessageListScroll({
   clearFirstNewMessageId,
   targetMessageId: targetMessageReference,
   onTargetMessageConsumed,
-  externalScrollerRef,
-  externalIsAtBottomRef,
   onScrollToTop,
   onLoadAround,
   isLoadingOlder,
@@ -368,8 +368,8 @@ export function useMessageListScroll({
   }
 
   // Track scroll position - always create internal ref to follow rules of hooks
-  const internalIsAtBottomRef = useRef(true)
-  const isAtBottomRef = externalIsAtBottomRef || internalIsAtBottomRef
+  // A static preview starts away from the bottom (it never auto-follows); a live list starts at it.
+  const isAtBottomRef = useRef(!staticMode)
   const viewportSessionRef = useRef<ViewportSession | null>(null)
   if (viewportSessionRef.current === null) {
     viewportSessionRef.current = new ViewportSession(conversationId, platform().scrollInputAlwaysObserved)
@@ -725,9 +725,9 @@ export function useMessageListScroll({
   // The dedicated binding owns ref identity, attach-order handling, native input listeners, and
   // the non-virtualized content observer. Its module comment documents those local invariants.
 
-  const latestRef = useRef({ staticMode, externalScrollerRef, isAtBottomRef, conversationId, virtualizer, onLoadAround })
+  const latestRef = useRef({ staticMode, isAtBottomRef, conversationId, virtualizer, onLoadAround })
   useEffect(() => {
-    latestRef.current = { staticMode, externalScrollerRef, isAtBottomRef, conversationId, virtualizer, onLoadAround }
+    latestRef.current = { staticMode, isAtBottomRef, conversationId, virtualizer, onLoadAround }
   })
 
   // Executor construction is delegated to useScrollExecutors. Its factory identities intentionally
@@ -1378,10 +1378,6 @@ export function useMessageListScroll({
           previous.style.overflowAnchor = originalOverflowAnchorsRef.current.get(previous) ?? ''
           originalOverflowAnchorsRef.current.delete(previous)
         })
-      }
-      const external = latestRef.current.externalScrollerRef
-      if (external) {
-        (external as React.MutableRefObject<HTMLElement | null>).current = el
       }
     },
     getScroller: () => scrollerRef.current,
@@ -2581,6 +2577,8 @@ export function useMessageListScroll({
     setInteractionMenuOpen,
     interactionMenuOpen,
     observeKeyboardNavigation,
+    isAtBottom: () => isAtBottomRef.current,
+    assumeAwayFromBottomForKeyboard: assumeAwayFromBottom,
     reassertUnreadMarker,
     setScrollContainerRef,
     contentWrapperRef: setContentRef,

@@ -19,7 +19,7 @@ import { memo } from 'react'
 import { messageRowRef, type MessageRowRef } from '@fluux/sdk'
 import { roomMessageFixture } from '@/test-utils/roomMessages'
 import { render, fireEvent, waitFor } from '@testing-library/react'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import { createTestMessages } from './MessageList.test-utils'
 import { useRequestMessageTarget } from './messageTargetContext'
 import {
@@ -128,7 +128,7 @@ describe('MessageList explicit-target routing (containment, not registration ord
 
     // The live conversation list re-registers after the preview mounted — the ordering that made
     // registry routing send preview clicks into the live conversation.
-    const liveList = { requestMessageTarget: vi.fn(), scrollToBottom: vi.fn(), observeKeyboardNavigation: vi.fn() }
+    const liveList = { requestMessageTarget: vi.fn(), scrollToBottom: vi.fn() }
     setActiveMessageListController(liveList)
 
     fireEvent.click(container.querySelector('[data-testid="jump-msg-1"]')!)

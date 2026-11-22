@@ -1,6 +1,5 @@
 import { iosHaptic } from '@/platform/ios/haptics'
 import { editableForward } from '../utils/forwardMessage'
-import { getActiveMessageListController } from './conversation/activeMessageListController'
 import type { ChatMessageTarget, GapInterval } from '@fluux/sdk'
 import type { MessageRowRef } from '@fluux/sdk'
 import { messageRowId, readMessageRowId, messageRowRefFromRowId } from './conversation/messageRowIdentity'
@@ -15,7 +14,7 @@ import { useToastStore } from '@/stores/toastStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
 import { useChatStore, useConnectionStore, useBlockingStore } from '@fluux/sdk/react'
-import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
+import { useFileUpload, useLinkPreview, useTypeToFocus, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, groupHeaderIndex, buildReplyContext } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
@@ -42,8 +41,8 @@ import { MediaAutoloadProvider } from '@/contexts'
 import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { auroraSenderColor } from '@/utils/senderColor'
-import { useViewportBottom } from '@/hooks/useViewportBottom'
-import { registerViewportScroller } from '@/utils/viewportScroller'
+import { useMessageListHandle } from '@/hooks/useMessageListHandle'
+import type { MessageListHandle } from './conversation/messageListBoundary'
 import { ReactionMentions } from './conversation/ReactionMentions'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
@@ -180,24 +179,10 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     goToPrev: find.goToPrev,
   }), [find.open, find.close, find.isOpen, find.goToNext, find.goToPrev])
 
-  // Scroll ref for programmatic scrolling and keyboard navigation
-  const scrollRef = useRef<HTMLElement>(null)
-  // Whether the viewport is showing the newest message — owned by useViewportBottom, which also
-  // publishes it so the global focus handler can tell a reader who is genuinely looking at the
-  // newest message from a view merely parked at the live edge (issue #1076).
-  const { ref: isAtBottomRef, assume: assumeViewportBottom } =
-    useViewportBottom('conversation', activeConversation?.id)
-
-  // Publish the scroll element too. Unlike the ref above this is not consumed in
-  // release builds; it exists so a dev-only check can measure the viewport WITHOUT
-  // going through the scroll hook's own at-bottom state, which is exactly the value
-  // under suspicion when the list and its affordances disagree.
-  useEffect(() => {
-    if (!__FLUUX_ANOMALY__) return
-    const id = activeConversation?.id
-    if (!id) return
-    return registerViewportScroller('conversation', id, scrollRef)
-  }, [activeConversation?.id])
+  // The command handle to the message list (keyboard navigation, hover scoping). The hook also
+  // publishes whether the viewport shows the newest message, so the global focus handler can tell
+  // a reader who is genuinely looking at it from a view merely parked at the live edge (#1076).
+  const listHandleRef = useMessageListHandle('conversation', activeConversation?.id)
 
   // Stable handler for the send-animation: clears the highlight after 400 ms.
   const handleMessageIdSent = useCallback((id: string) => {
@@ -228,21 +213,13 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     clearSelection,
     handleMouseMove,
     handleMouseLeave,
-  } = useMessageSelection(activeMessages, scrollRef, {
+  } = useMessageSelection(activeMessages, listHandleRef, {
     getRowId: messageRowId,
     onReachedFirstMessage: fetchOlderHistory,
     isLoadingOlder: activeHistoryState?.isLoading,
     isHistoryComplete: activeHistoryState?.isHistoryComplete,
     onEnterPressed: (id: string) => useExpandedMessagesStore.getState().toggle(id),
-    onKeyboardNavigate: () => assumeViewportBottom(false),
-    onKeyboardScrolled: () => {
-      const id = activeConversation?.id
-      if (id) getActiveMessageListController()?.observeKeyboardNavigation(id)
-    },
   })
-
-  // Format copied messages with sender headers
-  useMessageCopy(scrollRef)
 
   // Reply targets are resolved reactively per-row via useReferencedMessage (in
   // ChatMessageBubble), so this view holds no render-time lookup map: a value
@@ -598,8 +575,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
               interiorPlacementVersion={interiorPlacementVersion}
               contactsByJid={contactsByJid}
               typingUsers={activeTypingUsers}
-              scrollerRef={scrollRef}
-              isAtBottomRef={isAtBottomRef}
+              listHandleRef={listHandleRef}
               onLiveEdgeMeasured={reportLiveEdge}
               conversationId={activeConversation.id}
               conversationType={activeConversation.type}
@@ -711,8 +687,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   interiorPlacementVersion = 0,
   contactsByJid,
   typingUsers,
-  scrollerRef,
-  isAtBottomRef,
+  listHandleRef,
   onLiveEdgeMeasured,
   conversationId,
   conversationType,
@@ -762,8 +737,8 @@ export const ChatMessageList = memo(function ChatMessageList({
   interiorPlacementVersion?: number
   contactsByJid: Map<string, ContactIdentity>
   typingUsers: string[]
-  scrollerRef: React.RefObject<HTMLElement | null>
-  isAtBottomRef: React.MutableRefObject<boolean>
+  /** Holds the list's command handle; filled in while the list is mounted. */
+  listHandleRef: RefObject<MessageListHandle | null>
   onLiveEdgeMeasured?: (atEdge: boolean) => void
   conversationId: string
   conversationType: 'chat' | 'groupchat'
@@ -815,7 +790,7 @@ export const ChatMessageList = memo(function ChatMessageList({
 
   // Selection-aware, hover-intent toolbar hover state (stable handler identities)
   const { hoveredMessageId, handleMessageHover, handleMessageLeave } =
-    useMessageHoverState({ scrollRef: scrollerRef, resetKey: conversationId })
+    useMessageHoverState({ list: listHandleRef, resetKey: conversationId })
 
   const formatTypingUser = (jid: string) => {
     const bareJid = getBareJid(jid)
@@ -890,47 +865,45 @@ export const ChatMessageList = memo(function ChatMessageList({
       // all — bleeds between conversations. Restoration survives via scrollStateManager (an
       // external singleton keyed by conversation id).
       key={conversationId}
-      messages={messages}
-      messageIngressVersion={messageIngressVersion}
-      interiorPlacementVersion={interiorPlacementVersion}
       conversationId={conversationId}
-      firstNewMessageRow={firstNewMessageRow}
-      firstNewMessageIsProvisional={firstNewMessageIsProvisional}
-      firstNewMessageCount={firstNewMessageCount}
-      readPointerRow={readPointerRow}
-      unreadCount={unreadCount}
-      targetMessageId={targetMessageId}
-      onTargetMessageConsumed={clearTargetMessageId}
-      clearFirstNewMessageId={clearFirstNewMessageId}
-      onMessageSeen={onMessageSeen}
-      scrollerRef={scrollerRef}
-      isAtBottomRef={isAtBottomRef}
-      onLiveEdgeMeasured={onLiveEdgeMeasured}
-      typingUsers={typingUsers}
-      formatTypingUser={formatTypingUser}
+      timeline={{
+        messages,
+        ingressVersion: messageIngressVersion,
+        interiorPlacementVersion,
+        history: {
+          onLoadOlder: onScrollToTop,
+          isLoadingOlder,
+          isComplete: isHistoryComplete,
+          unavailable: historyUnavailable,
+          onLoadAround,
+        },
+        window: { atLiveEdge: windowAtLiveEdge, onLoadNewer, onJumpToLatest },
+        gaps: { intervals: gaps, onCatchUp: onCatchUpHistory, isCatchingUp },
+      }}
+      readMarkers={{
+        firstNewRow: firstNewMessageRow,
+        firstNewIsProvisional: firstNewMessageIsProvisional,
+        firstNewCount: firstNewMessageCount,
+        readPointerRow,
+        unreadCount,
+        onSeen: onMessageSeen,
+        onClear: clearFirstNewMessageId,
+        onLiveEdgeMeasured,
+      }}
+      target={{ id: targetMessageId, onConsumed: clearTargetMessageId }}
+      handleRef={listHandleRef}
+      typing={{ users: typingUsers, format: formatTypingUser }}
       renderMessage={renderMessage}
       formatMessageForCopy={formatMessageForCopy}
       lastSentMessageId={lastSentMessageId}
-      onScrollToTop={onScrollToTop}
-      onLoadAround={onLoadAround}
-      isLoadingOlder={isLoadingOlder}
-      onLoadNewer={onLoadNewer}
-      windowAtLiveEdge={windowAtLiveEdge}
-      onJumpToLatest={onJumpToLatest}
-      isHistoryComplete={isHistoryComplete}
-      historyUnavailable={historyUnavailable}
-      gaps={gaps}
-      onCatchUpHistory={onCatchUpHistory}
-      isCatchingUp={isCatchingUp}
-      isLoading={isInitialLoading}
-      loadingState={
+      loading={isInitialLoading ? (
         <div className="flex-1 flex items-center justify-center text-fluux-muted">
           <div className="flex items-center gap-2">
             <Loader2 className="size-5 animate-spin" />
             <span>{t('chat.loadingMessages')}</span>
           </div>
         </div>
-      }
+      ) : undefined}
     />
   )
 })

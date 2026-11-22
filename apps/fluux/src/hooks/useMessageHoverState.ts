@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import type { MessageListHandleCurrent } from '@/components/conversation/messageListBoundary'
 import { hasHover } from './useHasHover'
 
 export interface UseMessageHoverStateOptions {
-  /** Scroll container of the message list — scopes mousedown/selection detection */
-  scrollRef: RefObject<HTMLElement | null>
+  /** The message list's command handle — scopes mousedown/selection detection to its content */
+  list: MessageListHandleCurrent
   /** Reset hover state when this changes (conversation id / room JID) */
   resetKey: string
   /** Hover-intent delay before the toolbar appears */
@@ -34,7 +35,7 @@ export interface MessageHoverState {
  * bailouts.
  */
 export function useMessageHoverState({
-  scrollRef,
+  list,
   resetKey,
   hoverDelayMs = 200,
   leaveDelayMs = 100,
@@ -111,7 +112,7 @@ export function useMessageHoverState({
         sel.rangeCount > 0 &&
         !sel.isCollapsed &&
         sel.anchorNode !== null &&
-        scrollRef.current?.contains(sel.anchorNode) === true
+        list.current?.contains(sel.anchorNode) === true
       )
     }
 
@@ -125,7 +126,7 @@ export function useMessageHoverState({
     const onMouseDown = (e: MouseEvent) => {
       if (e.button !== 0) return
       const target = e.target as HTMLElement | null
-      if (!target || !scrollRef.current?.contains(target)) return
+      if (!target || !list.current?.contains(target)) return
       if (target.closest?.('[data-message-toolbar]')) return
       mouseDownRef.current = true
       clearTimer(intentTimerRef)
@@ -174,7 +175,7 @@ export function useMessageHoverState({
       document.removeEventListener('selectionchange', onSelectionChange)
       window.removeEventListener('blur', onWindowBlur)
     }
-  }, [scrollRef, armIntentTimer, setHovered])
+  }, [list, armIntentTimer, setHovered])
 
   // Reset when switching conversation/room. Also clear the drag/selection
   // latches: switching mid-drag (e.g. via the keyboard or a notification click)

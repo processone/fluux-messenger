@@ -7,7 +7,7 @@
  * double-click on a row or a click on the highlighted message opens the real conversation.
  * With nothing saved it explains how to save a message and what saving gives.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Bookmark, BookmarkPlus, CornerUpLeft, CornerUpRight, ExternalLink, Lock, MonitorSmartphone, MoreHorizontal, ShieldCheck, Smile, Trash2,
@@ -21,7 +21,7 @@ import { useChatStore, useConnectionStore, useRoomStore, useRosterStore, useSave
 import { Avatar } from './Avatar'
 import { RoomAvatar } from './RoomAvatar'
 import {
-  SearchContextMessageList, chatSearchContextRowId, useScrollToContextTarget,
+  SearchContextMessageList, chatSearchContextRowId,
 } from './SearchContextView'
 import { messageRowId } from './conversation/messageRowIdentity'
 import { useConversationName, useRowText } from './sidebar-components/SavedView'
@@ -96,11 +96,8 @@ function SavedPreview({ entry, index, total, onRemove, onOpen }: {
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownNickname = useConnectionStore((s) => s.ownNickname)
   const { messages, target, loading } = useSavedContext(entry)
-  const scrollRef = useRef<HTMLElement>(null)
-  const isAtBottomRef = useRef(false)
   const isRoom = entry.type === 'groupchat'
   const rowId = target ? (isRoom ? messageRowId(target) : chatSearchContextRowId(target)) : undefined
-  useScrollToContextTarget(scrollRef, rowId, entry.id, loading)
   const goToMessage = () => { void onOpen(entry) }
   const savedOn = new Date(entry.savedAt).toLocaleDateString(i18n.language, { month: 'short', day: 'numeric' })
 
@@ -130,8 +127,7 @@ function SavedPreview({ entry, index, total, onRemove, onOpen }: {
             ownAvatar={ownAvatar}
             ownNickname={ownNickname}
             isDarkMode={resolvedMode === 'dark'}
-            scrollerRef={scrollRef}
-            isAtBottomRef={isAtBottomRef}
+            landOn={{ rowId, key: entry.id, holding: loading }}
             // The cache cannot prove where the conversation begins, so no start marker is claimed.
             isHistoryComplete={false}
             isLoading={loading}

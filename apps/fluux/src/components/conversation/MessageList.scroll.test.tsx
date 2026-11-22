@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // virtualized scroll is verified via the scroll-hook unit tests + the real-engine pass.
 vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render, screen, act, fireEvent } from '@testing-library/react'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import type { BaseMessage } from '@fluux/sdk'
 import { PositioningController } from './positioningController'
 

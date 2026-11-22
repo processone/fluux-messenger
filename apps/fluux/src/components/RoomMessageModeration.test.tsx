@@ -41,7 +41,7 @@ const room: Room = {
 
 function listProps(): ComponentProps<typeof RoomMessageList> {
   return {
-    messages: [target], room, scrollerRef: { current: null }, isAtBottomRef: { current: true },
+    messages: [target], room, listHandleRef: { current: null },
     onLiveEdgeMeasured: vi.fn(), contactsByJid: new Map(),
     sendReaction: vi.fn(), votePoll: vi.fn(), closePoll: vi.fn(), onReply: vi.fn(), onEdit: vi.fn(),
     lastOutgoingMessageId: null, lastMessageId: target.id, typingUsers: [],

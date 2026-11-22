@@ -220,3 +220,20 @@ export function messageRowElements(root: ParentNode): HTMLElement[] {
 export function readMessageRowId(element: HTMLElement): string | undefined {
   return element.dataset.messageRowId || element.dataset.messageId
 }
+
+/**
+ * The handle of the lowest row overlapping a scroll container's viewport, or null when no row is
+ * mounted there. Rows are read in document order, so the last overlapping one is the lowest.
+ */
+export function lastVisibleRowId(container: HTMLElement | null): string | null {
+  if (!container) return null
+  const containerRect = container.getBoundingClientRect()
+  const rows = messageRowElements(container)
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const rect = rows[i].getBoundingClientRect()
+    if (rect.bottom > containerRect.top && rect.top < containerRect.bottom) {
+      return readMessageRowId(rows[i]) ?? null
+    }
+  }
+  return null
+}
