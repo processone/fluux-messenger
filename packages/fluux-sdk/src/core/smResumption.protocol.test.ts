@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { parse } from 'ltx'
 import type { AddressInfo, Socket } from 'node:net'
-import { XMPPClient, bindStoresForTesting } from './XMPPClient'
+import { XMPPClient, bindStoresForTesting, getInternalSurfaceForTesting } from './XMPPClient'
 import { createMockStores } from './test-utils'
 import type { SessionState, StorageAdapter } from './types'
 import { roomStore } from '../stores/roomStore'
@@ -54,6 +54,14 @@ class ControlledServer {
   held: string[] = []
   /** Answer the client's stanzas; when false the server still negotiates, resends and acknowledges. */
   answering = true
+  /** Chat messages lost on the way: the server neither counts nor keeps them. */
+  losingMessages = false
+  /** Answer a request to enable Stream Management with a refusal; the session continues without it. */
+  refusingEnable = false
+  /** Receive and count stanzas without acknowledging them. */
+  withholdingAcks = false
+  /** Chat messages that reached the server, in order. */
+  messages: string[] = []
   private nextId = 1
   private lastSm = ''
   private inbound = 0
@@ -87,6 +95,10 @@ class ControlledServer {
     const ready = (smAttrs: string) => `<enabled xmlns="${SM}" ${smAttrs}${this.grant ? ` max="${this.grant}"` : ''}/>`
     ws.on('message', (data) => {
       const el = parse(data.toString())
+      if (el.name === 'message' && el.getChild('body')) {
+        if (this.losingMessages) return
+        this.messages.push(String(el.attrs.id))
+      }
       this.seen.push({ name: el.name, attrs: { ...el.attrs }, ns: (el.children.find(c => typeof c !== 'string') as unknown as { getNS(): string } | undefined)?.getNS() })
       if (['iq', 'message', 'presence'].includes(el.name)) {
         this.inbound++
@@ -114,6 +126,14 @@ class ControlledServer {
           this.inlineAuths.push({ resumePrevid: String(resume.attrs.previd), bindEnable: false, answered: ok ? 'resumed' : 'failed', session: this.lastSm })
           if (ok) {
             sendTogether([`<success xmlns="${SASL2}">${who}<resumed xmlns="${SM}" previd="${this.lastSm}" h="${this.inbound}"/></success>`, ...this.held.splice(0)])
+          } else if (enable && this.refusingEnable) {
+            send(`<success xmlns="${SASL2}">${who}<failed xmlns="${SM}"/><bound xmlns="${BIND2}"><failed xmlns="${SM}"/></bound></success>`)
+          } else if (enable) {
+            // As ejabberd answers: the refusal and the new session arrive in one success.
+            this.lastSm = `sm-${this.nextId++}`
+            this.inbound = 0
+            this.sent = 0
+            send(`<success xmlns="${SASL2}">${who}<failed xmlns="${SM}"/><bound xmlns="${BIND2}">${ready(`id="${this.lastSm}" resume="true"`)}</bound></success>`)
           } else {
             send(`<success xmlns="${SASL2}">${who}<failed xmlns="${SM}"/></success>`)
           }
@@ -127,6 +147,8 @@ class ControlledServer {
           this.inlineAuths.push({ bindEnable: false, answered: 'bound' })
           send(`<success xmlns="${SASL2}">${who}<bound xmlns="${BIND2}"/></success>`)
         }
+      } else if (el.name === 'enable' && this.refusingEnable) {
+        send(`<failed xmlns="${SM}"/>`)
       } else if (el.name === 'enable') {
         this.lastSm = `sm-${this.nextId++}`
         this.inbound = 0
@@ -139,7 +161,7 @@ class ControlledServer {
           send(`<failed xmlns="${SM}"/>`)
         }
       } else if (el.name === 'r') {
-        send(`<a xmlns="${SM}" h="${this.inbound}"/>`)
+        if (!this.withholdingAcks) send(`<a xmlns="${SM}" h="${this.inbound}"/>`)
       } else if (el.name === 'presence' && el.getChild('x', 'http://jabber.org/protocol/muc')) {
         const to = String(el.attrs.to)
         this.rooms.add(to.split('/')[0])
@@ -458,5 +480,251 @@ describe('stream management resumption against a controlled XMPP server', { time
     await open()
     await until(() => server.count('enable') === 2)
     expect(server.count('resume')).toBe(1)
+  })
+
+  describe.each([
+    ['the traditional handshake', false],
+    ['SASL 2 with Bind 2', true],
+  ])('a message the server never received, over %s', (_handshake, inline) => {
+    const notDelivered: Array<{ conversationId: string; messageId: string }> = []
+    const held = new Map<string, string>()
+    let markIsSaved = true
+    let leavePage = () => {}
+    const SAVED_KEY = 'fluux:session-unconfirmed:alice@example.com'
+
+    /** A page: a client with the app's storage, reading back what the previous page saved. */
+    const openPage = async (storage: StorageAdapter) => {
+      let pageIsOpen = true
+      leavePage = () => { pageIsOpen = false }
+      client = new XMPPClient({
+        debug: false, streamManagementMaxSeconds: 600, storageAdapter: storage,
+        shouldAutoReconnect: () => pageIsOpen,
+      })
+      bindStoresForTesting(client, createMockStores())
+      client.subscribe('chat:message-unconfirmed', ({ conversationId, messageId, onSettled }) => {
+        notDelivered.push({ conversationId, messageId })
+        onSettled(markIsSaved)
+      })
+      await client.connect({
+        jid: 'alice@example.com', password: 'secret', server: `ws://localhost:${server.port}`,
+        skipDiscovery: true, resource: 'web',
+      })
+      await until(() => client.getStreamManagementState() !== null)
+    }
+    /** Leave the page without warning the server, as a reload does. */
+    const reload = async () => {
+      client.persistSmState()
+      leavePage()
+      server.drop()
+      await sleep(150)
+    }
+    const expected = (messageId: string) => [{ conversationId: 'bob@example.com', messageId }]
+    /** Until the session replacing `previous` is enabled, a message goes out uncounted. */
+    const untilNewSession = (previous: string | undefined) => until(() => {
+      const id = client.getStreamManagementState()?.id
+      return id !== undefined && id !== previous
+    })
+    /** Resolves after the next resumption, past the point where its unconfirmed messages are reported. */
+    const nextResumption = () => new Promise<void>((resolve) => {
+      const stop = getInternalSurfaceForTesting(client).on('sessionPhase', (phase) => {
+        if (phase.kind !== 'resumed') return
+        stop()
+        resolve()
+      })
+    })
+
+    beforeEach(() => {
+      server.inline = inline
+      server.grant = '600'
+      notDelivered.length = 0
+      markIsSaved = true
+      held.clear()
+      vi.stubGlobal('sessionStorage', {
+        getItem: (key: string) => held.get(key) ?? null,
+        setItem: (key: string, value: string) => { held.set(key, value) },
+        removeItem: (key: string) => { held.delete(key) },
+      })
+    })
+
+    it('is marked when the server refuses the resumption', async () => {
+      await openPage(memoryStorage())
+      server.losingMessages = true
+      const id = await client.messages.sendMessage('bob@example.com', 'lost words')
+      server.resumable = false
+      server.drop()
+
+      await until(() => notDelivered.length > 0)
+
+      expect(notDelivered).toEqual(expected(id))
+    })
+
+    it('is not marked again after a Retry, even when its first mark could not be saved', async () => {
+      await openPage(memoryStorage())
+      markIsSaved = false
+      server.losingMessages = true
+      const id = await client.messages.sendMessage('bob@example.com', 'lost words')
+      const lostSession = client.getStreamManagementState()?.id
+      server.resumable = false
+      server.drop()
+      await until(() => notDelivered.length === 1)
+      await untilNewSession(lostSession)
+
+      server.losingMessages = false
+      server.resumable = true
+      await client.messages.resendMessage('bob@example.com', 'lost words', id)
+      await until(() => server.messages.includes(id))
+      const resumed = nextResumption()
+      server.drop()
+      await resumed
+
+      expect(notDelivered).toEqual(expected(id))
+      expect(held.has(SAVED_KEY)).toBe(false)
+    })
+
+    /** A message marked after a refused resumption, with the connection back and the server receiving again. */
+    const markedAfterRefusal = async (storage: StorageAdapter) => {
+      await openPage(storage)
+      server.losingMessages = true
+      const id = await client.messages.sendMessage('bob@example.com', 'lost words')
+      const lostSession = client.getStreamManagementState()?.id
+      server.resumable = false
+      server.drop()
+      await until(() => notDelivered.length === 1)
+      await until(() => !held.has(SAVED_KEY))
+      await untilNewSession(lostSession)
+      server.losingMessages = false
+      server.resumable = true
+      return id
+    }
+    const encryption = () => vi.spyOn(
+      client.messages as unknown as { applyE2EEToOutboundChat: () => Promise<undefined> },
+      'applyE2EEToOutboundChat',
+    )
+
+    it('is marked again when the page reloads while its Retry is still being encrypted', async () => {
+      const storage = memoryStorage()
+      const id = await markedAfterRefusal(storage)
+      encryption().mockReturnValue(new Promise(() => {}))
+
+      void client.messages.resendMessage('bob@example.com', 'lost words', id)
+      await reload()
+      await openPage(storage)
+      await until(() => notDelivered.length === 2)
+
+      expect(notDelivered[1]).toEqual(expected(id)[0])
+      expect(server.messages).not.toContain(id)
+    })
+
+    it('is marked again after a reload when its Retry is refused before sending', async () => {
+      const storage = memoryStorage()
+      const id = await markedAfterRefusal(storage)
+      encryption().mockRejectedValue(new Error('encryption required'))
+
+      await expect(client.messages.resendMessage('bob@example.com', 'lost words', id)).rejects.toThrow('encryption required')
+      expect(held.get(SAVED_KEY)).toContain(id)
+      await reload()
+      await openPage(storage)
+      await until(() => notDelivered.length === 2)
+
+      expect(notDelivered[1]).toEqual(expected(id)[0])
+      expect(server.messages).not.toContain(id)
+    })
+
+    it('is marked after a reload when its Retry is refused and the resumed count covers only the earlier attempt', async () => {
+      const storage = memoryStorage()
+      await openPage(storage)
+      server.withholdingAcks = true
+      const id = await client.messages.sendMessage('bob@example.com', 'rejected words')
+      await sleep(300)
+      encryption().mockRejectedValue(new Error('encryption required'))
+
+      await expect(client.messages.resendMessage('bob@example.com', 'rejected words', id)).rejects.toThrow('encryption required')
+      await reload()
+      await openPage(storage)
+      await until(() => notDelivered.length > 0)
+
+      expect(notDelivered).toEqual(expected(id))
+      expect(server.messages).toEqual([id])
+    })
+
+    it('is marked again after a reload when its Retry went out on a session without Stream Management', async () => {
+      const storage = memoryStorage()
+      await openPage(storage)
+      server.losingMessages = true
+      const id = await client.messages.sendMessage('bob@example.com', 'lost words')
+      server.resumable = false
+      server.refusingEnable = true
+      server.drop()
+      await until(() => notDelivered.length === 1)
+      await until(() => !held.has(SAVED_KEY))
+
+      await client.messages.resendMessage('bob@example.com', 'lost words', id)
+      expect(held.get(SAVED_KEY)).toContain(id)
+      await reload()
+      server.refusingEnable = false
+      await openPage(storage)
+      await until(() => notDelivered.length === 2)
+
+      expect(notDelivered[1]).toEqual(expected(id)[0])
+      expect(server.messages).not.toContain(id)
+    })
+
+    it('is resent, and not marked, when the same session comes back', async () => {
+      await openPage(memoryStorage())
+      server.losingMessages = true
+      const id = await client.messages.sendMessage('bob@example.com', 'lost words')
+      await sleep(20)
+      server.losingMessages = false
+      server.drop()
+
+      await until(() => server.messages.includes(id))
+      await sleep(100)
+
+      expect(server.messages.filter(message => message === id)).toHaveLength(1)
+      expect(notDelivered).toEqual([])
+    })
+
+    it('is marked after a reload when the resumed session does not count it', async () => {
+      const storage = memoryStorage()
+      await openPage(storage)
+      server.losingMessages = true
+      const id = await client.messages.sendMessage('bob@example.com', 'lost words')
+      await reload()
+
+      await openPage(storage)
+      await until(() => notDelivered.length > 0)
+
+      expect(notDelivered).toEqual(expected(id))
+      expect(server.messages).not.toContain(id)
+      expect([...held.values()].join()).not.toContain('lost words')
+    })
+
+    it('is marked after a reload when the server refuses the resumption', async () => {
+      const storage = memoryStorage()
+      await openPage(storage)
+      server.losingMessages = true
+      const id = await client.messages.sendMessage('bob@example.com', 'lost words')
+      await reload()
+      server.resumable = false
+
+      await openPage(storage)
+      await until(() => notDelivered.length > 0)
+
+      expect(notDelivered).toEqual(expected(id))
+    })
+
+    it('is not marked after a reload when the resumed session counted it', async () => {
+      const storage = memoryStorage()
+      await openPage(storage)
+      const id = await client.messages.sendMessage('bob@example.com', 'received words')
+      await reload()
+      expect(held.get(SAVED_KEY)).toContain(id)
+
+      await openPage(storage)
+      await until(() => !held.has(SAVED_KEY))
+
+      expect(server.messages).toEqual([id])
+      expect(notDelivered).toEqual([])
+    })
   })
 })

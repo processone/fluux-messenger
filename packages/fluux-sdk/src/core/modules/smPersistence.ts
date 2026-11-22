@@ -10,6 +10,7 @@ import type { Client, SmOutboundQueueItem } from '@xmpp/client'
 import type { StorageAdapter, JoinedRoomInfo, SmResumptionState } from '../types'
 import type { ResolutionLogger } from './serverResolution'
 import { DEFAULT_SM_MAX_SECONDS, isWithinSmWindow, resolveSmWindowMs } from './smResumptionPolicy'
+import { NS_STANZA_ID } from '../namespaces'
 
 /**
  * The slice of the live xmpp.js client that SM capture reads.
@@ -21,6 +22,8 @@ import { DEFAULT_SM_MAX_SECONDS, isWithinSmWindow, resolveSmWindowMs } from './s
 export interface SmStateSource {
   streamManagement?: {
     id?: string | null
+    /** Whether the stream currently counts what is sent, which also queues it until acknowledged. */
+    enabled?: boolean
     inbound?: number
     outbound?: number
     outbound_q?: unknown[]
@@ -61,6 +64,54 @@ export interface SmUnacknowledged {
   items: SmOutboundQueueItem[]
 }
 
+/**
+ * A chat message sent without an acknowledgement. Holds what is needed to find
+ * its row and nothing of its content, because it is written to session storage.
+ */
+export interface SmUnconfirmedMessage {
+  id: string
+  /** The conversation it was sent to. */
+  to: string
+  /** The session it was sent in. Absent once the message is known to be unconfirmed. */
+  session?: string
+  /** Its position in that session's sent count, compared with the server's `h`. */
+  sequence?: number
+}
+
+const unconfirmedStorageKey = (jid: string) => `fluux:session-unconfirmed:${jid}`
+
+/**
+ * The conversation messages among a client's unacknowledged stanzas. A message
+ * of a conversation carries its own id as origin-id, including an encrypted one,
+ * whose origin-id stays outside the encrypted payload.
+ */
+function unconfirmedMessagesIn(session: string, items: readonly unknown[], acked: number): SmUnconfirmedMessage[] {
+  const messages: SmUnconfirmedMessage[] = []
+  items.forEach((item, index) => {
+    const stanza = (item as Partial<SmOutboundQueueItem> | null)?.stanza
+    if (stanza?.name !== 'message' || stanza.attrs?.type !== 'chat') return
+    const { id, to } = stanza.attrs
+    if (typeof id !== 'string' || !id || typeof to !== 'string' || !to) return
+    if (stanza.getChild?.('origin-id', NS_STANZA_ID)?.attrs.id !== id) return
+    messages.push({ id, to, session, sequence: acked + index + 1 })
+  })
+  return messages
+}
+
+/** One record per message, oldest to newest in: a Retry reuses the id, and its latest attempt decides. */
+function latestById(messages: readonly SmUnconfirmedMessage[]): SmUnconfirmedMessage[] {
+  const byId = new Map<string, SmUnconfirmedMessage>()
+  for (const message of messages) byId.set(message.id, message)
+  return [...byId.values()]
+}
+
+function isStoredUnconfirmed(value: unknown): value is SmUnconfirmedMessage {
+  const entry = value as Partial<SmUnconfirmedMessage> | null
+  if (typeof entry?.id !== 'string' || !entry.id || typeof entry.to !== 'string' || !entry.to) return false
+  if (entry.session === undefined) return entry.sequence === undefined
+  return typeof entry.session === 'string' && Number.isSafeInteger(entry.sequence)
+}
+
 /** Dependencies injected by Connection. */
 export interface SmPersistenceDeps {
   storageAdapter?: StorageAdapter
@@ -86,6 +137,12 @@ export interface SmLoadResult {
 export class SmPersistence {
   private cache: SmStateCache | null = null
   private unacknowledged: SmUnacknowledged | null = null
+  /** Messages restored from storage, and those now known to be unconfirmed (no `session`). */
+  private unconfirmed: SmUnconfirmedMessage[] = []
+  /** Records handed over by `takeUnconfirmed` whose result has not come back yet. */
+  private reportingUnconfirmed = new Set<SmUnconfirmedMessage>()
+  /** Ids of messages a Retry is sending, until the stream holds the new attempt. */
+  private retrying = new Set<string>()
   private deps: SmPersistenceDeps
 
   constructor(deps: SmPersistenceDeps) {
@@ -111,8 +168,8 @@ export class SmPersistence {
    */
   beginSession(id: string, inbound: number, advertisedMax: unknown): number {
     const windowMs = resolveSmWindowMs(this.requestSeconds, advertisedMax)
+    this.settleNewSession()
     this.cache = { id, inbound, outbound: 0, timestamp: Date.now(), windowMs }
-    this.unacknowledged = null
     return windowMs
   }
 
@@ -122,7 +179,8 @@ export class SmPersistence {
    * without a session id has nothing to add, and leaves what was kept in place.
    *
    * Memory only: these stanzas can hold message text, so they are never written
-   * to storage, and a page reload cannot resend them.
+   * to storage, and a page reload cannot resend them. A reload keeps only which
+   * messages they were (see `saveUnconfirmed`).
    */
   keepUnacknowledged(xmpp: Client | null): void {
     const sm = xmpp?.streamManagement
@@ -133,6 +191,125 @@ export class SmPersistence {
   /** What was kept for session `id`, if anything. */
   getUnacknowledged(id: string): SmUnacknowledged | null {
     return this.unacknowledged?.id === id ? this.unacknowledged : null
+  }
+
+  // ── Messages the server did not confirm ───────────────────────────────────
+
+  /**
+   * Save which messages have no acknowledgement yet, for the next page load.
+   * Synchronous, for page-unload handlers. Stores ids, addresses and positions,
+   * never message text.
+   */
+  saveUnconfirmed(jid: string, xmpp: SmStateSource | null): void {
+    const sm = xmpp?.streamManagement
+    const live = sm?.id && Array.isArray(sm.outbound_q)
+      ? unconfirmedMessagesIn(sm.id, sm.outbound_q, sm.outbound || 0)
+      : []
+    const kept = this.unacknowledged
+      ? unconfirmedMessagesIn(this.unacknowledged.id, this.unacknowledged.items, this.unacknowledged.acked)
+      : []
+    this.writeUnconfirmed(jid, this.withQueued([...kept, ...live]))
+  }
+
+  /**
+   * The records with what is queued added. A record without a session is a message
+   * known to be unsent, so a queued attempt of it is an older one and changes nothing.
+   */
+  private withQueued(queued: readonly SmUnconfirmedMessage[]): SmUnconfirmedMessage[] {
+    const unsent = new Set(this.unconfirmed.filter((message) => message.session === undefined).map((message) => message.id))
+    return latestById([...this.unconfirmed, ...queued.filter((message) => !unsent.has(message.id))])
+  }
+
+  /** Read back what the previous page load saved. */
+  restoreUnconfirmed(jid: string): void {
+    try {
+      const stored: unknown = JSON.parse(sessionStorage.getItem(unconfirmedStorageKey(jid)) ?? '[]')
+      if (!Array.isArray(stored)) return
+      this.unconfirmed = latestById([...stored.filter(isStoredUnconfirmed), ...this.unconfirmed])
+    } catch {
+      // Storage errors are non-fatal
+    }
+  }
+
+  /**
+   * The server resumed `session` and reported having received `h` stanzas.
+   * Restored messages past `h` never arrived, and their text is gone with the
+   * previous page. Messages kept in memory are not counted: they are being resent.
+   */
+  settleResumed(session: string, h: number): void {
+    this.unconfirmed = this.unconfirmed.flatMap((message) => {
+      if (message.session === undefined) return [message]
+      if (message.session === session && message.sequence! <= h) return []
+      return [{ id: message.id, to: message.to }]
+    })
+  }
+
+  /**
+   * A new session started, so the server will not say what the old one received.
+   * Everything still waiting becomes unconfirmed. An archived copy clears a
+   * message that did arrive.
+   */
+  settleNewSession(): void {
+    const kept = this.unacknowledged
+      ? unconfirmedMessagesIn(this.unacknowledged.id, this.unacknowledged.items, this.unacknowledged.acked)
+      : []
+    this.unacknowledged = null
+    this.unconfirmed = this.withQueued(kept).map((message) =>
+      message.session === undefined ? message : { id: message.id, to: message.to })
+  }
+
+  /**
+   * Hand over the messages known to be unconfirmed. Each stays recorded, in memory
+   * and in storage, until `settleUnconfirmed` says its mark was saved, so a reload
+   * or a failed write in between cannot lose it.
+   */
+  takeUnconfirmed(jid: string): SmUnconfirmedMessage[] {
+    const taken = this.unconfirmed.filter(
+      (message) => message.session === undefined
+        && !this.reportingUnconfirmed.has(message)
+        && !this.retrying.has(message.id),
+    )
+    for (const message of taken) this.reportingUnconfirmed.add(message)
+    this.writeUnconfirmed(jid, this.unconfirmed)
+    return taken
+  }
+
+  /** The result of a handed-over message: settled forgets it, otherwise the next connection reports it again. */
+  settleUnconfirmed(jid: string, message: SmUnconfirmedMessage, settled: boolean): void {
+    if (!this.reportingUnconfirmed.delete(message) || !settled) return
+    this.unconfirmed = this.unconfirmed.filter((held) => held !== message)
+    this.writeUnconfirmed(jid, this.unconfirmed)
+  }
+
+  /**
+   * A Retry has cleared the visible error and is preparing the message. Until the
+   * stream holds it, this record is what shows it was not delivered if the page
+   * reloads, so it is saved now and not reported on this page meanwhile.
+   */
+  beginRetry(jid: string, id: string, to: string): void {
+    this.retrying.add(id)
+    this.unconfirmed = [...this.unconfirmed.filter((message) => message.id !== id), { id, to }]
+    this.writeUnconfirmed(jid, this.unconfirmed)
+  }
+
+  /**
+   * The record goes only when the stream tracks the new attempt. If it could not be
+   * sent, or went out on a session without Stream Management, nothing else would
+   * show that it may not have arrived, so the record stays and is reported again.
+   */
+  endRetry(jid: string, id: string, sent: boolean, xmpp: SmStateSource | null): void {
+    if (!this.retrying.delete(id) || !sent || !xmpp?.streamManagement?.enabled) return
+    this.unconfirmed = this.unconfirmed.filter((message) => message.id !== id)
+    this.writeUnconfirmed(jid, this.unconfirmed)
+  }
+
+  private writeUnconfirmed(jid: string, messages: readonly SmUnconfirmedMessage[]): void {
+    try {
+      if (messages.length > 0) sessionStorage.setItem(unconfirmedStorageKey(jid), JSON.stringify(messages))
+      else sessionStorage.removeItem(unconfirmedStorageKey(jid))
+    } catch {
+      // Storage errors are non-fatal
+    }
   }
 
   /**
@@ -198,10 +375,21 @@ export class SmPersistence {
     return this.cache && this.eligible(this.cache) ? this.cache : null
   }
 
+  /**
+   * Stop trying to resume. What was kept stays until the new session starts,
+   * which reports it as unconfirmed.
+   */
+  abandonResumption(): void {
+    this.cache = null
+  }
+
   /** Clear cache (manual disconnect → fresh session next time). */
   clearCache(): void {
     this.cache = null
     this.unacknowledged = null
+    this.unconfirmed = []
+    this.reportingUnconfirmed.clear()
+    this.retrying.clear()
   }
 
   /**
@@ -345,6 +533,7 @@ export class SmPersistence {
 
   /** Clear SM state from storage (manual disconnect). */
   async clear(jid: string): Promise<void> {
+    this.writeUnconfirmed(jid, [])
     if (!this.deps.storageAdapter) {
       return
     }

@@ -411,12 +411,15 @@ function startsNewSession(element: Element): boolean {
  * through Bind 2 instead, empty the queue and the count. See the module
  * documentation (patch 5).
  *
+ * `onResumed` receives the session id and `h`, for the messages a page reload
+ * could not keep in this queue.
+ *
  * Runs ahead of xmpp.js, which handles `<resumed/>` after this 'element' event.
  *
  * Guard: only patches real xmpp.js clients — test mocks (which lack outbound_q)
  * are left untouched.
  */
-export function patchSmResumeQueue(xmppClient: Client): void {
+export function patchSmResumeQueue(xmppClient: Client, onResumed?: (session: string, h: number) => void): void {
   const sm = xmppClient.streamManagement
   if (!Array.isArray(sm?.outbound_q) || typeof xmppClient.prependListener !== 'function') return
 
@@ -433,6 +436,7 @@ export function patchSmResumeQueue(xmppClient: Client): void {
     if (!resumed) return
     const h = Number(resumed.attrs.h)
     if (!Number.isSafeInteger(h) || h < 0) return
+    if (sm.id) onResumed?.(sm.id, h)
     const notReceived = sm.outbound_q.slice(Math.max(0, h - sm.outbound))
     sm.outbound = h
     // xmpp.js throws on an address it cannot parse, which would abort the resumption.

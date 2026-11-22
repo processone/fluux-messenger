@@ -295,6 +295,10 @@ export function createStoreBindings(
     stores.chat.updateMessage(conversationId, messageId, { deliveryError: error })
   })
 
+  on('chat:message-unconfirmed', ({ conversationId, messageId, onSettled }) => {
+    void getStores().chat.markUnconfirmedDelivery(conversationId, messageId).then(onSettled, () => onSettled(false))
+  })
+
   on('chat:animation', ({ conversationId, animation, senderJid }) => {
     const stores = getStores()
     // Only auto-play in the active conversation; inactive eggs are surfaced by

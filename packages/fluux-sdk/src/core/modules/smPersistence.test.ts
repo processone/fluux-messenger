@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { xml } from '@xmpp/client'
 import { SmPersistence, type SmPersistenceDeps } from './smPersistence'
 import type { StorageAdapter, SessionState } from '../types'
 
@@ -324,6 +325,328 @@ describe('SmPersistence', () => {
 
       expect(sessionStorage.getItem(sessionKey)).toBeNull()
     })
+  })
+
+  describe('messages the server did not confirm', () => {
+    const JID = 'user@example.com'
+    const KEY = `fluux:session-unconfirmed:${JID}`
+    const chat = (id: string, text = 'private words') => ({
+      stanza: xml('message', { to: 'bob@example.com', type: 'chat', id },
+        xml('body', {}, text),
+        xml('origin-id', { xmlns: 'urn:xmpp:sid:0', id })),
+      stamp: '2026-11-22T10:00:00.000Z',
+    })
+    const client = (id: string, outbound: number, outbound_q: unknown[]) =>
+      ({ streamManagement: { id, inbound: 0, outbound, outbound_q } })
+    const tracking = (id: string, outbound: number, outbound_q: unknown[]) =>
+      ({ streamManagement: { ...client(id, outbound, outbound_q).streamManagement, enabled: true } })
+    const taken = (sm: SmPersistence) => sm.takeUnconfirmed(JID).map(message => message.id)
+    /** A page that saved `items` as unacknowledged, then reloaded. */
+    const reloaded = (acked: number, items: unknown[]) => {
+      new SmPersistence(createDeps()).saveUnconfirmed(JID, client('session-1', acked, items))
+      const sm = new SmPersistence(createDeps())
+      sm.restoreUnconfirmed(JID)
+      return sm
+    }
+
+    afterEach(() => sessionStorage.removeItem(KEY))
+
+    it('saves the id, address and position of a message, and never its text', () => {
+      new SmPersistence(createDeps()).saveUnconfirmed(JID, client('session-1', 4, [chat('m1')]))
+
+      const stored = sessionStorage.getItem(KEY)!
+      expect(JSON.parse(stored)).toEqual([{ id: 'm1', to: 'bob@example.com', session: 'session-1', sequence: 5 }])
+      expect(stored).not.toContain('private words')
+    })
+
+    it('saves only conversation messages', () => {
+      const request = { stanza: xml('iq', { type: 'get', id: 'q1' }) }
+      const room = { stanza: xml('message', { to: 'room@conference.example.com', type: 'groupchat', id: 'r1' }, xml('origin-id', { xmlns: 'urn:xmpp:sid:0', id: 'r1' })) }
+      const typing = { stanza: xml('message', { to: 'bob@example.com', type: 'chat', id: 't1' }, xml('composing', { xmlns: 'http://jabber.org/protocol/chatstates' })) }
+      new SmPersistence(createDeps()).saveUnconfirmed(JID, client('session-1', 0, [request, room, typing, chat('m1')]))
+
+      expect(JSON.parse(sessionStorage.getItem(KEY)!)).toEqual([{ id: 'm1', to: 'bob@example.com', session: 'session-1', sequence: 4 }])
+    })
+
+    it('after a reload, reports only the messages past the count of the resumed session', () => {
+      const sm = reloaded(4, [chat('received'), chat('lost')])
+
+      sm.settleResumed('session-1', 5)
+
+      const [record] = sm.takeUnconfirmed(JID)
+      expect(record.id).toBe('lost')
+      sm.settleUnconfirmed(JID, record, true)
+      expect(sessionStorage.getItem(KEY)).toBeNull()
+    })
+
+    it('keeps a reported message until its mark is saved, so a second reload reports it again', () => {
+      const first = reloaded(4, [chat('lost')])
+      first.settleNewSession()
+      expect(taken(first)).toEqual(['lost'])
+
+      const second = new SmPersistence(createDeps())
+      second.restoreUnconfirmed(JID)
+
+      expect(taken(second)).toEqual(['lost'])
+    })
+
+    it('reports a message again on the next connection when its mark could not be saved', () => {
+      const sm = reloaded(4, [chat('lost')])
+      sm.settleNewSession()
+      const [first] = sm.takeUnconfirmed(JID)
+
+      sm.settleUnconfirmed(JID, first, false)
+
+      const [second] = sm.takeUnconfirmed(JID)
+      expect(second.id).toBe('lost')
+      sm.settleUnconfirmed(JID, second, true)
+      expect(taken(sm)).toEqual([])
+      expect(sessionStorage.getItem(KEY)).toBeNull()
+    })
+
+    it('keeps the latest attempt of a retried message, so a count covering the first one does not clear it', () => {
+      const sm = reloaded(4, [chat('retried'), chat('retried')])
+
+      sm.settleResumed('session-1', 5)
+
+      expect(taken(sm)).toEqual(['retried'])
+    })
+
+    it('reports nothing when the count covers the latest attempt of a retried message', () => {
+      const sm = reloaded(4, [chat('retried'), chat('retried')])
+
+      sm.settleResumed('session-1', 6)
+
+      expect(taken(sm)).toEqual([])
+    })
+
+    it('replaces a known-lost record with the position of its retry', () => {
+      const sm = reloaded(4, [chat('retried')])
+      sm.settleNewSession()
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+      const stream = tracking('session-2', 0, [chat('retried')])
+      sm.endRetry(JID, 'retried', true, stream)
+
+      sm.saveUnconfirmed(JID, stream)
+
+      expect(JSON.parse(sessionStorage.getItem(KEY)!)).toEqual([
+        { id: 'retried', to: 'bob@example.com', session: 'session-2', sequence: 1 },
+      ])
+    })
+
+    it('forgets a message once its Retry is in the stream', () => {
+      const sm = reloaded(4, [chat('retried')])
+      sm.settleNewSession()
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+
+      sm.endRetry(JID, 'retried', true, tracking('session-2', 0, [chat('retried')]))
+
+      expect(taken(sm)).toEqual([])
+      expect(sessionStorage.getItem(KEY)).toBeNull()
+    })
+
+    it('keeps the record when a Retry was written on a session without Stream Management', () => {
+      const sm = reloaded(4, [chat('retried')])
+      sm.settleNewSession()
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+
+      sm.endRetry(JID, 'retried', true, { streamManagement: { id: '', enabled: false, outbound: 0, outbound_q: [] } })
+      sm.saveUnconfirmed(JID, null)
+
+      const next = new SmPersistence(createDeps())
+      next.restoreUnconfirmed(JID)
+      next.settleNewSession()
+      expect(taken(next)).toEqual(['retried'])
+    })
+
+    it.each([
+      ['the live stream', (sm: SmPersistence) => sm.saveUnconfirmed(JID, client('session-1', 4, [chat('retried')]))],
+      ['the queue kept from the previous client', (sm: SmPersistence) => {
+        sm.keepUnacknowledged(client('session-1', 4, [chat('retried')]) as never)
+        sm.saveUnconfirmed(JID, null)
+      }],
+    ])('after a refused Retry, an older attempt in %s does not replace its record', (_where, unload) => {
+      const sm = new SmPersistence(createDeps())
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+      sm.endRetry(JID, 'retried', false, tracking('session-1', 4, [chat('retried')]))
+
+      unload(sm)
+
+      const next = new SmPersistence(createDeps())
+      next.restoreUnconfirmed(JID)
+      next.settleResumed('session-1', 5)
+      expect(taken(next)).toEqual(['retried'])
+    })
+
+    it('a new session keeps a reported record, so its pending mark can still settle it', () => {
+      const sm = reloaded(4, [chat('retried')])
+      sm.settleNewSession()
+      const [reported] = sm.takeUnconfirmed(JID)
+      sm.keepUnacknowledged(client('session-1', 4, [chat('retried')]) as never)
+
+      sm.settleNewSession()
+      sm.settleUnconfirmed(JID, reported, true)
+
+      expect(taken(sm)).toEqual([])
+      expect(sessionStorage.getItem(KEY)).toBeNull()
+    })
+
+    it('saves a record for a Retry of a message that had none, so a reload before it is sent still reports it', () => {
+      const sm = new SmPersistence(createDeps())
+
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+      sm.saveUnconfirmed(JID, null)
+
+      const next = new SmPersistence(createDeps())
+      next.restoreUnconfirmed(JID)
+      next.settleNewSession()
+      expect(taken(next)).toEqual(['retried'])
+    })
+
+    it('does not report a message on this page while its Retry is being prepared', () => {
+      const sm = reloaded(4, [chat('retried')])
+      sm.settleNewSession()
+
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+
+      expect(taken(sm)).toEqual([])
+    })
+
+    it('keeps the record when a Retry could not be sent, and reports it again', () => {
+      const sm = new SmPersistence(createDeps())
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+
+      sm.endRetry(JID, 'retried', false, null)
+
+      expect(JSON.parse(sessionStorage.getItem(KEY)!)).toEqual([{ id: 'retried', to: 'bob@example.com' }])
+      expect(taken(sm)).toEqual(['retried'])
+    })
+
+    it('an attempt still queued from before a Retry does not replace its record', () => {
+      const sm = new SmPersistence(createDeps())
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+
+      sm.saveUnconfirmed(JID, client('session-1', 4, [chat('retried')]))
+
+      const next = new SmPersistence(createDeps())
+      next.restoreUnconfirmed(JID)
+      next.settleResumed('session-1', 5)
+      expect(taken(next)).toEqual(['retried'])
+    })
+
+    it('a mark that finishes during a Retry does not remove the record', () => {
+      const sm = reloaded(4, [chat('retried')])
+      sm.settleNewSession()
+      const [stale] = sm.takeUnconfirmed(JID)
+      sm.beginRetry(JID, 'retried', 'bob@example.com')
+
+      sm.settleUnconfirmed(JID, stale, true)
+
+      sm.endRetry(JID, 'retried', false, null)
+      expect(taken(sm)).toEqual(['retried'])
+    })
+
+    it('reports nothing when the resumed session received everything, and forgets the saved list', () => {
+      const sm = reloaded(4, [chat('m1')])
+
+      sm.settleResumed('session-1', 5)
+
+      expect(taken(sm)).toEqual([])
+      expect(sessionStorage.getItem(KEY)).toBeNull()
+    })
+
+    it('does not compare positions with a different session', () => {
+      const sm = reloaded(4, [chat('m1')])
+
+      sm.settleResumed('session-2', 99)
+
+      expect(taken(sm)).toEqual(['m1'])
+    })
+
+    it('after a reload, reports every message when a new session starts', () => {
+      const sm = reloaded(4, [chat('m1'), chat('m2')])
+
+      sm.settleNewSession()
+
+      expect(taken(sm)).toEqual(['m1', 'm2'])
+    })
+
+    it('keeps the list until the connection settles, so a second reload does not lose it', () => {
+      const sm = reloaded(4, [chat('m1')])
+      sm.saveUnconfirmed(JID, null)
+
+      const again = new SmPersistence(createDeps())
+      again.restoreUnconfirmed(JID)
+      again.settleResumed('session-1', 4)
+
+      expect(taken(again)).toEqual(['m1'])
+    })
+
+    it('saves what a discarded client left, for a reload during the reconnect', () => {
+      const sm = new SmPersistence(createDeps())
+      sm.keepUnacknowledged(client('session-1', 2, [chat('m1')]) as never)
+
+      sm.saveUnconfirmed(JID, null)
+
+      expect(JSON.parse(sessionStorage.getItem(KEY)!)).toEqual([{ id: 'm1', to: 'bob@example.com', session: 'session-1', sequence: 3 }])
+    })
+
+    it('does not report stanzas kept in memory when the session resumes: they are being resent', () => {
+      const sm = new SmPersistence(createDeps())
+      sm.keepUnacknowledged(client('session-1', 2, [chat('m1')]) as never)
+
+      sm.settleResumed('session-1', 2)
+      sm.updateCache('session-1', 0, 2)
+
+      expect(taken(sm)).toEqual([])
+    })
+
+    it.each([
+      ['a refused resumption', (sm: SmPersistence) => sm.beginSession('session-2', 0, undefined)],
+      ['a new session without Stream Management', (sm: SmPersistence) => sm.settleNewSession()],
+      ['a resumption window that ran out', (sm: SmPersistence) => { sm.abandonResumption(); sm.settleNewSession() }],
+    ])('reports stanzas kept in memory after %s', (_case, endSession) => {
+      const sm = new SmPersistence(createDeps())
+      sm.updateCache('session-1', 0, 2)
+      sm.keepUnacknowledged(client('session-1', 2, [chat('m1')]) as never)
+
+      endSession(sm)
+
+      expect(taken(sm)).toEqual(['m1'])
+    })
+
+    it('reports a message once', () => {
+      const sm = reloaded(4, [chat('m1')])
+      sm.settleNewSession()
+
+      expect(taken(sm)).toEqual(['m1'])
+      expect(taken(sm)).toEqual([])
+    })
+
+    it('a sign-out forgets everything, in memory and in storage', async () => {
+      const sm = reloaded(4, [chat('m1')])
+      sm.keepUnacknowledged(client('session-1', 2, [chat('m2')]) as never)
+
+      sm.clearCache()
+      await sm.clear(JID)
+      sm.settleNewSession()
+
+      expect(taken(sm)).toEqual([])
+      expect(sessionStorage.getItem(KEY)).toBeNull()
+    })
+
+    it.each(['not json', '{"id":"m1"}', '[{"id":"m1"}]', '[{"id":"m1","to":"bob@example.com","session":"s"}]'])(
+      'ignores a saved list it cannot read: %s',
+      (stored) => {
+        sessionStorage.setItem(KEY, stored)
+        const sm = new SmPersistence(createDeps())
+
+        sm.restoreUnconfirmed(JID)
+        sm.settleNewSession()
+
+        expect(taken(sm)).toEqual([])
+      },
+    )
   })
 
   describe('load', () => {
