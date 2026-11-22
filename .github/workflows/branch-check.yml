@@ -56,6 +56,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # The test change report below compares with the merge base on main.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -85,6 +88,23 @@ jobs:
 
       - name: App unit tests
         run: npm run test:run --workspace=@xmpp/fluux
+
+      # Informational: lists rewritten test expectations, removed protection and
+      # growth of files over 2,000 lines in the job summary. It never fails the
+      # run (continue-on-error, and the script always exits 0). The script comes
+      # from main, so a change cannot edit its own report; until it exists on
+      # main the step says it could not compare.
+      - name: Test change report
+        timeout-minutes: 3
+        continue-on-error: true
+        shell: bash
+        run: |
+          if git fetch --no-tags origin main:refs/remotes/origin/main \
+            && git show origin/main:scripts/report-test-changes.mjs > "$RUNNER_TEMP/report-test-changes.mjs"; then
+            node "$RUNNER_TEMP/report-test-changes.mjs" || true
+          else
+            printf '### Test change report\n\n**Could not compare**: the report script is not on main yet. Nothing is claimed about this change.\n' | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
 
   rust:
     name: Light check (Rust)
