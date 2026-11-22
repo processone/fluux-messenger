@@ -143,6 +143,60 @@ describe('marking a message the server never confirmed', () => {
     expect((await saved())?.deliveryError).toBeUndefined()
   })
 
+  const withPreview = (row: Message) => {
+    const meta = new Map(chatStore.getState().conversationMeta)
+    meta.set(CHAT, { ...meta.get(CHAT)!, lastMessage: row })
+    chatStore.setState({ conversationMeta: meta })
+  }
+
+  it.each([
+    ['a displayed row', () => chatStore.setState({ messages: new Map([[CHAT, [lost({ deliveryError: serverError })]]]) })],
+    ['a sidebar preview', () => withPreview(lost({ deliveryError: serverError }))],
+  ])('saves a server error that only %s holds before settling', async (_copy, display) => {
+    await cache.saveMessages('chat', [lost()])
+    display()
+
+    await expect(mark()).resolves.toBe(true)
+
+    expect((await saved())?.deliveryError).toEqual(serverError)
+  })
+
+  it('saves a sidebar preview with its server error when it is the only copy', async () => {
+    withPreview(lost({ deliveryError: serverError }))
+
+    await expect(mark()).resolves.toBe(true)
+
+    expect((await saved())?.deliveryError).toEqual(serverError)
+  })
+
+  it.each([
+    ['a displayed row', () => chatStore.setState({ messages: new Map([[CHAT, [lost({ deliveryError: serverError })]]]) })],
+    ['a sidebar preview', () => withPreview(lost({ deliveryError: serverError }))],
+  ])('keeps the record when the server error on %s cannot be saved', async (_copy, display) => {
+    await cache.saveMessages('chat', [lost()])
+    display()
+    vi.spyOn(cache, 'updateChatMessageIf').mockResolvedValue('failed')
+
+    await expect(mark()).resolves.toBe(false)
+
+    expect((await saved())?.deliveryError).toBeUndefined()
+  })
+
+  it('does not save a server error that a Retry cleared while the write was queued', async () => {
+    await cache.saveMessages('chat', [lost()])
+    chatStore.setState({ messages: new Map([[CHAT, [lost({ deliveryError: serverError })]]]) })
+    const write = cache.updateChatMessageIf
+    vi.spyOn(cache, 'updateChatMessageIf').mockImplementation(async (...args) => {
+      chatStore.getState().updateMessage(CHAT, 'lost-1', { deliveryError: undefined })
+      return write(...args)
+    })
+
+    await expect(mark()).resolves.toBe(false)
+
+    await vi.waitFor(async () => expect((await saved())?.deliveryError).toBeUndefined())
+    expect(shown()?.deliveryError).toBeUndefined()
+  })
+
   it('settles when no copy of the message exists', async () => {
     await expect(mark()).resolves.toBe(true)
   })
@@ -281,6 +335,71 @@ describe('marking a message the server never confirmed', () => {
       await vi.waitFor(async () => expect((await saved())?.deliveryError).toEqual(serverError))
       expect(shown()?.deliveryError).toEqual(serverError)
     })
+
+    /** The history write of the server's error fails, as a full or unavailable browser store would. */
+    const errorSaveFails = () => vi.spyOn(cache, 'updateMessage').mockRejectedValue(new Error('write failed'))
+
+    it('saves the error itself when the error\'s own write fails while the mark is queued', async () => {
+      await cache.saveMessages('chat', [lost()])
+      await chatStore.getState().loadMessagesFromCache(CHAT)
+      const { reached, release } = pauseHydration()
+      const loading = chatStore.getState().loadMessagesFromCache(CHAT)
+      await reached
+      errorSaveFails()
+      const onSettled = vi.fn()
+
+      report(onSettled)
+      serverRejects()
+      release()
+      await loading
+
+      await vi.waitFor(() => expect(onSettled).toHaveBeenCalledWith(true))
+      expect((await saved())?.deliveryError).toEqual(serverError)
+      expect(shown()?.deliveryError).toEqual(serverError)
+    })
+
+    it('keeps the record when neither the error nor the mark can be saved', async () => {
+      await cache.saveMessages('chat', [lost()])
+      await chatStore.getState().loadMessagesFromCache(CHAT)
+      const { reached, release } = pauseHydration()
+      const loading = chatStore.getState().loadMessagesFromCache(CHAT)
+      await reached
+      errorSaveFails()
+      vi.spyOn(cache, 'updateChatMessageIf').mockResolvedValue('failed')
+      const onSettled = vi.fn()
+
+      report(onSettled)
+      serverRejects()
+      release()
+      await loading
+
+      await vi.waitFor(() => expect(onSettled).toHaveBeenCalledWith(false))
+      expect((await saved())?.deliveryError).toBeUndefined()
+    })
+
+    it('keeps the record when an error arrives during the write and its save fails, and saves it on the next report', async () => {
+      await cache.saveMessages('chat', [lost()])
+      await chatStore.getState().loadMessagesFromCache(CHAT)
+      errorSaveFails()
+      const write = cache.updateChatMessageIf
+      const writing = vi.spyOn(cache, 'updateChatMessageIf').mockImplementationOnce(async (...args) => {
+        serverRejects()
+        return write(...args)
+      })
+      const first = vi.fn()
+
+      report(first)
+
+      await vi.waitFor(() => expect(first).toHaveBeenCalledWith(false))
+      expect((await saved())?.deliveryError).toBeUndefined()
+      writing.mockRestore()
+
+      const second = vi.fn()
+      report(second)
+
+      await vi.waitFor(() => expect(second).toHaveBeenCalledWith(true))
+      expect((await saved())?.deliveryError).toEqual(serverError)
+    })
   })
 
   it('a Retry cancels a mark queued behind a history load', async () => {
@@ -295,7 +414,8 @@ describe('marking a message the server never confirmed', () => {
     release()
     await loading
 
-    await expect(marking).resolves.toBe(true)
+    // History holds neither the mark nor an answer, so this mark reports nothing as settled.
+    await expect(marking).resolves.toBe(false)
     await vi.waitFor(async () => expect((await saved())?.deliveryError).toBeUndefined())
     expect(shown()?.deliveryError).toBeUndefined()
     await chatStore.getState().loadMessagesFromCache(CHAT)

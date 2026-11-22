@@ -125,8 +125,9 @@ its id. Across a reload only each message's id, address and position in the
 session are kept, in session storage: when the session resumes, the server's
 `h` says which of them arrived. When it does not resume, all of them are marked,
 and an archived copy of a message that did arrive removes the mark. A message
-whose saved copy already has an archive id or a server's own error keeps it. Each
-record stays in session storage until the mark is saved in the history, so another
+whose saved copy already has an archive id or a server's own error keeps it, and a
+server's error shown but not yet saved is saved in place of the mark. Each record
+stays in session storage until the history holds the mark or that error, so another
 reload or a failed write reports it again. A Retry cancels a mark still waiting
 and keeps the record until Stream Management holds the new attempt, so a reload
 while it is being prepared still shows the message as not delivered. A Retry that
