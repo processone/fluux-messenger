@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createMockClient, localStorageMock } from './sideEffects.testHelpers'
+import { createMockClient, localStorageMock, sessionPhase } from './sideEffects.testHelpers'
 
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
 
@@ -19,13 +19,13 @@ describe('background session discovery recovery', () => {
   let client: ReturnType<typeof createMockClient>
   let cleanup: (() => void) | undefined
   const active = () => connectionStore.getState().isCatchingUp
-  const inputsReady = () => client._emit('freshSessionInputsReady')
-  const discoverySettled = () => client._emit('freshSessionDiscoverySettled')
+  const inputsReady = () => client._emit('freshSessionInputsReady', sessionPhase.current())
+  const discoverySettled = () => client._emit('freshSessionDiscoverySettled', sessionPhase.current())
   const connect = (inputs = true) => {
     cleanup = setupBackgroundSyncSideEffects(client)
     connectionStore.getState().setStatus('connecting')
     connectionStore.getState().setStatus('online')
-    client._emit('online')
+    client._emit('sessionPhase', sessionPhase.fresh())
     if (inputs) inputsReady()
   }
   beforeEach(() => {
@@ -143,7 +143,7 @@ describe('background session discovery recovery', () => {
     await vi.advanceTimersByTimeAsync(SERVER_DISCOVERY_RETRY_DELAY_MS)
     expect(client.server.fetchServerInfo).toHaveBeenCalledTimes(1)
     if (action === 'offline') connectionStore.getState().setStatus('reconnecting')
-    else if (action === 'resumed') client._emit('resumed')
+    else if (action === 'resumed') client._emit('sessionPhase', sessionPhase.resumed())
     else { cleanup?.(); cleanup = undefined }
     pending.resolve()
     await vi.advanceTimersByTimeAsync(60_000)
@@ -159,7 +159,7 @@ describe('background session discovery recovery', () => {
     await vi.advanceTimersByTimeAsync(SERVER_DISCOVERY_RETRY_DELAY_MS)
     connectionStore.getState().setStatus('reconnecting')
     connectionStore.getState().setStatus('online')
-    client._emit('online'); inputsReady(); discoverySettled()
+    client._emit('sessionPhase', sessionPhase.fresh()); inputsReady(); discoverySettled()
     await vi.advanceTimersByTimeAsync(SERVER_DISCOVERY_RETRY_DELAY_MS)
     expect(client.server.fetchServerInfo).toHaveBeenCalledTimes(2)
     old.resolve()

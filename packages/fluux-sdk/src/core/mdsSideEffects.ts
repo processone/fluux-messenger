@@ -607,7 +607,7 @@ export function setupMdsSideEffects(
 
   // Fresh session: seed from the node, then enable publishing. Publishing stays
   // disabled for the whole async seed so the seeded positions aren't republished.
-  const unsubscribeOnline = client.internal.on('online', () => {
+  function seedFreshSession(): void {
     syncEnabled = false
     sessionEpoch++
     nodeSnapshotAuthoritative = false
@@ -707,7 +707,7 @@ export function setupMdsSideEffects(
       retryLegacyMigrations()
       logInfo('MDS: seeded read positions and enabled publishing')
     })()
-  })
+  }
 
   // Live remote notify: a peer device published a new read position. The
   // storeBindings binding applies it (advancing the read pointer, which fires
@@ -727,7 +727,7 @@ export function setupMdsSideEffects(
   )
 
   // SM resumption: server replays notifications; keep publishing enabled, no reseed.
-  const unsubscribeResumed = client.internal.on('resumed', () => {
+  function resumeSession(): void {
     dirty.open()
     lastConsideredPointerIdentity.clear()
     syncEnabled = true
@@ -737,6 +737,11 @@ export function setupMdsSideEffects(
     considerConversations()
     considerRooms()
     retryLegacyMigrations()
+  }
+
+  const unsubscribePhase = client.internal.on('sessionPhase', (phase) => {
+    if (phase.kind === 'fresh') seedFreshSession()
+    else resumeSession()
   })
 
   // On disconnect: DROP pending work and cancel the timer. The canonical pointer
@@ -773,9 +778,8 @@ export function setupMdsSideEffects(
     unsubscribeRoomsSeedDrain()
     unsubscribeChatEntities()
     unsubscribeRoomEntities()
-    unsubscribeOnline()
+    unsubscribePhase()
     unsubscribeDisplayedSynced()
-    unsubscribeResumed()
     unsubscribeConnection()
     dirty.drop()
     unroutedSeedMarkers.clear()

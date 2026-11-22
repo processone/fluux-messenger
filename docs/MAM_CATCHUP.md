@@ -48,7 +48,6 @@ The same registration derives the public `isCatchingUp` and `catchUpStartedAt`
 aggregate. A producer never registers a separate catch-up handle alongside its
 scope handle. Unknown preparation or a scheduled pass uses `beginUpdate([])`:
 it preserves the public aggregate without creating a local scope or deadline.
-`beginCatchUp()` remains a compatibility alias for that empty-scope registration.
 
 Foreground cache hydration, targeted background catch-up and roster discovery
 register conversation/room work with the appropriate list. Preview-only work

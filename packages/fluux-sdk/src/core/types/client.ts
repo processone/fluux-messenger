@@ -63,6 +63,23 @@ export interface XMPPClientEvents {
 }
 
 /**
+ * What the session lifecycle engine decided about a session that came up.
+ *
+ * - `fresh`: a new session, full setup. `afterResume` is true when the engine
+ *   upgraded a resumed stream to full setup because the local cache was
+ *   cleared; that `fresh` phase follows the `resumed` phase of the same stream.
+ * - `resumed`: the server resumed the stream and replays what was queued.
+ *
+ * `generation` identifies the session: it grows with every phase, so work
+ * started under an older generation can tell it was superseded.
+ *
+ * @internal
+ */
+export type SessionPhase =
+  | { kind: 'fresh'; generation: number; afterResume: boolean }
+  | { kind: 'resumed'; generation: number }
+
+/**
  * Signals a module raises for the client itself, not for consumers.
  *
  * Every one of these exists so a module can report something without reaching
@@ -90,9 +107,12 @@ export interface InternalClientEvents {
   occupantAvatarUpdate: (roomJid: string, nick: string, hash: string, realJid?: string, occupantId?: string, invalidationJid?: string) => void
   /** Roster (contact list) fully loaded from server */
   rosterLoaded: () => void
-  freshSessionInputsReady: () => void
-  /** The current session's server discovery settled; capability data may remain unknown. */
-  freshSessionDiscoverySettled: () => void
+  /** A session phase began; see {@link SessionPhase}. Raised by the session lifecycle engine alone. */
+  sessionPhase: (phase: SessionPhase) => void
+  /** The fresh session of `generation` has its roster and conversation list. */
+  freshSessionInputsReady: (generation: number) => void
+  /** The server discovery of the session of `generation` settled; capability data may remain unknown. */
+  freshSessionDiscoverySettled: (generation: number) => void
   conversationListReady: (conversations: SDKEvents['conversation:list-synced']['conversations']) => void
 }
 

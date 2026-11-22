@@ -34,7 +34,7 @@ import { SDK_VERSION } from '../version'
 import { generateUUID } from '../utils/uuid'
 import { raceDeadline } from '../utils/deadline'
 import { bumpAvatarResumeCount } from '../utils/avatarCache'
-import type { StoreBindings } from './types'
+import type { StoreBindings, SessionPhase } from './types'
 import type { ModuleDependencies } from './modules/BaseModule'
 
 /**
@@ -59,11 +59,13 @@ export interface SessionLifecycleDeps {
   ensureE2EEManager: () => void
   sendStanza: (stanza: Element) => Promise<void>
   emitSDK: ModuleDependencies['emitSDK']
-  /** Emit the SDK `online` event (fresh-session side effects depend on it). */
+  /** Emit the public `online` event, for a resumed stream upgraded to a fresh session. */
   emitOnline: () => void
-  emitFreshSessionInputsReady: () => void
+  /** Tell the side effects which phase the session entered. */
+  emitSessionPhase: (phase: SessionPhase) => void
+  emitFreshSessionInputsReady: (generation: number) => void
   /** Discovery finished, including failure or a response without capability data. */
-  emitFreshSessionDiscoverySettled: () => void
+  emitFreshSessionDiscoverySettled: (generation: number) => void
   emitConversationListReady: (conversations: SyncedConversation[]) => void
   /** Transition the presence machine to connected (`CONNECT`). */
   connectPresence: () => void
@@ -114,7 +116,14 @@ export class SessionLifecycleEngine {
     // Increment session generation to invalidate any in-progress handleFreshSession/handleSmResumption.
     // If the system sleeps during an await below and a reconnect fires, the new call increments
     // this counter again, causing the stale run to bail out at its next checkpoint.
-    const generation = ++this.sessionGeneration
+    let generation = ++this.sessionGeneration
+
+    // The side effects hear the phase before anything else runs, so each starts
+    // from the same decision: resumed or fresh. A resumed stream whose local
+    // cache was cleared is upgraded below, with a second phase.
+    this.deps.emitSessionPhase(isResumption
+      ? { kind: 'resumed', generation }
+      : { kind: 'fresh', generation, afterResume: false })
 
     // Session-scoped discovery caches (e.g. the account PEP probe) must not
     // leak across sessions — server capabilities can change between logins.
@@ -137,7 +146,7 @@ export class SessionLifecycleEngine {
     this.deps.ensureE2EEManager()
 
     if (isResumption) {
-      await this.handleSmResumption(generation, previouslyJoinedRooms, disconnectDurationMs)
+      generation = await this.handleSmResumption(generation, previouslyJoinedRooms, disconnectDurationMs)
     } else {
       await this.handleFreshSession(previouslyJoinedRooms, generation)
     }
@@ -202,13 +211,16 @@ export class SessionLifecycleEngine {
    * Send sequence:
    * 1) Send initial presence
    * 2) Send presence probes to refresh contact status
+   *
+   * Resolves to the generation the session finished under: a resumed stream
+   * whose local cache was cleared is upgraded to a fresh session, which is a
+   * new generation.
    */
   private async handleSmResumption(
-    generation?: number,
+    gen: number,
     previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>,
     disconnectDurationMs?: number
-  ): Promise<void> {
-    const gen = generation ?? this.sessionGeneration
+  ): Promise<number> {
     const stores = this.deps.getStores()
 
     // Check if local cache was cleared (e.g., Ctrl-Shift+R on Linux clears WebKit cache).
@@ -219,15 +231,17 @@ export class SessionLifecycleEngine {
       logInfo('SM resumption: cache marker missing — local storage was cleared, upgrading to full sync')
       stores?.console.addEvent('Cache cleared during SM session — performing full sync', 'sm')
       this.smResumedSession = false
-      // Connection.ts emitted 'resumed'; side effects need 'online' to run their
-      // fresh-session path. Emitting it BEFORE setup makes this the plain fresh
-      // path from here on: side effects reset on 'online' and then see the same
+      // The side effects heard 'resumed'; they need a fresh phase to run their
+      // fresh-session path. Announcing it BEFORE setup makes this the plain
+      // fresh path from here on: side effects reset on it and then see the same
       // setup sequence. A setup failure propagates like any fresh-session
       // failure, so the transport discards the session and no cache marker is
       // written; the next connection upgrades again.
+      const upgraded = ++this.sessionGeneration
+      this.deps.emitSessionPhase({ kind: 'fresh', generation: upgraded, afterResume: true })
       this.deps.emitOnline()
-      await this.handleFreshSession(previouslyJoinedRooms, gen)
-      return
+      await this.handleFreshSession(previouslyJoinedRooms, upgraded)
+      return upgraded
     }
 
     // The resumed stream keeps the rooms the store already holds (see below),
@@ -256,7 +270,7 @@ export class SessionLifecycleEngine {
     }
 
     await this.deps.roster.sendInitialPresence()
-    if (this.isSessionSuperseded(gen, 'SM resumption aborted after sendInitialPresence')) return
+    if (this.isSessionSuperseded(gen, 'SM resumption aborted after sendInitialPresence')) return gen
 
     stores?.console.addEvent('Sending presence probes to refresh contact status', 'sm')
     this.deps.roster.sendPresenceProbes().catch(() => {})
@@ -302,6 +316,7 @@ export class SessionLifecycleEngine {
         logWarn(`SM resumption: bookmark fetch failed, autojoin skipped: ${err instanceof Error ? err.message : String(err)}`)
       })
     }
+    return gen
   }
 
   /**
@@ -356,10 +371,9 @@ export class SessionLifecycleEngine {
    * docs/MAM_CATCHUP.md for the readiness and transport boundary.
    */
   private async handleFreshSession(
-    previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>,
-    generation?: number
+    previouslyJoinedRooms: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }> | undefined,
+    gen: number
   ): Promise<void> {
-    const gen = generation ?? this.sessionGeneration
     const iqTimeout = FRESH_SESSION_IQ_TIMEOUT_MS
 
     // Race the entire setup against a safety timeout to prevent hanging
@@ -435,7 +449,7 @@ export class SessionLifecycleEngine {
       }
     }).catch(() => {}).finally(() => {
       // Preparation can recover an unavailable discovery without treating it as synchronized state.
-      if (!this.isSessionStale(gen)) this.deps.emitFreshSessionDiscoverySettled()
+      if (!this.isSessionStale(gen)) this.deps.emitFreshSessionDiscoverySettled(gen)
     })
     this.deps.push.checkSupport().catch(() => {})
     this.deps.discovery.discoverHttpUploadService().catch(() => {})
@@ -535,7 +549,7 @@ export class SessionLifecycleEngine {
     if (list.status === 'fulfilled' && list.value !== null) {
       this.mergeServerConversations(list.value, revision)
     }
-    this.deps.emitFreshSessionInputsReady()
+    this.deps.emitFreshSessionInputsReady(gen)
     if (roster.status === 'rejected') throw roster.reason
   }
 

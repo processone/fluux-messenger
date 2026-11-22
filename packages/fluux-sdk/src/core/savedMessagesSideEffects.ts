@@ -207,10 +207,10 @@ export function setupSavedMessagesSideEffects(
   }
   const unsubscribeKeyUnlocked = client.subscribe('e2ee:key-unlocked', onKeyStateChange)
   const unsubscribePluginRegistered = client.subscribe('e2ee:plugin-registered', onKeyStateChange)
-  const unsubscribeOnline = client.internal.on('online', () => { void refresh().catch(() => {}) })
-  // A resumed session keeps the stream but not this page's memory: with no list loaded, read it.
-  const unsubscribeResumed = client.internal.on('resumed', () => {
-    void (state().loaded && refreshing === 0 ? flush() : refresh()).catch(() => {})
+  const unsubscribePhase = client.internal.on('sessionPhase', (phase) => {
+    if (phase.kind === 'fresh') void refresh().catch(() => {})
+    // A resumed session keeps the stream but not this page's memory: with no list loaded, read it.
+    else void (state().loaded && refreshing === 0 ? flush() : refresh()).catch(() => {})
   })
   // Notifications apply in arrival order, after what the cache knows of deletions has been learned.
   let notifications: Promise<void> = Promise.resolve()
@@ -240,6 +240,6 @@ export function setupSavedMessagesSideEffects(
   return () => {
     epoch += 1
     flushing = false
-    unsubscribeKeyUnlocked(); unsubscribePluginRegistered(); unsubscribeOnline(); unsubscribeResumed(); unsubscribeNotify(); unsubscribeAccount(); unsubscribeStore()
+    unsubscribeKeyUnlocked(); unsubscribePluginRegistered(); unsubscribePhase(); unsubscribeNotify(); unsubscribeAccount(); unsubscribeStore()
   }
 }

@@ -17,7 +17,7 @@ import { makeReadPointer, type ReadPointer } from '../stores/shared/readPointer'
 import * as messageCache from '../utils/messageCache'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { subscribeDiagnostics, type UnreadRecountVerdict } from '../diagnostics/channel'
-import { localStorageMock } from './sideEffects.testHelpers'
+import { localStorageMock, sessionPhase } from './sideEffects.testHelpers'
 import type { DisplayedMarker } from './modules/Mds'
 import type { Message, Room, RoomMessage } from './types'
 
@@ -143,7 +143,7 @@ async function connectWithNode(markers: DisplayedMarker[]) {
   const client = makeClient(markers)
   connectionStore.setState({ status: 'online', jid: OWN_JID } as never)
   const cleanup = setupMdsSideEffects(client as never)
-  client._emit('online')
+  client._emit('sessionPhase', sessionPhase.fresh())
   await vi.waitFor(() => {
     expect(client.internal.mds.fetchAllDisplayedResult).toHaveBeenCalledTimes(1)
   }, WAIT)
