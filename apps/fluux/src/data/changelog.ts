@@ -80,6 +80,7 @@ export const changelog: ChangelogEntry[] = [
         'Tab and Shift+Tab now stay inside an open window and reach all of its buttons on macOS and other WebKit versions of Fluux, instead of moving to the conversation behind it',
         'Keyboard users can now leave a contact list, such as in Invite to Room, New Message or Forward: Esc closes the list without closing the window or losing your choices, and Tab then moves to the next field or button. The list always shows this hint',
         'Manage Membership and Manage Hats now suggest each person in the room once by their account address, without a device suffix, so adding a member or assigning a hat applies to the person rather than one connection',
+        'A room\'s member list no longer shows someone who is in the room under Offline members when they were added by the address of one of their devices',
         'Find in conversation now highlights the whole word as you type it, in chats and rooms. Messages that stop matching lose their highlight, and closing the find bar clears every highlight',
       ],
     }],

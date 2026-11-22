@@ -459,9 +459,10 @@ export function OccupantPanel({
       onlineNicks.add(occupant.nick)
     }
 
-    // Filter to members not currently online (check by JID, fall back to nick)
+    // Filter to members not currently online (check by bare JID, fall back to nick).
+    // A cached member address can name a device, which may differ from the one online.
     return room.affiliatedMembers.filter(member => {
-      if (onlineJids.has(member.jid)) return false
+      if (onlineJids.has(getBareJid(member.jid))) return false
       if (member.nick && onlineNicks.has(member.nick)) return false
       return true
     }).sort((a, b) => {
