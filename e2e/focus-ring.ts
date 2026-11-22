@@ -66,7 +66,13 @@ for (const mode of ['light', 'dark'] as const) {
     await expect(field).toHaveCSS('outline-offset', '2px')
     await expect(field).toHaveCSS('box-shadow', 'none')
     await capture(page, `${mode}-dialog-field`)
+    // Escape closes the open contact list first, then the window.
+    const suggestions = page.getByTestId('contact-suggestions')
+    await expect(suggestions).toBeVisible()
     await page.keyboard.press('Escape')
+    await expect(suggestions).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await expect(page.locator('[data-modal="true"]')).toHaveCount(0)
     const pane = page.locator('.focus-zone').first()
     await pane.click({ position: { x: 2, y: 2 } })
     await expect(pane).toHaveCSS('outline-style', 'none')
