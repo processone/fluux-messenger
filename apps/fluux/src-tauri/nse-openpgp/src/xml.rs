@@ -325,11 +325,15 @@ fn strip_quoted_lines(text: &str) -> String {
     if remaining.is_empty() { text.trim().to_string() } else { remaining.to_string() }
 }
 fn preview_text(text: &str) -> String {
-    // Sanitize first: removing control characters (tabs) after the quote filter would expose
-    // an indented `\t> x` line to the Swift pass, which filters again.
+    // Quote lines are recognized on the original text, like every other surface. Control
+    // characters then become spaces, never disappear: a removed tab or control byte in front
+    // of `>` would turn a kept line into a quote line for the Swift pass that filters again.
     let text = text.replace("\r\n", "\n").replace('\r', "\n");
-    let clean: String = text.chars().filter(|c| !c.is_control() || *c == '\n').collect();
-    strip_quoted_lines(&clean).chars().take(240).collect()
+    strip_quoted_lines(&text)
+        .chars()
+        .map(|c| if c.is_control() && c != '\n' { ' ' } else { c })
+        .take(240)
+        .collect()
 }
 #[cfg(test)]
 pub(crate) fn ox_body(bytes: &[u8], account: &str) -> Result<String> {
@@ -353,7 +357,8 @@ mod tests {
             let once = preview_text(input);
             assert_eq!(preview_text(&once), once, "{input:?}");
         }
-        assert_eq!(preview_text("> old\n\t> keep\nreply"), "reply");
+        assert_eq!(preview_text("> old\n\t> keep\nreply"), " > keep\nreply");
+        assert_eq!(preview_text("a\tb\u{1}c"), "a b c");
         let once = preview_text("> old\n  > keep\nreply");
         assert_eq!(once, "  > keep\nreply");
         assert_eq!(preview_text(&once), once, "filtering again must not change it");
