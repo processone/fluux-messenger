@@ -24,6 +24,11 @@ beforeEach(async () => {
 
 afterEach(() => vi.restoreAllMocks())
 
+// jsdom drives animation frames from an interval it creates with the global setInterval.
+// A faked setInterval would leave jsdom holding a dead timer after vi.useRealTimers(),
+// and requestAnimationFrame callbacks in every later test of this file would never run.
+const startFakeTimeouts = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
 it.each(['local', 'mam'] as const)('preserves an uncached anonymous reactor in a %s historical preview', async (source) => {
   const roomJid = 'r@conf'
   const nick = 'r@conf/Alice'
@@ -46,7 +51,7 @@ it.each(['local', 'mam'] as const)('preserves an uncached anonymous reactor in a
   try {
     render(<SearchContextView />)
     await screen.findByText(message.body)
-    vi.useFakeTimers()
+    startFakeTimeouts()
     const chip = screen.getByRole('button', { name: '🔥1' })
     fireEvent.mouseEnter(chip.parentElement!)
     act(() => vi.advanceTimersByTime(300))
@@ -93,7 +98,7 @@ it.each(['occupant', 'avatar-cache', 'jid-cache'].flatMap(source => ['stored-nic
       rosterStore.getState().setContacts([{ jid: 'correct@example.test', name: 'Correct', avatar: '/correct.png', presence: 'offline', subscription: 'both' }])
       render(<SearchContextView />)
       await screen.findByText(message.body)
-      vi.useFakeTimers()
+      startFakeTimeouts()
       const chip = screen.getByRole('button', { name: '👍3' })
       fireEvent.mouseEnter(chip.parentElement!)
       act(() => vi.advanceTimersByTime(300))
