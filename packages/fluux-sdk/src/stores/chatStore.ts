@@ -260,8 +260,15 @@ function withResidentMessageUpdate(
   return { ...window, ...draft.commit() }
 }
 
+type DeliveryFacts = Pick<Message, 'stanzaId' | 'deliveryError' | 'isRetracted'>
+
+/** Marks in progress. A newer delivery fact about the message, such as Retry or a server's error, cancels its mark. */
+const queuedDeliveryMarks = new Map<string, object>()
+const deliveryMarkKey = (scope: string | null, conversationId: string, messageId: string) =>
+  JSON.stringify([scope, conversationId, messageId])
+
 /** The server already answered for this row, or it no longer shows: "not confirmed" must not replace that. */
-function deliveryAlreadySettled(row: Pick<Message, 'stanzaId' | 'deliveryError' | 'isRetracted'>): boolean {
+function deliveryAlreadySettled(row: DeliveryFacts): boolean {
   return !!row.stanzaId || !!row.isRetracted || (!!row.deliveryError && !isUnconfirmedDelivery(row.deliveryError))
 }
 
@@ -2310,6 +2317,10 @@ export const chatStore = createStore<ChatState>()(
       },
 
       updateMessage: (conversationId, selectedTarget, updates, retractionReference, correctionActor, onCorrectionMissing, onCorrectionResolved) => {
+        if ('deliveryError' in updates) {
+          const id = typeof selectedTarget === 'string' ? selectedTarget : selectedTarget.id
+          queuedDeliveryMarks.delete(deliveryMarkKey(getStorageScopeJid(), conversationId, id))
+        }
         const applyResidentUpdate = (target: StoredMessage, patch: Partial<StoredMessage>, accountScope: string | null) =>
           set(state => withResidentMessageUpdate(state, conversationId, target, patch, accountScope))
         if (!correctionActor && Object.keys(updates).length === 1 && 'linkPreview' in updates) {
@@ -2522,37 +2533,38 @@ export const chatStore = createStore<ChatState>()(
         const updates = { deliveryError: UNCONFIRMED_DELIVERY_ERROR }
         const scope = captureStorageScope()
         const isCurrent = captureChatCacheRead(conversationId)
-        // The cache reports failures by returning nothing: only reading the row back proves a write.
-        const noCache = () => typeof indexedDB === 'undefined'
-        let saved: StoredMessage | null = null
-        let settled = false
-        await handoffMessageUpdate<StoredMessage>('chat', conversationId, isCurrent, async () => {
-          const state = get()
-          const rows = state.messages.get(conversationId) ?? []
-          const resident = rows[findChatMessageIndex(rows, target)]
-          const preview = state.conversationMeta.get(conversationId)?.lastMessage
-          saved = await messageCache.getMessage('chat', conversationId, messageId, target)
-          const known = [resident, saved, preview && findChatMessageIndex([preview], target) === 0 ? preview : undefined]
-          if (known.some(row => row && deliveryAlreadySettled(row))) { settled = true; return null }
-          if (!saved) {
-            // Nothing durable to mark, unless the cache could not be read at all.
-            const read = noCache() ? null : await messageCache.readMessages('chat', conversationId, { limit: 1, latest: true })
-            settled = read?.status !== 'unavailable'
-          }
-          return saved ?? resident ?? null
-        }, async row => {
-          if (!saved) return
-          await messageCache.updateMessage('chat', conversationId, row.id, updates, row.from, scope.jid, row)
-          const written = await messageCache.getMessage('chat', conversationId, row.id, row)
-          settled = noCache() || isUnconfirmedDelivery(written?.deliveryError)
-        }, row => set(state => {
-          const rows = state.messages.get(conversationId) ?? []
-          const current = rows[findChatMessageIndex(rows, row)]
-          return current && deliveryAlreadySettled(current)
-            ? state
-            : withResidentMessageUpdate(state, conversationId, row, updates, scope.jid)
-        }))
-        return settled
+        const key = deliveryMarkKey(scope.jid, conversationId, messageId)
+        const mark = {}
+        queuedDeliveryMarks.set(key, mark)
+        const canMark = (row: DeliveryFacts) => queuedDeliveryMarks.get(key) === mark && !deliveryAlreadySettled(row)
+        let copy: Message | undefined
+        let outcome: messageCache.GuardedMessageUpdate | undefined
+        try {
+          await handoffMessageUpdate('chat', conversationId, isCurrent, async () => {
+            const state = get()
+            const rows = state.messages.get(conversationId) ?? []
+            const resident = rows[findChatMessageIndex(rows, target)]
+            const last = state.conversationMeta.get(conversationId)?.lastMessage
+            const preview = last && findChatMessageIndex([last], target) === 0 ? last : undefined
+            if ([resident, preview].some(row => row && !canMark(row))) { outcome = 'declined'; return null }
+            copy = resident ?? preview
+            return target
+          }, async () => {
+            // The only remaining copy is saved with its mark, unless it is a message meant to stay out of history.
+            const insert = copy && !isNoLocalStore(copy) ? copy : undefined
+            outcome = await messageCache.updateChatMessageIf(conversationId, messageId, updates, { accepts: canMark, insert }, target, scope.jid)
+          }, () => set(state => {
+            if (outcome === 'declined') return state
+            const rows = state.messages.get(conversationId) ?? []
+            const current = rows[findChatMessageIndex(rows, target)]
+            return current && canMark(current)
+              ? withResidentMessageUpdate(state, conversationId, current, updates, scope.jid)
+              : state
+          }))
+        } finally {
+          if (queuedDeliveryMarks.get(key) === mark) queuedDeliveryMarks.delete(key)
+        }
+        return outcome !== undefined && outcome !== 'failed'
       },
 
       clearMessageStanzaId: (conversationId, stanzaId) => {

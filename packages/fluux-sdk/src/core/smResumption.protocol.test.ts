@@ -480,6 +480,7 @@ describe('stream management resumption against a controlled XMPP server', { time
   ])('a message the server never received, over %s', (_handshake, inline) => {
     const notDelivered: Array<{ conversationId: string; messageId: string }> = []
     const held = new Map<string, string>()
+    let markIsSaved = true
     const SAVED_KEY = 'fluux:session-unconfirmed:alice@example.com'
 
     /** A page: a client with the app's storage, reading back what the previous page saved. */
@@ -488,7 +489,7 @@ describe('stream management resumption against a controlled XMPP server', { time
       bindStoresForTesting(client, createMockStores())
       client.subscribe('chat:message-unconfirmed', ({ conversationId, messageId, onSettled }) => {
         notDelivered.push({ conversationId, messageId })
-        onSettled(true)
+        onSettled(markIsSaved)
       })
       await client.connect({
         jid: 'alice@example.com', password: 'secret', server: `ws://localhost:${server.port}`,
@@ -509,6 +510,7 @@ describe('stream management resumption against a controlled XMPP server', { time
       server.inline = inline
       server.grant = '600'
       notDelivered.length = 0
+      markIsSaved = true
       held.clear()
       vi.stubGlobal('sessionStorage', {
         getItem: (key: string) => held.get(key) ?? null,
@@ -527,6 +529,28 @@ describe('stream management resumption against a controlled XMPP server', { time
       await until(() => notDelivered.length > 0)
 
       expect(notDelivered).toEqual(expected(id))
+    })
+
+    it('is not marked again after a Retry, even when its first mark could not be saved', async () => {
+      await openPage(memoryStorage())
+      markIsSaved = false
+      server.losingMessages = true
+      const id = await client.messages.sendMessage('bob@example.com', 'lost words')
+      server.resumable = false
+      server.drop()
+      await until(() => notDelivered.length === 1)
+      await until(() => client.getStreamManagementState() !== null)
+
+      server.losingMessages = false
+      server.resumable = true
+      await client.messages.resendMessage('bob@example.com', 'lost words', id)
+      await until(() => server.messages.includes(id))
+      server.drop()
+      await sleep(400)
+      await until(() => client.getStreamManagementState() !== null)
+
+      expect(notDelivered).toEqual(expected(id))
+      expect(held.has(SAVED_KEY)).toBe(false)
     })
 
     it('is resent, and not marked, when the same session comes back', async () => {

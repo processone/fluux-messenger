@@ -40,6 +40,8 @@ export interface ModuleDependencies {
    * See createStoreBindings for the event-to-store mapping and update timing.
    */
   emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => void
+  /** A Retry is sending this chat message again: drop what the connection recorded about earlier attempts. */
+  forgetUnconfirmedMessage?: (messageId: string) => void
   /** The underlying xmpp.js client, or null when no session is live. */
   getXmpp: () => Client | null
   /**

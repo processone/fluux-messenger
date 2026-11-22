@@ -116,17 +116,19 @@ address. A session that is not resumed, because the server refused it or enabled
 a new one through Bind 2, starts with an empty queue and count, because the client
 cannot tell what the old session received.
 
-Two cases cannot be resent. After a refused resumption Fluux does not know what
-the server received, and resending could duplicate a message. After a page reload
-the message text is gone, because it is never written to storage. In both cases
-the conversation shows the message as not delivered, with a Retry button that
-reuses its id. Across a reload only each message's id, address and position in
-the session are kept, in session storage: when the session resumes, the server's
+Two cases cannot be resent automatically. After a refused resumption Fluux does
+not know what the server received, and resending could duplicate a message. After
+a page reload the queue of unacknowledged stanzas is gone, because it is never
+written to storage. In both cases the conversation shows the message as not
+delivered, with a Retry button that rebuilds it from the saved history and reuses
+its id. Across a reload only each message's id, address and position in the
+session are kept, in session storage: when the session resumes, the server's
 `h` says which of them arrived. When it does not resume, all of them are marked,
 and an archived copy of a message that did arrive removes the mark. A message
 whose saved copy already has an archive id or a server's own error keeps it. Each
 record stays in session storage until the mark is saved in the history, so another
-reload or a failed write reports it again. A manual disconnect marks nothing.
+reload or a failed write reports it again, and a Retry replaces it and cancels a
+mark still waiting. A manual disconnect marks nothing.
 
 ### Stream Management resumption window
 

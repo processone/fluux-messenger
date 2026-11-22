@@ -2224,13 +2224,18 @@ export class Connection extends BaseModule {
     const messages = this.smPersistence.takeUnconfirmed(jid)
     if (messages.length === 0) return
     this.stores.console.addEvent(`${messages.length} sent message(s) not confirmed by the server`, 'sm')
-    for (const { id, to } of messages) {
+    for (const message of messages) {
       this.deps.emitSDK('chat:message-unconfirmed', {
-        conversationId: to,
-        messageId: id,
-        onSettled: settled => this.smPersistence.settleUnconfirmed(jid, id, settled),
+        conversationId: message.to,
+        messageId: message.id,
+        onSettled: settled => this.smPersistence.settleUnconfirmed(jid, message, settled),
       })
     }
+  }
+
+  /** A Retry is sending this message again, so what an earlier connection recorded about it no longer holds. */
+  forgetUnconfirmedMessage(messageId: string): void {
+    if (this.credentials?.jid) this.smPersistence.forgetUnconfirmed(this.credentials.jid, messageId)
   }
 
   /** Give the state machine the window of the session in the cache. */
@@ -2312,10 +2317,6 @@ export class Connection extends BaseModule {
           this.stores.console.addEvent(`SM stanza send failed: ${stanzaStr}`, 'sm')
         }
         // Note: xmpp.js will fall back to new session and emit 'online'
-      })
-
-      sm.on('ack', (stanza: { name?: string; attrs?: { id?: string } }) => {
-        if (this.credentials?.jid) this.smPersistence.confirmUnconfirmed(this.credentials.jid, stanza)
       })
 
       // SASL2 inline SM resumption: the <resumed> is embedded inside <success> so xmpp.js

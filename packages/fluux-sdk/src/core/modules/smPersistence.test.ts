@@ -371,8 +371,9 @@ describe('SmPersistence', () => {
 
       sm.settleResumed('session-1', 5)
 
-      expect(taken(sm)).toEqual(['lost'])
-      sm.settleUnconfirmed(JID, 'lost', true)
+      const [record] = sm.takeUnconfirmed(JID)
+      expect(record.id).toBe('lost')
+      sm.settleUnconfirmed(JID, record, true)
       expect(sessionStorage.getItem(KEY)).toBeNull()
     })
 
@@ -390,12 +391,13 @@ describe('SmPersistence', () => {
     it('reports a message again on the next connection when its mark could not be saved', () => {
       const sm = reloaded(4, [chat('lost')])
       sm.settleNewSession()
-      expect(taken(sm)).toEqual(['lost'])
+      const [first] = sm.takeUnconfirmed(JID)
 
-      sm.settleUnconfirmed(JID, 'lost', false)
+      sm.settleUnconfirmed(JID, first, false)
 
-      expect(taken(sm)).toEqual(['lost'])
-      sm.settleUnconfirmed(JID, 'lost', true)
+      const [second] = sm.takeUnconfirmed(JID)
+      expect(second.id).toBe('lost')
+      sm.settleUnconfirmed(JID, second, true)
       expect(taken(sm)).toEqual([])
       expect(sessionStorage.getItem(KEY)).toBeNull()
     })
@@ -427,16 +429,27 @@ describe('SmPersistence', () => {
       ])
     })
 
-    it('forgets a message once the server counts a retry of it', () => {
+    it('forgets a message when a Retry sends it again', () => {
       const sm = reloaded(4, [chat('retried')])
       sm.settleNewSession()
-      expect(taken(sm)).toEqual(['retried'])
-      sm.settleUnconfirmed(JID, 'retried', false)
 
-      sm.confirmUnconfirmed(JID, chat('retried').stanza)
+      sm.forgetUnconfirmed(JID, 'retried')
 
       expect(taken(sm)).toEqual([])
       expect(sessionStorage.getItem(KEY)).toBeNull()
+    })
+
+    it('a mark that finishes after a Retry does not settle the newer attempt', () => {
+      const sm = reloaded(4, [chat('retried')])
+      sm.settleNewSession()
+      const [stale] = sm.takeUnconfirmed(JID)
+      sm.forgetUnconfirmed(JID, 'retried')
+      sm.keepUnacknowledged(client('session-2', 0, [chat('retried')]) as never)
+      sm.settleNewSession()
+
+      sm.settleUnconfirmed(JID, stale, true)
+
+      expect(taken(sm)).toEqual(['retried'])
     })
 
     it('reports nothing when the resumed session received everything, and forgets the saved list', () => {

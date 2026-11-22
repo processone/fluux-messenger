@@ -137,8 +137,8 @@ export class SmPersistence {
   private unacknowledged: SmUnacknowledged | null = null
   /** Messages restored from storage, and those now known to be unconfirmed (no `session`). */
   private unconfirmed: SmUnconfirmedMessage[] = []
-  /** Ids handed over by `takeUnconfirmed` whose result has not come back yet. */
-  private reportingUnconfirmed = new Set<string>()
+  /** Records handed over by `takeUnconfirmed` whose result has not come back yet. */
+  private reportingUnconfirmed = new Set<SmUnconfirmedMessage>()
   private deps: SmPersistenceDeps
 
   constructor(deps: SmPersistenceDeps) {
@@ -225,6 +225,7 @@ export class SmPersistence {
    */
   settleResumed(session: string, h: number): void {
     this.unconfirmed = this.unconfirmed.flatMap((message) => {
+      if (message.session === undefined) return [message]
       if (message.session === session && message.sequence! <= h) return []
       return [{ id: message.id, to: message.to }]
     })
@@ -240,7 +241,8 @@ export class SmPersistence {
       ? unconfirmedMessagesIn(this.unacknowledged.id, this.unacknowledged.items, this.unacknowledged.acked)
       : []
     this.unacknowledged = null
-    this.unconfirmed = latestById([...this.unconfirmed, ...kept]).map(({ id, to }) => ({ id, to }))
+    this.unconfirmed = latestById([...this.unconfirmed, ...kept]).map((message) =>
+      message.session === undefined ? message : { id: message.id, to: message.to })
   }
 
   /**
@@ -250,24 +252,23 @@ export class SmPersistence {
    */
   takeUnconfirmed(jid: string): SmUnconfirmedMessage[] {
     const taken = this.unconfirmed.filter(
-      (message) => message.session === undefined && !this.reportingUnconfirmed.has(message.id),
+      (message) => message.session === undefined && !this.reportingUnconfirmed.has(message),
     )
-    for (const { id } of taken) this.reportingUnconfirmed.add(id)
+    for (const message of taken) this.reportingUnconfirmed.add(message)
     this.writeUnconfirmed(jid, this.unconfirmed)
     return taken
   }
 
   /** The result of a handed-over message: settled forgets it, otherwise the next connection reports it again. */
-  settleUnconfirmed(jid: string, id: string, settled: boolean): void {
-    if (!this.reportingUnconfirmed.delete(id) || !settled) return
-    this.unconfirmed = this.unconfirmed.filter((message) => message.id !== id || message.session !== undefined)
+  settleUnconfirmed(jid: string, message: SmUnconfirmedMessage, settled: boolean): void {
+    if (!this.reportingUnconfirmed.delete(message) || !settled) return
+    this.unconfirmed = this.unconfirmed.filter((held) => held !== message)
     this.writeUnconfirmed(jid, this.unconfirmed)
   }
 
-  /** The server counted this stanza. A Retry reuses the id, so an earlier record of the message no longer holds. */
-  confirmUnconfirmed(jid: string, stanza: { name?: string; attrs?: { id?: string } }): void {
-    const id = stanza.attrs?.id
-    if (stanza.name !== 'message' || !id || !this.unconfirmed.some((message) => message.id === id)) return
+  /** A Retry sends the message again: the stream tracks that attempt, so earlier records of it no longer hold. */
+  forgetUnconfirmed(jid: string, id: string): void {
+    if (!this.unconfirmed.some((message) => message.id === id)) return
     this.unconfirmed = this.unconfirmed.filter((message) => message.id !== id)
     this.writeUnconfirmed(jid, this.unconfirmed)
   }

@@ -1166,6 +1166,8 @@ export class Chat extends BaseModule {
     wasEncrypted?: boolean,
   ): Promise<void> {
     const recipient = getBareJid(to)
+    // Before the first await, so no reconnect between the caller's error clear and this send can mark it again.
+    this.deps.forgetUnconfirmedMessage?.(messageId)
 
     let fullBody = body
     // Reconstruct OOB fallback if attachment present
