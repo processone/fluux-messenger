@@ -103,9 +103,9 @@ export function buildMessageKeySet<T>(
   return keySet
 }
 
-type MessageIdentityIndex = ReadonlyMap<string, readonly number[]>
+export type MessageIdentityIndex = ReadonlyMap<string, readonly number[]>
 
-function buildMessageIdentityIndex<T>(
+export function buildMessageIdentityIndex<T>(
   messages: readonly T[],
   getKeys: (message: T) => string[]
 ): MessageIdentityIndex {
@@ -118,6 +118,34 @@ function buildMessageIdentityIndex<T>(
     }
   })
   return positionsByKey
+}
+
+/**
+ * The first position after `after` (-1 to start) whose message shares any of
+ * `keys`, or -1. Walking this repeatedly visits exactly the messages a linear
+ * scan would, in scan order, while letting the caller change the keys between
+ * steps (a row that gains an archive id from one match). Positions in the index
+ * are ascending, so each key costs a binary search.
+ */
+export function nextPositionSharingIdentity(
+  index: MessageIdentityIndex,
+  keys: readonly string[],
+  after: number
+): number {
+  let best = -1
+  for (const key of keys) {
+    const positions = index.get(key)
+    if (!positions) continue
+    let low = 0
+    let high = positions.length
+    while (low < high) {
+      const mid = (low + high) >>> 1
+      if (positions[mid] > after) high = mid
+      else low = mid + 1
+    }
+    if (low < positions.length && (best === -1 || positions[low] < best)) best = positions[low]
+  }
+  return best
 }
 
 export function findMessagesSharingIdentity<T>(
@@ -275,9 +303,12 @@ export function sortMessagesByTimestamp<T extends TimestampedMessage>(
   messages: T[],
   kind: 'chat' | 'room'
 ): T[] {
-  return [...messages].sort((a, b) =>
-    compareExact(exactPosition(a, kind), exactPosition(b, kind))
-  )
+  // Build each message's position once. Re-deriving it inside the comparator
+  // rebuilt the room row key (a JSON string) on every one of the n log n
+  // comparisons. Array#sort is stable, so equal positions keep input order.
+  const keyed = messages.map((message) => ({ message, position: exactPosition(message, kind) }))
+  keyed.sort((a, b) => compareExact(a.position, b.position))
+  return keyed.map((entry) => entry.message)
 }
 
 /**

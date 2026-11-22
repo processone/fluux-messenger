@@ -2788,6 +2788,8 @@ export const roomStore = createStore<RoomState>()(
       const newMessages = [...resident]
       const updatedMessage = { ...resident[targetIdx], stanzaId: undefined }
       newMessages[targetIdx] = updatedMessage
+      // The archive id is part of the same-millisecond order key; keep the window in cache order.
+      const ordered = sortMessagesByTimestamp(newMessages, 'room')
 
       void messageCache.updateRoomMessage(
         roomJid,
@@ -2798,7 +2800,7 @@ export const roomStore = createStore<RoomState>()(
         resident[targetIdx],
       )
 
-      const written = withRoomMessageWindow(state, roomJid, newMessages)
+      const written = withRoomMessageWindow(state, roomJid, ordered)
       if (!written) return state
 
       const result: Partial<RoomState> = { ...written }

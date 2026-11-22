@@ -17,6 +17,7 @@
  */
 
 import { measured } from '../../utils/measure'
+import { compareExact, exactPosition } from './readState'
 import type { ArchiveIdentifiableMessage, TimestampedMessage } from './messageArrayUtils'
 import {
   sortMessagesByTimestamp,
@@ -130,7 +131,8 @@ export function appendLive<T extends TimelineMessage>(
       config.mergeIdentity,
     )
     if (patched.length === 0) return { kind: 'duplicate-unchanged' }
-    return { kind: 'duplicate-backfilled', messages: backfilled, patched }
+    // A backfilled archive id can change a row's same-millisecond position, so restore cache order.
+    return { kind: 'duplicate-backfilled', messages: sortMessagesByTimestamp(backfilled, config.kind), patched }
   }
 
   if (!atLiveEdge) return { kind: 'gated' }
@@ -145,9 +147,20 @@ export function appendLive<T extends TimelineMessage>(
   // under-count, the unrecoverable direction. `sortMessagesByTimestamp` is the
   // SAME comparator `loadOlderSlice`/`loadNewerSlice`/`latestSlice` already use
   // here, so all resident-array construction paths agree with the cache walk.
-  const sorted = sortMessagesByTimestamp([...messages, incoming], config.kind)
+  //
+  // The resident window is kept in that order, so an arrival that sorts at or
+  // after the newest resident row (the common live case) is already in place:
+  // the sort is stable and equal positions keep arrival order. Only an arrival
+  // older than the newest row (a delayed or out-of-order delivery) needs it.
+  const newest = messages[messages.length - 1]
+  const inPlace = newest === undefined ||
+    compareExact(exactPosition(newest, config.kind), exactPosition(incoming, config.kind)) <= 0
+  const sorted = inPlace
+    ? [...messages, incoming]
+    : sortMessagesByTimestamp([...messages, incoming], config.kind)
   const trimmed = trimWindow(sorted, config)
-  const residentIndex = trimmed.indexOf(incoming)
+  // An in-place arrival is the last row when kept, so search from the end.
+  const residentIndex = inPlace ? trimmed.lastIndexOf(incoming) : trimmed.indexOf(incoming)
   if (observation && residentIndex >= 0) {
     observation.placement =
       residentIndex === trimmed.length - 1 ? 'live-edge' : 'interior'
@@ -207,7 +220,7 @@ export function mergeArchive<T extends TimelineMessage>(
     // Backfill server stanzaIds from archived copies onto stanzaId-less resident
     // messages (e.g. own outgoing) BEFORE merging, so the live copy gains a valid
     // backward-pagination cursor. The archived copy itself still dedups away.
-    const { messages: existing, patched } = backfillArchiveIds(
+    const { messages: backfilledExisting, patched } = backfillArchiveIds(
       messages,
       incoming,
       config.getKeys,
@@ -215,6 +228,10 @@ export function mergeArchive<T extends TimelineMessage>(
       config.getMergeCandidates,
       config.mergeIdentity,
     )
+
+    // A backfill can move a row among its same-millisecond neighbours (the archive id is part
+    // of the room order key), so restore cache order before anything relies on it.
+    const existing = patched.length > 0 ? sortMessagesByTimestamp(backfilledExisting, config.kind) : backfilledExisting
 
     // Fetch-latest pages land at the LIVE edge and may sit entirely ABOVE the
     // resident window (bail after an incomplete forward catch-up). The backward

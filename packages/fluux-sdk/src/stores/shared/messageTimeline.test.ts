@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { appendLive, mergeArchive, loadOlderSlice, loadNewerSlice, latestSlice, aroundSlice, catchUpSeed, type TimelineConfig } from './messageTimeline'
 import { mergeableOccupantCandidates } from '../../utils/messageIdentity'
+import { sortMessagesByTimestamp, trimMessages } from './messageArrayUtils'
 
 /**
  * The resident-window timeline machine shared by chatStore and roomStore.
@@ -61,6 +62,65 @@ describe('messageTimeline', () => {
       if (result.kind === 'appended') {
         expect(result.messages.map((m) => m.id)).toEqual(['m2', 'm3', 'm4'])
       }
+    })
+
+    it.each(['chat', 'room'] as const)('places a %s arrival exactly where a full sort would, including ties and late deliveries', (kind) => {
+      let seed = 0x5eed
+      const random = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296
+      const pick = <T,>(values: readonly T[]) => values[Math.floor(random() * values.length)]
+      const randomMessage = (id: string, ms: number) => msg(id, new Date(ms).toISOString(), {
+        from: pick(['a@room/alice', 'a@room/bob', 'a@room/carol']),
+        ...(random() < 0.5 ? { occupantId: pick(['o1', 'o2']) } : {}),
+      })
+      const bounded = { ...cfg, kind, windowSize: 40 }
+      for (let round = 0; round < 200; round++) {
+        const resident = sortMessagesByTimestamp(
+          Array.from({ length: Math.floor(random() * 60) }, (_, i) => randomMessage(`r${round}-${i}`, 1_000 + Math.floor(random() * 20))),
+          kind
+        )
+        // Older, tied with the newest, and newer arrivals all occur.
+        const incoming = randomMessage(`in${round}`, 1_000 + Math.floor(random() * 24))
+        const observation: { placement?: 'live-edge' | 'interior' } = {}
+        const result = appendLive(resident, incoming, true, bounded, observation)
+        const expected = trimMessages(sortMessagesByTimestamp([...resident, incoming], kind), bounded.windowSize)
+
+        expect(result.kind).toBe('appended')
+        if (result.kind !== 'appended') continue
+        expect(result.messages).toHaveLength(expected.length)
+        result.messages.forEach((message, index) => expect(message).toBe(expected[index]))
+        const index = expected.indexOf(incoming)
+        if (index >= 0) expect(observation.placement).toBe(index === expected.length - 1 ? 'live-edge' : 'interior')
+      }
+    })
+
+    it('restores cache order when an archive-id backfill moves a same-millisecond row, before the next arrival', () => {
+      // Two distinct rows share sender, id and millisecond, so the archive id decides their order.
+      const identity = (m: TestMsg): string[] => [
+        ...(m.stanzaId ? [`stanzaId:${m.stanzaId}`] : []),
+        ...(m.originId ? [`originId:${m.originId}`] : []),
+      ]
+      const room = {
+        getKeys: identity,
+        sameMessage: (a: TestMsg, b: TestMsg) => identity(a).some((key) => identity(b).includes(key)),
+        getMergeCandidates: (_incoming: TestMsg, candidates: readonly TestMsg[]) => [...candidates],
+        windowSize: 10,
+        kind: 'room' as const,
+      }
+      const at = '2024-01-15T10:00:00Z'
+      const early = msg('m', at, { stanzaId: 'b-9' })
+      const unconfirmed = msg('m', at, { originId: 'o-1' })
+      const resident = [unconfirmed, early]
+
+      const duplicate = appendLive(resident, msg('copy', at, { originId: 'o-1', stanzaId: 'c-1' }), true, room)
+      expect(duplicate.kind).toBe('duplicate-backfilled')
+      if (duplicate.kind !== 'duplicate-backfilled') return
+      expect(duplicate.messages.map((m) => m.stanzaId)).toEqual(['b-9', 'c-1'])
+
+      const later = appendLive(duplicate.messages, msg('later', '2024-01-15T10:01:00Z'), true, room)
+      expect(later.kind === 'appended' && later.messages.map((m) => m.id)).toEqual(['m', 'm', 'later'])
+
+      const merged = mergeArchive(resident, [msg('copy', at, { originId: 'o-1', stanzaId: 'c-1' })], 'forward', room)
+      expect(merged.resident.map((m) => m.stanzaId)).toEqual(['b-9', 'c-1'])
     })
 
     it('gates the append when the window slid off the live edge', () => {

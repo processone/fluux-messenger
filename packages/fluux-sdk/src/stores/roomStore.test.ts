@@ -2048,6 +2048,20 @@ describe('roomStore', () => {
       )
     })
 
+    it('keeps same-millisecond rows in cache order once a stanzaId is cleared, so a later arrival lands after them', () => {
+      roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
+      const at = new Date(5_000)
+      const base = { ...createMessage('m', ROOM, 'alice', '', false, at) }
+      const first = { ...base, body: 'first', stanzaId: 'a-1' }
+      const second = { ...base, body: 'second', stanzaId: 'b-2' }
+      roomStore.setState({ messages: new Map([[ROOM, [first, second]]]) })
+
+      roomStore.getState().clearMessageStanzaId(ROOM, 'b-2')
+      roomStore.getState().addMessage(ROOM, { ...createMessage('later', ROOM, 'alice', 'later', false, new Date(6_000)) })
+
+      expect(roomWindow(ROOM).map(message => message.body)).toEqual(['second', 'first', 'later'])
+    })
+
     it('is a no-op when no message carries the given stanzaId', () => {
       roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
       const msg = { ...createMessage('m1', ROOM, 'alice', 'real'), stanzaId: 'archive-1' }
