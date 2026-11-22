@@ -56,9 +56,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          # The test change report below compares with the merge base on main.
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -89,22 +86,49 @@ jobs:
       - name: App unit tests
         run: npm run test:run --workspace=@xmpp/fluux
 
-      # Informational: lists rewritten test expectations, removed protection and
-      # growth of files over 2,000 lines in the job summary. It never fails the
-      # run (continue-on-error, and the script always exits 0). The script comes
-      # from main, so a change cannot edit its own report; until it exists on
-      # main the step says it could not compare.
+  # Informational: lists rewritten test expectations, removed protection and
+  # growth of files over 2,000 lines in the job summary. It is its own job and
+  # nothing needs it, so it can never add time to the light check. Every step
+  # inside is time-boxed and failure-tolerant, the job itself ends green, and
+  # its own 25-minute limit sits above the 15 minutes of work it allows itself.
+  # The script comes from main, so a change cannot edit its own report; until
+  # it exists on main the report says it could not compare.
+  report:
+    name: Test change report (informational)
+    needs: changes
+    if: needs.changes.outputs.js == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The report compares with the merge base on main.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: npm
+
       - name: Test change report
-        timeout-minutes: 3
+        timeout-minutes: 15
         continue-on-error: true
         shell: bash
         run: |
-          if git fetch --no-tags origin main:refs/remotes/origin/main \
-            && git show origin/main:scripts/report-test-changes.mjs > "$RUNNER_TEMP/report-test-changes.mjs"; then
-            node "$RUNNER_TEMP/report-test-changes.mjs" || true
-          else
-            printf '### Test change report\n\n**Could not compare**: the report script is not on main yet. Nothing is claimed about this change.\n' | tee -a "$GITHUB_STEP_SUMMARY"
-          fi
+          could_not() {
+            printf '### Test change report\n\n**Could not compare**: %s. Nothing is claimed about this change.\n' "$1" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
+          git fetch --no-tags origin main:refs/remotes/origin/main \
+            && git show origin/main:scripts/report-test-changes.mjs > "$RUNNER_TEMP/report-test-changes.mjs" \
+            || could_not "the report script is not on main yet"
+          timeout 240 npm ci || could_not "installing dependencies did not finish"
+          timeout 360 npm run build || could_not "the build did not finish"
+          timeout 120 npm run build --workspace=@fluux/omemo || could_not "the OMEMO build did not finish"
+          timeout 180 node "$RUNNER_TEMP/report-test-changes.mjs" || could_not "the report did not finish"
 
   rust:
     name: Light check (Rust)
