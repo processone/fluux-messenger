@@ -177,7 +177,7 @@
         "manage": "Διαχείριση",
         "searchContacts": "Αναζήτηση επαφών...",
         "addMoreContacts": "Προσθήκη περισσότερων επαφών...",
-        "keyboardHint": "Tab/↑↓ για πλοήγηση, Enter για επιλογή",
+        "keyboardHint": "Tab/↑↓ για πλοήγηση, Enter για επιλογή, Esc για κλείσιμο",
         "noContactsFound": "Δεν βρέθηκαν επαφές",
         "pressEnterToAdd": "Πατήστε Enter για προσθήκη",
         "blockUser": "Αποκλεισμός χρήστη",

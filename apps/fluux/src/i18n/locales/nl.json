@@ -176,7 +176,7 @@
         "manage": "Beheren",
         "searchContacts": "Contacten zoeken...",
         "addMoreContacts": "Meer contacten toevoegen...",
-        "keyboardHint": "Tab/↑↓ om te navigeren, Enter om te selecteren",
+        "keyboardHint": "Tab/↑↓ om te navigeren, Enter om te selecteren, Esc om te sluiten",
         "noContactsFound": "Geen contacten gevonden",
         "pressEnterToAdd": "Druk op Enter om toe te voegen",
         "blockUser": "Gebruiker blokkeren",

@@ -178,7 +178,7 @@
         "manage": "Halda",
         "searchContacts": "Otsi kontakte...",
         "addMoreContacts": "Lisa rohkem kontakte...",
-        "keyboardHint": "Tab/↑↓ navigeerimiseks, Enter valimiseks",
+        "keyboardHint": "Tab/↑↓ navigeerimiseks, Enter valimiseks, Esc sulgemiseks",
         "noContactsFound": "Kontakte ei leitud",
         "pressEnterToAdd": "Vajuta Enter lisamiseks",
         "blockUser": "Blokeeri kasutaja",

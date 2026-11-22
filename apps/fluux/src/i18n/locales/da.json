@@ -176,7 +176,7 @@
         "manage": "Administrer",
         "searchContacts": "Søg kontakter...",
         "addMoreContacts": "Tilføj flere kontakter...",
-        "keyboardHint": "Tab/↑↓ for at navigere, Enter for at vælge",
+        "keyboardHint": "Tab/↑↓ for at navigere, Enter for at vælge, Esc for at lukke",
         "noContactsFound": "Ingen kontakter fundet",
         "pressEnterToAdd": "Tryk Enter for at tilføje",
         "blockUser": "Blokér bruger",
