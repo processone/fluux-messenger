@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto'
 import { clearAllMessages, saveMessages } from '@fluux/sdk/cache'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
-import { createRef, type ComponentProps } from 'react'
+import type { ComponentProps } from 'react'
 import { roomStore } from '@fluux/sdk/stores'
 import { useSearch, type RoomMessage, type SearchResult } from '@fluux/sdk'
 import { fireEvent } from '@testing-library/react'
@@ -14,7 +14,7 @@ vi.mock('./conversation', async importOriginal => {
   const actual = await importOriginal<typeof import('./conversation')>()
   return {
     ...actual,
-    MessageList: ({ messages, renderMessage }: { messages: RoomMessage[]; renderMessage: (message: RoomMessage, index: number, group: RoomMessage[], marker: boolean, onMediaLoad: () => void) => React.ReactNode }) =>
+    MessageList: ({ timeline: { messages }, renderMessage }: { timeline: { messages: RoomMessage[] }; renderMessage: (message: RoomMessage, index: number, group: RoomMessage[], marker: boolean, onMediaLoad: () => void) => React.ReactNode }) =>
       <div>{messages.map((message, index) => <article key={messageRowId(message)} data-testid={`row-${message.id}`} data-archive-id={message.stanzaId}>
         {renderMessage(message, index, messages, false, () => {})}
       </article>)}</div>,
@@ -32,7 +32,6 @@ const base: RoomMessage = roomMessageFixture({
 const props: Omit<ComponentProps<typeof SearchContextMessageList>, 'messages'> = {
   conversationId: 'preview', messageConversationId: roomJid, isRoom: true,
   highlightedMessage: base, onHighlightedClick: vi.fn(), contactsByJid: new Map(),
-  scrollerRef: createRef(), isAtBottomRef: { current: false },
 }
 
 describe('Spam in search context messages', () => {

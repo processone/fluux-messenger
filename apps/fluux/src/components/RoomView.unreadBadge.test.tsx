@@ -59,8 +59,7 @@ const frozenRoom = {
 } as unknown as Room
 
 const ROOM_PROPS = {
-  scrollerRef: { current: null },
-  isAtBottomRef: { current: true },
+  listHandleRef: { current: null },
   room: frozenRoom,
   contactsByJid: new Map(),
   ownAvatar: null,

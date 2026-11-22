@@ -16,10 +16,11 @@
  * Same harness as MessageList.pinBottomRepaint.test.tsx: mocked virtualizer,
  * fake rAF queue, instrumented scroller geometry.
  */
-import React from 'react'
+import React, { createRef, type RefObject } from 'react'
+import type { MessageListHandle } from './messageListBoundary'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act } from '@testing-library/react'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import type { BaseMessage } from '@fluux/sdk'
 import { appliedWrite } from './scrollWriteTestDoubles'
 
@@ -119,16 +120,16 @@ describe('MessageList — live-edge executor cost control', () => {
   const sent: BaseMessage = { id: 'sent-1', stanzaId: undefined, originId: undefined, from: 'me@example.com', body: 'hi', timestamp: new Date(2024, 0, 1, 13, 0), isOutgoing: true, type: 'chat' }
 
   function renderPinned() {
-    const isAtBottomRef = { current: true }
+    const handleRef = createRef<MessageListHandle>()
     const view = render(
-      <MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} {...props} />,
+      <MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" handleRef={handleRef} {...props} />,
     )
     const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
     instrumentScroller(scroller)
     flush(70) // settle the entry pin completely
     scrollToEndCalls.count = 0
     repaint.overflowSets = []
-    return { ...view, isAtBottomRef }
+    return { ...view, handleRef }
   }
 
   // A link-preview (OGP) fastening lands SECONDS after its message, as an in-place update: same
@@ -141,9 +142,9 @@ describe('MessageList — live-edge executor cost control', () => {
   }
   const preview = { url: 'https://example.com', title: 'Example', description: 'An example page' }
 
-  function renderWithLinkMessage(isAtBottomRef: { current: boolean }) {
+  function renderWithLinkMessage(handleRef: RefObject<MessageListHandle | null>) {
     const view = render(
-      <MessageList messages={[...makeMessages(50), linked]} conversationId="conv-fastening" isAtBottomRef={isAtBottomRef} {...props} />,
+      <MessageList messages={[...makeMessages(50), linked]} conversationId="conv-fastening" handleRef={handleRef} {...props} />,
     )
     const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
     instrumentScroller(scroller)
@@ -159,9 +160,9 @@ describe('MessageList — live-edge executor cost control', () => {
     return { view, scroller }
   }
 
-  const fastenPreview = (view: { rerender: (ui: React.ReactElement) => void }, isAtBottomRef: { current: boolean }) =>
+  const fastenPreview = (view: { rerender: (ui: React.ReactElement) => void }, handleRef: RefObject<MessageListHandle | null>) =>
     view.rerender(
-      <MessageList messages={[...makeMessages(50), { ...linked, linkPreview: preview }]} conversationId="conv-fastening" isAtBottomRef={isAtBottomRef} {...props} />,
+      <MessageList messages={[...makeMessages(50), { ...linked, linkPreview: preview }]} conversationId="conv-fastening" handleRef={handleRef} {...props} />,
     )
 
   // The card's height is in the scroller AS SOON AS the commit that mounts it lands: the row is
@@ -175,11 +176,11 @@ describe('MessageList — live-edge executor cost control', () => {
   const PREVIEW_CARD_PX = 260
 
   it('re-pins the bottom when a late link-preview fastening grows a resident row', () => {
-    const isAtBottomRef = { current: true }
-    const { view, scroller } = renderWithLinkMessage(isAtBottomRef)
+    const handleRef = createRef<MessageListHandle>()
+    const { view, scroller } = renderWithLinkMessage(handleRef)
 
     geo.scrollHeight += PREVIEW_CARD_PX // the card is in the layout the moment it commits
-    fastenPreview(view, isAtBottomRef)
+    fastenPreview(view, handleRef)
     flush(10)
 
     expect(scrollToEndCalls.count).toBeGreaterThan(0)
@@ -187,12 +188,12 @@ describe('MessageList — live-edge executor cost control', () => {
   })
 
   it('re-pins late row growth after input pauses follow-live at the bottom', () => {
-    const isAtBottomRef = { current: true }
-    const { view, scroller } = renderWithLinkMessage(isAtBottomRef)
+    const handleRef = createRef<MessageListHandle>()
+    const { view, scroller } = renderWithLinkMessage(handleRef)
 
     act(() => { scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true })) })
     geo.scrollHeight += PREVIEW_CARD_PX
-    fastenPreview(view, isAtBottomRef)
+    fastenPreview(view, handleRef)
     flush(10)
 
     expect(scrollToEndCalls.count).toBeGreaterThan(0)
@@ -200,10 +201,10 @@ describe('MessageList — live-edge executor cost control', () => {
   })
 
   it('re-pins when a virtual row reports growth after the original reaction pin has settled', () => {
-    const isAtBottomRef = { current: true }
+    const handleRef = createRef<MessageListHandle>()
     const messages = makeMessages(50)
     const view = render(
-      <MessageList messages={messages} conversationId="conv-late-reaction-measure" isAtBottomRef={isAtBottomRef} {...props} />,
+      <MessageList messages={messages} conversationId="conv-late-reaction-measure" handleRef={handleRef} {...props} />,
     )
     const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
     instrumentScroller(scroller)
@@ -220,7 +221,7 @@ describe('MessageList — live-edge executor cost control', () => {
             : message,
         )}
         conversationId="conv-late-reaction-measure"
-        isAtBottomRef={isAtBottomRef}
+        handleRef={handleRef}
         {...props}
       />,
     )
@@ -239,10 +240,10 @@ describe('MessageList — live-edge executor cost control', () => {
   })
 
   it('does not re-pin late measured reaction growth for a reader in history', () => {
-    const isAtBottomRef = { current: true }
+    const handleRef = createRef<MessageListHandle>()
     const messages = makeMessages(50)
     const view = render(
-      <MessageList messages={messages} conversationId="conv-late-reaction-history" isAtBottomRef={isAtBottomRef} {...props} />,
+      <MessageList messages={messages} conversationId="conv-late-reaction-history" handleRef={handleRef} {...props} />,
     )
     const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
     instrumentScroller(scroller)
@@ -262,7 +263,7 @@ describe('MessageList — live-edge executor cost control', () => {
             : message,
         )}
         conversationId="conv-late-reaction-history"
-        isAtBottomRef={isAtBottomRef}
+        handleRef={handleRef}
         {...props}
       />,
     )
@@ -278,10 +279,10 @@ describe('MessageList — live-edge executor cost control', () => {
   })
 
   it('waits for post-measurement geometry before deciding whether to re-pin', () => {
-    const isAtBottomRef = { current: true }
+    const handleRef = createRef<MessageListHandle>()
     const messages = makeMessages(50)
     const view = render(
-      <MessageList messages={messages} conversationId="conv-reaction-threshold" isAtBottomRef={isAtBottomRef} {...props} />,
+      <MessageList messages={messages} conversationId="conv-reaction-threshold" handleRef={handleRef} {...props} />,
     )
     const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
     instrumentScroller(scroller)
@@ -300,7 +301,7 @@ describe('MessageList — live-edge executor cost control', () => {
             : message,
         )}
         conversationId="conv-reaction-threshold"
-        isAtBottomRef={isAtBottomRef}
+        handleRef={handleRef}
         {...props}
       />,
     )
@@ -317,12 +318,12 @@ describe('MessageList — live-edge executor cost control', () => {
   })
 
   it('does not yank a scrolled-up reader down when a link-preview fastening lands', () => {
-    const isAtBottomRef = { current: true } // deliberately left latched true — geometry must decide
-    const { view, scroller } = renderWithLinkMessage(isAtBottomRef)
+    const handleRef = createRef<MessageListHandle>()
+    const { view, scroller } = renderWithLinkMessage(handleRef)
 
     scroller.scrollTop = 400 // the reader scrolled up into history
     geo.scrollHeight += PREVIEW_CARD_PX
-    fastenPreview(view, isAtBottomRef)
+    fastenPreview(view, handleRef)
     flush(10)
 
     expect(scrollToEndCalls.count).toBe(0)
@@ -330,10 +331,10 @@ describe('MessageList — live-edge executor cost control', () => {
   })
 
   it('stops the re-assert loop early once geometry is stable (convergence exit)', () => {
-    const { rerender, isAtBottomRef } = renderPinned()
+    const { rerender, handleRef } = renderPinned()
 
     geo.scrollHeight = 2040 // the sent row grows the content
-    rerender(<MessageList messages={[...makeMessages(50), sent]} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} {...props} />)
+    rerender(<MessageList messages={[...makeMessages(50), sent]} conversationId="conv-pin-behavior" handleRef={handleRef} {...props} />)
     flush(2)
     // The pin loop is alive right after the send…
     expect(rafQueue.length).toBeGreaterThan(0)
@@ -345,8 +346,8 @@ describe('MessageList — live-edge executor cost control', () => {
   })
 
   it('skips the forced repaint when the pin did not move scrollTop', () => {
-    const { isAtBottomRef } = renderPinned()
-    expect(isAtBottomRef.current).toBe(true)
+    const { handleRef } = renderPinned()
+    expect(handleRef.current?.isAtBottom()).toBe(true)
 
     // A viewport resize at unchanged geometry re-pins, but the scroll position is
     // already exactly at the bottom: no programmatic scroll happened, so the
@@ -368,18 +369,18 @@ describe('MessageList — live-edge executor cost control', () => {
   // growing the last row) — see the next test for the invariant that still matters: a reader
   // scrolled up must never be yanked back down.
   it('gently nudges to reveal the footer clearance when typing starts at the bottom, not when it stops', () => {
-    const { rerender, isAtBottomRef } = renderPinned()
+    const { rerender, handleRef } = renderPinned()
     flush(30) // quiesce any residual pin activity
     expect(rafQueue.length).toBe(0)
     const baseline = scrollToEndCalls.count
 
     // Typing starts while genuinely at the bottom → nudges once to reveal the grown footer.
-    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} typingUsers={['alice']} {...props} />)
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" handleRef={handleRef} typingUsers={['alice']} {...props} />)
     flush(5)
     expect(scrollToEndCalls.count).toBe(baseline + 1)
 
     // Typing stops → the footer shrinks; the browser clamps scrollTop on its own, no extra nudge.
-    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} typingUsers={[]} {...props} />)
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" handleRef={handleRef} typingUsers={[]} {...props} />)
     flush(5)
     expect(scrollToEndCalls.count).toBe(baseline + 1)
   })
@@ -390,9 +391,9 @@ describe('MessageList — live-edge executor cost control', () => {
   // the pinBottomActiveRef guard in handleScroll that transient flipped the FAB visible — the reported
   // intermittent flash on opening a conversation at the bottom.
   it('keeps the scroll-to-bottom FAB hidden when a growth-driven scroll fires during the entry pin (open-at-bottom flash race)', () => {
-    const isAtBottomRef = { current: true }
+    const handleRef = createRef<MessageListHandle>()
     const view = render(
-      <MessageList messages={makeMessages(50)} conversationId="conv-fab-race" isAtBottomRef={isAtBottomRef} {...props} />,
+      <MessageList messages={makeMessages(50)} conversationId="conv-fab-race" handleRef={handleRef} {...props} />,
     )
     const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
     instrumentScroller(scroller)
@@ -419,23 +420,22 @@ describe('MessageList — live-edge executor cost control', () => {
   })
 
   it('does not yank a scrolled-up viewport back to the bottom when typing toggles (issue #918)', () => {
-    const { rerender, isAtBottomRef } = renderPinned()
+    const { rerender, handleRef } = renderPinned()
     flush(30) // quiesce any residual pin activity
     const scroller = document.querySelector('[data-message-list]') as HTMLElement
 
     // Reproduce the reported state faithfully: the user has scrolled UP into history, but the
     // follow flag is still latched `true`. That latch was the real bug — the former pin loop's
-    // user-intent bail called finish() WITHOUT re-deriving isAtBottomRef from geometry, so after a
+    // user-intent bail called finish() WITHOUT re-deriving handleRef from geometry, so after a
     // wheel-up mid-pin the flag stays true. With the old code (typing indicator inside the scroll
     // content, typingUsersCount driving the re-pin effect) each XEP-0085 composing/paused toggle
     // then re-pinned and hauled the viewport back to the bottom. The typing indicator now floats
     // over the list, so a toggle changes no scroll height and must not scroll at all.
     scroller.scrollTop = 400
-    isAtBottomRef.current = true
     scrollToEndCalls.count = 0
 
     for (const users of [['alice'], [], ['alice'], []]) {
-      rerender(<MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} typingUsers={users} {...props} />)
+      rerender(<MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" handleRef={handleRef} typingUsers={users} {...props} />)
       flush(5)
     }
 

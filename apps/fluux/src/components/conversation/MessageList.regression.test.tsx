@@ -13,14 +13,15 @@ import {
   createMockMouseEvent,
   calculateIsAtBottom,
   hasMouseMovedSignificantly,
+  listHandleOver,
 } from './MessageList.test-utils'
 
 describe('MessageList Regressions', () => {
-  let mockScrollRef: { current: HTMLElement | null }
+  let mockScrollRef: ReturnType<typeof listHandleOver>
 
   beforeEach(() => {
     vi.useFakeTimers()
-    mockScrollRef = { current: null }
+    mockScrollRef = listHandleOver()
   })
 
   afterEach(() => {

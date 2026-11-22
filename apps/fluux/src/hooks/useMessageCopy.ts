@@ -19,8 +19,9 @@ interface MessageData {
  * Bob [14:32]:
  * I'm good, thanks!
  */
-export function useMessageCopy(containerRef: RefObject<HTMLElement | null>) {
+export function useMessageCopy(containerRef: RefObject<HTMLElement | null>, enabled = true) {
   useEffect(() => {
+    if (!enabled) return
     const container = containerRef.current
     if (!container) return
 
@@ -89,5 +90,5 @@ export function useMessageCopy(containerRef: RefObject<HTMLElement | null>) {
 
     container.addEventListener('copy', handleCopy)
     return () => container.removeEventListener('copy', handleCopy)
-  }, [containerRef])
+  }, [containerRef, enabled])
 }

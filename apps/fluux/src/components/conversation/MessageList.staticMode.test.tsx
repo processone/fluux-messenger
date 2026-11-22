@@ -20,7 +20,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { fireEvent, render } from '@testing-library/react'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import { createTestMessages } from './MessageList.test-utils'
 import { scrollStateManager } from '@/utils/scrollStateManager'
 

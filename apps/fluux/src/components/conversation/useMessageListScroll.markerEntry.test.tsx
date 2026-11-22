@@ -9,6 +9,7 @@ import { resetScrollShadowDiagnostics } from './scrollPositionShadow'
 import { useMessageListScroll } from './useMessageListScroll'
 import { useMessageSelection } from '@/hooks/useMessageSelection'
 import { appliedWrite } from './scrollWriteTestDoubles'
+import { listHandleOver } from './MessageList.test-utils'
 
 let frames: Map<number, FrameRequestCallback>
 let nextFrame: number
@@ -104,9 +105,17 @@ function markerEntry({ bottomFraction = 0, contentKind = 'system-notice', marker
       onLiveEdgeMeasured,
       clearFirstNewMessageId,
     })
-    const selection = useMessageSelection(rows, selectionScrollRef, {
+    const observeKeyboardNavigationRef = React.useRef(result.observeKeyboardNavigation)
+    observeKeyboardNavigationRef.current = result.observeKeyboardNavigation
+    const selectionList = React.useMemo(() => {
+      const handle = listHandleOver(() => selectionScrollRef.current)
+      handle.current.noteKeyboardNavigation.mockImplementation((phase?: string) => {
+        if (phase === 'scrolled') observeKeyboardNavigationRef.current('room-a')
+      })
+      return handle
+    }, [])
+    const selection = useMessageSelection(rows, selectionList, {
       getRowId: row => row.rowId,
-      onKeyboardScrolled: () => result.observeKeyboardNavigation('room-a'),
     })
     React.useLayoutEffect(() => {
       scrollToMarker.current = result.scrollToMarker

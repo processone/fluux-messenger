@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render } from '@testing-library/react'
 import type { BaseMessage } from '@fluux/sdk'
-import { MessageList } from './MessageList'
+import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { appliedWrite } from './scrollWriteTestDoubles'
 

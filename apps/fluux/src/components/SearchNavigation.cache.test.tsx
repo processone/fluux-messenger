@@ -31,9 +31,9 @@ function LiveList({ literal }: { literal?: string }) {
   const { navigateToRoom } = useNavigateToTarget()
   return <div data-testid="live-list">
     <button type="button" onClick={() => navigateToRoom(ROOM, literal)}>Open literal</button>
-    <MessageList messages={messages} conversationId={ROOM} targetMessageId={targetMessageId}
-      onTargetMessageConsumed={() => roomStore.getState().setTargetMessageId(null)}
-      onLoadAround={loadAround} renderMessage={message => <span>{message.body}</span>} />
+    <MessageList conversationId={ROOM} timeline={{ messages, history: { onLoadAround: loadAround } }}
+      target={{ id: targetMessageId, onConsumed: () => roomStore.getState().setTargetMessageId(null) }}
+      renderMessage={message => <span>{message.body}</span>} />
   </div>
 }
 function row(id: string, time: number, body: string): RoomMessage {
