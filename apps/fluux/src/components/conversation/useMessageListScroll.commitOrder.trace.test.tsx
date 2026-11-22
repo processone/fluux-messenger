@@ -198,7 +198,11 @@ function runScenarios(): string {
   scrollTopSets.length = 0
   const base: Props = { conversationId: 'a@example.test', ids: ids('a', 10, 15) }
   let current: Props = base
-  let view!: ReturnType<typeof render>
+  mark('mount a (live edge entry)')
+  scrollTopSets.length = 0
+  const view = render(<Harness {...current} />)
+  flushRepeat()
+  lines.push(`   scroll writes: [${scrollTopSets.join(',')}]`)
   const step = (label: string, patch: Partial<Props>) => {
     mark(label)
     current = { ...current, ...patch }
@@ -208,12 +212,6 @@ function runScenarios(): string {
     lastLine = ''
     lines.push(`   scroll writes: [${scrollTopSets.join(',')}]`)
   }
-
-  mark('mount a (live edge entry)')
-  scrollTopSets.length = 0
-  view = render(<Harness {...current} />)
-  flushRepeat()
-  lines.push(`   scroll writes: [${scrollTopSets.join(',')}]`)
 
   step('append incoming', { ids: ids('a', 10, 16) })
   step('append outgoing', { ids: ids('a', 10, 17), lastMessageIsOutgoing: true })
