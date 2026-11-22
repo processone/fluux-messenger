@@ -33,7 +33,7 @@ import { pathToFileURL } from 'node:url'
 const LARGE_FILE_LINES = 2000
 const GROWTH_LINES = 100
 // All test runs together stay inside this budget, under the workflow's own limit.
-const TOTAL_BUDGET_MS = 170_000
+const TOTAL_BUDGET_MS = Number(process.env.REPORT_TEST_BUDGET_MS) || 170_000
 const STARTED = Date.now()
 const MAX_LISTED = 15
 const WORKSPACES = ['packages/fluux-sdk', 'apps/fluux', 'packages/omemo', 'packages/omemo-plugin', 'packages/openpgp-plugin']
