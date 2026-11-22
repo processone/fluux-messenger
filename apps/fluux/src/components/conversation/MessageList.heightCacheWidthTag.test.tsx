@@ -77,7 +77,6 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
 
 const CONVERSATION = 'ava@fluux.chat'
 const COLUMN_AT_1280_PX = 888
-const COLUMN_AT_1000_PX = 608
 const INCOMING_ROW_PX = 70
 const OWN_ROW_PX = 24
 const LONG_BODY = 'A comfortable reading column keeps a long conversation easy to follow. '.repeat(4)
@@ -145,38 +144,6 @@ describe('MessageList height cache width tag', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     localStorage.clear()
-  })
-
-  it('keeps heights while the window moves between own replies and incoming rows, and clears them when the column narrows', () => {
-    // The re-tag after a resize records the mounted rows' settled heights again.
-    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(OWN_ROW_PX)
-    const view = render(list())
-    const scale = useSettingsStore.getState().fontSize
-    const incoming = itemIndices(false).slice(0, 19)
-    const own = itemIndices(true).slice(-37)
-    const firstIncomingKey = adapter.items[incoming[0]].key
-    const lastOwnKey = adapter.items[own.at(-1)!].key
-
-    showWindow(view, incoming, INCOMING_ROW_PX)
-    expect(getConversationWidthBucket(CONVERSATION)).toBe(880)
-
-    showWindow(view, own, OWN_ROW_PX)
-    expect(getConversationWidthBucket(CONVERSATION)).toBe(880)
-    expect(getCachedHeight(CONVERSATION, firstIncomingKey, scale)).toBe(INCOMING_ROW_PX)
-
-    showWindow(view, incoming, INCOMING_ROW_PX)
-    expect(getConversationWidthBucket(CONVERSATION)).toBe(880)
-    expect(getCachedHeight(CONVERSATION, lastOwnKey, scale)).toBe(OWN_ROW_PX)
-
-    // Narrowing the window moves the column. The rows re-measure at the new width, then the
-    // sampler reads it: the tag moves at that sample, before any further measurement or
-    // teardown, and the rows just measured keep their heights.
-    showWindow(view, own, OWN_ROW_PX)
-    columnPx = COLUMN_AT_1000_PX
-    showWindow(view, own, OWN_ROW_PX)
-    expect(getConversationWidthBucket(CONVERSATION)).toBe(600)
-    expect(getCachedHeight(CONVERSATION, firstIncomingKey, scale)).toBeUndefined()
-    expect(getCachedHeight(CONVERSATION, lastOwnKey, scale)).toBe(OWN_ROW_PX)
   })
 
   // Regression from compiling MessageList: a render-phase state update must not

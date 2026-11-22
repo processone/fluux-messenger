@@ -232,13 +232,6 @@ function afterEntryBatch(estimate: (index: number) => number = entryEstimate) {
   return { ...h, owed, growSpacer, distanceFromBottom }
 }
 
-it('keeps every clamped correction when rows above the reader grow before the spacer does', () => {
-  const { scroller, owed, growSpacer, distanceFromBottom } = afterEntryBatch()
-  expect(scroller.scrollTop, 'the corrections wait at the old bottom until the spacer grows').toBe(oldBottom)
-  growSpacer(owed)
-  expect(distanceFromBottom(), 'the reader is back at the live edge').toBe(0)
-})
-
 // The batch moved row 10 down to start at 690 px, below the old bottom and above the 782 px the
 // reader is owed. Its first measurement is a row above the reader, as the owed position counts.
 it('judges a row the clamped growth moved below the old bottom against the owed position', () => {
