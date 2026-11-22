@@ -459,8 +459,8 @@ export class E2EEManager {
    * Priority order:
    * 1. Forced-plaintext override always passes — explicit user consent.
    * 2. Strict global send policy blocks all plaintext.
-   * 3. A direct peer with established trust (verified / introduced / tofu) blocks plaintext (implicit per-peer strict).
-   * 4. Opportunistic policy with an unverified peer → allowed.
+   * 3. A direct peer with established trust (verified / introduced / tofu / untrusted) blocks plaintext (implicit per-peer strict), for every plugin.
+   * 4. Opportunistic policy with a peer whose trust is unknown → allowed.
    */
   async assertPlaintextPermitted(target: ConversationTarget): Promise<void> {
     if (this.isForcedPlaintext(target)) return

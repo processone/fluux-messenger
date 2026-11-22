@@ -154,7 +154,9 @@ export class OmemoPlugin implements E2EEPlugin {
    * the persisted `TrustRecord.identityKey` (bound on first session) when
    * present, else a best-effort bundle fetch. No key → `fingerprint:''`,
    * `trust:'unknown'`. Trust precedence: a fingerprint-bound verified marker
-   * wins (`'verified'`), else the library BTBV state (`toTrustState`).
+   * wins (`'verified'`), else the library BTBV state (`toTrustState`). A usable device nobody has
+   * decided on, of a contact with no verified device, is promoted from unknown to `'tofu'` (first
+   * contact is blind-trusted), so the list, getDeviceTrust and getPeerTrust agree.
    */
   /**
    * Trust of a device judged against one specific identity key (the one a session was built
