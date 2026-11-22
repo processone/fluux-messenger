@@ -1501,10 +1501,6 @@
         "search": {
             "title": "搜索结果",
             "description": "从侧边栏选择一个结果即可查看对话。"
-        },
-        "saved": {
-            "title": "已保存的消息",
-            "description": "在侧边栏中选择一条已保存的消息，即可在其所在对话中打开。"
         }
     },
     "avatar": {
@@ -1909,7 +1905,14 @@
         "headerButton": "已保存在此对话中（{{count}}）。只有你能看到。",
         "scopeLabel": "在 {{name}} 中",
         "clearScope": "显示所有已保存的消息",
-        "onlyYou": "只有你能看到你保存的消息"
+        "onlyYou": "只有你能看到你保存的消息",
+        "zeroTitle": "留住重要的消息",
+        "factPrivate": "只有你能看到，聊天室中也一样",
+        "factDevices": "在你的所有设备上可用",
+        "factOriginal": "一键回到原消息",
+        "paneSavedOn": "保存于 {{date}}",
+        "panePosition": "第 {{index}} 条，共 {{total}} 条",
+        "copyOnly": "此设备上没有该对话的历史记录，这里显示的是你保存的副本。"
     },
     "errorBoundary": {
         "title": "出了点问题",

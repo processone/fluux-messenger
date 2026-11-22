@@ -16,6 +16,7 @@ const SettingsView = lazy(() => import('./SettingsView').then(m => ({ default: m
 const AdminView = lazy(() => import('./AdminView').then(m => ({ default: m.AdminView })))
 const XmppConsole = lazy(() => import('./XmppConsole').then(m => ({ default: m.XmppConsole })))
 const SearchContextView = lazy(() => import('./SearchContextView').then(m => ({ default: m.SearchContextView })))
+const SavedPane = lazy(() => import('./SavedPane').then(m => ({ default: m.SavedPane })))
 const StrangerRequestPreviewView = lazy(() => import('./StrangerRequestPreviewView').then(m => ({ default: m.StrangerRequestPreviewView })))
 import { ShortcutHelp } from './ShortcutHelp'
 import { CommandPalette } from './CommandPalette'
@@ -45,12 +46,13 @@ import { useSoundNotification } from '@/hooks/useSoundNotification'
 import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
 import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotifications'
 import { useSDKErrorToasts } from '@/hooks/useSDKErrorToasts'
-import { useSavedScopeStore } from '@/stores/savedScopeStore'
+import { useSavedScopeStore, useSavedSelectionStore } from '@/stores/savedScopeStore'
 import { useSavedRefusalToast } from '@/hooks/useSavedRefusalToast'
+import { useSavedOpener } from '@/hooks/useSavedOpener'
 import { useReactionNotifications } from '@/hooks/useReactionNotifications'
 import { reportStartupShell } from '@/utils/startupRecovery'
 import { useEasterEggNotifications } from '@/hooks/useEasterEggNotifications'
-import { useFocusZones, useViewNavigation, isMobileWeb, isSmallScreen, useWindowVisibility, useRouteSync, useDayBoundaryWatcher, type FocusZoneRefs } from '@/hooks'
+import { useFocusZones, useViewNavigation, useIsSmallScreen, isMobileWeb, isSmallScreen, useWindowVisibility, useRouteSync, useDayBoundaryWatcher, type FocusZoneRefs } from '@/hooks'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { resolveEncryptionSubPage } from './settings-components/encryptionPages'
 import { useIosPaneNavigation } from '@/hooks/useIosPaneNavigation'
@@ -58,7 +60,7 @@ import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/utils/sessionStorage'
 import { useModalStore } from '@/stores/modalStore'
 import { useContactSecurityRequestStore } from '@/stores/contactSecurityRequestStore'
-import { Server, ShieldOff, MessageCircle, Hash, Users, Search, Bookmark, Settings, Plus, ArrowLeft, Loader2, type LucideIcon } from 'lucide-react'
+import { Server, ShieldOff, MessageCircle, Hash, Users, Search, Settings, Plus, ArrowLeft, Loader2, type LucideIcon } from 'lucide-react'
 
 /**
  * ChatLayout wrapper. The actual layout logic is in ChatLayoutContent; modal state
@@ -222,6 +224,9 @@ function ModalHost({
 }
 
 function ChatLayoutContent() {
+  // Above the Saved list and the Saved pane: opening an unjoined room switches the layout and unmounts the
+  // pane, and the pending join and a failure shown on a row must outlive it.
+  const savedOpener = useSavedOpener()
   // Detect render loops before they freeze the UI
   detectRenderLoop('ChatLayout')
 
@@ -264,6 +269,7 @@ function ChatLayoutContent() {
   const chatActivationPending = useChatStore((s) => s.activationPending)
   const roomActivationPending = useRoomStore((s) => s.activationPending)
   const searchPreviewResult = useSearchStore((s) => s.previewResult)
+  const isSmallViewport = useIsSmallScreen()
   // Read-only message-request preview (transient; set by the Message-requests banner).
   const previewJid = useMessageRequestPreviewStore((s) => s.previewJid)
   const setPreviewJid = useMessageRequestPreviewStore((s) => s.setPreviewJid)
@@ -922,9 +928,12 @@ function ChatLayoutContent() {
     useSavedScopeStore.getState().setScope(conversationId)
     navigateToSaved()
   }
-  // The narrowing ends with the Saved tab.
+  // The narrowing and the message shown in the central pane end with the Saved tab.
   useEffect(() => {
-    if (sidebarView !== 'saved') useSavedScopeStore.getState().setScope(null)
+    if (sidebarView !== 'saved') {
+      useSavedScopeStore.getState().setScope(null)
+      useSavedSelectionStore.getState().select(null)
+    }
   }, [sidebarView])
 
   // Handle starting a conversation from contact profile or double-click
@@ -1128,6 +1137,7 @@ function ChatLayoutContent() {
             accountRef={accountRef}
             activeContactJid={selectedContact?.jid}
             onViewChange={handleSidebarViewChange}
+            savedOpener={savedOpener}
           />
           </RegionErrorBoundary>
         </div>
@@ -1217,6 +1227,12 @@ function ChatLayoutContent() {
           ) : searchPreviewResult ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <SearchContextView onBack={() => searchStore.getState().setPreviewResult(null)} />
+            </Suspense>
+          ) : sidebarView === 'saved' && !isSmallViewport ? (
+            // A wide window shows the selected saved message in its conversation. A small screen
+            // shows the list alone, where a tap opens the conversation.
+            <Suspense fallback={<ViewLoadingFallback />}>
+              <SavedPane onOpen={savedOpener.open} />
             </Suspense>
           ) : activationHoldsMainPane ? (
             <ViewLoadingFallback onBack={sidebarView === 'rooms' ? handleRoomBack : handleChatBack} />
@@ -1342,12 +1358,6 @@ function EmptyState({ sidebarView, primaryAction, onBrowseRooms }: {
           Icon: Server,
           title: t('emptyState.admin.title'),
           description: t('emptyState.admin.description'),
-        }
-      case 'saved':
-        return {
-          Icon: Bookmark,
-          title: t('emptyState.saved.title'),
-          description: t('emptyState.saved.description'),
         }
       case 'search':
         return {

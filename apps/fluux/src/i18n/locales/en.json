@@ -1501,10 +1501,6 @@
         "search": {
             "title": "Search Results",
             "description": "Select a result from the sidebar to view the conversation."
-        },
-        "saved": {
-            "title": "Saved messages",
-            "description": "Select a saved message in the sidebar to open it in its conversation."
         }
     },
     "avatar": {
@@ -1909,7 +1905,14 @@
         "headerButton": "Saved in this conversation ({{count}}). Only you see them.",
         "scopeLabel": "In {{name}}",
         "clearScope": "Show all saved messages",
-        "onlyYou": "Only you see your saved messages"
+        "onlyYou": "Only you see your saved messages",
+        "zeroTitle": "Keep the messages that matter",
+        "factPrivate": "Only you see them, even in rooms",
+        "factDevices": "Available on all your devices",
+        "factOriginal": "One click back to the original",
+        "paneSavedOn": "Saved {{date}}",
+        "panePosition": "{{index}} of {{total}}",
+        "copyOnly": "The conversation history is not on this device, so this is the copy you saved."
     },
     "errorBoundary": {
         "title": "Something went wrong",

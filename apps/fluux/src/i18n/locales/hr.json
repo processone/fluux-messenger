@@ -1503,10 +1503,6 @@
         "search": {
             "title": "Rezultati pretraživanja",
             "description": "Odaberite rezultat u bočnoj traci za prikaz razgovora."
-        },
-        "saved": {
-            "title": "Spremljene poruke",
-            "description": "Odaberite spremljenu poruku na bočnoj traci da biste je otvorili u njezinu razgovoru."
         }
     },
     "avatar": {
@@ -1911,7 +1907,14 @@
         "headerButton": "Spremljeno u ovom razgovoru ({{count}}). Vidite ih samo vi.",
         "scopeLabel": "U: {{name}}",
         "clearScope": "Prikaži sve spremljene poruke",
-        "onlyYou": "Spremljene poruke vidite samo vi"
+        "onlyYou": "Spremljene poruke vidite samo vi",
+        "zeroTitle": "Čuvajte poruke koje su važne",
+        "factPrivate": "Vidite ih samo vi, čak i u sobama",
+        "factDevices": "Dostupne na svim vašim uređajima",
+        "factOriginal": "Jedan klik do izvornika",
+        "paneSavedOn": "Spremljeno {{date}}",
+        "panePosition": "{{index}} od {{total}}",
+        "copyOnly": "Povijest razgovora nije na ovom uređaju, pa se prikazuje kopija koju ste spremili."
     },
     "errorBoundary": {
         "title": "Nešto nije u redu",

@@ -1507,10 +1507,6 @@
         "search": {
             "title": "Torthaí cuardaigh",
             "description": "Roghnaigh toradh sa bharra taoibh chun an comhrá a fheiceáil."
-        },
-        "saved": {
-            "title": "Teachtaireachtaí sábháilte",
-            "description": "Roghnaigh teachtaireacht shábháilte sa bharra taoibh chun í a oscailt ina comhrá."
         }
     },
     "avatar": {
@@ -1915,7 +1911,14 @@
         "headerButton": "Sábháilte sa chomhrá seo ({{count}}). Ní fheiceann ach tusa iad.",
         "scopeLabel": "I {{name}}",
         "clearScope": "Taispeáin gach teachtaireacht shábháilte",
-        "onlyYou": "Ní fheiceann ach tusa do theachtaireachtaí sábháilte"
+        "onlyYou": "Ní fheiceann ach tusa do theachtaireachtaí sábháilte",
+        "zeroTitle": "Coinnigh na teachtaireachtaí tábhachtacha",
+        "factPrivate": "Ní fheiceann ach tusa iad, fiú i seomraí",
+        "factDevices": "Ar fáil ar do ghléasanna go léir",
+        "factOriginal": "Cliceáil amháin ar ais chuig an mbunleagan",
+        "paneSavedOn": "Sábháilte {{date}}",
+        "panePosition": "{{index}} as {{total}}",
+        "copyOnly": "Níl stair an chomhrá ar an ngléas seo, mar sin is é seo an cóip a shábháil tú."
     },
     "errorBoundary": {
         "title": "Tharla earráid",

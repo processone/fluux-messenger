@@ -1505,10 +1505,6 @@
         "search": {
             "title": "Rezultatele căutării",
             "description": "Selectați un rezultat din bara laterală pentru a vizualiza conversația."
-        },
-        "saved": {
-            "title": "Mesaje salvate",
-            "description": "Selectați un mesaj salvat în bara laterală pentru a-l deschide în conversația sa."
         }
     },
     "avatar": {
@@ -1913,7 +1909,14 @@
         "headerButton": "Salvate în această conversație ({{count}}). Doar tu le vezi.",
         "scopeLabel": "În {{name}}",
         "clearScope": "Arată toate mesajele salvate",
-        "onlyYou": "Doar tu îți vezi mesajele salvate"
+        "onlyYou": "Doar tu îți vezi mesajele salvate",
+        "zeroTitle": "Păstrați mesajele care contează",
+        "factPrivate": "Doar dumneavoastră le vedeți, chiar și în camere",
+        "factDevices": "Disponibile pe toate dispozitivele dumneavoastră",
+        "factOriginal": "Un clic înapoi la original",
+        "paneSavedOn": "Salvat pe {{date}}",
+        "panePosition": "{{index}} din {{total}}",
+        "copyOnly": "Istoricul conversației nu este pe acest dispozitiv, așa că vedeți copia pe care ați salvat-o."
     },
     "errorBoundary": {
         "title": "Ceva nu a funcționat",

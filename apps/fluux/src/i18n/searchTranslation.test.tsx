@@ -123,7 +123,7 @@ async function changeLanguage(language: string) {
 
 describe('search tab translation', () => {
   it('updates the sidebar title, navigation, input and hint without remounting', async () => {
-    renderTranslated(<Sidebar onViewChange={vi.fn()} />)
+    renderTranslated(<Sidebar onViewChange={vi.fn()} savedOpener={{ problems: {}, open: vi.fn() }} />)
     expect(screen.getByRole('heading', { name: 'Search' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Search' })).toBeVisible()
     const input = screen.getByPlaceholderText('Search messages…')

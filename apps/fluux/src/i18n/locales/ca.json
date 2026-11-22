@@ -1505,10 +1505,6 @@
         "search": {
             "title": "Resultats de la cerca",
             "description": "Seleccioneu un resultat a la barra lateral per veure la conversa."
-        },
-        "saved": {
-            "title": "Missatges desats",
-            "description": "Seleccioneu un missatge desat a la barra lateral per obrir-lo a la seva conversa."
         }
     },
     "avatar": {
@@ -1913,7 +1909,14 @@
         "headerButton": "Desats en aquesta conversa ({{count}}). Només tu els veus.",
         "scopeLabel": "A {{name}}",
         "clearScope": "Mostra tots els missatges desats",
-        "onlyYou": "Només tu veus els teus missatges desats"
+        "onlyYou": "Només tu veus els teus missatges desats",
+        "zeroTitle": "Guarda els missatges que importen",
+        "factPrivate": "Només tu els veus, fins i tot a les sales",
+        "factDevices": "Disponibles a tots els teus dispositius",
+        "factOriginal": "Un clic per tornar a l’original",
+        "paneSavedOn": "Desat el {{date}}",
+        "panePosition": "{{index}} de {{total}}",
+        "copyOnly": "L’historial de la conversa no és en aquest dispositiu; aquesta és la còpia que vas desar."
     },
     "errorBoundary": {
         "title": "Alguna cosa ha anat malament",

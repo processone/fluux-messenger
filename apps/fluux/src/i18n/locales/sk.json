@@ -1506,10 +1506,6 @@
         "search": {
             "title": "Výsledky vyhľadávania",
             "description": "Vyberte výsledok v bočnom paneli na zobrazenie konverzácie."
-        },
-        "saved": {
-            "title": "Uložené správy",
-            "description": "Vyberte uloženú správu v bočnom paneli, aby sa otvorila vo svojej konverzácii."
         }
     },
     "avatar": {
@@ -1914,7 +1910,14 @@
         "headerButton": "Uložené v tejto konverzácii ({{count}}). Vidíte ich len vy.",
         "scopeLabel": "V: {{name}}",
         "clearScope": "Zobraziť všetky uložené správy",
-        "onlyYou": "Uložené správy vidíte len vy"
+        "onlyYou": "Uložené správy vidíte len vy",
+        "zeroTitle": "Uchovajte správy, na ktorých záleží",
+        "factPrivate": "Vidíte ich len vy, aj v miestnostiach",
+        "factDevices": "Dostupné na všetkých vašich zariadeniach",
+        "factOriginal": "Jedno kliknutie k originálu",
+        "paneSavedOn": "Uložené {{date}}",
+        "panePosition": "{{index}} z {{total}}",
+        "copyOnly": "História konverzácie nie je v tomto zariadení, preto vidíte kópiu, ktorú ste uložili."
     },
     "errorBoundary": {
         "title": "Niečo sa pokazilo",

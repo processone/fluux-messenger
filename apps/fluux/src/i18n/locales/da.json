@@ -1501,10 +1501,6 @@
         "search": {
             "title": "Søgeresultater",
             "description": "Vælg et resultat i sidebjælken for at se samtalen."
-        },
-        "saved": {
-            "title": "Gemte beskeder",
-            "description": "Vælg en gemt besked i sidepanelet for at åbne den i sin samtale."
         }
     },
     "avatar": {
@@ -1909,7 +1905,14 @@
         "headerButton": "Gemt i denne samtale ({{count}}). Kun du kan se dem.",
         "scopeLabel": "I {{name}}",
         "clearScope": "Vis alle gemte beskeder",
-        "onlyYou": "Kun du kan se dine gemte beskeder"
+        "onlyYou": "Kun du kan se dine gemte beskeder",
+        "zeroTitle": "Behold de beskeder, der betyder noget",
+        "factPrivate": "Kun du ser dem, også i rum",
+        "factDevices": "Tilgængelige på alle dine enheder",
+        "factOriginal": "Ét klik tilbage til originalen",
+        "paneSavedOn": "Gemt {{date}}",
+        "panePosition": "{{index}} af {{total}}",
+        "copyOnly": "Samtalens historik findes ikke på denne enhed, så det er den kopi, du gemte."
     },
     "errorBoundary": {
         "title": "Noget gik galt",

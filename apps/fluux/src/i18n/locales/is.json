@@ -1501,10 +1501,6 @@
         "search": {
             "title": "Leitarniðurstöður",
             "description": "Veldu niðurstöðu á hliðarstikunni til að skoða samtalið."
-        },
-        "saved": {
-            "title": "Vistuð skilaboð",
-            "description": "Veldu vistuð skilaboð í hliðarstikunni til að opna þau í samtalinu sínu."
         }
     },
     "avatar": {
@@ -1909,7 +1905,14 @@
         "headerButton": "Vistað í þessu samtali ({{count}}). Aðeins þú sérð þau.",
         "scopeLabel": "Í {{name}}",
         "clearScope": "Sýna öll vistuð skilaboð",
-        "onlyYou": "Aðeins þú sérð vistuðu skilaboðin þín"
+        "onlyYou": "Aðeins þú sérð vistuðu skilaboðin þín",
+        "zeroTitle": "Geymdu skilaboðin sem skipta máli",
+        "factPrivate": "Aðeins þú sérð þau, líka í spjallrásum",
+        "factDevices": "Aðgengileg í öllum tækjunum þínum",
+        "factOriginal": "Einn smellur aftur í upprunalegu skilaboðin",
+        "paneSavedOn": "Vistað {{date}}",
+        "panePosition": "{{index}} af {{total}}",
+        "copyOnly": "Samtalssagan er ekki í þessu tæki, svo þetta er afritið sem þú vistaðir."
     },
     "errorBoundary": {
         "title": "Eitthvað fór úrskeiðis",

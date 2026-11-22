@@ -1505,10 +1505,6 @@
         "search": {
             "title": "Resultados de búsqueda",
             "description": "Seleccione un resultado en la barra lateral para ver la conversación."
-        },
-        "saved": {
-            "title": "Mensajes guardados",
-            "description": "Selecciona un mensaje guardado en la barra lateral para abrirlo en su conversación."
         }
     },
     "avatar": {
@@ -1913,7 +1909,14 @@
         "headerButton": "Guardados en esta conversación ({{count}}). Solo tú los ves.",
         "scopeLabel": "En {{name}}",
         "clearScope": "Mostrar todos los mensajes guardados",
-        "onlyYou": "Solo tú ves tus mensajes guardados"
+        "onlyYou": "Solo tú ves tus mensajes guardados",
+        "zeroTitle": "Guarda los mensajes importantes",
+        "factPrivate": "Solo tú los ves, incluso en salas",
+        "factDevices": "Disponibles en todos tus dispositivos",
+        "factOriginal": "Un clic para volver al original",
+        "paneSavedOn": "Guardado el {{date}}",
+        "panePosition": "{{index}} de {{total}}",
+        "copyOnly": "El historial de la conversación no está en este dispositivo; esta es la copia que guardaste."
     },
     "errorBoundary": {
         "title": "Algo salió mal",

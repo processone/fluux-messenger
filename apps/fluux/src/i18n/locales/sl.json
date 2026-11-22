@@ -1507,10 +1507,6 @@
         "search": {
             "title": "Rezultati iskanja",
             "description": "Izberite rezultat v stranski vrstici za prikaz pogovora."
-        },
-        "saved": {
-            "title": "Shranjena sporočila",
-            "description": "V stranski vrstici izberite shranjeno sporočilo, da ga odprete v njegovem pogovoru."
         }
     },
     "avatar": {
@@ -1915,7 +1911,14 @@
         "headerButton": "Shranjeno v tem pogovoru ({{count}}). Vidite jih samo vi.",
         "scopeLabel": "V: {{name}}",
         "clearScope": "Prikaži vsa shranjena sporočila",
-        "onlyYou": "Shranjena sporočila vidite samo vi"
+        "onlyYou": "Shranjena sporočila vidite samo vi",
+        "zeroTitle": "Hranite sporočila, ki štejejo",
+        "factPrivate": "Vidite jih samo vi, tudi v sobah",
+        "factDevices": "Na voljo na vseh vaših napravah",
+        "factOriginal": "En klik do izvirnika",
+        "paneSavedOn": "Shranjeno {{date}}",
+        "panePosition": "{{index}} od {{total}}",
+        "copyOnly": "Zgodovine pogovora ni v tej napravi, zato je prikazana kopija, ki ste jo shranili."
     },
     "errorBoundary": {
         "title": "Nekaj je šlo narobe",

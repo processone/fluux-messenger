@@ -1501,10 +1501,6 @@
         "search": {
             "title": "검색 결과",
             "description": "사이드바에서 결과를 선택하여 대화를 봅니다."
-        },
-        "saved": {
-            "title": "저장된 메시지",
-            "description": "사이드바에서 저장된 메시지를 선택하면 해당 대화에서 열립니다."
         }
     },
     "avatar": {
@@ -1909,7 +1905,14 @@
         "headerButton": "이 대화에 저장됨 ({{count}}). 나만 볼 수 있습니다.",
         "scopeLabel": "{{name}}에서",
         "clearScope": "저장한 메시지 모두 보기",
-        "onlyYou": "저장한 메시지는 나만 볼 수 있습니다"
+        "onlyYou": "저장한 메시지는 나만 볼 수 있습니다",
+        "zeroTitle": "중요한 메시지를 보관하세요",
+        "factPrivate": "나만 볼 수 있으며, 대화방에서도 마찬가지입니다",
+        "factDevices": "모든 기기에서 사용할 수 있습니다",
+        "factOriginal": "한 번의 클릭으로 원본으로 돌아갑니다",
+        "paneSavedOn": "{{date}}에 저장됨",
+        "panePosition": "{{index}} / {{total}}",
+        "copyOnly": "이 기기에 대화 기록이 없어 저장한 사본을 표시합니다."
     },
     "errorBoundary": {
         "title": "문제가 발생했습니다",

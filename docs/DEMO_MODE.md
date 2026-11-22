@@ -59,7 +59,7 @@ The demo populates the UI with:
 
 ### Showcase scene
 
-`http://localhost:5173/demo.html?scene=showcase` loads curated marketing data (used for the README and release pictures) instead of the test fixture. It opens with **5 saved messages**, seeded through the same path as a person's save (`apps/fluux/src/demo/showcase/saved.ts`): Emma Ward "Venue confirmed…", Ava Reyes "Door code is 4827…" (an end-to-end encrypted chat), Liam Ross "Press kit…", Liam in Launch Crew "Livestream is ready…" and Olivia in Design Studio "Badges are printed…". Opening a row shows the original message highlighted. The default demo keeps an empty Saved list, because `e2e/saved-messages.ts` depends on it.
+`http://localhost:5173/demo.html?scene=showcase` loads curated marketing data (used for the README and release pictures) instead of the test fixture. It opens with **5 saved messages**, seeded through the same path as a person's save (`apps/fluux/src/demo/showcase/saved.ts`): Emma Ward "Venue confirmed…", Ava Reyes "Door code is 4827…" (an end-to-end encrypted chat), Liam Ross "Press kit…", Liam in Launch Crew "Livestream is ready…" and Olivia in Design Studio "Badges are printed…". Selecting a row shows the message in its conversation in the central pane, highlighted and read-only; double-clicking the row, or Go to message, opens the real conversation. The default demo keeps an empty Saved list, because `e2e/saved-messages.ts` depends on it.
 
 ### Guided tour
 

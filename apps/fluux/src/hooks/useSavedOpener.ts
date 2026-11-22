@@ -12,8 +12,8 @@ import { useToastStore } from '@/stores/toastStore'
 export type SavedOpenProblem = 'absent' | 'failed'
 
 /**
- * Opens a saved message in its conversation. It lives above the Saved list, not
- * in it: opening a room can leave the list (and a room join it waits for) behind,
+ * Opens a saved message in its conversation. It lives above the Saved list and the
+ * Saved pane (in ChatLayout), not in either: opening a room can leave the list (and a room join it waits for) behind,
  * and the failure shown on the entry must still be there when the list returns.
  */
 const JOIN_WAIT_MS = 30_000
@@ -40,6 +40,8 @@ function waitForJoin(roomJid: string, abandoned: () => boolean): Promise<boolean
     check()
   })
 }
+
+export type SavedOpener = ReturnType<typeof useSavedOpener>
 
 export function useSavedOpener() {
   const { t } = useTranslation()

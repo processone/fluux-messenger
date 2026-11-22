@@ -55,7 +55,6 @@ vi.mock('./settings-components', () => ({
   DEFAULT_SETTINGS_CATEGORY: 'profile',
 }))
 vi.mock('@/utils/performLogout', () => ({ performLogout: vi.fn() }))
-vi.mock('@/hooks/useSavedOpener', () => ({ useSavedOpener: () => ({ problems: {}, open: vi.fn() }) }))
 
 // Mock SDK stores and hooks
 vi.mock('@fluux/sdk', () => ({
@@ -138,7 +137,7 @@ describe('Sidebar archive toggle', () => {
   it('toggles between active and archived conversation lists from the Messages header', () => {
     render(
       <MemoryRouter initialEntries={['/messages']}>
-        <Sidebar onViewChange={vi.fn()} />
+        <Sidebar onViewChange={vi.fn()} savedOpener={{ problems: {}, open: vi.fn() }} />
       </MemoryRouter>
     )
 

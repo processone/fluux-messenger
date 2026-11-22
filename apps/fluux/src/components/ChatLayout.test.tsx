@@ -509,6 +509,7 @@ vi.mock('@/utils/sessionStorage', () => ({
 
 // Mock child components to simplify testing
 // Sidebar now uses useRouteSync internally, so we mock with NavLinks for navigation
+vi.mock('@/hooks/useSavedOpener', () => ({ useSavedOpener: () => ({ problems: {}, open: vi.fn() }) }))
 vi.mock('./Sidebar', () => ({
   Sidebar: ({ onSelectContact, onStartChat, onViewChange }: {
     onSelectContact: (contact: Contact) => void
