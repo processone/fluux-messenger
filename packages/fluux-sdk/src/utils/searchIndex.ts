@@ -618,7 +618,10 @@ type SearchWriteTx = IDBPTransaction<
 type PostingKey = [string, number, number]
 
 function postingKeys(doc: DocEntry): PostingKey[] {
-  return doc.docNo === undefined ? [] : doc.tokens.map(token => [token, -doc.timestamp, doc.docNo as number])
+  // A malformed delay stamp can persist as NaN, which no key can hold: such a
+  // document sorts as the oldest instead of failing every write and every copy.
+  const time = Number.isFinite(doc.timestamp) ? doc.timestamp : 0
+  return doc.docNo === undefined ? [] : doc.tokens.map(token => [token, -time, doc.docNo as number])
 }
 
 const postingKeyId = (key: PostingKey) => `${key[0]}\u0000${key[1]}\u0000${key[2]}`
@@ -656,10 +659,15 @@ function createDocumentWriter(tx: SearchWriteTx) {
       await docs.delete(doc.indexId)
       for (const key of postingKeys(doc)) await rows.delete(key)
     },
-    /** Change a document's id only: it keeps its docNo, so its rows stay. */
+    /**
+     * Change a document's id only: a numbered document keeps its docNo, so its
+     * rows stay. An unnumbered one is numbered now, because the copy cursor may
+     * already be past its new id.
+     */
     async relocate(doc: DocEntry, indexId: string): Promise<void> {
       await docs.delete(doc.indexId)
-      await docs.put({ ...doc, indexId })
+      if (doc.docNo === undefined) await this.put({ ...doc, indexId })
+      else await docs.put({ ...doc, indexId })
     },
     /** Persist the next free number; call once before the transaction completes. */
     async flush(): Promise<void> {

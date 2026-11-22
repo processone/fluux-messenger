@@ -63,8 +63,8 @@ async function expectRowsMatchDocuments(db: IDBPDatabase<any>, options: { allNum
   const numbers = docs.filter(d => d.docNo !== undefined).map(d => d.docNo)
   expect(new Set(numbers).size).toBe(numbers.length)
   if (options.allNumbered) expect(numbers).toHaveLength(docs.length)
-  const expected = docs.flatMap(d => d.docNo === undefined ? [] : d.tokens.map((t: string) => [t, -d.timestamp, d.docNo]))
-  const actual = await db.getAllKeys('search-postings')
+  const expected = docs.flatMap(d => d.docNo === undefined ? [] : d.tokens.map((t: string) => [t, -(Number.isFinite(d.timestamp) ? d.timestamp : 0), d.docNo]))
+  const actual = (await db.getAllKeys('search-postings')) as unknown as [string, number, number][]
   expect(actual).toHaveLength(expected.length)
   expect(new Set(actual.map(k => JSON.stringify(k)))).toEqual(new Set(expected.map(k => JSON.stringify(k))))
 }
@@ -91,7 +91,7 @@ describe('time-sorted search index', () => {
     await indexMessage(chat('b', 'hello again', 2), SCOPE)
     const db = await openRaw()
     await expectRowsMatchDocuments(db, { allNumbered: true })
-    expect((await db.getAllKeys('search-postings')).filter(k => k[0] === 'hello')).toEqual([
+    expect(((await db.getAllKeys('search-postings')) as unknown as [string, number, number][]).filter(k => k[0] === 'hello')).toEqual([
       ['hello', -Date.UTC(2024, 0, 1, 0, 2), 2], ['hello', -Date.UTC(2024, 0, 1, 0, 1), 1],
     ])
     db.close()
@@ -105,12 +105,12 @@ describe('time-sorted search index', () => {
     await removeMessage(chat('b', 'drop this one', 2), SCOPE)
     let db = await openRaw()
     await expectRowsMatchDocuments(db, { allNumbered: true })
-    expect((await db.getAllKeys('search-postings')).some(k => k[0] === 'drop')).toBe(false)
+    expect(((await db.getAllKeys('search-postings')) as unknown as [string, number, number][]).some(k => k[0] === 'drop')).toBe(false)
     db.close()
     await removeConversation('chat', 'bob@example.test', SCOPE)
     db = await openRaw()
     await expectRowsMatchDocuments(db, { allNumbered: true })
-    expect((await db.getAllKeys('search-postings')).some(k => k[0] === 'other')).toBe(false)
+    expect(((await db.getAllKeys('search-postings')) as unknown as [string, number, number][]).some(k => k[0] === 'other')).toBe(false)
     expect(await db.count('search-docs')).toBe(1)
     db.close()
   })
@@ -245,6 +245,66 @@ describe('time-sorted search index', () => {
       expect(await search('shared')).toHaveLength(10)
       await migrateSearchPostings()
       expect(await isPostingsReady(SCOPE)).toBe(true)
+    })
+
+    it('copies a stored document whose timestamp is not a number and still finds it', async () => {
+      const bad = { ...legacyDoc(2, 'shared malformed stamp'), timestamp: Number.NaN }
+      await seedV4([legacyDoc(1, 'shared fine'), bad, legacyDoc(3, 'shared also fine')])
+      await initSearchIndex(SCOPE)
+      await migrateSearchPostings()
+      expect(await isPostingsReady(SCOPE)).toBe(true)
+      const db = await openRaw()
+      expect((await db.getAll('search-docs')).every(d => d.docNo !== undefined)).toBe(true)
+      expect(await db.count('search-docs')).toBe(3)
+      expect(((await db.getAllKeys('search-postings')) as unknown as [string, number, number][]).filter(k => k[0] === 'malformed')).toHaveLength(1)
+      db.close()
+      expect(await search('malformed')).toHaveLength(1)
+    })
+
+    it('indexes a batch that mixes valid and invalid timestamps', async () => {
+      await initSearchIndex(SCOPE)
+      await indexMessage(chat('good', 'mixed batch good', 1), SCOPE)
+      await indexMessage({ ...chat('bad', 'mixed batch bad', 2), timestamp: new Date(Number.NaN) }, SCOPE)
+      const db = await openRaw()
+      expect(await db.count('search-docs')).toBe(2)
+      await expectRowsMatchDocuments(db, { allNumbered: true })
+      db.close()
+    })
+
+    it('numbers a legacy document that a collision moves behind the copy cursor', async () => {
+      const ROOM = 'team@conference.example.test'
+      const legacy = (n: number) => ({
+        indexId: `room:archive-${n}`, messageId: `r${n}`, conversationId: ROOM, from: `${ROOM}/alice`, nick: 'alice',
+        timestamp: Date.UTC(2024, 0, 1, 0, n), isRoom: true, body: `shared word number${n}`,
+        tokens: ['shared', 'word', `number${n}`], identityKeys: [],
+        ...(n === 5 ? {} : { stanzaId: `archive-${n}`, occupantId: 'alice-one' }),
+      })
+      await seedV4(Array.from({ length: 300 }, (_, i) => legacy(i + 1)) as never)
+      await initSearchIndex(SCOPE)
+      // The copy cursor sits past every id the relocated document can take.
+      const db0 = await openRaw()
+      const cursorTx = db0.transaction(['search-docs', 'search-meta'], 'readwrite')
+      const all = await cursorTx.objectStore('search-docs').getAll()
+      await cursorTx.objectStore('search-meta').put({ key: 'postings-cursor', value: 'room:z' })
+      await cursorTx.done
+      expect(all.length).toBe(300)
+      db0.close()
+      // A colliding message makes the writer relocate the legacy document.
+      const colliding = {
+        type: 'groupchat', id: 'other', roomJid: ROOM, from: `${ROOM}/bob`, nick: 'bob', occupantId: 'bob-one',
+        stanzaId: 'archive-5', originId: undefined, body: 'collision fresh', timestamp: new Date(Date.UTC(2024, 0, 2)),
+        isOutgoing: false,
+      } as never
+      await indexMessage(colliding, SCOPE)
+      await migrateSearchPostings()
+      const db = await openRaw()
+      const docs = await db.getAll('search-docs')
+      const moved = docs.find(d => d.messageId === 'r5' && d.indexId !== 'room:archive-5')
+      // The copy cursor is past the destination, so only the relocation can number it.
+      expect(moved?.docNo).toBeDefined()
+      await expectRowsMatchDocuments(db, { allNumbered: false })
+      expect(((await db.getAllKeys('search-postings')) as unknown as [string, number, number][]).filter(k => k[2] === moved?.docNo)).toHaveLength(3)
+      db.close()
     })
 
     it('finishes one correct index when two copies run at once', async () => {
