@@ -4069,6 +4069,50 @@ describe('XMPPClient Connection', () => {
       expect(smState?.id).toBe('sm-cycle-test')
       expect(smState?.inbound).toBe(25)
     })
+
+    it('hands unacknowledged stanzas to the next client, even through a failed attempt', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      const queueOf = (client: MockXmppClient) => client.streamManagement as unknown as {
+        outbound: number
+        outbound_q: Array<{ stanza: unknown }>
+      }
+      const firstClient = mockXmppClientInstance
+      firstClient.streamManagement.id = 'sm-queue-test'
+      firstClient.streamManagement.enabled = true
+      firstClient._emit('nonza', createMockElement('enabled', { xmlns: 'urn:xmpp:sm:3', id: 'sm-queue-test', max: '600' }))
+      firstClient._emit('online')
+      await connectPromise
+
+      // One stanza acknowledged, one still waiting when the socket dies.
+      const waiting = { stanza: createMockElement('message', { id: 'lost-1', to: 'bob@example.com', type: 'chat' }) }
+      queueOf(firstClient).outbound = 1
+      queueOf(firstClient).outbound_q = [waiting]
+      const failedAttempt = createMockXmppClient()
+      queueOf(failedAttempt).outbound_q = []
+      failedAttempt.start = vi.fn().mockRejectedValue(new Error('socket closed during handshake'))
+      mockClientFactory._setInstance(failedAttempt)
+      mockStores.connection.getStatus.mockReturnValue('online')
+      firstClient._emit('disconnect', { clean: false })
+      await vi.advanceTimersToNextTimerAsync()
+      await vi.waitFor(() => expect(failedAttempt.start).toHaveBeenCalled())
+      expect(queueOf(failedAttempt).outbound_q).toEqual([waiting])
+
+      // The next attempt still gets it, at the acknowledged count.
+      const retry = createMockXmppClient()
+      queueOf(retry).outbound_q = []
+      mockClientFactory._setInstance(retry)
+      await vi.advanceTimersToNextTimerAsync()
+      await vi.waitFor(() => expect(retry.start).toHaveBeenCalled())
+
+      expect(retry.streamManagement.id).toBe('sm-queue-test')
+      expect(retry.streamManagement.outbound).toBe(1)
+      expect(queueOf(retry).outbound_q).toEqual([waiting])
+    })
   })
 
   // Regression: SASL2 inline SM resumption (XEP-0388 + XEP-0198).

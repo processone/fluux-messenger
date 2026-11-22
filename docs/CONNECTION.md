@@ -105,6 +105,18 @@ When the connection drops, the SDK's reconnection logic:
 
 The original server string is preserved separately from the resolved credentials to ensure reconnection always goes through the full resolution path.
 
+### Resending after a resumption
+
+Each reconnect uses a new xmpp.js client. The stanzas the old client sent without
+an acknowledgement are kept in memory and handed to the new one. When the server
+resumes the session, its `h` says which of them it received. Fluux resends only
+the messages it did not receive, once, and sets its sent count to `h`. Requests
+and presence are not replayed, nor is a console message with an unusable
+address. A page reload keeps no stanzas. A session that
+is not resumed, because the server refused it or enabled a new one through
+Bind 2, starts with an empty queue and count, because the client cannot tell
+what the old session received.
+
 ### Stream Management resumption window
 
 The client asks the server to keep a dropped session resumable for
