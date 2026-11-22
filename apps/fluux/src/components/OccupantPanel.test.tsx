@@ -189,6 +189,18 @@ describe('OccupantPanel', () => {
       expect(screen.getByRole('button', { name: 'Offline members 10', expanded: true })).toBeInTheDocument()
       expect(screen.queryByText('Offline 0')).not.toBeInTheDocument()
     })
+
+    it('keeps an online person out of offline members when their cached address names another device', () => {
+      const occupants = new Map([['James', createOccupant({ nick: 'James', jid: 'james@example.com/desktop' })]])
+      const affiliatedMembers: NonNullable<Room['affiliatedMembers']> = [
+        { jid: 'james@example.com/phone', affiliation: 'member' },
+        { jid: 'emma@example.com/phone', affiliation: 'member' },
+      ]
+      render(<OccupantPanel room={createRoom({ affiliatedMembers, occupants })} contactsByJid={new Map()} onClose={() => {}} />)
+      expect(screen.getByRole('button', { name: 'Offline members 1', expanded: true })).toBeInTheDocument()
+      expect(screen.queryByText('james@example.com/phone')).not.toBeInTheDocument()
+      expect(screen.getAllByText('emma@example.com/phone').length).toBeGreaterThan(0)
+    })
   })
 
   describe('Basic Rendering', () => {
