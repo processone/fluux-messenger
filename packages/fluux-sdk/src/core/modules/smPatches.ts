@@ -2,7 +2,7 @@
  * Stream Management monkey-patches for xmpp.js
  *
  * These patches are applied at runtime to the xmpp.js client instance created
- * in Connection.createXmppClient(). They address five issues:
+ * in Connection.createXmppClient(). They address six issues:
  *
  * 1. **SM ack debouncing** (patchSmAckDebounce):
  *    xmpp.js sends an immediate <a h='N'/> for every <r/> from the server.
@@ -81,12 +81,24 @@
  *    keeps its queue and count, so this patch clears them: nothing from the
  *    old session may be resent in the new one.
  *
+ * 6. **Incoming unparsable addresses** (patchIncomingUnparsableAddress):
+ *    xmpp.js builds an incoming context for every element, and that context
+ *    throws on a `to` or `from` with no domain, such as the `from='@'` of
+ *    ejabberd's error reply to a stanza sent to `@`. The throw leaves the parser
+ *    mid-dispatch: it never resets its cursor, so every later stanza nests inside
+ *    the failed one and none is delivered, while the client still reports online.
+ *
+ *    Mechanics: such a stanza goes to the `element` listeners one by one, so the
+ *    console log and the inbound count still see it, and to no `stanza` handler,
+ *    because nothing can route a stanza without a valid address.
+ *
  * @module
  */
 
 import type { Client, Element, SmOutboundQueueItem, StreamManagement } from '@xmpp/client'
 import { jid, xml } from '@xmpp/client'
 import { parse as parseXml } from 'ltx'
+import { logWarn } from '../logger'
 
 const NS_SM = 'urn:xmpp:sm:3'
 const NS_SASL2 = 'urn:xmpp:sasl:2'
@@ -294,6 +306,51 @@ export function patchSmOutboundCount(xmppClient: Client): void {
       sm.outbound_q.push({ stanza: element, stamp: new Date().toISOString() })
     }
   })
+}
+
+/** The element dispatch of xmpp.js's connection, which is not on the SDK-facing declaration. */
+interface ElementDispatch {
+  _onElement?: (this: ElementDispatch, element: Element) => void
+  rawListeners: (event: 'element') => ((element: Element) => void)[]
+}
+
+/**
+ * Keep the stream readable after an incoming element whose address xmpp.js cannot
+ * parse. See the module documentation (patch 6). Must run before the client
+ * connects: xmpp.js binds `_onElement` when it attaches its first parser.
+ *
+ * A stanza is counted and logged but reaches no `stanza` handler. Any other element
+ * keeps xmpp.js's own handling, so a stream error is still reported.
+ *
+ * Guard: only patches real xmpp.js clients — test mocks have no `_onElement`.
+ */
+export function patchIncomingUnparsableAddress(xmppClient: Client): void {
+  const connection = xmppClient as unknown as ElementDispatch
+  const dispatch = connection._onElement
+  if (typeof dispatch !== 'function') return
+
+  connection._onElement = function (element: Element) {
+    if (!hasUnparsableAddress(element)) {
+      dispatch.call(this, element)
+      return
+    }
+    logWarn(`Ignored an incoming <${element.name}> with an unparsable address`)
+    if (!COUNTED_STANZAS.has(element.name)) {
+      try {
+        dispatch.call(this, element)
+      } catch {
+        // xmpp.js's incoming context rejected the address.
+      }
+      return
+    }
+    for (const listener of this.rawListeners('element')) {
+      try {
+        listener.call(this, element)
+      } catch {
+        // xmpp.js's incoming context rejected the address.
+      }
+    }
+  }
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   createSmPatchState,
   patchSmAckDebounce,
   patchSmAckQueue,
+  patchIncomingUnparsableAddress,
   patchSmInboundCount,
   patchSmOutboundCount,
   patchSmResumeQueue,
@@ -2108,6 +2109,7 @@ export class Connection extends BaseModule {
       patchSmOutboundCount(xmppClient)
       patchSmResumeQueue(xmppClient)
     }
+    patchIncomingUnparsableAddress(xmppClient)
 
     // Intercept <stream:features> before middleware to strip <sm> when SM was
     // negotiated INLINE via SASL2 (bind2 <enabled> or inline <resumed> inside
