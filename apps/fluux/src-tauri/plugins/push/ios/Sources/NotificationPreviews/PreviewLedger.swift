@@ -305,12 +305,12 @@ final class PreviewLedger {
             // Without an exact push ID, revealing an older body would claim more than we know.
             if unresolvedTarget || result.events.contains(where: { $0.kind == "unknown" }) { candidates = []; metadata = nil }
             var body: String?
-            if candidates.count == 1 { body = candidates[0].body }
+            if candidates.count == 1 { body = candidates[0].body.map(NotificationContent.previewText) }
             else if !candidates.isEmpty { body = words.format(words.messages, nickname: nickname, count: candidates.count) }
             else if let event = metadata {
                 switch event.mutation {
                 case "reaction": body = words.format(words.reaction, nickname: nickname, text: event.text ?? "")
-                case "edit", "outerEdit": body = words.format(words.edit, nickname: nickname, text: event.text ?? "")
+                case "edit", "outerEdit": body = words.format(words.edit, nickname: nickname, text: NotificationContent.previewText(event.text ?? ""))
                 case "retraction": body = words.format(words.retraction, nickname: nickname)
                 default: break
                 }

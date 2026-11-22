@@ -40,7 +40,8 @@ describe('forward with a marked quote', () => {
   it('shows the copied text when no comment is left, and the whole body once an edit changed the marked text', () => {
     expect(formatLocalizedPreview(marked(''), t)).toBe('Ship it')
     const edited = { ...marked('Look\n'), body: `A much longer comment\n${quote}` }
-    expect(formatLocalizedPreview(edited, t)).toContain('Bob wrote')
+    // FLM-537: the edited body is shown whole, but previews drop its quote lines.
+    expect(formatLocalizedPreview(edited, t)).toBe('A much longer comment\nxmpp:r@c?join;msg=1')
   })
 })
 

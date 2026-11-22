@@ -651,6 +651,7 @@ export type { ConsistentColorOptions } from './core/consistentColor'
 
 // Message preview utilities
 export { getAttachmentEmoji, formatMessagePreview, stripReplyQuote } from './utils/messagePreview'
+export { stripQuotedLines } from './utils/previewQuotes'
 export type { AttachmentDisplay } from './utils/messagePreview'
 export { forwardedCopyQuoteRange } from './utils/forwardedCopyQuote'
 export { isPreviewableMessage } from './stores/shared/lastMessageUtils'

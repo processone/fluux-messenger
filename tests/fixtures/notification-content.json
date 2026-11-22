@@ -105,7 +105,7 @@
     {
       "id": "reply",
       "app": {"message": {"body": "> Previous message\n\nMy reply", "replyTo": {"id": "old"}}, "expected": {"title": "Alice", "body": "My reply"}, "web": {"title": "Alice", "body": "My reply"}},
-      "ios": {"body": "> Previous message\n\nMy reply", "expected": {"title": "Alice", "body": "> Previous message\n\nMy reply"}, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "> Previous message\n\nMy reply"}]}
+      "ios": {"body": "> Previous message\n\nMy reply", "expected": {"title": "Alice", "body": "My reply"}, "preview": true, "events": [{"uid": "one", "id": "one", "kind": "newMessage", "body": "> Previous message\n\nMy reply"}]}
     },
     {
       "id": "correction",
@@ -260,6 +260,11 @@
     {
       "id": "app-language-other-account",
       "ios": {"body": "[OpenPGP-encrypted message]", "preview": true, "events": [], "words": {"activity": "Nouvelle activité", "reaction": "{{nickname}} a réagi : {{text}}", "edit": "{{nickname}} (edit) : {{text}}", "retraction": "{{nickname}} a supprimé un message", "messages": "{{nickname}} : {{count}} nouveaux messages"}, "snapshotAccount": "other@example.test", "expected": {"title": "Alice", "body": "New activity"}}
-    }
+    },
+    {"id": "quote-stripped", "app": {"message": {"body": "> Bob: earlier\n> more\nMy answer", "replyTo": {"id": "orig"}}, "expected": {"title": "Alice", "body": "My answer"}, "web": {"title": "Alice", "body": "My answer"}}, "push": {"payload": {"body": "> Bob: earlier\n> more\nMy answer", "title": "Alice"}, "expected": {"title": "Alice", "body": "My answer"}}, "ios": {"body": "> Bob: earlier\n> more\nMy answer", "expected": {"title": "Alice", "body": "My answer"}}},
+    {"id": "quote-unreplied-stripped", "app": {"message": {"body": "> Bob: earlier\nMy answer"}, "expected": {"title": "Alice", "body": "My answer"}, "web": {"title": "Alice", "body": "My answer"}}, "push": {"payload": {"body": "> Bob: earlier\nMy answer", "title": "Alice"}, "expected": {"title": "Alice", "body": "My answer"}}, "ios": {"body": "> Bob: earlier\nMy answer", "expected": {"title": "Alice", "body": "My answer"}}},
+    {"id": "quote-between-lines", "app": {"message": {"body": "Before\n> quoted\nAfter", "replyTo": {"id": "orig"}}, "expected": {"title": "Alice", "body": "Before\nAfter"}, "web": {"title": "Alice", "body": "Before\nAfter"}}, "push": {"payload": {"body": "Before\n> quoted\nAfter", "title": "Alice"}, "expected": {"title": "Alice", "body": "Before\nAfter"}}, "ios": {"body": "Before\n> quoted\nAfter", "expected": {"title": "Alice", "body": "Before\nAfter"}}},
+    {"id": "quote-only-kept", "app": {"message": {"body": "> Bob: earlier\n> more", "replyTo": {"id": "orig"}}, "expected": {"title": "Alice", "body": "> Bob: earlier\n> more"}, "web": {"title": "Alice", "body": "> Bob: earlier\n> more"}}, "push": {"payload": {"body": "> Bob: earlier\n> more", "title": "Alice"}, "expected": {"title": "Alice", "body": "> Bob: earlier\n> more"}}, "ios": {"body": "> Bob: earlier\n> more", "expected": {"title": "Alice", "body": "> Bob: earlier\n> more"}}},
+    {"id": "quote-in-fence-kept", "app": {"message": {"body": "Look:\n```\n> not a quote\n```\n> Bob: x\nDone"}, "expected": {"title": "Alice", "body": "Look:\n> not a quote\nDone"}, "web": {"title": "Alice", "body": "Look:\n> not a quote\nDone"}}, "push": {"payload": {"body": "Look:\n```\n> not a quote\n```\n> Bob: x\nDone", "title": "Alice"}, "expected": {"title": "Alice", "body": "Look:\n```\n> not a quote\n```\nDone"}}, "ios": {"body": "Look:\n```\n> not a quote\n```\n> Bob: x\nDone", "expected": {"title": "Alice", "body": "Look:\n```\n> not a quote\n```\nDone"}}}
   ]
 }

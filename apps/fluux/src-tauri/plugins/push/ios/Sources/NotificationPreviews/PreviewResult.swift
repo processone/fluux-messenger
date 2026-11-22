@@ -51,6 +51,23 @@ enum NotificationContent {
     static func transportBody(_ body: String, encrypted: Bool?, activity: String) -> String {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         let placeholder = ["This message is encrypted", "[OpenPGP-encrypted message]", "[Encrypted message: could not decrypt]"].contains(trimmed)
-        return encrypted == true || trimmed.isEmpty || (encrypted != false && placeholder) ? activity : body
+        return encrypted == true || trimmed.isEmpty || (encrypted != false && placeholder) ? activity : previewText(body)
+    }
+
+    /// Twin of `stripQuotedLines` in the SDK: drop every line starting with `>` outside a code
+    /// fence. A text made only of quote lines keeps its quote, `>` included.
+    static func previewText(_ text: String) -> String {
+        guard text.contains(">") else { return text }
+        var kept: [Substring] = []
+        var inFence = false
+        var dropped = false
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            if !inFence && line.hasPrefix(">") { dropped = true; continue }
+            if (line.components(separatedBy: "```").count - 1) % 2 == 1 { inFence.toggle() }
+            kept.append(line)
+        }
+        guard dropped else { return text }
+        let remaining = kept.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return remaining.isEmpty ? text.trimmingCharacters(in: .whitespacesAndNewlines) : remaining
     }
 }
