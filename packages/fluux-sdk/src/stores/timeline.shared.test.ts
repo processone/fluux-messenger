@@ -66,6 +66,7 @@ interface TimelineSurface {
   updateReactions(messageId: string, reactor: string, emojis: string[]): Promise<void> | void
   clearMessageStanzaId(stanzaId: string): void
   loadFromCache(): Promise<AnyMessage[]>
+  loadFromCacheWith(options: { before?: Date; peek?: boolean; oldest?: boolean }): Promise<AnyMessage[]>
   loadOlder(): Promise<AnyMessage[]>
   loadNewer(): Promise<AnyMessage[]>
   recenter(): Promise<boolean>
@@ -120,6 +121,7 @@ const chatSurface: TimelineSurface = {
   updateReactions: (id, reactor, emojis) => chatStore.getState().updateReactions(CHAT_ID, id, reactor, emojis),
   clearMessageStanzaId: (stanzaId) => chatStore.getState().clearMessageStanzaId(CHAT_ID, stanzaId),
   loadFromCache: () => chatStore.getState().loadMessagesFromCache(CHAT_ID),
+  loadFromCacheWith: (o) => chatStore.getState().loadMessagesFromCache(CHAT_ID, o),
   loadOlder: () => chatStore.getState().loadOlderMessagesFromCache(CHAT_ID),
   loadNewer: () => chatStore.getState().loadNewerMessagesFromCache(CHAT_ID),
   recenter: () => chatStore.getState().recenterToLatest(CHAT_ID),
@@ -175,6 +177,7 @@ const roomSurface: TimelineSurface = {
   updateReactions: (id, reactor, emojis) => roomStore.getState().updateReactions(ROOM_ID, id, reactor, emojis),
   clearMessageStanzaId: (stanzaId) => roomStore.getState().clearMessageStanzaId(ROOM_ID, stanzaId),
   loadFromCache: () => roomStore.getState().loadMessagesFromCache(ROOM_ID),
+  loadFromCacheWith: (o) => roomStore.getState().loadMessagesFromCache(ROOM_ID, o),
   loadOlder: () => roomStore.getState().loadOlderMessagesFromCache(ROOM_ID),
   loadNewer: () => roomStore.getState().loadNewerMessagesFromCache(ROOM_ID),
   recenter: () => roomStore.getState().recenterToLatest(ROOM_ID),
@@ -372,6 +375,23 @@ describe.each([chatSurface, roomSurface])('timeline scenarios: $name store', (s)
       const read = await s.loadFromCache()
       expect(ids(read)).toEqual(['a', 'b'])
       expect(ids(s.window())).toEqual(['a', 'b'])
+    })
+
+    it('loadFromCache asks for the latest rows unless a before bound or oldest-first is given', async () => {
+      await s.loadFromCache()
+      expect(vi.mocked(messageCache.getMessages).mock.calls.at(-1)?.[2]).toMatchObject({ latest: true, limit: 100 })
+      const before = new Date('2024-01-15T10:00:00Z')
+      await s.loadFromCacheWith({ before })
+      expect(vi.mocked(messageCache.getMessages).mock.calls.at(-1)?.[2]).toMatchObject({ latest: false, before })
+      await s.loadFromCacheWith({ oldest: true })
+      expect(vi.mocked(messageCache.getMessages).mock.calls.at(-1)?.[2]).toMatchObject({ latest: false })
+    })
+
+    it('loadFromCache with peek or oldest reads without making rows resident', async () => {
+      vi.mocked(messageCache.getMessages).mockResolvedValue([s.message('a', '2024-01-15T10:00:00Z')])
+      expect(ids(await s.loadFromCacheWith({ peek: true }))).toEqual(['a'])
+      expect(ids(await s.loadFromCacheWith({ oldest: true }))).toEqual(['a'])
+      expect(s.window()).toEqual([])
     })
 
     it('loadFromCache leaves a parked window where it is', async () => {
