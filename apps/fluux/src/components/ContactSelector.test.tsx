@@ -124,6 +124,10 @@ describe('ContactSelector', () => {
         fireEvent.click(removeButton('Alice Smith'))
         // A prevented key-down is what stops the browser from pressing the focused button.
         expect(fireEvent.keyDown(removeButton('Bob Jones'), { key: 'Enter', repeat: true })).toBe(false)
+        // Other keys, such as Shift released after Shift+Enter, say nothing about Enter.
+        fireEvent.keyUp(removeButton('Bob Jones'), { key: 'Shift' })
+        fireEvent.keyDown(removeButton('Bob Jones'), { key: 'a' })
+        expect(fireEvent.keyDown(removeButton('Bob Jones'), { key: 'Enter', repeat: true })).toBe(false)
         fireEvent.keyUp(removeButton('Bob Jones'), { key: 'Enter' })
         expect(fireEvent.keyDown(removeButton('Bob Jones'), { key: 'Enter' })).toBe(true)
 

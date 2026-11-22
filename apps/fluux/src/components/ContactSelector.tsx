@@ -109,7 +109,7 @@ export function ContactSelector({
   const popoverRef = useRef<HTMLDivElement>(null)
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const chipRowRef = useRef<HTMLDivElement>(null)
-  // The key that removed a contact may still be down when focus reaches the next control.
+  // The Enter that removed a contact may still be down when focus reaches the next control.
   const removalKeyHeldRef = useRef(false)
 
   // Recent-activity ordering is a one-shot nicety for the dropdown. Read it
@@ -410,15 +410,17 @@ export function ContactSelector({
     next?.focus()
   }
 
-  // Auto-repeat of that key must not press the control focus just moved to: holding Enter
-  // would remove every contact and then pick a suggestion. A new press works normally.
+  // Enter presses a button on key-down, so its auto-repeat must not press the control focus
+  // just moved to: holding it would remove every contact and then pick a suggestion. Only
+  // Enter's own release or new press ends this; a released Shift says nothing about Enter.
+  // Space presses a button on key-up, so it is never still held here.
   const handleRemovalKeyRepeat = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!removalKeyHeldRef.current) return
-    if (!e.repeat) {
-      removalKeyHeldRef.current = false
-    } else if (e.key === 'Enter' || e.key === ' ') {
+    if (!removalKeyHeldRef.current || e.key !== 'Enter') return
+    if (e.repeat) {
       e.preventDefault()
       e.stopPropagation()
+    } else {
+      removalKeyHeldRef.current = false
     }
   }
 
@@ -490,7 +492,7 @@ export function ContactSelector({
   return (
     <div
       onKeyDownCapture={handleRemovalKeyRepeat}
-      onKeyUpCapture={() => { removalKeyHeldRef.current = false }}
+      onKeyUpCapture={(e) => { if (e.key === 'Enter') removalKeyHeldRef.current = false }}
     >
       {/* Selected contacts chips */}
       {selectedContacts.length > 0 && (
