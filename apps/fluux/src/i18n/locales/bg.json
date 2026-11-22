@@ -144,6 +144,7 @@
         "rename": "Преименувай",
         "removeContact": "Премахни контакт",
         "removeFromRoster": "Премахни от моите контакти",
+        "removeFromSelection": "Премахни {{name}} от избраните",
         "addContact": "Добави контакт",
         "renameContact": "Преименувай контакт",
         "displayName": "Показвано име",

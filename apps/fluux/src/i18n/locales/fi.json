@@ -144,6 +144,7 @@
         "rename": "Nimeä uudelleen",
         "removeContact": "Poista yhteystieto",
         "removeFromRoster": "Poista yhteystiedoistani",
+        "removeFromSelection": "Poista {{name}} valinnasta",
         "addContact": "Lisää yhteystieto",
         "renameContact": "Nimeä yhteystieto uudelleen",
         "displayName": "Näyttönimi",

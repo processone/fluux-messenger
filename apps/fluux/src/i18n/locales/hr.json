@@ -144,6 +144,7 @@
         "rename": "Preimenuj",
         "removeContact": "Ukloni kontakt",
         "removeFromRoster": "Ukloni iz mojih kontakata",
+        "removeFromSelection": "Ukloni {{name}} iz odabira",
         "addContact": "Dodaj kontakt",
         "renameContact": "Preimenuj kontakt",
         "displayName": "Ime za prikaz",

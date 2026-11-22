@@ -145,6 +145,7 @@
         "rename": "Rename",
         "removeContact": "Remove contact",
         "removeFromRoster": "Remove from my contacts",
+        "removeFromSelection": "Remove {{name}} from selection",
         "addContact": "Add Contact",
         "renameContact": "Rename Contact",
         "displayName": "Display Name",

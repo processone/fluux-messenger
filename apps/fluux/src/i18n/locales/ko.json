@@ -145,6 +145,7 @@
         "rename": "이름 변경",
         "removeContact": "연락처 제거",
         "removeFromRoster": "내 연락처에서 제거",
+        "removeFromSelection": "선택에서 {{name}} 제거",
         "addContact": "연락처 추가",
         "renameContact": "연락처 이름 변경",
         "displayName": "표시 이름",

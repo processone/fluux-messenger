@@ -146,6 +146,7 @@
         "rename": "Renombrar",
         "removeContact": "Eliminar contacto",
         "removeFromRoster": "Eliminar de mis contactos",
+        "removeFromSelection": "Quitar {{name}} de la selección",
         "addContact": "Añadir Contacto",
         "renameContact": "Renombrar Contacto",
         "displayName": "Nombre a mostrar",

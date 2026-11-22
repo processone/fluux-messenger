@@ -144,6 +144,7 @@
         "rename": "Hernoemen",
         "removeContact": "Contact verwijderen",
         "removeFromRoster": "Verwijderen uit mijn contacten",
+        "removeFromSelection": "{{name}} uit de selectie verwijderen",
         "addContact": "Contact toevoegen",
         "renameContact": "Contact hernoemen",
         "displayName": "Weergavenaam",

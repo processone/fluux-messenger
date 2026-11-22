@@ -144,6 +144,7 @@
         "rename": "Omdøb",
         "removeContact": "Fjern kontakt",
         "removeFromRoster": "Fjern fra mine kontakter",
+        "removeFromSelection": "Fjern {{name}} fra valget",
         "addContact": "Tilføj kontakt",
         "renameContact": "Omdøb kontakt",
         "displayName": "Visningsnavn",

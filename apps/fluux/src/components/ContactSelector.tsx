@@ -473,6 +473,7 @@ export function ContactSelector({
                 <button
                   type="button"
                   onClick={() => removeContact(jid)}
+                  aria-label={t('contacts.removeFromSelection', { name: displayName })}
                   className="hover:text-fluux-text"
                   disabled={disabled}
                 >
