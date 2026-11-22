@@ -75,6 +75,9 @@
  *    ahead of `h` after a page reload, and would hold back later acks; and only
  *    messages are resent. A request's caller is gone with the old client, and a
  *    presence may be out of date, so those stay unsent as they did before.
+ *    When the server instead enables a new session through Bind 2, xmpp.js
+ *    keeps its queue and count, so this patch clears them: nothing from the
+ *    old session may be resent in the new one.
  *
  * @module
  */
@@ -335,11 +338,19 @@ function findResumed(element: Element): Element | undefined {
   return element.getChild('resumed', NS_SM) ?? element.getChild('bound', NS_BIND2)?.getChild('resumed', NS_SM)
 }
 
+/** A SASL2 success where Bind 2 enabled a new session. A refused resumption is left to xmpp.js. */
+function startsNewSession(element: Element): boolean {
+  return element.is('success', NS_SASL2)
+    && !element.getChild('failed', NS_SM)
+    && !!element.getChild('bound', NS_BIND2)?.getChild('enabled', NS_SM)
+}
+
 /**
  * When the server resumes the session, leave in the queue only the messages it
  * never received, and set the sent count to its `h`. xmpp.js then finds nothing
- * to acknowledge and resends exactly that queue. See the module documentation
- * (patch 5).
+ * to acknowledge and resends exactly that queue. When it starts a new session
+ * through Bind 2 instead, empty the queue and the count. See the module
+ * documentation (patch 5).
  *
  * Runs ahead of xmpp.js, which handles `<resumed/>` after this 'element' event.
  *
@@ -351,6 +362,14 @@ export function patchSmResumeQueue(xmppClient: Client): void {
   if (!Array.isArray(sm?.outbound_q) || typeof xmppClient.prependListener !== 'function') return
 
   xmppClient.prependListener('element', (element: Element) => {
+    if (startsNewSession(element)) {
+      // Nothing can have been sent in the new session yet. Without the old id, a
+      // success that then fails its server signature leaves the kept stanzas alone.
+      sm.id = ''
+      sm.outbound = 0
+      sm.outbound_q = []
+      return
+    }
     const resumed = findResumed(element)
     if (!resumed) return
     const h = Number(resumed.attrs.h)

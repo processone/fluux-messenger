@@ -111,9 +111,10 @@ Each reconnect uses a new xmpp.js client. The stanzas the old client sent withou
 an acknowledgement are kept in memory and handed to the new one. When the server
 resumes the session, its `h` says which of them it received. Fluux resends only
 the messages it did not receive, once, and sets its sent count to `h`. Requests
-and presence are not replayed. A page reload keeps no stanzas, and a refused
-resumption starts a new session without resending, because the client cannot
-tell what the old session received.
+and presence are not replayed. A page reload keeps no stanzas. A session that
+is not resumed, because the server refused it or enabled a new one through
+Bind 2, starts with an empty queue and count, because the client cannot tell
+what the old session received.
 
 ### Stream Management resumption window
 

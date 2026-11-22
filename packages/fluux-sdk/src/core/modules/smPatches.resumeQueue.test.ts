@@ -13,18 +13,21 @@ import { patchSmAckQueue, patchSmResumeQueue } from './smPatches'
 const NS_SM = 'urn:xmpp:sm:3'
 const NS_STREAM = 'http://etherx.jabber.org/streams'
 const NS_SASL2 = 'urn:xmpp:sasl:2'
+const NS_BIND2 = 'urn:xmpp:bind:0'
 const SESSION = 'g2gCbQAAAAxmbHV1eC13ejRkcXRt'
+const NEW_SESSION = 'g2gCbQAAAAxmbHV1eC1rN3BxdnM'
 const SENT_AT = '2026-11-22T11:16:38.441Z'
 
 interface Harness {
   xmppClient: Client
+  session: string
   /** Stanzas written to the transport, in order. */
   wire: Element[]
   receive: (element: Element) => void
 }
 
 /** A new client holding what the previous one left unacknowledged, as Connection hydrates it. */
-function resumingClient(acked: number, unacknowledged: Element[]): Harness {
+function resumingClient(acked: number, unacknowledged: Element[], session = SESSION): Harness {
   const xmppClient = client({
     service: 'wss://example.invalid/ws',
     domain: 'localhost',
@@ -47,10 +50,10 @@ function resumingClient(acked: number, unacknowledged: Element[]): Harness {
   const sm = xmppClient.streamManagement
   patchSmAckQueue(sm)
   patchSmResumeQueue(xmppClient)
-  sm.id = SESSION
+  sm.id = session
   sm.outbound = acked
   sm.outbound_q.push(...unacknowledged.map(stanza => ({ stanza, stamp: SENT_AT })))
-  return { xmppClient, wire, receive: element => entity._onElement(element) }
+  return { xmppClient, session, wire, receive: element => entity._onElement(element) }
 }
 
 function chat(id: string, body: string): Element {
@@ -61,12 +64,12 @@ function chat(id: string, body: string): Element {
 }
 
 function resumeWith(harness: Harness, h: number): Promise<void> {
-  const { xmppClient, wire, receive } = harness
+  const { xmppClient, session, wire, receive } = harness
   receive(xml('stream:features', { 'xmlns:stream': NS_STREAM }, xml('sm', { xmlns: NS_SM })))
   return vi.waitFor(() => {
     if (!wire.some(element => element.is('resume', NS_SM))) throw new Error('no <resume/> yet')
   }).then(async () => {
-    receive(xml('resumed', { xmlns: NS_SM, previd: SESSION, h: String(h) }))
+    receive(xml('resumed', { xmlns: NS_SM, previd: session, h: String(h) }))
     await vi.waitFor(() => expect(xmppClient.status).toBe('online'))
   })
 }
@@ -160,5 +163,33 @@ describe('Resending after a resumption (patchSmResumeQueue)', () => {
     const sm = xmppClient.streamManagement
     expect(sm.outbound).toBe(15)
     expect(sm.outbound_q.map(item => item.stanza)).toEqual([lost])
+  })
+
+  it('does not replay an old message after the server enabled a new session through Bind 2', async () => {
+    const delivered = chat('6421e651', 'reached the old session')
+    const harness = resumingClient(20, [delivered])
+    const sm = harness.xmppClient.streamManagement
+
+    // A server with Bind 2 stream management but no inline resumption: no <resume/> is offered.
+    harness.receive(xml('stream:features', { 'xmlns:stream': NS_STREAM },
+      xml('authentication', { xmlns: NS_SASL2 },
+        xml('mechanism', {}, 'SCRAM-SHA-1'),
+        xml('inline', {},
+          xml('bind', { xmlns: NS_BIND2 },
+            xml('inline', {}, xml('feature', { var: NS_SM })))))))
+    await vi.waitFor(() => {
+      if (!harness.wire.some(element => element.is('authenticate', NS_SASL2))) throw new Error('no <authenticate/> yet')
+    })
+    harness.receive(xml('success', { xmlns: NS_SASL2 },
+      xml('authorization-identifier', {}, 'alice@localhost/fluux-wz4d'),
+      xml('bound', { xmlns: NS_BIND2 }, xml('enabled', { xmlns: NS_SM, id: NEW_SESSION, resume: 'true', max: '600' }))))
+    await vi.waitFor(() => expect(sm.id).toBe(NEW_SESSION))
+
+    const unanswered = chat('9c44d1e0', 'sent in the new session')
+    await harness.xmppClient.send(unanswered)
+    const next = resumingClient(sm.outbound, sm.outbound_q.map(item => item.stanza as Element), NEW_SESSION)
+    await resumeWith(next, 0)
+
+    expect(stanzasOn(next.wire).map(stanza => stanza.attrs.id)).toEqual(['9c44d1e0'])
   })
 })
