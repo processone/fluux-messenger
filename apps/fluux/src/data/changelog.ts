@@ -48,6 +48,7 @@ export const changelog: ChangelogEntry[] = [
     }, {
       type: 'fixed',
       items: [
+        'In Contacts and Search, pressing an arrow key in the search field and then Enter now opens the highlighted result right away',
         'Screen readers now name the remove button on each chosen contact in contact pickers, such as Invite to Room, so you can tell which contact it takes out of the selection, in every language',
         'A message you send just as your connection drops is no longer lost while shown as sent: when Fluux gets the same session back, it sends the messages your server did not receive, and each reaches the other person once',
         'Large contact lists open and filter faster in Contacts, the command palette, recipient picker and room mentions. Suggestions prioritize exact matches and show how many results are hidden; type more to narrow them. Names and usernames take priority over category words in the command palette. Contacts keeps the full list scrollable and its search field in place while you scroll',

@@ -893,6 +893,37 @@ describe('useListKeyboardNav', () => {
     })
   })
 
+  describe('Leaving the search input', () => {
+    it('keeps focus in the zone so Enter selects the highlighted item', () => {
+      const zone = document.createElement('div')
+      zone.tabIndex = 0
+      const input = document.createElement('input')
+      const list = document.createElement('div')
+      zone.append(input, list)
+      document.body.appendChild(zone)
+      renderHook(() => useListKeyboardNav({
+        items: mockItems,
+        onSelect: mockOnSelect,
+        listRef: { current: list },
+        searchInputRef: { current: input },
+        zoneRef: { current: zone },
+        getItemId: (item) => item.id,
+      }))
+      input.focus()
+
+      act(() => {
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+      })
+      expect(document.activeElement).toBe(zone)
+
+      act(() => {
+        zone.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      })
+      expect(mockOnSelect).toHaveBeenCalledWith(mockItems[0], 0)
+      zone.remove()
+    })
+  })
+
   describe('activateOnAltNav option', () => {
     function createActivateWrapper(items: TestItem[], onSelect: OnSelectFn) {
       return () => {
