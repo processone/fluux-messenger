@@ -428,7 +428,7 @@ export class E2EEManager {
    * and must be blocked even under the opportunistic global policy. For OMEMO
    * a contact with a usable device reads `tofu` from first contact, and one
    * with a refused or waiting device reads `untrusted`; neither may fall back
-   * to plaintext. Only `unknown` is excluded: we have never seen a usable key
+   * to plaintext when no strategy is selected. Only `unknown` is excluded: we have never seen a usable key
    * (legitimate first contact, or a device whose bundle cannot be fetched).
    *
    * Plugin trust-check errors are treated as not-established (fail-open) so a
