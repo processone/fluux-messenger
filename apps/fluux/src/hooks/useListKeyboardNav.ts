@@ -19,7 +19,7 @@ interface UseListKeyboardNavOptions<T> {
   enabled?: boolean
   /** Ref to the scrollable list container for auto-scroll */
   listRef: RefObject<HTMLElement | null>
-  /** Optional ref to search input - will be blurred on arrow navigation */
+  /** Optional ref to search input - arrow navigation moves focus to zoneRef, or blurs it when there is no zone */
   searchInputRef?: RefObject<HTMLInputElement | null>
   /** Function to get a unique ID for each item (for scroll targeting) */
   getItemId: (item: T) => string
@@ -77,7 +77,7 @@ interface UseListKeyboardNavReturn {
  * - Enter to select
  * - Auto-scroll selected item into view
  * - Reset selection when items change
- * - Optional search input blur on navigation
+ * - Optional move out of the search input on navigation
  *
  * @example
  * ```tsx
@@ -291,9 +291,12 @@ export function useListKeyboardNav<T>({
         e.preventDefault()
         setIsKeyboardNav(true)
 
-        // Blur search input to indicate we're now navigating the list
+        // Leave the search input to indicate we're now navigating the list. Inside a
+        // zone, the zone takes focus: a plain blur drops focus to the page body, and
+        // the zone check above would then ignore the next Enter.
         if (isOurSearchInput) {
-          searchInputRef?.current?.blur()
+          if (zoneRef?.current) zoneRef.current.focus({ preventScroll: true })
+          else searchInputRef?.current?.blur()
         }
 
         // Calculate the new index - we need the current selectedIndex for this

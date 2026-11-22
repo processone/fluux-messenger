@@ -149,15 +149,13 @@ test('Contacts windows rows but keeps scroll, search and keyboard navigation', a
   const search = page.getByPlaceholder('Search contacts...')
   await search.fill(lastContact)
   await expect(rows).toHaveCount(1)
-  // Return to the sidebar's keyboard focus zone before navigating its rows.
-  await search.press('Shift+Tab')
-  await page.keyboard.press('ArrowDown')
+  // Arrow keys leave the search field for the list without an extra focus step.
+  await search.press('ArrowDown')
   await page.keyboard.press('Enter')
   await expect(page.getByRole('heading', { name: lastContact, exact: true })).toBeVisible()
   await search.fill('')
   // Move beyond the initial window with real keys, not a DOM scroll on an
   // already-mounted row; the selected row must be revealed by the virtualizer.
-  await search.press('Shift+Tab')
   for (let i = 0; i < MAX_SUGGESTIONS + 5; i++) await page.keyboard.press('ArrowDown')
   const selected = page.locator('[data-contact-jid].keyboard-focus-row')
   await expect(selected).toBeVisible()
