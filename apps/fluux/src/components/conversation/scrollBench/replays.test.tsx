@@ -54,7 +54,9 @@ it('C2 a viewport that shrinks under a reader at the end keeps them at the end, 
   s.setViewportHeight(450)
   s.frame()
   expect(bench.distanceFromEnd(), 'back at the end in the frame the viewport shrank, before paint').toBeLessThan(1)
-  // The composer keeps growing: the next shrink arrives before the list has settled.
+  // The composer keeps growing: the next shrink arrives before the list has settled. The bench
+  // advances frames before each check, so the delivery-time guarantee (each shrink corrected
+  // during observer delivery, before paint) is owned by useViewportResizeReconciliation.test.ts.
   s.setViewportHeight(426)
   s.frame()
   expect(bench.distanceFromEnd(), 'and again for the second shrink').toBeLessThan(1)
