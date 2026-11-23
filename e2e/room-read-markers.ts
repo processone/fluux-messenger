@@ -5,7 +5,7 @@ import { bootDemo } from './harness/demoBoot'
 import { LAUNCH_ROOM } from '../apps/fluux/src/demo/showcase/constants'
 
 type Perf = { reset(): void; counts(): Record<string, number>; tally(): Record<string, number>; resetTally(): void }
-type Scope = { __demoClient: DemoClient; __roomStore: typeof roomStore; __perf: Perf }
+type Scope = { __demoClient: DemoClient; __roomStore: typeof roomStore; __perf: Perf; __i18n: { changeLanguage(language: string): Promise<unknown> } }
 type Box = { x: number; y: number; width: number; height: number }
 const clearOf = (a: Box, b: Box) => a.x >= b.x + b.width || a.y >= b.y + b.height
   || a.x + a.width <= b.x || a.y + a.height <= b.y
@@ -45,9 +45,12 @@ test('room read badges cap avatars, name every reader and move without rendering
   const layouts = paragraphs.flatMap(message => ['ltr', 'rtl'].flatMap(direction => [1280, 390].map(width => ({ message, direction, width }))))
   const applyLayout = async ({ message, direction, width }: typeof layouts[number]) => {
     await page.evaluate(async ({ roomJid, id, body, direction }) => {
-      document.documentElement.dir = direction
-      await (window as unknown as Scope).__roomStore.getState().updateMessage(roomJid, id, { body, isEdited: false })
+      const scope = window as unknown as Scope
+      await scope.__i18n.changeLanguage(direction === 'rtl' ? 'ar' : 'en')
+      await scope.__roomStore.getState().updateMessage(roomJid, id, { body, isEdited: false })
     }, { roomJid: LAUNCH_ROOM, id: fixture.id, body: message.body, direction })
+    await expect(page.locator('html')).toHaveAttribute('lang', direction === 'rtl' ? 'ar' : 'en')
+    await expect(page.locator('html')).toHaveAttribute('dir', direction)
     await expect(oldRow.locator('[data-msg-text]')).toHaveText(message.body)
     await page.evaluate(() => document.fonts.ready.then(() => undefined))
     await page.setViewportSize({ width, height: 800 })
