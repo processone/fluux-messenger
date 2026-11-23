@@ -1877,6 +1877,28 @@
         "sent": "Messaggio inviato. Puoi eliminare questo elemento importato."
     },
     "search": {
+        "chip": {
+            "list": "Filtri di ricerca",
+            "after": "Dopo {{date}}",
+            "before": "Prima di {{date}}",
+            "on": "Data: {{date}}",
+            "invalid": "Fluux non capisce {{filter}}",
+            "remove": "Rimuovi {{label}}"
+        },
+        "dates": {
+            "today": "Oggi",
+            "yesterday": "Ieri",
+            "thisMonth": "Questo mese",
+            "thisYear": "Quest'anno"
+        },
+        "operators": {
+            "label": "Filtri",
+            "in": "Cerca in una conversazione o stanza",
+            "after": "Messaggi dopo una data",
+            "before": "Messaggi prima di una data",
+            "on": "Messaggi di un giorno, un mese o un anno",
+            "during": "Come on:, per esempio during:2024-03"
+        },
         "filter": {
             "all": "Tutto",
             "conversations": "Chat",

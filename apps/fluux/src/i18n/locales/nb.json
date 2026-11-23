@@ -1873,6 +1873,28 @@
         "sent": "Meldingen er sendt. Du kan fjerne dette importerte elementet."
     },
     "search": {
+        "chip": {
+            "list": "Søkefiltre",
+            "after": "Etter {{date}}",
+            "before": "Før {{date}}",
+            "on": "Dato: {{date}}",
+            "invalid": "Fluux forstår ikke {{filter}}",
+            "remove": "Fjern {{label}}"
+        },
+        "dates": {
+            "today": "I dag",
+            "yesterday": "I går",
+            "thisMonth": "Denne måneden",
+            "thisYear": "I år"
+        },
+        "operators": {
+            "label": "Filtre",
+            "in": "Søk i én samtale eller ett rom",
+            "after": "Meldinger etter en dato",
+            "before": "Meldinger før en dato",
+            "on": "Meldinger fra en dag, en måned eller et år",
+            "during": "Samme som on:, for eksempel during:2024-03"
+        },
         "filter": {
             "all": "Alle",
             "conversations": "Samtaler",

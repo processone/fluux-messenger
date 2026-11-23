@@ -1873,6 +1873,28 @@
         "sent": "메시지를 보냈습니다. 가져온 항목을 삭제할 수 있습니다."
     },
     "search": {
+        "chip": {
+            "list": "검색 필터",
+            "after": "{{date}} 이후",
+            "before": "{{date}} 이전",
+            "on": "날짜: {{date}}",
+            "invalid": "Fluux가 {{filter}}을(를) 이해하지 못합니다",
+            "remove": "{{label}} 제거"
+        },
+        "dates": {
+            "today": "오늘",
+            "yesterday": "어제",
+            "thisMonth": "이번 달",
+            "thisYear": "올해"
+        },
+        "operators": {
+            "label": "필터",
+            "in": "대화 또는 대화방 하나에서 검색",
+            "after": "특정 날짜 이후의 메시지",
+            "before": "특정 날짜 이전의 메시지",
+            "on": "특정 일, 월 또는 연도의 메시지",
+            "during": "on:과 같음, 예: during:2024-03"
+        },
         "filter": {
             "all": "전체",
             "conversations": "채팅",

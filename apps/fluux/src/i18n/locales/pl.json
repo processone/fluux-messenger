@@ -1879,6 +1879,28 @@
         "sent": "Wiadomość wysłana. Możesz usunąć ten zaimportowany element."
     },
     "search": {
+        "chip": {
+            "list": "Filtry wyszukiwania",
+            "after": "Po: {{date}}",
+            "before": "Przed: {{date}}",
+            "on": "Data: {{date}}",
+            "invalid": "Fluux nie rozumie {{filter}}",
+            "remove": "Usuń {{label}}"
+        },
+        "dates": {
+            "today": "Dzisiaj",
+            "yesterday": "Wczoraj",
+            "thisMonth": "Ten miesiąc",
+            "thisYear": "Ten rok"
+        },
+        "operators": {
+            "label": "Filtry",
+            "in": "Szukaj w jednej rozmowie lub pokoju",
+            "after": "Wiadomości po dacie",
+            "before": "Wiadomości przed datą",
+            "on": "Wiadomości z dnia, miesiąca lub roku",
+            "during": "To samo co on:, na przykład during:2024-03"
+        },
         "filter": {
             "all": "Wszystko",
             "conversations": "Czaty",

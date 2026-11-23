@@ -1873,6 +1873,28 @@
         "sent": "Meddelandet har skickats. Du kan ta bort det importerade objektet."
     },
     "search": {
+        "chip": {
+            "list": "Sökfilter",
+            "after": "Efter {{date}}",
+            "before": "Före {{date}}",
+            "on": "Datum: {{date}}",
+            "invalid": "Fluux förstår inte {{filter}}",
+            "remove": "Ta bort {{label}}"
+        },
+        "dates": {
+            "today": "I dag",
+            "yesterday": "I går",
+            "thisMonth": "Den här månaden",
+            "thisYear": "I år"
+        },
+        "operators": {
+            "label": "Filter",
+            "in": "Sök i en konversation eller ett rum",
+            "after": "Meddelanden efter ett datum",
+            "before": "Meddelanden före ett datum",
+            "on": "Meddelanden från en dag, en månad eller ett år",
+            "during": "Samma som on:, till exempel during:2024-03"
+        },
         "filter": {
             "all": "Alla",
             "conversations": "Chattar",

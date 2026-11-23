@@ -1875,6 +1875,28 @@
         "sent": "ההודעה נשלחה. ניתן למחוק את הפריט שיובא."
     },
     "search": {
+        "chip": {
+            "list": "מסנני חיפוש",
+            "after": "אחרי {{date}}",
+            "before": "לפני {{date}}",
+            "on": "תאריך: {{date}}",
+            "invalid": "Fluux לא מבין את {{filter}}",
+            "remove": "הסרת {{label}}"
+        },
+        "dates": {
+            "today": "היום",
+            "yesterday": "אתמול",
+            "thisMonth": "החודש",
+            "thisYear": "השנה"
+        },
+        "operators": {
+            "label": "מסננים",
+            "in": "חיפוש בשיחה או בחדר אחד",
+            "after": "הודעות אחרי תאריך",
+            "before": "הודעות לפני תאריך",
+            "on": "הודעות של יום, חודש או שנה",
+            "during": "כמו on:, לדוגמה during:2024-03"
+        },
         "filter": {
             "all": "הכול",
             "conversations": "צ'אטים",

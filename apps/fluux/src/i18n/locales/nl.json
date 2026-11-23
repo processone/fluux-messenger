@@ -1873,6 +1873,28 @@
         "sent": "Bericht verzonden. Je kunt dit geïmporteerde item verwijderen."
     },
     "search": {
+        "chip": {
+            "list": "Zoekfilters",
+            "after": "Na {{date}}",
+            "before": "Vóór {{date}}",
+            "on": "Datum: {{date}}",
+            "invalid": "Fluux begrijpt {{filter}} niet",
+            "remove": "{{label}} verwijderen"
+        },
+        "dates": {
+            "today": "Vandaag",
+            "yesterday": "Gisteren",
+            "thisMonth": "Deze maand",
+            "thisYear": "Dit jaar"
+        },
+        "operators": {
+            "label": "Filters",
+            "in": "Zoeken in één gesprek of kamer",
+            "after": "Berichten na een datum",
+            "before": "Berichten vóór een datum",
+            "on": "Berichten van een dag, maand of jaar",
+            "during": "Hetzelfde als on:, bijvoorbeeld during:2024-03"
+        },
         "filter": {
             "all": "Alles",
             "conversations": "Chats",

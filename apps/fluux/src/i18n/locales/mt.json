@@ -1881,6 +1881,28 @@
         "sent": "Messaġġ mibgħut. Tista’ tħassar dan l-oġġett importat."
     },
     "search": {
+        "chip": {
+            "list": "Filtri tat-tiftix",
+            "after": "Wara {{date}}",
+            "before": "Qabel {{date}}",
+            "on": "Data: {{date}}",
+            "invalid": "Fluux ma jifhimx {{filter}}",
+            "remove": "Neħħi {{label}}"
+        },
+        "dates": {
+            "today": "Illum",
+            "yesterday": "Ilbieraħ",
+            "thisMonth": "Dan ix-xahar",
+            "thisYear": "Din is-sena"
+        },
+        "operators": {
+            "label": "Filtri",
+            "in": "Fittex f'konversazzjoni jew kamra waħda",
+            "after": "Messaġġi wara data",
+            "before": "Messaġġi qabel data",
+            "on": "Messaġġi ta' jum, xahar jew sena",
+            "during": "L-istess bħal on:, pereżempju during:2024-03"
+        },
         "filter": {
             "all": "Kollox",
             "conversations": "Chats",

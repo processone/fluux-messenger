@@ -4,7 +4,7 @@ import { isSpamModerated } from '@/utils/spamModeration'
 import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import { useSearch, useRoomMessageSnapshots, chatStore, roomStore, getLocalPart, setSearchLocale } from '@fluux/sdk'
+import { useSearch, useRoomMessageSnapshots, chatStore, roomStore, getLocalPart, setSearchLocale, parseSearchInput, removeSearchFilter } from '@fluux/sdk'
 import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
 import type { SearchResult, SearchResultContext, SearchFilterType, RoomMessage } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
@@ -16,7 +16,8 @@ import { useDayChange } from '@/hooks/useDayChange'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 import { useSidebarZone } from './types'
-import { Search, SearchX, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash } from 'lucide-react'
+import { Search, SearchX, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash, CalendarDays, AlertTriangle, Filter } from 'lucide-react'
+import { applySuggestion, filterChipLabel, operatorSuggestions, SEARCH_OPERATOR_NAMES } from './searchOperators'
 import { TextInput } from '../ui/TextInput'
 import { ListEmpty } from '../ui/ListEmpty'
 
@@ -52,6 +53,8 @@ export function SearchView() {
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const [inPrefixHighlight, setInPrefixHighlight] = useState(-1)
+  // The query whose operator suggestions Escape dismissed; typing brings them back
+  const [dismissedFor, setDismissedFor] = useState<string | null>(null)
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
   const zoneRef = useSidebarZone()
@@ -106,7 +109,18 @@ export function SearchView() {
     if (previewResult && hiddenResults.has(previewResult.indexId)) latestRef.current.setPreviewResult(null)
   }, [previewResult, hiddenResults])
 
+  // Parsed again on each render: cheap, and the locale effect above runs before any typing
+  const parsedInput = useMemo(() => parseSearchInput(query), [query, i18n.language])
+  const chips = parsedInput.filters.filter((filter) => filter.value)
+  const operatorOptions = useMemo(
+    () => (isInPrefixActive || dismissedFor === query ? [] : operatorSuggestions(query)),
+    [query, isInPrefixActive, dismissedFor],
+  )
+  const suggestionCount = isInPrefixActive ? inPrefixSuggestions.length : operatorOptions.length
+  const suggestionsOpen = suggestionCount > 0
+
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
+    enabled: !suggestionsOpen,
     items: allResults,
     onSelect: rowHandlers.onSelect,
     listRef,
@@ -120,26 +134,38 @@ export function SearchView() {
   // Reset highlight when suggestions change
   useEffect(() => {
     setInPrefixHighlight(-1)
-  }, [inPrefixSuggestions])
+  }, [inPrefixSuggestions, operatorOptions])
 
-  const handleInPrefixKeyDown = useCallback(
+  const replaceQuery = useCallback((next: string) => {
+    notifyUserInput()
+    search(next)
+    inputRef.current?.focus()
+  }, [search])
+
+  const acceptSuggestion = useCallback((index: number) => {
+    if (isInPrefixActive) selectInPrefixSuggestion(inPrefixSuggestions[index])
+    else replaceQuery(applySuggestion(query, operatorOptions[index]))
+  }, [isInPrefixActive, selectInPrefixSuggestion, inPrefixSuggestions, replaceQuery, query, operatorOptions])
+
+  const handleSuggestionKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (!isInPrefixActive || inPrefixSuggestions.length === 0) return
+      if (!suggestionsOpen) return
       if (e.key === 'ArrowDown') {
         e.preventDefault()
-        setInPrefixHighlight((prev) => Math.min(prev + 1, inPrefixSuggestions.length - 1))
+        setInPrefixHighlight((prev) => Math.min(prev + 1, suggestionCount - 1))
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
         setInPrefixHighlight((prev) => Math.max(prev - 1, -1))
-      } else if (e.key === 'Enter' && inPrefixHighlight >= 0) {
+      } else if ((e.key === 'Enter' && inPrefixHighlight >= 0) || (e.key === 'Tab' && !e.shiftKey)) {
         e.preventDefault()
-        selectInPrefixSuggestion(inPrefixSuggestions[inPrefixHighlight])
+        acceptSuggestion(Math.max(inPrefixHighlight, 0))
       } else if (e.key === 'Escape') {
         e.preventDefault()
-        clearSearch()
+        if (isInPrefixActive) clearSearch()
+        else setDismissedFor(query)
       }
     },
-    [isInPrefixActive, inPrefixSuggestions, inPrefixHighlight, selectInPrefixSuggestion, clearSearch]
+    [suggestionsOpen, suggestionCount, inPrefixHighlight, acceptSuggestion, isInPrefixActive, clearSearch, query]
   )
 
   const filterOptions: { key: SearchFilterType; label: string; icon: typeof Users }[] = [
@@ -167,8 +193,13 @@ export function SearchView() {
               notifyUserInput()
               search(e.target.value)
             }}
-            onKeyDown={handleInPrefixKeyDown}
+            onKeyDown={handleSuggestionKeyDown}
             placeholder={t('search.placeholder')}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={suggestionsOpen}
+            aria-controls={suggestionsOpen ? 'search-suggestions' : undefined}
+            aria-activedescendant={suggestionsOpen && inPrefixHighlight >= 0 ? `search-suggestion-${inPrefixHighlight}` : undefined}
             className="w-full ps-8 pe-8 py-1.5 text-sm bg-fluux-bg border border-fluux-border rounded-md
                        text-fluux-text placeholder-fluux-muted"
           />
@@ -183,13 +214,35 @@ export function SearchView() {
             </button>
           )}
 
-          {/* in: prefix autocomplete dropdown */}
-          {isInPrefixActive && inPrefixSuggestions.length > 0 && (
-            <div className="absolute inset-x-0 top-full mt-1 fluux-popover rounded-md z-50 max-h-48 overflow-y-auto">
-              {inPrefixSuggestions.map((s, i) => (
+          {/* in: and operator autocomplete dropdown */}
+          {suggestionsOpen && (
+            <div id="search-suggestions" role="listbox" aria-label={t('search.operators.label')}
+              className="absolute inset-x-0 top-full mt-1 fluux-popover rounded-md z-50 max-h-48 overflow-y-auto">
+              {!isInPrefixActive && operatorOptions.map((option, i) => (
+                <button
+                  type="button"
+                  key={option.id}
+                  id={`search-suggestion-${i}`}
+                  role="option"
+                  aria-selected={i === inPrefixHighlight}
+                  tabIndex={-1}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => acceptSuggestion(i)}
+                  className={`w-full px-3 py-1.5 text-start text-sm flex items-center gap-2 transition-colors
+                    ${i === inPrefixHighlight ? 'bg-fluux-hover text-fluux-text' : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'}`}
+                >
+                  <span className="font-mono text-fluux-text flex-shrink-0">{option.insert}</span>
+                  <span className="truncate text-xs">{t(option.hintKey)}</span>
+                </button>
+              ))}
+              {isInPrefixActive && inPrefixSuggestions.map((s, i) => (
                 <button
                   type="button"
                   key={s.id}
+                  id={`search-suggestion-${i}`}
+                  role="option"
+                  aria-selected={i === inPrefixHighlight}
+                  tabIndex={-1}
                   onClick={() => selectInPrefixSuggestion(s)}
                   className={`w-full px-3 py-1.5 text-start text-sm flex items-center gap-2 transition-colors
                     ${i === inPrefixHighlight ? 'bg-fluux-hover text-fluux-text' : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'}`}
@@ -208,22 +261,48 @@ export function SearchView() {
         </div>
       </div>
 
-      {/* Scope chip */}
-      {searchScope && (
-        <div className="flex items-center gap-1 px-3 pb-1">
-          <span className="text-xs bg-fluux-hover rounded px-2 py-0.5 text-fluux-muted truncate">
-            {t('search.scopeLabel', { name: getConversationName(searchScope) })}
-          </span>
-          <button
-            type="button"
-            onClick={() => setSearchScope(null)}
-            className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted flex-shrink-0 tap-target"
-            aria-label={t('search.clearScope')}
-            title={t('search.clearScope')}
-          >
-            <X className="size-3" />
-          </button>
-        </div>
+      {/* Scope and filter chips: each removes its scope or operator */}
+      {(searchScope || chips.length > 0) && (
+        <ul className="flex flex-wrap items-center gap-1 px-3 pb-1" aria-label={t('search.chip.list')}>
+          {searchScope && (
+            <li className="flex items-center gap-0.5 min-w-0 max-w-full text-xs bg-fluux-hover rounded ps-2 text-fluux-muted">
+              <span className="truncate">{t('search.scopeLabel', { name: getConversationName(searchScope) })}</span>
+              <button
+                type="button"
+                onClick={() => setSearchScope(null)}
+                className="p-0.5 rounded hover:bg-fluux-hover-strong text-fluux-muted flex-shrink-0 tap-target"
+                aria-label={t('search.clearScope')}
+                title={t('search.clearScope')}
+              >
+                <X className="size-3" />
+              </button>
+            </li>
+          )}
+          {chips.map((filter) => {
+            const label = filterChipLabel(filter, t, currentLang)
+            return (
+              <li key={filter.raw}
+                className={`flex items-center gap-1 min-w-0 max-w-full text-xs rounded ps-2 ${filter.valid
+                  ? 'bg-fluux-brand/15 text-fluux-text' : 'bg-fluux-red/20 text-fluux-error'}`}
+                title={filter.valid ? undefined : t('search.chip.invalid', { filter: filter.raw })}
+              >
+                {filter.valid ? <CalendarDays className="size-3 flex-shrink-0" aria-hidden />
+                  : <AlertTriangle className="size-3 flex-shrink-0" aria-hidden />}
+                <span className="truncate">{label}</span>
+                {!filter.valid && <span className="sr-only">{t('search.chip.invalid', { filter: filter.raw })}</span>}
+                <button
+                  type="button"
+                  onClick={() => replaceQuery(removeSearchFilter(query, filter))}
+                  className="p-0.5 rounded hover:bg-fluux-hover-strong flex-shrink-0 tap-target"
+                  aria-label={t('search.chip.remove', { label })}
+                  title={t('search.chip.remove', { label })}
+                >
+                  <X className="size-3" />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
       )}
 
       {/* Type filter pills */}
@@ -360,7 +439,28 @@ export function SearchView() {
         )}
 
         {!query && (
-          <ListEmpty icon={Search} title={t('search.hint')} />
+          <>
+            <ListEmpty icon={Search} title={t('search.hint')} />
+            <div className="px-2 pb-3">
+              <p className="flex items-center justify-center gap-1 text-xs text-fluux-muted mb-1.5">
+                <Filter className="size-3" aria-hidden />
+                {t('search.operators.label')}
+              </p>
+              <div className="flex flex-wrap justify-center gap-1">
+                {SEARCH_OPERATOR_NAMES.map((name) => (
+                  <button
+                    type="button"
+                    key={name}
+                    onClick={() => replaceQuery(`${name}:`)}
+                    title={t(`search.operators.${name}`)}
+                    className="font-mono text-xs rounded-full px-2.5 py-0.5 bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+                  >
+                    {name}:
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>

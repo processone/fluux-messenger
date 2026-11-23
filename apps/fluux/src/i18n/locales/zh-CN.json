@@ -1873,6 +1873,28 @@
         "sent": "消息已发送。可以删除此导入项。"
     },
     "search": {
+        "chip": {
+            "list": "搜索筛选",
+            "after": "{{date}} 之后",
+            "before": "{{date}} 之前",
+            "on": "日期：{{date}}",
+            "invalid": "Fluux 无法理解 {{filter}}",
+            "remove": "移除 {{label}}"
+        },
+        "dates": {
+            "today": "今天",
+            "yesterday": "昨天",
+            "thisMonth": "本月",
+            "thisYear": "今年"
+        },
+        "operators": {
+            "label": "筛选",
+            "in": "在某个对话或房间中搜索",
+            "after": "某日期之后的消息",
+            "before": "某日期之前的消息",
+            "on": "某天、某月或某年的消息",
+            "during": "与 on: 相同，例如 during:2024-03"
+        },
         "filter": {
             "all": "全部",
             "conversations": "聊天",

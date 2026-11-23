@@ -1875,6 +1875,28 @@
         "sent": "Nachricht gesendet. Du kannst diesen importierten Inhalt entfernen."
     },
     "search": {
+        "chip": {
+            "list": "Suchfilter",
+            "after": "Nach {{date}}",
+            "before": "Vor {{date}}",
+            "on": "Datum: {{date}}",
+            "invalid": "Fluux versteht {{filter}} nicht",
+            "remove": "{{label}} entfernen"
+        },
+        "dates": {
+            "today": "Heute",
+            "yesterday": "Gestern",
+            "thisMonth": "Diesen Monat",
+            "thisYear": "Dieses Jahr"
+        },
+        "operators": {
+            "label": "Filter",
+            "in": "In einer Unterhaltung oder einem Raum suchen",
+            "after": "Nachrichten nach einem Datum",
+            "before": "Nachrichten vor einem Datum",
+            "on": "Nachrichten eines Tages, Monats oder Jahres",
+            "during": "Wie on:, zum Beispiel during:2024-03"
+        },
         "filter": {
             "all": "Alle",
             "conversations": "Chats",

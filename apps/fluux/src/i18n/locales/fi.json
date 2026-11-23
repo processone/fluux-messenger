@@ -1873,6 +1873,28 @@
         "sent": "Viesti lähetetty. Voit poistaa tämän tuodun kohteen."
     },
     "search": {
+        "chip": {
+            "list": "Hakusuodattimet",
+            "after": "{{date}} jälkeen",
+            "before": "Ennen {{date}}",
+            "on": "Päivä: {{date}}",
+            "invalid": "Fluux ei ymmärrä suodatinta {{filter}}",
+            "remove": "Poista {{label}}"
+        },
+        "dates": {
+            "today": "Tänään",
+            "yesterday": "Eilen",
+            "thisMonth": "Tässä kuussa",
+            "thisYear": "Tänä vuonna"
+        },
+        "operators": {
+            "label": "Suodattimet",
+            "in": "Hae yhdestä keskustelusta tai huoneesta",
+            "after": "Viestit päivämäärän jälkeen",
+            "before": "Viestit ennen päivämäärää",
+            "on": "Päivän, kuukauden tai vuoden viestit",
+            "during": "Sama kuin on:, esimerkiksi during:2024-03"
+        },
         "filter": {
             "all": "Kaikki",
             "conversations": "Keskustelut",

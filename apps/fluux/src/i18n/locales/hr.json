@@ -1875,6 +1875,28 @@
         "sent": "Poruka je poslana. Ovu uvezenu stavku možete ukloniti."
     },
     "search": {
+        "chip": {
+            "list": "Filtri pretrage",
+            "after": "Nakon: {{date}}",
+            "before": "Prije: {{date}}",
+            "on": "Datum: {{date}}",
+            "invalid": "Fluux ne razumije {{filter}}",
+            "remove": "Ukloni {{label}}"
+        },
+        "dates": {
+            "today": "Danas",
+            "yesterday": "Jučer",
+            "thisMonth": "Ovaj mjesec",
+            "thisYear": "Ova godina"
+        },
+        "operators": {
+            "label": "Filtri",
+            "in": "Pretraži jedan razgovor ili sobu",
+            "after": "Poruke nakon datuma",
+            "before": "Poruke prije datuma",
+            "on": "Poruke dana, mjeseca ili godine",
+            "during": "Isto kao on:, na primjer during:2024-03"
+        },
         "filter": {
             "all": "Sve",
             "conversations": "Razgovori",

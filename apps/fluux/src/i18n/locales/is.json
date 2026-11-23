@@ -1873,6 +1873,28 @@
         "sent": "Skilaboð send. Þú getur fjarlægt þetta innflutta atriði."
     },
     "search": {
+        "chip": {
+            "list": "Leitarsíur",
+            "after": "Eftir {{date}}",
+            "before": "Fyrir {{date}}",
+            "on": "Dagsetning: {{date}}",
+            "invalid": "Fluux skilur ekki {{filter}}",
+            "remove": "Fjarlægja {{label}}"
+        },
+        "dates": {
+            "today": "Í dag",
+            "yesterday": "Í gær",
+            "thisMonth": "Þessi mánuður",
+            "thisYear": "Þetta ár"
+        },
+        "operators": {
+            "label": "Síur",
+            "in": "Leita í einu samtali eða herbergi",
+            "after": "Skilaboð eftir dagsetningu",
+            "before": "Skilaboð fyrir dagsetningu",
+            "on": "Skilaboð frá degi, mánuði eða ári",
+            "during": "Sama og on:, til dæmis during:2024-03"
+        },
         "filter": {
             "all": "Allt",
             "conversations": "Spjall",

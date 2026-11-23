@@ -1877,6 +1877,28 @@
         "sent": "Mesaj trimis. Puteți șterge acest element importat."
     },
     "search": {
+        "chip": {
+            "list": "Filtre de căutare",
+            "after": "După {{date}}",
+            "before": "Înainte de {{date}}",
+            "on": "Data: {{date}}",
+            "invalid": "Fluux nu înțelege {{filter}}",
+            "remove": "Elimină {{label}}"
+        },
+        "dates": {
+            "today": "Azi",
+            "yesterday": "Ieri",
+            "thisMonth": "Luna aceasta",
+            "thisYear": "Anul acesta"
+        },
+        "operators": {
+            "label": "Filtre",
+            "in": "Caută într-o conversație sau cameră",
+            "after": "Mesaje după o dată",
+            "before": "Mesaje înainte de o dată",
+            "on": "Mesaje dintr-o zi, o lună sau un an",
+            "during": "La fel ca on:, de exemplu during:2024-03"
+        },
         "filter": {
             "all": "Toate",
             "conversations": "Conversații",

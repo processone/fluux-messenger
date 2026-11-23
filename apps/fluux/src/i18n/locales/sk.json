@@ -1878,6 +1878,28 @@
         "sent": "Správa odoslaná. Túto importovanú položku môžete odstrániť."
     },
     "search": {
+        "chip": {
+            "list": "Filtre hľadania",
+            "after": "Po: {{date}}",
+            "before": "Pred: {{date}}",
+            "on": "Dátum: {{date}}",
+            "invalid": "Fluux nerozumie {{filter}}",
+            "remove": "Odstrániť {{label}}"
+        },
+        "dates": {
+            "today": "Dnes",
+            "yesterday": "Včera",
+            "thisMonth": "Tento mesiac",
+            "thisYear": "Tento rok"
+        },
+        "operators": {
+            "label": "Filtre",
+            "in": "Hľadať v jednej konverzácii alebo miestnosti",
+            "after": "Správy po dátume",
+            "before": "Správy pred dátumom",
+            "on": "Správy z dňa, mesiaca alebo roka",
+            "during": "To isté ako on:, napríklad during:2024-03"
+        },
         "filter": {
             "all": "Všetko",
             "conversations": "Chaty",

@@ -1879,6 +1879,28 @@
         "sent": "Sporočilo je poslano. Ta uvoženi element lahko odstranite."
     },
     "search": {
+        "chip": {
+            "list": "Filtri iskanja",
+            "after": "Po: {{date}}",
+            "before": "Pred: {{date}}",
+            "on": "Datum: {{date}}",
+            "invalid": "Fluux ne razume {{filter}}",
+            "remove": "Odstrani {{label}}"
+        },
+        "dates": {
+            "today": "Danes",
+            "yesterday": "Včeraj",
+            "thisMonth": "Ta mesec",
+            "thisYear": "To leto"
+        },
+        "operators": {
+            "label": "Filtri",
+            "in": "Iskanje v enem pogovoru ali sobi",
+            "after": "Sporočila po datumu",
+            "before": "Sporočila pred datumom",
+            "on": "Sporočila dneva, meseca ali leta",
+            "during": "Enako kot on:, na primer during:2024-03"
+        },
         "filter": {
             "all": "Vse",
             "conversations": "Klepeti",

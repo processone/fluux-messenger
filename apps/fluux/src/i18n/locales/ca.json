@@ -1877,6 +1877,28 @@
         "sent": "Missatge enviat. Podeu suprimir aquest element importat."
     },
     "search": {
+        "chip": {
+            "list": "Filtres de cerca",
+            "after": "Després de {{date}}",
+            "before": "Abans de {{date}}",
+            "on": "Data: {{date}}",
+            "invalid": "Fluux no entén {{filter}}",
+            "remove": "Treu {{label}}"
+        },
+        "dates": {
+            "today": "Avui",
+            "yesterday": "Ahir",
+            "thisMonth": "Aquest mes",
+            "thisYear": "Aquest any"
+        },
+        "operators": {
+            "label": "Filtres",
+            "in": "Cerca en una conversa o sala",
+            "after": "Missatges després d'una data",
+            "before": "Missatges abans d'una data",
+            "on": "Missatges d'un dia, un mes o un any",
+            "during": "Igual que on:, per exemple during:2024-03"
+        },
         "filter": {
             "all": "Tot",
             "conversations": "Xats",

@@ -1873,6 +1873,28 @@
         "sent": "Üzenet elküldve. Ezt az importált elemet törölheti."
     },
     "search": {
+        "chip": {
+            "list": "Keresési szűrők",
+            "after": "{{date}} után",
+            "before": "{{date}} előtt",
+            "on": "Dátum: {{date}}",
+            "invalid": "A Fluux nem érti ezt: {{filter}}",
+            "remove": "{{label}} eltávolítása"
+        },
+        "dates": {
+            "today": "Ma",
+            "yesterday": "Tegnap",
+            "thisMonth": "Ebben a hónapban",
+            "thisYear": "Ebben az évben"
+        },
+        "operators": {
+            "label": "Szűrők",
+            "in": "Keresés egy beszélgetésben vagy szobában",
+            "after": "Üzenetek egy dátum után",
+            "before": "Üzenetek egy dátum előtt",
+            "on": "Egy nap, hónap vagy év üzenetei",
+            "during": "Ugyanaz, mint az on:, például during:2024-03"
+        },
         "filter": {
             "all": "Összes",
             "conversations": "Csevegések",

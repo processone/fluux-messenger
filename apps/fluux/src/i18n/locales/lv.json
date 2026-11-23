@@ -1876,6 +1876,28 @@
         "sent": "Ziņojums nosūtīts. Varat dzēst šo importēto vienumu."
     },
     "search": {
+        "chip": {
+            "list": "Meklēšanas filtri",
+            "after": "Pēc: {{date}}",
+            "before": "Pirms: {{date}}",
+            "on": "Datums: {{date}}",
+            "invalid": "Fluux nesaprot {{filter}}",
+            "remove": "Noņemt {{label}}"
+        },
+        "dates": {
+            "today": "Šodien",
+            "yesterday": "Vakar",
+            "thisMonth": "Šis mēnesis",
+            "thisYear": "Šis gads"
+        },
+        "operators": {
+            "label": "Filtri",
+            "in": "Meklēt vienā sarunā vai istabā",
+            "after": "Ziņas pēc datuma",
+            "before": "Ziņas pirms datuma",
+            "on": "Dienas, mēneša vai gada ziņas",
+            "during": "Tas pats, kas on:, piemēram, during:2024-03"
+        },
         "filter": {
             "all": "Viss",
             "conversations": "Tērzēšanas",

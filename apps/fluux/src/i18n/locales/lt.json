@@ -1877,6 +1877,28 @@
         "sent": "Žinutė išsiųsta. Galite pašalinti šį importuotą elementą."
     },
     "search": {
+        "chip": {
+            "list": "Paieškos filtrai",
+            "after": "Po: {{date}}",
+            "before": "Iki: {{date}}",
+            "on": "Data: {{date}}",
+            "invalid": "Fluux nesupranta {{filter}}",
+            "remove": "Pašalinti {{label}}"
+        },
+        "dates": {
+            "today": "Šiandien",
+            "yesterday": "Vakar",
+            "thisMonth": "Šis mėnuo",
+            "thisYear": "Šie metai"
+        },
+        "operators": {
+            "label": "Filtrai",
+            "in": "Ieškoti viename pokalbyje ar kambaryje",
+            "after": "Žinutės po datos",
+            "before": "Žinutės iki datos",
+            "on": "Dienos, mėnesio ar metų žinutės",
+            "during": "Tas pats kaip on:, pavyzdžiui, during:2024-03"
+        },
         "filter": {
             "all": "Viskas",
             "conversations": "Pokalbiai",

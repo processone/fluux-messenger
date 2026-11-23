@@ -1873,6 +1873,28 @@
         "sent": "Message sent. You can remove this imported item."
     },
     "search": {
+        "chip": {
+            "list": "Search filters",
+            "after": "After {{date}}",
+            "before": "Before {{date}}",
+            "on": "Date: {{date}}",
+            "invalid": "Fluux does not understand {{filter}}",
+            "remove": "Remove {{label}}"
+        },
+        "dates": {
+            "today": "Today",
+            "yesterday": "Yesterday",
+            "thisMonth": "This month",
+            "thisYear": "This year"
+        },
+        "operators": {
+            "label": "Filters",
+            "in": "Search one conversation or room",
+            "after": "Messages after a date",
+            "before": "Messages before a date",
+            "on": "Messages of a day, a month or a year",
+            "during": "Same as on:, for example during:2024-03"
+        },
         "filter": {
             "all": "All",
             "conversations": "Chats",

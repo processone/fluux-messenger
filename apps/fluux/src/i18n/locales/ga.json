@@ -1879,6 +1879,28 @@
         "sent": "Teachtaireacht seolta. Is féidir an mhír iompórtáilte seo a bhaint."
     },
     "search": {
+        "chip": {
+            "list": "Scagairí cuardaigh",
+            "after": "I ndiaidh {{date}}",
+            "before": "Roimh {{date}}",
+            "on": "Dáta: {{date}}",
+            "invalid": "Ní thuigeann Fluux {{filter}}",
+            "remove": "Bain {{label}}"
+        },
+        "dates": {
+            "today": "Inniu",
+            "yesterday": "Inné",
+            "thisMonth": "An mhí seo",
+            "thisYear": "An bhliain seo"
+        },
+        "operators": {
+            "label": "Scagairí",
+            "in": "Cuardaigh i gcomhrá nó i seomra amháin",
+            "after": "Teachtaireachtaí i ndiaidh dáta",
+            "before": "Teachtaireachtaí roimh dháta",
+            "on": "Teachtaireachtaí lae, míosa nó bliana",
+            "during": "Mar an gcéanna le on:, mar shampla during:2024-03"
+        },
         "filter": {
             "all": "Uile",
             "conversations": "Comhráite",

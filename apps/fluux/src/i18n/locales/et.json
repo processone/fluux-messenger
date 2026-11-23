@@ -1875,6 +1875,28 @@
         "sent": "Sõnum saadetud. Võid selle imporditud üksuse eemaldada."
     },
     "search": {
+        "chip": {
+            "list": "Otsingufiltrid",
+            "after": "Pärast {{date}}",
+            "before": "Enne {{date}}",
+            "on": "Kuupäev: {{date}}",
+            "invalid": "Fluux ei mõista filtrit {{filter}}",
+            "remove": "Eemalda {{label}}"
+        },
+        "dates": {
+            "today": "Täna",
+            "yesterday": "Eile",
+            "thisMonth": "See kuu",
+            "thisYear": "See aasta"
+        },
+        "operators": {
+            "label": "Filtrid",
+            "in": "Otsi ühest vestlusest või ruumist",
+            "after": "Sõnumid pärast kuupäeva",
+            "before": "Sõnumid enne kuupäeva",
+            "on": "Päeva, kuu või aasta sõnumid",
+            "during": "Sama mis on:, näiteks during:2024-03"
+        },
         "filter": {
             "all": "Kõik",
             "conversations": "Vestlused",
