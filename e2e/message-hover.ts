@@ -996,6 +996,8 @@ for (const kind of ['chat', 'room'] as const) {
     await page.mouse.move(bounds.x + 20, bounds.y + bounds.height / 2)
     await page.mouse.wheel(0, -AT_BOTTOM_THRESHOLD / 3)
     await expect.poll(() => distance(page)).toBeGreaterThan(1)
+    expect(await waitForTopVisibleSettled(page), 'native wheel must settle its visible window before choosing a row').not.toBeNull()
+    expect(await distance(page), 'fixture remains above the exact latest endpoint').toBeGreaterThan(1)
     expect(await distance(page), 'fixture stays inside the near-bottom band').toBeLessThan(AT_BOTTOM_THRESHOLD)
     const id = await list.evaluate(list => {
       const view = list.getBoundingClientRect()
@@ -1008,6 +1010,7 @@ for (const kind of ['chat', 'room'] as const) {
     await row.locator('[data-msg-text]').hover()
     await expect(list).toHaveAttribute('data-message-interaction', await row.getAttribute('data-message-row-id') as string)
     await waitForActions(page, id)
+    expect(await row.evaluate(row => row.matches(':hover')), 'pointer must rest on the chosen reading row').toBe(true)
     await measureDuring(page, id, async () => {
       await draftingPeerTyping(page, kind)
       await arrive(page, kind, ['near-latest-arrival'])
