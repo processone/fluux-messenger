@@ -930,7 +930,7 @@ for (const kind of ['chat', 'room'] as const) {
         c.emitSDK('chat:reactions', { conversationId: 'emma@fluux.chat', messageId: target, reactorJid: 'emma@fluux.chat', emojis: ['👍'], isLive: true })
         c.emitSDK('chat:message-updated', { conversationId: 'emma@fluux.chat', messageId: target, updates: { linkPreview } })
       } else {
-        c.emitSDK('room:reactions', { roomJid: 'team@conference.fluux.chat', messageId: target, reactorNick: 'Adrien', emojis: ['👍'] })
+        c.emitSDK('room:reactions', { roomJid: 'team@conference.fluux.chat', messageId: target, reactorNick: 'Adrien', emojis: ['👍'], isLive: true })
         c.emitSDK('room:message-updated', { roomJid: 'team@conference.fluux.chat', messageId: target, updates: { linkPreview } })
       }
     }, { kind, target: TARGET })
