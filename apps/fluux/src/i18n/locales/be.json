@@ -1959,14 +1959,14 @@
         "reload": "Перазагрузіць"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Абагульваць пазіцыі чытання ў пакоях",
+        "description": "Тыпова выключана. Пасля ўключэння выберыце кожны пакой асобна ў яго звестках.",
+        "shareInRoom": "Абагульваць маю пазіцыю чытання ў гэтым пакоі",
+        "roomDescription": "Адпраўляць толькі ў правераных, нябачных у спісе, неананімных пакоях толькі для ўдзельнікаў, дзе менш за 20 прысутных са сталымі ідэнтыфікатарамі. Зашыфраваныя паведамленні выключаны.",
+        "masterOff": "Агульны пераключальнік у наладах прыватнасці выключаны. Пакой не будзе абагульваць вашу пазіцыю чытання, пакуль вы яго не ўключыце.",
+        "metadata": "Пакой і прысутныя бачаць вашу актыўнасць чытання. Архіў можа захоўваць гэтыя метаданыя. Адключэнне спыняе новыя абнаўленні, але не выдаляе захаваныя пазнакі.",
+        "readThrough": "Прачытана да гэтага паведамлення",
+        "readers": "Прачытана да гэтага паведамлення: {{names}}",
+        "saveFailed": "Не ўдалося захаваць выбар. Абагульванне застаецца выключаным. Праверце доступ да сховішча перад паўторным уключэннем."
     }
 }

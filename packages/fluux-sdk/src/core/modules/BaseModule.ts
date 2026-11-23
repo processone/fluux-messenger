@@ -23,6 +23,8 @@ export interface ModuleDependencies {
   stores: StoreBindings | null
   /** Room-only peer markers; no dependency on private read-sync events. */
   getRoomReadMarkers?: () => RoomReadMarkers
+  /** Reuse the archive's existing positive purged-anchor classification. */
+  lookUpRoomArchiveAnchor?: (roomJid: string, archiveId: string) => Promise<{ kind: 'found' | 'absent' | 'unknown' }>
   flushRoomOccupants?: (roomJid?: string) => void
   waitForRoomOccupants?: (roomJid: string) => Promise<void>
   /**

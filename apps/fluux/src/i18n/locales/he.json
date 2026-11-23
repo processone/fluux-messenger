@@ -1957,14 +1957,14 @@
         "reload": "טעינה מחדש"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "שיתוף מיקומי קריאה בחדרים",
+        "description": "כבוי כברירת מחדל. לאחר ההפעלה, יש לבחור כל חדר בנפרד בפרטי החדר.",
+        "shareInRoom": "שיתוף מיקום הקריאה שלי בחדר הזה",
+        "roomDescription": "שליחה רק בחדרים מאומתים, לא רשומים, לא אנונימיים ולחברים בלבד, עם פחות מ־20 נוכחים בעלי זהויות חדר קבועות. הודעות מוצפנות אינן נכללות.",
+        "masterOff": "המתג הראשי בפרטיות כבוי. החדר לא ישתף את מיקום הקריאה שלך עד להפעלתו.",
+        "metadata": "החדר והנוכחים בו יכולים לראות את פעילות הקריאה שלך. הארכיון עשוי לשמור מטא־נתונים אלה. כיבוי השיתוף עוצר עדכונים עתידיים, אך אינו מסיר סמנים שנשמרו.",
+        "readThrough": "נקרא עד להודעה הזו",
+        "readers": "נקרא עד להודעה הזו: {{names}}",
+        "saveFailed": "לא ניתן לשמור את הבחירה. השיתוף נשאר כבוי. יש לבדוק את הגישה לאחסון לפני הפעלה חוזרת."
     }
 }

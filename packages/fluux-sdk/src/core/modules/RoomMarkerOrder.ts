@@ -6,6 +6,7 @@
 export class RoomMarkerOrder {
   private edges = new Map<string, Set<string>>()
   private liveLast: string | undefined
+  revision = 0
 
   after(candidate: string, previous: string): boolean {
     if (candidate === previous) return false
@@ -23,8 +24,10 @@ export class RoomMarkerOrder {
   private link(earlier: string, later: string) {
     if (!earlier || !later || earlier === later || this.after(earlier, later)) return
     const next = this.edges.get(earlier) ?? new Set<string>()
+    if (next.has(later)) return
     next.add(later)
     this.edges.set(earlier, next)
+    this.revision++
     // Losing old order evidence is safe: the caller can probe it again. Keep
     // long-lived room sessions from retaining an unbounded archive graph.
     if (this.edges.size > 4096) { this.edges.clear(); this.liveLast = undefined }

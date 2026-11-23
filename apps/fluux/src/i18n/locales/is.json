@@ -1955,14 +1955,14 @@
         "reload": "Endurhlaða"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Deila lestrarstöðum í herbergjum",
+        "description": "Slökkt sjálfgefið. Eftir að þú kveikir á þessu skaltu velja hvert herbergi sérstaklega í upplýsingum þess.",
+        "shareInRoom": "Deila lestrarstöðu minni í þessu herbergi",
+        "roomDescription": "Senda aðeins í staðfestum, óskráðum, ónafnlausum herbergjum sem eru eingöngu fyrir meðlimi, með færri en 20 viðstöddum með stöðug auðkenni í herberginu. Dulkóðuð skilaboð eru undanskilin.",
+        "masterOff": "Aðalrofinn í Persónuvernd er slökktur. Herbergið deilir ekki lestrarstöðu þinni fyrr en þú kveikir á honum.",
+        "metadata": "Herbergið og viðstaddir geta séð lestrarvirkni þína. Safnið kann að geyma þessi lýsigögn. Slökkt er á framtíðaruppfærslum, en vistuð merki eru ekki fjarlægð.",
+        "readThrough": "Lesið að þessum skilaboðum",
+        "readers": "Lesið að þessum skilaboðum: {{names}}",
+        "saveFailed": "Ekki tókst að vista valið. Slökkt verður áfram á deilingu. Athugaðu aðgang að geymslu áður en þú kveikir aftur."
     }
 }

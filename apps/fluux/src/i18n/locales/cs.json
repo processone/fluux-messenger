@@ -1961,14 +1961,14 @@
         "reload": "Načíst znovu"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Sdílet pozice přečtení v místnostech",
+        "description": "Ve výchozím nastavení vypnuto. Po zapnutí vyberte každou místnost zvlášť v jejích podrobnostech.",
+        "shareInRoom": "Sdílet mou pozici přečtení v této místnosti",
+        "roomDescription": "Odesílat jen v ověřených, neveřejně uvedených, neanonymních místnostech pouze pro členy s méně než 20 přítomnými se stálými identitami v místnosti. Šifrované zprávy jsou vyloučeny.",
+        "masterOff": "Hlavní přepínač v nastavení soukromí je vypnutý. Místnost nebude sdílet vaši pozici přečtení, dokud jej nezapnete.",
+        "metadata": "Místnost a její přítomní vidí vaši aktivitu čtení. Archiv může tato metadata uchovat. Vypnutí zastaví budoucí aktualizace, nikoli již uložené značky.",
+        "readThrough": "Přečteno po tuto zprávu",
+        "readers": "Přečteno po tuto zprávu: {{names}}",
+        "saveFailed": "Volbu se nepodařilo uložit. Sdílení zůstává vypnuté. Před opětovným zapnutím zkontrolujte přístup k úložišti."
     }
 }

@@ -1959,14 +1959,14 @@
         "reload": "Torna a carregar"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Comparteix les posicions de lectura a les sales",
+        "description": "Desactivat per defecte. Després d'activar-ho, tria cada sala per separat als seus detalls.",
+        "shareInRoom": "Comparteix la meva posició de lectura en aquesta sala",
+        "roomDescription": "Envia només en sales verificades, no llistades, no anònimes i només per a membres, amb menys de 20 ocupants amb identitats estables dins la sala. S'exclouen els missatges xifrats.",
+        "masterOff": "L'interruptor general de Privadesa està desactivat. Aquesta sala no compartirà la teva posició de lectura fins que l'activis.",
+        "metadata": "La sala i els seus ocupants poden veure la teva activitat de lectura. L'arxiu pot conservar aquestes metadades. Desactivar-ho atura les actualitzacions futures, però no elimina els marcadors desats.",
+        "readThrough": "Llegit fins a aquest missatge",
+        "readers": "Llegit fins a aquest missatge: {{names}}",
+        "saveFailed": "No s'ha pogut desar la tria. La compartició continua desactivada. Comprova l'accés a l'emmagatzematge abans de tornar-la a activar."
     }
 }

@@ -28,6 +28,8 @@ interface UseViewportObserverOptions {
   conversationId: string
   /** Callback when the bottom-most visible row changes; receives the row handle. */
   onMessageSeen?: (rowId: string) => void
+  /** Independent focused-view evidence; never flushed during conversation teardown. */
+  onVisibleRows?: (rowIds: readonly string[]) => void
   /** Whether the observer is active (e.g., skip while loading) */
   enabled?: boolean
 }
@@ -36,6 +38,7 @@ export function useViewportObserver({
   scrollContainerRef,
   conversationId,
   onMessageSeen,
+  onVisibleRows,
   enabled = true,
 }: UseViewportObserverOptions) {
   const lastReportedRef = useRef<string | null>(null)
@@ -46,6 +49,8 @@ export function useViewportObserver({
   // Stable callback ref to avoid re-creating the observer when onMessageSeen changes
   const onMessageSeenRef = useRef(onMessageSeen)
   onMessageSeenRef.current = onMessageSeen
+  const onVisibleRowsRef = useRef(onVisibleRows)
+  onVisibleRowsRef.current = onVisibleRows
 
   const resetReporting = useCallback(() => {
     lastReportedRef.current = null
@@ -111,7 +116,7 @@ export function useViewportObserver({
   }, [conversationId, resetReporting])
 
   useEffect(() => {
-    if (!enabled || !onMessageSeenRef.current) return
+    if (!enabled || (!onMessageSeenRef.current && !onVisibleRowsRef.current)) return
 
     const scrollContainer = scrollContainerRef.current
     if (!scrollContainer) return
@@ -147,6 +152,31 @@ export function useViewportObserver({
     // Track all currently visible entries
     const visibleEntries = new Map<Element, IntersectionObserverEntry>()
 
+    let viewingTimer: ReturnType<typeof setTimeout> | undefined
+    const reportVisibleRows = () => {
+      if (!onVisibleRowsRef.current || viewingTimer !== undefined) return
+      viewingTimer = setTimeout(() => {
+        viewingTimer = undefined
+        // Measure CURRENT intersections at the throttled boundary, not the
+        // geometry of a row that was visible before a scroll or overlay.
+        const viewport = scrollContainer.getBoundingClientRect()
+        const rows = new Set<string>()
+        for (const entry of visibleEntries.values()) {
+          const element = entry.target as HTMLElement
+          const rowId = element.closest<HTMLElement>('[data-message-row-id]')?.dataset.messageRowId
+          if (!rowId || !element.isConnected) continue
+          const rect = element.getBoundingClientRect()
+          const overlap = Math.min(rect.bottom, viewport.bottom) - Math.max(rect.top, viewport.top)
+          if (rect.height > 0 && viewport.height > 0 && overlap >= Math.min(rect.height, viewport.height) / 2) rows.add(rowId)
+        }
+        // Run the existing read writer first when its throttle is due in this
+        // same turn; peer publication must never race ahead of that pointer.
+        const bottom = findBottomMostVisible([...visibleEntries.values()])
+        if (bottom) reportMessageSeen(bottom)
+        onVisibleRowsRef.current?.([...rows])
+      }, THROTTLE_MS)
+    }
+
     const observer = new IntersectionObserver(
       (entries) => {
         // Update the visible entries map
@@ -158,6 +188,7 @@ export function useViewportObserver({
           }
         }
 
+        reportVisibleRows()
         // Find bottom-most from ALL currently visible entries
         const allVisible = Array.from(visibleEntries.values())
         const bottomMostId = findBottomMostVisible(allVisible)
@@ -219,6 +250,7 @@ export function useViewportObserver({
     // advances after scroll-to-bottom corrections.
     const handleScroll = () => {
       if (visibleEntries.size === 0) return
+      reportVisibleRows()
       const allVisible = Array.from(visibleEntries.values())
       const bottomMostId = findBottomMostVisible(allVisible)
       if (bottomMostId) {
@@ -248,6 +280,7 @@ export function useViewportObserver({
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleFocus)
       observer.disconnect()
+      if (viewingTimer !== undefined) clearTimeout(viewingTimer)
       mutationObserver.disconnect()
       scrollContainer.removeEventListener('scroll', handleScroll)
       visibleEntries.clear()

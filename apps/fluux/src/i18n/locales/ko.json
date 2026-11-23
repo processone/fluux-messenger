@@ -1955,14 +1955,14 @@
         "reload": "새로고침"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "방의 읽은 위치 공유",
+        "description": "기본적으로 꺼져 있습니다. 이 기능을 켠 다음 각 방의 세부 정보에서 공유할 방을 따로 선택하세요.",
+        "shareInRoom": "이 방에서 내 읽은 위치 공유",
+        "roomDescription": "검증된 회원 전용 비익명 방 중 목록에 공개되지 않고, 안정적인 방 식별자를 가진 참여자가 20명 미만인 방에서만 전송합니다. 암호화된 메시지는 제외됩니다.",
+        "masterOff": "개인정보 보호의 전체 스위치가 꺼져 있습니다. 스위치를 켜기 전까지 이 방은 읽은 위치를 공유하지 않습니다.",
+        "metadata": "방과 참여자는 읽기 활동을 볼 수 있습니다. 방의 기록에 이 메타데이터가 보관될 수 있습니다. 공유를 꺼도 저장된 표시는 삭제되지 않으며 이후 업데이트만 중지됩니다.",
+        "readThrough": "이 메시지까지 읽음",
+        "readers": "이 메시지까지 읽음: {{names}}",
+        "saveFailed": "선택 사항을 저장하지 못했습니다. 공유는 꺼진 상태로 유지됩니다. 다시 켜기 전에 저장소 접근 권한을 확인하세요."
     }
 }

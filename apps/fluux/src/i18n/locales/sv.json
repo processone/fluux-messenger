@@ -1955,14 +1955,14 @@
         "reload": "Läs in igen"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Dela läspositioner i rum",
+        "description": "Av som standard. Välj varje rum separat i dess detaljer efter att du har aktiverat detta.",
+        "shareInRoom": "Dela min läsposition i det här rummet",
+        "roomDescription": "Skicka endast i verifierade, olistade, icke-anonyma rum enbart för medlemmar, med färre än 20 närvarande med stabila rumsidentiteter. Krypterade meddelanden är undantagna.",
+        "masterOff": "Huvudreglaget under Integritet är av. Rummet delar inte din läsposition förrän du slår på det.",
+        "metadata": "Rummet och de närvarande kan se din läsaktivitet. Arkivet kan behålla dessa metadata. Avstängning stoppar framtida uppdateringar men tar inte bort sparade markörer.",
+        "readThrough": "Läst till och med detta meddelande",
+        "readers": "Läst till och med detta meddelande: {{names}}",
+        "saveFailed": "Valet kunde inte sparas. Delning förblir av. Kontrollera åtkomsten till lagringen innan du aktiverar igen."
     }
 }

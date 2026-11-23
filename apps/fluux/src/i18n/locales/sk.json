@@ -1960,14 +1960,14 @@
         "reload": "Znova načítať"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Zdieľať pozície prečítania v miestnostiach",
+        "description": "Predvolene vypnuté. Po zapnutí vyberte každú miestnosť osobitne v jej podrobnostiach.",
+        "shareInRoom": "Zdieľať moju pozíciu prečítania v tejto miestnosti",
+        "roomDescription": "Odosielať iba v overených, nezverejnených, neanonymných miestnostiach len pre členov, s menej ako 20 prítomnými so stálymi identitami v miestnosti. Šifrované správy sú vylúčené.",
+        "masterOff": "Hlavný prepínač v Súkromí je vypnutý. Miestnosť nebude zdieľať vašu pozíciu prečítania, kým ho nezapnete.",
+        "metadata": "Miestnosť a jej prítomní vidia vašu aktivitu čítania. Archív môže tieto metaúdaje uchovať. Vypnutie zastaví budúce aktualizácie, no neodstráni uložené značky.",
+        "readThrough": "Prečítané po túto správu",
+        "readers": "Prečítané po túto správu: {{names}}",
+        "saveFailed": "Voľbu sa nepodarilo uložiť. Zdieľanie zostáva vypnuté. Pred opätovným zapnutím skontrolujte prístup k úložisku."
     }
 }

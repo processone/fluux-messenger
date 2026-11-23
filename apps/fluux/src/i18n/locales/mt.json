@@ -1963,14 +1963,14 @@
         "reload": "Erġa' tella'"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Aqsam il-pożizzjonijiet tal-qari fil-kmamar",
+        "description": "Mitfi b’mod awtomatiku. Wara li tixgħel dan, agħżel kull kamra separatament fid-dettalji tagħha.",
+        "shareInRoom": "Aqsam il-pożizzjoni tal-qari tiegħi f’din il-kamra",
+        "roomDescription": "Ibgħat biss fi kmamar ivverifikati, mhux elenkati, mhux anonimi u għall-membri biss, b’inqas minn 20 persuna preżenti b’identitajiet stabbli fil-kamra. Il-messaġġi kriptati huma esklużi.",
+        "masterOff": "Is-swiċċ ewlieni tal-Privatezza huwa mitfi. Il-kamra mhux se taqsam il-pożizzjoni tal-qari tiegħek sakemm tixegħlu.",
+        "metadata": "Il-kamra u n-nies fiha jistgħu jaraw l-attività tal-qari tiegħek. L-arkivju jista’ jżomm din il-metadata. It-tifi jwaqqaf aġġornamenti futuri, iżda ma jneħħix il-markaturi maħżuna.",
+        "readThrough": "Inqara sa dan il-messaġġ",
+        "readers": "Inqara sa dan il-messaġġ: {{names}}",
+        "saveFailed": "L-għażla ma setgħetx tinħażen. Il-qsim jibqa’ mitfi. Iċċekkja l-aċċess għall-ħażna qabel ma terġa’ tixegħlu."
     }
 }

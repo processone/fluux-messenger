@@ -1957,14 +1957,14 @@
         "reload": "Laadi uuesti"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Jaga tubades lugemisjärge",
+        "description": "Vaikimisi välja lülitatud. Pärast sisselülitamist vali iga tuba eraldi selle üksikasjades.",
+        "shareInRoom": "Jaga minu lugemisjärge selles toas",
+        "roomDescription": "Saada ainult kontrollitud, loendis mitteolevates, mitteanonüümsetes liikmetele mõeldud tubades, kus on alla 20 kohalolija püsivate toaidentiteetidega. Krüptitud sõnumid on välistatud.",
+        "masterOff": "Privaatsuse pealüliti on väljas. Tuba ei jaga sinu lugemisjärge enne selle sisselülitamist.",
+        "metadata": "Tuba ja kohalolijad näevad sinu lugemistegevust. Arhiiv võib neid metaandmeid säilitada. Väljalülitamine peatab uued uuendused, kuid ei eemalda salvestatud märgiseid.",
+        "readThrough": "Loetud selle sõnumini",
+        "readers": "Loetud selle sõnumini: {{names}}",
+        "saveFailed": "Valikut ei saanud salvestada. Jagamine jääb välja lülitatuks. Enne uuesti sisselülitamist kontrolli ligipääsu salvestusruumile."
     }
 }

@@ -69,7 +69,7 @@ describe('RoomReadMarkers', () => {
     markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
   })
 
-  afterEach(() => { vi.restoreAllMocks(); setStorageScopeJid(null) })
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); setStorageScopeJid(null) })
 
   it('starts with both consent gates off; enabling one room does not enable another', async () => {
     expect(markers.getConsent()).toEqual({ enabled: false, rooms: [] })
@@ -112,8 +112,9 @@ describe('RoomReadMarkers', () => {
       .getChildren('field').find(field => field.attrs.var === 'FORM_TYPE')!.getChild('value')!.children = ['urn:example:other-form']
     const duplicate = disco()
     duplicate.getChild('query', 'http://jabber.org/protocol/disco#info')!.getChild('x', 'jabber:x:data')!
-      .getChildren('field').find(field => field.attrs.var === 'muc#roominfo_occupants')!.append(xml('value', {}, '20'))
+      .getChildren('field').find(field => field.attrs.var === 'muc#roominfo_occupants')!.children.push(xml('value', {}, '20'))
     for (const invalid of [unrelated, duplicate]) {
+      markers.observe(xml('presence', { from: `${roomJid}/Bob` }))
       iq.mockResolvedValueOnce(invalid)
       await markers.viewed(roomJid, rows[1])
       expect(send).not.toHaveBeenCalled()
@@ -127,10 +128,12 @@ describe('RoomReadMarkers', () => {
     await markers.viewed(roomJid, rows[0])
     expect(send).toHaveBeenCalledTimes(1)
     room.occupants.set('Member 19', { nick: 'Member 19', occupantId: 'member-19', role: 'participant', affiliation: 'member' })
+    markers.observe(xml('presence', { from: `${roomJid}/Member 19` }))
     iq.mockResolvedValue(disco(features, 20))
     await markers.viewed(roomJid, rows[1])
     expect(send).toHaveBeenCalledTimes(1)
     room.occupants.delete('Member 19')
+    markers.observe(xml('presence', { from: `${roomJid}/Member 19`, type: 'unavailable' }))
     iq.mockResolvedValue(disco(features, 18))
     await markers.viewed(roomJid, rows[1])
     expect(send).toHaveBeenCalledTimes(1)
@@ -139,6 +142,7 @@ describe('RoomReadMarkers', () => {
   it('rechecks focus, opt-out, occupancy and account after queued discovery', async () => {
     for (const invalidate of [() => { focused = false }, () => markers.setEnabled(false), () => { room.joined = false }, () => { account = 'bob@localhost' }, () => markers.cancelPending()]) {
       focused = true; room.joined = true; account = jid
+      markers.observe(xml('presence', { from: `${roomJid}/Bob` }))
       markers.setEnabled(true); markers.setRoomEnabled(roomJid, true)
       let answer!: (value: ReturnType<typeof disco>) => void
       let started!: () => void
@@ -284,7 +288,7 @@ describe('RoomReadMarkers', () => {
       const after = query.getChild('set', 'http://jabber.org/protocol/rsm')!.getChildText('after')
       const page = rows.slice(rows.findIndex(row => row.stanzaId === after) + 1)
       for (const row of page) collectors.get(query.attrs.queryid)!(xml('message', { from: roomJid },
-        xml('result', { xmlns: 'urn:xmpp:mam:2', id: row.stanzaId, queryid: query.attrs.queryid },
+        xml('result', { xmlns: 'urn:xmpp:mam:2', id: row.stanzaId!, queryid: query.attrs.queryid },
           xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { type: 'groupchat', from: row.from })))))
       return xml('iq', { type: 'result', from: roomJid }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
         xml('set', { xmlns: 'http://jabber.org/protocol/rsm' }, xml('last', {}, page.at(-1)?.stanzaId ?? ''))))
@@ -301,15 +305,15 @@ describe('RoomReadMarkers', () => {
   it('does not revive an older opt-in or lose the send watermark after storage refuses an opt-out', async () => {
     markers.setEnabled(true); markers.setRoomEnabled(roomJid, true)
     await markers.viewed(roomJid, rows[1])
-    // Node also exposes a Storage class; patch the actual storage method owner,
-    // not a constructor that the DOM environment may have replaced separately.
+    // happy-dom binds and caches storage methods inside its proxy. Intercept
+    // this boundary directly, retaining its real data and removal behavior.
     const storage = localStorage
-    const owner = Object.hasOwn(storage, 'setItem') ? storage : Object.getPrototypeOf(storage)
-    const fail = vi.spyOn(owner, 'setItem').mockImplementation(() => { throw new DOMException('Storage full', 'QuotaExceededError') })
+    const fail = vi.fn(() => { throw new DOMException('Storage full', 'QuotaExceededError') })
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) => key === 'setItem' ? fail : Reflect.get(target, key, target) }))
     expect(markers.setEnabled(false)).toBe(false)
     expect(fail).toHaveBeenCalled()
     expect(markers.getConsent()).toEqual({ enabled: false, rooms: [] })
-    fail.mockRestore()
+    vi.unstubAllGlobals()
     markers = new RoomReadMarkers(dependencies, () => focused)
     expect(markers.getConsent()).toEqual({ enabled: false, rooms: [] })
     await markers.viewed(roomJid, rows[1])
@@ -360,7 +364,7 @@ describe('RoomReadMarkers', () => {
     await Promise.resolve()
     const traced = vi.spyOn(markers, 'receive')
     const replay = marker('archive-b')
-    replay.append(xml('delay', { xmlns: 'urn:xmpp:delay', from: roomJid, stamp: '2026-05-01T10:00:00Z' }))
+    replay.children.push(xml('delay', { xmlns: 'urn:xmpp:delay', from: roomJid, stamp: '2026-05-01T10:00:00Z' }))
     expect(markers.observe(replay)).toBe(true)
     await traced.mock.results[0].value
     expect(markers.readers(roomJid, rows[1])).toMatchObject([{ occupantId: 'bob-id', nick: 'Robert' }])
@@ -408,4 +412,164 @@ describe('RoomReadMarkers', () => {
     await markers.receive(roomJid, marker('archive-b', 'alice-id', 'Alice'))
     expect(markers.readers(roomJid, rows[1])).toHaveLength(0)
   })
+
+  it('reuses negative discovery and coalesces concurrent markers within the same roster epoch', async () => {
+    iq.mockResolvedValue(disco([...features, 'muc_public']))
+    await Promise.all([markers.receive(roomJid, marker('archive-a')), markers.receive(roomJid, marker('archive-b'))])
+    await markers.receive(roomJid, marker('archive-b'))
+    expect(iq).toHaveBeenCalledTimes(1)
+    expect(markers.readers(roomJid, rows[1])).toHaveLength(0)
+    markers.observe(xml('presence', { from: `${roomJid}/Bob` }))
+    iq.mockResolvedValue(disco())
+    await markers.receive(roomJid, marker('archive-b'))
+    expect(iq).toHaveBeenCalledTimes(2)
+    expect(markers.readers(roomJid, rows[1])).toHaveLength(1)
+  })
+
+  it('retains the last proven display during roster revalidation but cannot send from that stale proof', async () => {
+    await markers.receive(roomJid, marker('archive-a'))
+    const held = markers.readers(roomJid, rows[0])
+    let answer!: (value: Element) => void
+    iq.mockImplementationOnce(() => new Promise(resolve => { answer = resolve }))
+    markers.observe(xml('presence', { from: `${roomJid}/Bob` }))
+    markers.roomChanged(roomJid)
+    expect(markers.eligible(roomJid)).toBe(false)
+    expect(markers.showsBadges(roomJid)).toBe(true)
+    expect(markers.readers(roomJid, rows[0])).toBe(held)
+    const resolved = markers.receive(roomJid, marker('archive-b'))
+    answer(disco())
+    await resolved
+    expect(markers.readers(roomJid, rows[0])).toHaveLength(0)
+    expect(markers.readers(roomJid, rows[1])).toHaveLength(1)
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('waits for the room arrival queue before resolving a delayed burst target', async () => {
+    const target = rows[1]
+    rows = []
+    let arrived!: (value: boolean) => void
+    let started!: () => void
+    const waiting = new Promise<void>(resolve => { started = resolve })
+    const arrivals = new Promise<boolean>(resolve => { arrived = resolve })
+    stores.room.waitForMessageArrivals = vi.fn<(roomJid: string) => Promise<boolean> | undefined>(() => { started(); return arrivals })
+    const pending = markers.receive(roomJid, marker(target.stanzaId!), [], true)
+    await Promise.race([waiting, pending])
+    expect(stores.room.waitForMessageArrivals).toHaveBeenCalledWith(roomJid)
+    expect(stores.room.getMessageByArchiveId).not.toHaveBeenCalled()
+    rows = [target]
+    arrived(true)
+    await pending
+    expect(stores.room.waitForMessageArrivals).toHaveBeenCalledWith(roomJid)
+    expect(markers.readers(roomJid, target)).toHaveLength(1)
+  })
+
+  it('remembers an unsuccessful archive-order pair instead of walking it again on each view', async () => {
+    markers.setEnabled(true); markers.setRoomEnabled(roomJid, true)
+    await markers.viewed(roomJid, rows[1])
+    markers = new RoomReadMarkers(dependencies, () => focused)
+    dependencies.registerMAMCollector = () => () => {}
+    iq.mockImplementation(async request => request.getChild('query', 'http://jabber.org/protocol/disco#info') ? disco()
+      : xml('iq', { type: 'result', from: roomJid }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })))
+    await markers.viewed(roomJid, rows[0])
+    const queries = iq.mock.calls.length
+    await markers.viewed(roomJid, rows[0])
+    expect(iq).toHaveBeenCalledTimes(queries)
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it('resumes sharing when the existing archive lookup positively identifies a purged send anchor', async () => {
+    markers.setEnabled(true); markers.setRoomEnabled(roomJid, true)
+    await markers.viewed(roomJid, rows[0])
+    markers = new RoomReadMarkers(dependencies, () => focused)
+    dependencies.lookUpRoomArchiveAnchor = vi.fn(async () => ({ kind: 'absent' as const }))
+    await markers.viewed(roomJid, rows[1])
+    expect(dependencies.lookUpRoomArchiveAnchor).toHaveBeenCalledWith(roomJid, rows[0].stanzaId)
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(send.mock.calls[1][0].getChild('displayed', 'urn:xmpp:chat-markers:0')?.attrs.id).toBe(rows[1].stanzaId)
+  })
+
+  it('continues a capped archive walk from its last proven cursor on the next view', async () => {
+    markers.setEnabled(true); markers.setRoomEnabled(roomJid, true)
+    await markers.viewed(roomJid, rows[0])
+    markers = new RoomReadMarkers(dependencies, () => focused)
+    const collectors = new Map<string, (stanza: Element) => void>()
+    dependencies.registerMAMCollector = (id, collector) => { collectors.set(id, collector); return () => { collectors.delete(id) } }
+    let page = 0
+    const cursors: string[] = []
+    iq.mockImplementation(async request => {
+      if (request.getChild('query', 'http://jabber.org/protocol/disco#info')) return disco()
+      const query = request.getChild('query', 'urn:xmpp:mam:2')!
+      cursors.push(query.getChild('set', 'http://jabber.org/protocol/rsm')!.getChildText('after')!)
+      const id = ++page > 20 ? rows[1].stanzaId! : `intermediate-${page}`
+      collectors.get(query.attrs.queryid)!(xml('message', { from: roomJid }, xml('result', { xmlns: 'urn:xmpp:mam:2', queryid: query.attrs.queryid, id },
+        xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { type: 'groupchat', from: `${roomJid}/Bob` })))))
+      return xml('iq', { type: 'result', from: roomJid }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: page > 20 ? 'true' : 'false' },
+        xml('set', { xmlns: 'http://jabber.org/protocol/rsm' }, xml('last', {}, id))))
+    })
+    await markers.viewed(roomJid, rows[1])
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(page).toBe(20)
+    await markers.viewed(roomJid, rows[1])
+    expect(cursors.at(-1)).toBe('intermediate-20')
+    expect(send).toHaveBeenCalledTimes(2)
+  })
+
+  it('allows a fresh connection to replace a stalled send from an old session without order evidence', async () => {
+    markers.setEnabled(true); markers.setRoomEnabled(roomJid, true)
+    let answer!: (value: Element) => void
+    let started!: () => void
+    const ready = new Promise<void>(resolve => { started = resolve })
+    iq.mockImplementationOnce(() => new Promise(resolve => { answer = resolve; started() }))
+    const old = markers.viewed(roomJid, rows[1])
+    await ready
+    const connection = {} as ReturnType<ModuleDependencies['getXmpp']>
+    dependencies.getXmpp = () => connection
+    await markers.viewed(roomJid, rows[0])
+    answer(disco())
+    await old
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0][0].getChild('displayed', 'urn:xmpp:chat-markers:0')?.attrs.id).toBe(rows[0].stanzaId)
+  })
+
+  it('honors a different tab’s durable opt-out before its storage event arrives and notifies subscribed controls', async () => {
+    markers.setEnabled(true); markers.setRoomEnabled(roomJid, true)
+    const notify = vi.fn()
+    const unsubscribe = markers.subscribe(notify)
+    const otherTab = new RoomReadMarkers(dependencies, () => focused)
+    otherTab.setEnabled(false)
+    await markers.viewed(roomJid, rows[1])
+    expect(send).not.toHaveBeenCalled()
+    expect(markers.getConsent().enabled).toBe(false)
+    const key = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).find(key => key?.includes('consent'))!
+    window.dispatchEvent(new StorageEvent('storage', { key }))
+    expect(notify).toHaveBeenCalledTimes(1)
+    unsubscribe()
+  })
+
+
+  it('keeps this client opted out when storage refuses both the write and removal of an older consent', async () => {
+    markers.setEnabled(true); markers.setRoomEnabled(roomJid, true)
+    const storage = localStorage
+    const refuse = () => { throw new DOMException('Storage unavailable', 'SecurityError') }
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) =>
+      key === 'setItem' || key === 'removeItem' ? refuse : Reflect.get(target, key, target) }))
+    expect(markers.setEnabled(false)).toBe(false)
+    markers.reload()
+    expect(markers.getConsent()).toEqual({ enabled: false, rooms: [] })
+    await markers.viewed(roomJid, rows[1])
+    expect(send).not.toHaveBeenCalled()
+  })
+
+
+  it('refreshes a cached send watermark on connection takeover before the other tab’s storage event', async () => {
+    markers.setEnabled(true); markers.setRoomEnabled(roomJid, true)
+    const otherTab = new RoomReadMarkers(dependencies, () => focused)
+    otherTab.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+    await otherTab.viewed(roomJid, rows[1])
+    const connection = {} as ReturnType<ModuleDependencies['getXmpp']>
+    dependencies.getXmpp = () => connection
+    await markers.viewed(roomJid, rows[0])
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
 })

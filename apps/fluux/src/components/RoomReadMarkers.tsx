@@ -31,24 +31,20 @@ export function RoomReadSharing({ markers, roomJid }: { markers: Pick<RoomReadMa
 
 /** Subscribes below the memoized message row: only moved badges receive new snapshots. */
 export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row }: {
-  markers: Pick<RoomReadMarkers, 'subscribe' | 'readers' | 'showsBadges'>; roomJid: string; row: MessageRowRef
+  markers: Pick<RoomReadMarkers, 'subscribe' | 'readers'>; roomJid: string; row: MessageRowRef
 }) {
   const { t } = useTranslation()
   const read = useCallback(() => markers.readers(roomJid, row), [markers, roomJid, row])
   const readers = useSyncExternalStore(markers.subscribe, read)
-  const eligibleSnapshot = useCallback(() => markers.showsBadges(roomJid), [markers, roomJid])
-  const eligible = useSyncExternalStore(markers.subscribe, eligibleSnapshot)
   const [open, setOpen] = useState(false)
-  if (!eligible) return null
-  // A fixed slot in eligible rooms keeps a marker move out of the virtualizer's
-  // row-size state. Empty and populated slots have exactly the same height.
-  if (!readers.length) return <div className="h-8" aria-hidden="true" />
+  // Overlay the trailing corner (right in LTR) without height or reaction moves.
+  if (!readers.length) return null
   const title = t('readMarkers.readThrough')
   return (
-    <div className="h-8 ps-14" data-read-marker-row={row.stanzaId}>
+    <div className="absolute end-2 bottom-0 z-10" data-read-marker-row={row.stanzaId}>
       <button type="button" onClick={() => setOpen(true)}
         aria-label={t('readMarkers.readers', { names: readers.map(reader => reader.nick).join(', ') })}
-        className="min-h-7 flex items-center gap-1 rounded px-1 text-xs text-fluux-muted hover:bg-fluux-hover">
+        className="min-h-7 flex items-center gap-1 rounded-full bg-fluux-bg px-1 text-xs text-fluux-muted shadow-sm hover:bg-fluux-hover">
         <span className="sr-only">{title}</span>
         {readers.slice(0, 3).map(reader => <span key={reader.occupantId} aria-hidden="true">
           <Avatar identifier={`${roomJid}/${reader.occupantId}`} name={reader.nick} avatarUrl={reader.avatar} size="xs" />

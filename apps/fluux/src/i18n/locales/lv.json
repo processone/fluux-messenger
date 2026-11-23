@@ -1958,14 +1958,14 @@
         "reload": "Pārlādēt"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Kopīgot lasīšanas pozīcijas istabās",
+        "description": "Pēc noklusējuma izslēgts. Pēc ieslēgšanas izvēlieties katru istabu atsevišķi tās informācijā.",
+        "shareInRoom": "Kopīgot manu lasīšanas pozīciju šajā istabā",
+        "roomDescription": "Sūtīt tikai pārbaudītās, sarakstā neiekļautās, neanonīmās istabās tikai biedriem, kur ir mazāk par 20 klātesošajiem ar pastāvīgām istabas identitātēm. Šifrēti ziņojumi netiek iekļauti.",
+        "masterOff": "Galvenais privātuma slēdzis ir izslēgts. Istaba nekopīgos jūsu lasīšanas pozīciju, kamēr to neieslēgsiet.",
+        "metadata": "Istaba un klātesošie redz jūsu lasīšanas darbības. Arhīvs var saglabāt šos metadatus. Izslēgšana aptur turpmākos atjauninājumus, bet neizdzēš saglabātās atzīmes.",
+        "readThrough": "Izlasīts līdz šim ziņojumam",
+        "readers": "Izlasīts līdz šim ziņojumam: {{names}}",
+        "saveFailed": "Neizdevās saglabāt izvēli. Kopīgošana paliek izslēgta. Pirms atkārtotas ieslēgšanas pārbaudiet piekļuvi krātuvei."
     }
 }

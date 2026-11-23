@@ -54,11 +54,17 @@ targets never move to a different message. Position order comes from server-orde
 archive pages and undelayed room delivery, never from opaque IDs, nicknames or
 marker timestamps. When two positions have no known order, a read-only, bounded
 MAM probe can establish it without inserting rows or changing archive coverage.
-If the server cannot prove that order, Fluux leaves the existing position alone.
+Completed unsuccessful probes are remembered until order evidence changes; a capped
+walk resumes at its last cursor. A positively purged send anchor is older than
+retained history, matching private read-sync recovery. Failed or unknown lookups
+never establish order. If the server cannot prove order, Fluux leaves the existing
+position alone.
 
 ## Display
 
-Each reader appears beneath their most recently displayed message, identified by
+Each reader appears over the lower-right corner of their most recently displayed
+message (lower-left in right-to-left layouts), without adding row height or moving
+reactions, identified by
 the room's occupant ID. Nick changes preserve identity, departures hide the reader,
 and reused nicknames do not inherit another person's position. Fluux hides your
 own marker. Each badge shows up to three avatars; its button opens a full named

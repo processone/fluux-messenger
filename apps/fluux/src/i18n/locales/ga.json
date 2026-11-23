@@ -1961,14 +1961,14 @@
         "reload": "Athlódáil"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Roinn suíomhanna léitheoireachta i seomraí",
+        "description": "Múchta de réir réamhshocraithe. Tar éis é seo a chumasú, roghnaigh gach seomra ar leith ina shonraí.",
+        "shareInRoom": "Roinn mo shuíomh léitheoireachta sa seomra seo",
+        "roomDescription": "Seol i seomraí fíoraithe, neamhliostaithe do bhaill amháin, ina nochtar céannacht na ndaoine, ina bhfuil níos lú ná 20 duine agus aitheantais sheasmhacha seomra. Ní áirítear teachtaireachtaí criptithe.",
+        "masterOff": "Tá an príomhlasc Príobháideachais múchta. Ní roinnfidh an seomra do shuíomh léitheoireachta go dtí go gcumasóidh tú é.",
+        "metadata": "Is féidir leis an seomra agus na daoine ann do ghníomhaíocht léitheoireachta a fheiceáil. Féadfaidh an chartlann na meiteashonraí seo a choinneáil. Stopann múchadh nuashonruithe amach anseo, ach ní bhaineann sé marcóirí sábháilte.",
+        "readThrough": "Léite go dtí an teachtaireacht seo",
+        "readers": "Léite go dtí an teachtaireacht seo: {{names}}",
+        "saveFailed": "Níor sábháladh an rogha. Fanann an roinnt múchta. Seiceáil rochtain ar an stóras sula gcumasaíonn tú arís í."
     }
 }

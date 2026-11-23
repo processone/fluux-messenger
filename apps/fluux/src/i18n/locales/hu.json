@@ -1955,14 +1955,14 @@
         "reload": "Újratöltés"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Olvasási pozíciók megosztása a szobákban",
+        "description": "Alapértelmezés szerint kikapcsolva. Bekapcsolás után válassza ki külön-külön a szobákat azok adatlapján.",
+        "shareInRoom": "Olvasási pozícióm megosztása ebben a szobában",
+        "roomDescription": "Küldés csak ellenőrzött, nem listázott, nem névtelen, kizárólag tagoknak fenntartott szobákban, 20-nál kevesebb jelenlévővel és állandó szobaazonosítókkal. A titkosított üzenetek kizárva.",
+        "masterOff": "Az Adatvédelem főkapcsolója ki van kapcsolva. A szoba nem osztja meg az olvasási pozícióját, amíg be nem kapcsolja.",
+        "metadata": "A szoba és a jelenlévők láthatják olvasási tevékenységét. Az archívum megőrizheti ezeket a metaadatokat. A kikapcsolás a jövőbeli frissítéseket állítja le, a tárolt jelölőket nem törli.",
+        "readThrough": "Eddig az üzenetig olvasva",
+        "readers": "Eddig az üzenetig olvasva: {{names}}",
+        "saveFailed": "A választás nem menthető. A megosztás kikapcsolva marad. Újbóli bekapcsolás előtt ellenőrizze a tárhely elérhetőségét."
     }
 }

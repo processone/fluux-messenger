@@ -1963,14 +1963,14 @@
         "reload": "إعادة التحميل"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "مشاركة مواضع القراءة في الغرف",
+        "description": "معطلة افتراضيًا. بعد تفعيل هذا الخيار، اختر كل غرفة على حدة من تفاصيلها.",
+        "shareInRoom": "مشاركة موضع قراءتي في هذه الغرفة",
+        "roomDescription": "الإرسال فقط في غرف تم التحقق منها، غير مدرجة، للأعضاء فقط، وغير مجهولة الهوية، تضم أقل من 20 شاغلًا بهويات ثابتة داخل الغرفة. تُستثنى الرسائل المشفرة.",
+        "masterOff": "خيار الخصوصية العام معطل. لن تشارك هذه الغرفة موضع قراءتك حتى تفعّله.",
+        "metadata": "يمكن للغرفة وشاغليها رؤية نشاط قراءتك، وقد يحتفظ أرشيفها بهذه البيانات الوصفية. يؤدي تعطيل المشاركة إلى إيقاف التحديثات المستقبلية، لا حذف العلامات المحفوظة.",
+        "readThrough": "تمت القراءة حتى هذه الرسالة",
+        "readers": "تمت القراءة حتى هذه الرسالة: {{names}}",
+        "saveFailed": "تعذر حفظ هذا الاختيار. تبقى المشاركة معطلة. تحقق من إمكانية الوصول إلى التخزين قبل تفعيلها مجددًا."
     }
 }

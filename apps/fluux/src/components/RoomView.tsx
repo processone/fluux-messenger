@@ -1454,6 +1454,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 
   return (
     <>
+      <div className="relative">
       <MessageBubble
         message={message}
         showAvatar={showAvatar}
@@ -1520,6 +1521,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       />
 
       {peerReadMarkers && !message.isPrivate && <RoomReadBadge markers={peerReadMarkers} roomJid={roomJid} row={message} />}
+      </div>
 
       {/* Delete own message confirmation dialog */}
       {showDeleteConfirm && (

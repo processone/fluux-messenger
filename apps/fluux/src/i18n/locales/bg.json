@@ -1955,14 +1955,14 @@
         "reload": "Презареди"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Споделяне на позициите на прочитане в стаите",
+        "description": "Изключено по подразбиране. След включване изберете всяка стая отделно в нейните подробности.",
+        "shareInRoom": "Споделяне на моята позиция на прочитане в тази стая",
+        "roomDescription": "Изпращане само в проверени, невписани в списъка, неанонимни стаи само за членове, с по-малко от 20 присъстващи със стабилни самоличности в стаята. Шифрованите съобщения са изключени.",
+        "masterOff": "Общият превключвател в „Поверителност“ е изключен. Стаята няма да споделя позицията ви на прочитане, докато не го включите.",
+        "metadata": "Стаята и присъстващите виждат дейността ви по четене. Архивът може да запази тези метаданни. Изключването спира бъдещите актуализации, но не изтрива съхранените маркери.",
+        "readThrough": "Прочетено до това съобщение",
+        "readers": "Прочетено до това съобщение: {{names}}",
+        "saveFailed": "Изборът не бе запазен. Споделянето остава изключено. Проверете достъпа до хранилището, преди да го включите отново."
     }
 }

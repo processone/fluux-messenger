@@ -1959,14 +1959,14 @@
         "reload": "Перезавантажити"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Ділитися позиціями читання в кімнатах",
+        "description": "Типово вимкнено. Після ввімкнення виберіть кожну кімнату окремо в її відомостях.",
+        "shareInRoom": "Ділитися моєю позицією читання в цій кімнаті",
+        "roomDescription": "Надсилати лише в перевірених, не внесених до списку, неанонімних кімнатах тільки для учасників, де менше ніж 20 присутніх зі сталими ідентифікаторами кімнати. Зашифровані повідомлення виключено.",
+        "masterOff": "Головний перемикач у налаштуваннях приватності вимкнено. Кімната не ділитиметься вашою позицією читання, доки ви його не ввімкнете.",
+        "metadata": "Кімната та присутні бачать вашу активність читання. Архів може зберігати ці метадані. Вимкнення зупиняє майбутні оновлення, але не видаляє збережені позначки.",
+        "readThrough": "Прочитано до цього повідомлення",
+        "readers": "Прочитано до цього повідомлення: {{names}}",
+        "saveFailed": "Не вдалося зберегти вибір. Поширення залишається вимкненим. Перевірте доступ до сховища перед повторним увімкненням."
     }
 }

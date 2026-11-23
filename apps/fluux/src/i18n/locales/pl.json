@@ -1961,14 +1961,14 @@
         "reload": "Odśwież"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Udostępniaj pozycje odczytu w pokojach",
+        "description": "Domyślnie wyłączone. Po włączeniu wybierz każdy pokój osobno w jego szczegółach.",
+        "shareInRoom": "Udostępniaj moją pozycję odczytu w tym pokoju",
+        "roomDescription": "Wysyłaj tylko w zweryfikowanych, niewidocznych na liście, nieanonimowych pokojach wyłącznie dla członków, z mniej niż 20 obecnymi o stałych tożsamościach w pokoju. Zaszyfrowane wiadomości są wykluczone.",
+        "masterOff": "Główny przełącznik w Prywatności jest wyłączony. Pokój nie udostępni Twojej pozycji odczytu, dopóki go nie włączysz.",
+        "metadata": "Pokój i obecne w nim osoby widzą Twoją aktywność czytania. Archiwum może zachować te metadane. Wyłączenie zatrzymuje przyszłe aktualizacje, ale nie usuwa zapisanych znaczników.",
+        "readThrough": "Przeczytano do tej wiadomości",
+        "readers": "Przeczytano do tej wiadomości: {{names}}",
+        "saveFailed": "Nie udało się zapisać wyboru. Udostępnianie pozostaje wyłączone. Przed ponownym włączeniem sprawdź dostęp do pamięci."
     }
 }

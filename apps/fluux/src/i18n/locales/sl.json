@@ -1961,14 +1961,14 @@
         "reload": "Znova naloži"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Deli položaje branja v sobah",
+        "description": "Privzeto izklopljeno. Po vklopu izberite vsako sobo posebej v njenih podrobnostih.",
+        "shareInRoom": "Deli moj položaj branja v tej sobi",
+        "roomDescription": "Pošiljaj le v preverjenih, neobjavljenih, neanonimnih sobah samo za člane, z manj kot 20 prisotnimi s stalnimi identitetami v sobi. Šifrirana sporočila so izključena.",
+        "masterOff": "Glavno stikalo v Zasebnosti je izklopljeno. Soba ne bo delila vašega položaja branja, dokler ga ne vklopite.",
+        "metadata": "Soba in prisotni vidijo vašo dejavnost branja. Arhiv lahko te metapodatke ohrani. Izklop ustavi prihodnje posodobitve, ne odstrani pa shranjenih oznak.",
+        "readThrough": "Prebrano do tega sporočila",
+        "readers": "Prebrano do tega sporočila: {{names}}",
+        "saveFailed": "Izbire ni bilo mogoče shraniti. Deljenje ostaja izklopljeno. Pred ponovnim vklopom preverite dostop do shrambe."
     }
 }

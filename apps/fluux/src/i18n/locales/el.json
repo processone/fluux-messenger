@@ -1956,14 +1956,14 @@
         "reload": "Επαναφόρτωση"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Κοινοποίηση θέσεων ανάγνωσης στα δωμάτια",
+        "description": "Απενεργοποιημένο από προεπιλογή. Αφού το ενεργοποιήσετε, επιλέξτε κάθε δωμάτιο ξεχωριστά στις λεπτομέρειές του.",
+        "shareInRoom": "Κοινοποίηση της θέσης ανάγνωσής μου σε αυτό το δωμάτιο",
+        "roomDescription": "Αποστολή μόνο σε επαληθευμένα, μη καταχωρισμένα, μη ανώνυμα δωμάτια μόνο για μέλη, με λιγότερους από 20 παρόντες με σταθερές ταυτότητες δωματίου. Εξαιρούνται τα κρυπτογραφημένα μηνύματα.",
+        "masterOff": "Ο γενικός διακόπτης στο Απόρρητο είναι κλειστός. Το δωμάτιο δεν θα κοινοποιεί τη θέση ανάγνωσής σας μέχρι να τον ενεργοποιήσετε.",
+        "metadata": "Το δωμάτιο και οι παρόντες βλέπουν τη δραστηριότητα ανάγνωσής σας. Το αρχείο μπορεί να διατηρεί αυτά τα μεταδεδομένα. Η απενεργοποίηση σταματά μελλοντικές ενημερώσεις, όχι τους αποθηκευμένους δείκτες.",
+        "readThrough": "Ανάγνωση μέχρι αυτό το μήνυμα",
+        "readers": "Ανάγνωση μέχρι αυτό το μήνυμα: {{names}}",
+        "saveFailed": "Δεν αποθηκεύτηκε η επιλογή. Η κοινοποίηση παραμένει ανενεργή. Ελέγξτε την πρόσβαση στον χώρο αποθήκευσης πριν την ενεργοποιήσετε ξανά."
     }
 }

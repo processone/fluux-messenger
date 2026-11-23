@@ -1955,14 +1955,14 @@
         "reload": "重新加载"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "共享群聊已读位置",
+        "description": "默认关闭。开启后，请在各群聊的详情中单独选择要共享的群聊。",
+        "shareInRoom": "在此群聊中共享我的已读位置",
+        "roomDescription": "仅在经过验证、不公开列出、仅限成员且非匿名的群聊中发送；在线成员须少于 20 人，并具有稳定的群聊身份标识。不包含加密消息。",
+        "masterOff": "隐私设置中的总开关已关闭。开启之前，此群聊不会共享你的已读位置。",
+        "metadata": "群聊及其中的成员可以看到你的阅读活动。群聊存档可能保留这些元数据。关闭共享只会停止后续更新，不会删除已保存的标记。",
+        "readThrough": "已读至此消息",
+        "readers": "已读至此消息：{{names}}",
+        "saveFailed": "无法保存此选择。共享将保持关闭。再次开启前，请检查存储访问权限。"
     }
 }

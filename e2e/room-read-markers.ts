@@ -23,11 +23,52 @@ test('room read badges cap avatars, name every reader and move without rendering
     const rows = scope.__roomStore.getState().messages.get(roomJid)!.filter(row => !row.isPrivate && !row.securityContext && !row.encryptedPayload && !row.contentAvailability)
     const old = rows.at(-3)!, next = rows.at(-2)!
     if (!old.stanzaId || !next.stanzaId || readers.length !== 4) throw new Error('Showcase room lacks marker fixture identities')
-    for (const reader of readers) await scope.__demoClient.simulateRoomDisplayed(roomJid, reader.occupantId!, old.stanzaId)
-    return { old: old.stanzaId, next: next.stanzaId, names: readers.map(reader => reader.nick), actor: readers[0].occupantId! }
+    await scope.__demoClient.messages.sendReaction(roomJid, old.stanzaId, ['👍'])
+    return { old: old.stanzaId, next: next.stanzaId, names: readers.map(reader => reader.nick), actors: readers.map(reader => reader.occupantId!), actor: readers[0].occupantId! }
   }, LAUNCH_ROOM)
+  const oldRow = page.locator(`[data-message-row-id][data-stanza-id="${fixture.old}"]`)
+  const layouts = [
+    { direction: 'ltr', width: 1280 }, { direction: 'ltr', width: 390 },
+    { direction: 'rtl', width: 1280 }, { direction: 'rtl', width: 390 },
+  ] as const
+  const heights = new Map<string, number>()
+  for (const { direction, width } of layouts) {
+    await page.evaluate(direction => { document.documentElement.dir = direction }, direction)
+    await page.setViewportSize({ width, height: 800 })
+    await oldRow.scrollIntoViewIfNeeded()
+    await expect(oldRow.locator('[data-reaction-emoji="👍"]')).toBeVisible()
+    heights.set(`${direction}-${width}`, (await oldRow.boundingBox())!.height)
+  }
+  await page.evaluate(async ({ roomJid, actors, target }) => {
+    for (const actor of actors) await (window as unknown as Scope).__demoClient.simulateRoomDisplayed(roomJid, actor, target)
+  }, { roomJid: LAUNCH_ROOM, actors: fixture.actors, target: fixture.old })
   const oldBadge = page.locator(`[data-read-marker-row="${fixture.old}"]`)
   await oldBadge.scrollIntoViewIfNeeded()
+  for (const { direction, width } of layouts) {
+    await page.evaluate(direction => { document.documentElement.dir = direction }, direction)
+    await page.setViewportSize({ width, height: 800 })
+    await oldRow.scrollIntoViewIfNeeded()
+    await expect(oldBadge).toBeVisible()
+    expect((await oldRow.boundingBox())!.height, 'the overlay adds no row height').toBe(heights.get(`${direction}-${width}`))
+    const badge = (await oldBadge.boundingBox())!
+    const reaction = (await oldRow.locator('[data-reaction-emoji="👍"]').boundingBox())!
+    expect(badge.x >= reaction.x + reaction.width || badge.y >= reaction.y + reaction.height
+      || badge.x + badge.width <= reaction.x || badge.y + badge.height <= reaction.y,
+    'the trailing-corner badge leaves the reaction control unobscured').toBe(true)
+    const body = oldRow.locator('[data-message-body]')
+    const textClear = await body.evaluate((element, badge) => {
+      const text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      for (let node = text.nextNode(); node; node = text.nextNode()) {
+        const range = document.createRange(); range.selectNodeContents(node)
+        if (![...range.getClientRects()].every(rect => !rect.width || !rect.height || badge.x >= rect.right || badge.y >= rect.bottom
+          || badge.x + badge.width <= rect.left || badge.y + badge.height <= rect.top)) return false
+      }
+      return true
+    }, badge)
+    expect(textClear, 'the overlay leaves message text unobscured').toBe(true)
+  }
+  await page.evaluate(() => { document.documentElement.dir = 'ltr' })
+  await page.setViewportSize({ width: 1280, height: 800 })
   const opener = oldBadge.getByRole('button', { name: `Read through this message: ${fixture.names.join(', ')}`, exact: true })
   await expect(opener).toBeVisible()
   await expect(opener.getByText('+1', { exact: true })).toBeVisible()

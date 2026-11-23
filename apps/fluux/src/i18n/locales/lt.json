@@ -1959,14 +1959,14 @@
         "reload": "Įkelti iš naujo"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Bendrinti skaitymo pozicijas kambariuose",
+        "description": "Pagal numatymą išjungta. Įjungę pasirinkite kiekvieną kambarį atskirai jo informacijoje.",
+        "shareInRoom": "Bendrinti mano skaitymo poziciją šiame kambaryje",
+        "roomDescription": "Siųsti tik patikrintuose, neskelbiamuose, neanoniminiuose kambariuose tik nariams, kuriuose yra mažiau nei 20 dalyvių su pastoviomis kambario tapatybėmis. Užšifruoti pranešimai neįtraukiami.",
+        "masterOff": "Pagrindinis privatumo jungiklis išjungtas. Kambarys nebendrins jūsų skaitymo pozicijos, kol jo neįjungsite.",
+        "metadata": "Kambarys ir jo dalyviai mato jūsų skaitymo veiklą. Archyvas gali saugoti šiuos metaduomenis. Išjungimas sustabdo būsimus atnaujinimus, bet nepašalina išsaugotų žymų.",
+        "readThrough": "Perskaityta iki šio pranešimo",
+        "readers": "Perskaityta iki šio pranešimo: {{names}}",
+        "saveFailed": "Nepavyko išsaugoti pasirinkimo. Bendrinimas lieka išjungtas. Prieš įjungdami vėl patikrinkite prieigą prie saugyklos."
     }
 }

@@ -1955,14 +1955,14 @@
         "reload": "Lataa uudelleen"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Jaa lukukohdat huoneissa",
+        "description": "Oletuksena pois käytöstä. Kun olet ottanut tämän käyttöön, valitse kukin huone erikseen sen tiedoista.",
+        "shareInRoom": "Jaa lukukohtani tässä huoneessa",
+        "roomDescription": "Lähetä vain vahvistetuissa, listaamattomissa, ei-anonyymeissä, vain jäsenille tarkoitetuissa huoneissa, joissa on alle 20 läsnäolijaa ja pysyvät huonekohtaiset tunnisteet. Salatut viestit jätetään pois.",
+        "masterOff": "Tietosuojan pääkytkin on pois päältä. Huone ei jaa lukukohtaasi ennen kuin otat sen käyttöön.",
+        "metadata": "Huone ja sen läsnäolijat näkevät lukutoimintasi. Arkisto voi säilyttää nämä metatiedot. Poiskytkentä pysäyttää tulevat päivitykset, mutta ei poista tallennettuja merkkejä.",
+        "readThrough": "Luettu tähän viestiin asti",
+        "readers": "Luettu tähän viestiin asti: {{names}}",
+        "saveFailed": "Valintaa ei voitu tallentaa. Jakaminen pysyy pois käytöstä. Tarkista tallennustilan käyttöoikeus ennen uudelleen käyttöönottoa."
     }
 }

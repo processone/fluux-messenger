@@ -1959,14 +1959,14 @@
         "reload": "Recarregar"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Partilhar posições de leitura nas salas",
+        "description": "Desativado por predefinição. Após ativar, escolha cada sala separadamente nos respetivos detalhes.",
+        "shareInRoom": "Partilhar a minha posição de leitura nesta sala",
+        "roomDescription": "Enviar apenas em salas verificadas, não listadas, não anónimas e só para membros, com menos de 20 ocupantes com identidades estáveis na sala. As mensagens encriptadas são excluídas.",
+        "masterOff": "O interruptor geral em Privacidade está desativado. Esta sala não partilhará a sua posição de leitura até o ativar.",
+        "metadata": "A sala e os seus ocupantes podem ver a sua atividade de leitura. O arquivo pode guardar estes metadados. Desativar interrompe as atualizações futuras, mas não elimina os marcadores guardados.",
+        "readThrough": "Lido até esta mensagem",
+        "readers": "Lido até esta mensagem: {{names}}",
+        "saveFailed": "Não foi possível guardar a escolha. A partilha permanece desativada. Verifique o acesso ao armazenamento antes de a reativar."
     }
 }

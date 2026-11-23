@@ -1959,14 +1959,14 @@
         "reload": "Перезагрузить"
     },
     "readMarkers": {
-        "master": "Share room read positions",
-        "description": "Off by default. After enabling this switch, choose each room separately in its room details.",
-        "shareInRoom": "Share my read position in this room",
-        "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
-        "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
-        "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
-        "readThrough": "Read through this message",
-        "readers": "Read through this message: {{names}}",
-        "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
+        "master": "Делиться позицией чтения в комнатах",
+        "description": "По умолчанию выключено. После включения выберите каждую комнату отдельно в её сведениях.",
+        "shareInRoom": "Делиться моей позицией чтения в этой комнате",
+        "roomDescription": "Отправлять только в проверенных, не указанных в списке, неанонимных комнатах только для участников, где меньше 20 присутствующих с постоянными идентификаторами комнаты. Зашифрованные сообщения исключены.",
+        "masterOff": "Главный переключатель в настройках конфиденциальности выключен. Комната не будет передавать вашу позицию чтения, пока вы его не включите.",
+        "metadata": "Комната и присутствующие видят вашу активность чтения. Архив может сохранять эти метаданные. Отключение останавливает будущие обновления, но не удаляет сохранённые отметки.",
+        "readThrough": "Прочитано до этого сообщения",
+        "readers": "Прочитано до этого сообщения: {{names}}",
+        "saveFailed": "Не удалось сохранить выбор. Передача остаётся выключенной. Проверьте доступ к хранилищу перед повторным включением."
     }
 }

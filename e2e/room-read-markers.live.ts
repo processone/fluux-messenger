@@ -38,9 +38,25 @@ const title = 'Read marker proof'
 const publicTitle = 'Public room proof'
 const otherTitle = 'Other private room proof'
 const content = ['Room reading proof: first message', 'Room reading proof: focused advance', 'Room reading proof: sharing stopped']
-interface App { page: Page; context: BrowserContext; sent: string[]; received: string[]; name: string; started: number; marks: Record<string, number> }
+interface App { page: Page; context: BrowserContext; sent: string[]; received: string[]; name: string; started: number; marks: Record<string, number>; sentObservers: Set<() => void>; quietChecks: { name: string; count: number; durationMs: number }[] }
 const mark = (client: App, name: string) => { client.marks[name] = (Date.now() - client.started) / 1000 }
 const displayed = (app: App) => app.sent.filter(frame => /^<message\b/.test(frame) && frame.includes(MARKERS) && /type=['"]groupchat['"]/.test(frame))
+/** Observe a finite real-stream window; this is a negative check, not a retry. */
+async function noPublication(client: App, count: number, name: string) {
+  expect(displayed(client)).toHaveLength(count)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let observed!: () => void
+  const started = Date.now()
+  try {
+    await new Promise<void>((resolve, reject) => {
+      observed = () => { if (displayed(client).length !== count) reject(new Error(`Unexpected room publication during ${name}`)) }
+      client.sentObservers.add(observed)
+      timer = setTimeout(resolve, 650)
+    })
+    expect(displayed(client)).toHaveLength(count)
+    client.quietChecks.push({ name, count, durationMs: Date.now() - started })
+  } finally { clearTimeout(timer); client.sentObservers.delete(observed) }
+}
 const shot = async (page: Page, name: string) => {
   if (!evidence) return
   await page.mouse.move(1270, 790)
@@ -53,8 +69,9 @@ async function app(browser: Browser, name: 'alice' | 'bob', touch = false): Prom
   const started = Date.now()
   const page = await context.newPage()
   const sent: string[] = [], received: string[] = []
+  const sentObservers = new Set<() => void>()
   page.on('websocket', socket => {
-    socket.on('framesent', frame => { if (typeof frame.payload === 'string') sent.push(frame.payload) })
+    socket.on('framesent', frame => { if (typeof frame.payload === 'string') { sent.push(frame.payload); for (const observe of sentObservers) observe() } })
     socket.on('framereceived', frame => { if (typeof frame.payload === 'string') received.push(frame.payload) })
   })
   await page.addInitScript(() => { localStorage.setItem('i18nextLng', 'en'); localStorage.setItem('fluux-theme', 'dark') })
@@ -66,7 +83,7 @@ async function app(browser: Browser, name: 'alice' | 'bob', touch = false): Prom
   await page.getByText('Remember me').click()
   await page.getByRole('button', { name: 'Connect', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible({ timeout: 30_000 })
-  return { page, context, sent, received, name, started, marks: {} }
+  return { page, context, sent, received, name, started, marks: {}, sentObservers, quietChecks: [] }
 }
 async function peer(name: 'alice' | 'bob') {
   const client = xmppClient({ service: config!.ws, domain: 'localhost', username: name,
@@ -164,9 +181,14 @@ test('two real clients share only opted-in focused reading, keep identity and re
     if (before) mark(bob, 'reading-focus')
     await alice.page.bringToFront()
     await expect(alice.page.locator('[data-message-body]').filter({ hasText: content[0] })).toBeInViewport()
-    expect(displayed(alice)).toHaveLength(0)
+    await noPublication(alice, 0, 'default-off')
     await bob.page.bringToFront()
     await shot(bob.page, 'timeline')
+    if (before) {
+      await bob.page.setViewportSize({ width: 390, height: 800 })
+      await shot(bob.page, 'phone-timeline')
+      await bob.page.setViewportSize({ width: 1280, height: 800 })
+    }
     await alice.page.bringToFront()
     await privacy(alice)
     if (before) {
@@ -201,13 +223,48 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await expect(bob.page.getByRole('dialog', { name: 'Read through this message' })).toBeVisible()
     await bob.page.keyboard.press('Escape')
     await shot(bob.page, 'timeline')
+    await bob.page.setViewportSize({ width: 390, height: 800 })
+    await shot(bob.page, 'phone-timeline')
+    await bob.page.setViewportSize({ width: 1280, height: 800 })
+
+    // A focused window is not viewing while a dialog covers the timeline.
+    await alice.page.bringToFront()
+    await alice.page.getByTestId('room-info-area').getByRole('button').click()
+    await expect(alice.page.locator('[data-modal="true"]')).toBeVisible()
+    const modalHeld = displayed(alice).length
+    await bob.page.bringToFront(); await say(bob, 'A dialog covers this new message')
+    await alice.page.bringToFront()
+    await expect(alice.page.locator('[data-message-body]').filter({ hasText: 'A dialog covers this new message' })).toHaveCount(1)
+    await noPublication(alice, modalHeld, 'open-dialog')
+    await shot(alice.page, 'covered-dialog')
+    await alice.page.keyboard.press('Escape')
+    const modalRecovery = await alice.context.newPage(); await modalRecovery.goto('about:blank')
+    await alice.page.bringToFront(); await modalRecovery.close()
+    await expect.poll(() => displayed(alice).length).toBe(modalHeld + 1)
+
+    // The phone members pane makes the conversation inert, not a modal.
+    await alice.page.setViewportSize({ width: 390, height: 800 })
+    await alice.page.getByRole('button', { name: 'Show members', exact: true }).click()
+    await expect.poll(() => alice.page.locator('.message-input[contenteditable="true"]').evaluate(element => !!element.closest('[inert]'))).toBe(true)
+    const paneHeld = displayed(alice).length
+    await bob.page.bringToFront(); await say(bob, 'The members pane covers this new message')
+    await alice.page.bringToFront()
+    await expect(alice.page.locator('[data-message-body]').filter({ hasText: 'The members pane covers this new message' })).toHaveCount(1)
+    await noPublication(alice, paneHeld, 'covered-phone-members')
+    await shot(alice.page, 'covered-phone-members')
+    await alice.page.getByRole('heading', { name: 'Members', exact: true }).locator('..').getByRole('button').click()
+    await expect.poll(() => alice.page.locator('.message-input[contenteditable="true"]').evaluate(element => !!element.closest('[inert]'))).toBe(false)
+    await alice.page.setViewportSize({ width: 1280, height: 800 })
+    const paneRecovery = await alice.context.newPage(); await paneRecovery.goto('about:blank')
+    await alice.page.bringToFront(); await paneRecovery.close()
+    await expect.poll(() => displayed(alice).length).toBe(paneHeld + 1)
 
     const hidden = await alice.context.newPage(); await hidden.goto('about:blank')
     await expect.poll(() => alice.page.evaluate(() => document.visibilityState)).toBe('hidden')
     const held = displayed(alice).length
     await say(bob, content[1])
     await expect.poll(() => alice.received.some(frame => frame.includes(content[1]))).toBe(true)
-    expect(displayed(alice)).toHaveLength(held)
+    await noPublication(alice, held, 'background-window')
     await alice.page.bringToFront(); await hidden.close()
     await expect.poll(() => displayed(alice).length).toBe(held + 1)
     await roomConsent(alice, false)
@@ -215,7 +272,7 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await bob.page.bringToFront(); await say(bob, content[2])
     await alice.page.bringToFront()
     await expect(alice.page.locator('[data-message-body]').filter({ hasText: content[2] })).toBeInViewport()
-    expect(displayed(alice)).toHaveLength(stopped)
+    await noPublication(alice, stopped, 'room-opt-out')
 
     // The actual app's slash command changes this session's nick.
     const composer = alice.page.getByRole('combobox', { name: /^Message / })
@@ -229,7 +286,7 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await bob.page.reload()
     await openRoom(bob)
     await expect(bob.page.getByRole('button', { name: 'Read through this message: AliceRenamed', exact: true })).toBeVisible({ timeout: 30_000 })
-    expect(displayed(bob)).toHaveLength(0) // this account never opted in
+    await noPublication(bob, 0, 'replay-without-consent')
     await shot(bob.page, 'archive-replay')
 
     // Even explicit room consent cannot override a positive public-listing flag.
@@ -240,14 +297,14 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await say(bob, 'Public room reading must stay private')
     await alice.page.bringToFront()
     await expect(alice.page.locator('[data-message-body]').filter({ hasText: 'Public room reading must stay private' })).toBeInViewport()
-    expect(displayed(alice)).toHaveLength(publicBefore)
+    await noPublication(alice, publicBefore, 'public-room')
     // Choosing one eligible room must not enable another eligible room.
     await openRoom(alice, otherTitle); await openRoom(bob, otherTitle)
     const otherBefore = displayed(alice).length
     await say(bob, 'This private room was not chosen')
     await alice.page.bringToFront()
     await expect(alice.page.locator('[data-message-body]').filter({ hasText: 'This private room was not chosen' })).toBeInViewport()
-    expect(displayed(alice)).toHaveLength(otherBefore)
+    await noPublication(alice, otherBefore, 'unchosen-room')
     await alice.page.getByTestId('room-info-area').getByRole('button').click()
     await expect(alice.page.getByRole('switch', { name: 'Share my read position in this room', exact: true })).toHaveAttribute('aria-checked', 'false')
     await alice.page.keyboard.press('Escape')
@@ -261,12 +318,13 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await say(bob, 'The master switch stops every chosen room')
     await alice.page.bringToFront()
     await expect(alice.page.locator('[data-message-body]').filter({ hasText: 'The master switch stops every chosen room' })).toBeInViewport()
-    expect(displayed(alice)).toHaveLength(masterStopped)
+    await noPublication(alice, masterStopped, 'master-opt-out')
     const disco = await owner.iqCaller.request(xml('iq', { type: 'get', to: room }, xml('query', { xmlns: DISCO })))
     const publicDisco = await owner.iqCaller.request(xml('iq', { type: 'get', to: publicRoom }, xml('query', { xmlns: DISCO })))
     if (evidence) {
       writeFileSync(`${evidence}/room-read-protocol-fixtures.json`, JSON.stringify({
         eligibleRoom: disco.toString(), publicRoom: publicDisco.toString(),
+        quietChecks: clients.map(client => ({ client: client.name, checks: client.quietChecks })),
         sentMarkers: displayed(alice), reflectedMarkers: bob.received.filter(frame => frame.includes(MARKERS) && /type=['"]groupchat['"]/.test(frame)),
       }, null, 2))
     }

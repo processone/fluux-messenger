@@ -1,44 +1,58 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import type { RoomMessage } from '@fluux/sdk'
 import { useFocusedVisibleRows } from './useFocusedVisibleRows'
+import { useViewportObserver } from './useViewportObserver'
 import { messageRowId } from '@/components/conversation/messageRowIdentity'
 
-// Source: approved room-marker send contract. Geometry and focus are DOM-boundary
-// stand-ins here; the actual browser/server journey owns the live viewing claim.
+// Source: issue #1453's focused-view and shared-observer contract. The browser
+// journey owns actual layout; this exercises the shared observer's DOM boundary.
 const row: RoomMessage = { type: 'groupchat', id: 'reading-proof', roomJid: 'reading@conference.localhost',
   from: 'reading@conference.localhost/Bob', nick: 'Bob', occupantId: 'bob-id', stanzaId: 'archive-reading-proof',
   originId: undefined, body: 'Room reading proof', timestamp: new Date('2026-05-01T10:00:00Z'), isOutgoing: false }
 const rect = (top: number, height: number) => ({ top, bottom: top + height, height, left: 0, right: 750, width: 750, x: 0, y: top, toJSON: () => ({}) })
 let notify: () => void
+let deliver: () => void
 let focused: boolean
 let scroller: HTMLDivElement
 let message: HTMLDivElement
 let observe: ReturnType<typeof vi.fn>
 let disconnect: ReturnType<typeof vi.fn>
+function useViewing(seen: (rows: readonly RoomMessage[]) => void, enabled = true) {
+  const ref = { current: scroller }
+  const viewed = useFocusedVisibleRows(ref, [row], seen, enabled)
+  useViewportObserver({ scrollContainerRef: ref, conversationId: row.roomJid, onVisibleRows: viewed, enabled })
+}
 beforeEach(() => {
   focused = true
+  vi.useFakeTimers()
   vi.spyOn(document, 'hasFocus').mockImplementation(() => focused)
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
   observe = vi.fn(); disconnect = vi.fn()
   vi.stubGlobal('IntersectionObserver', class {
-    constructor(callback: () => void) { notify = callback }
+    constructor(callback: IntersectionObserverCallback) {
+      deliver = () => callback([{ target: message, isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver)
+      notify = () => act(() => { deliver(); vi.runOnlyPendingTimers() })
+    }
     observe = observe
+    unobserve = vi.fn()
+    takeRecords = () => []
     disconnect = disconnect
   })
   scroller = document.createElement('div')
   message = document.createElement('div')
   message.dataset.messageRowId = messageRowId(row)
+  message.dataset.messageId = row.id
   scroller.append(message); document.body.append(scroller)
   vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(rect(100, 400))
   vi.spyOn(message, 'getBoundingClientRect').mockReturnValue(rect(300, 100))
 })
-afterEach(() => { scroller.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+afterEach(() => { scroller.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers() })
 
 describe('focused visible room rows', () => {
-  it('reports measured visible rows but never infers viewing from focus alone or detached/offscreen geometry', () => {
+  it('reports measured rows, never focus alone or offscreen geometry, and stops on teardown', () => {
     const seen = vi.fn()
-    const view = renderHook(() => useFocusedVisibleRows({ current: scroller }, [row], seen, true))
+    const view = renderHook(() => useViewing(seen))
     notify()
     expect(seen).toHaveBeenLastCalledWith([row])
     seen.mockClear()
@@ -48,9 +62,12 @@ describe('focused visible room rows', () => {
     focused = true
     vi.mocked(message.getBoundingClientRect).mockReturnValue(rect(600, 100))
     window.dispatchEvent(new Event('focus'))
+    notify()
     expect(seen).not.toHaveBeenCalled()
     vi.mocked(message.getBoundingClientRect).mockReturnValue(rect(300, 100))
     window.dispatchEvent(new Event('focus'))
+    expect(seen).not.toHaveBeenCalled()
+    notify()
     expect(seen).toHaveBeenLastCalledWith([row])
     view.unmount()
     expect(disconnect).toHaveBeenCalled()
@@ -59,11 +76,11 @@ describe('focused visible room rows', () => {
     expect(seen).not.toHaveBeenCalled()
   })
 
-  it('does not report messages covered by a modal as viewed', () => {
+  it.each(['aria-modal', 'data-modal'])('does not report messages covered by %s dialogs', attribute => {
     const seen = vi.fn()
-    const view = renderHook(() => useFocusedVisibleRows({ current: scroller }, [row], seen, true))
+    const view = renderHook(() => useViewing(seen))
     const modal = document.createElement('div')
-    modal.setAttribute('aria-modal', 'true')
+    modal.setAttribute(attribute, 'true')
     document.body.append(modal)
     try {
       notify()
@@ -74,9 +91,40 @@ describe('focused visible room rows', () => {
     } finally { modal.remove(); view.unmount() }
   })
 
-  it('does not attach viewing work for static previews or a loading list', () => {
+  it('does not share through the inert phone participants pane', () => {
     const seen = vi.fn()
-    renderHook(() => useFocusedVisibleRows({ current: scroller }, [row], seen, false))
+    const view = renderHook(() => useViewing(seen))
+    scroller.setAttribute('inert', '')
+    notify()
+    expect(seen).not.toHaveBeenCalled()
+    scroller.removeAttribute('inert')
+    notify()
+    expect(seen).toHaveBeenCalledWith([row])
+    view.unmount()
+  })
+
+  it('runs the existing read writer before peer viewing when both callbacks become due in one burst', () => {
+    let read = ''
+    const viewed = vi.fn(() => expect(read).toBe('second-row'))
+    const view = renderHook(() => useViewportObserver({ scrollContainerRef: { current: scroller }, conversationId: row.roomJid,
+      onMessageSeen: id => { read = id }, onVisibleRows: viewed }))
+    act(() => {
+      deliver()
+      message = document.createElement('div')
+      message.dataset.messageRowId = 'second-row'
+      message.dataset.messageId = 'second-client-id'
+      scroller.append(message)
+      vi.spyOn(message, 'getBoundingClientRect').mockReturnValue(rect(400, 100))
+      deliver()
+      vi.runOnlyPendingTimers()
+    })
+    expect(viewed).toHaveBeenCalledTimes(1)
+    view.unmount()
+  })
+
+  it('does not attach viewing work for previews or loading lists', () => {
+    const seen = vi.fn()
+    renderHook(() => useViewing(seen, false))
     expect(observe).not.toHaveBeenCalled()
     expect(seen).not.toHaveBeenCalled()
   })

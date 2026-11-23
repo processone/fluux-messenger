@@ -749,6 +749,7 @@ export class XMPPClient {
 
     const moduleDeps = {
       getRoomReadMarkers: () => this.roomReadMarkers,
+      lookUpRoomArchiveAnchor: (roomJid: string, archiveId: string) => this.#internal.mam.lookUpArchivedMessage(roomJid, true, archiveId),
       stores: this.stores,
       flushRoomOccupants: (roomJid?: string) => this.storeBindings?.flushOccupants(roomJid),
       waitForRoomOccupants: (roomJid: string) => this.storeBindings?.waitForOccupants(roomJid) ?? Promise.resolve(),

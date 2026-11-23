@@ -701,12 +701,13 @@ export function MessageList<T extends BaseMessage>({
   // VIEWPORT OBSERVER (tracks the bottom-most visible row for the read pointer)
   // --------------------------------------------------------------------------
 
-  useFocusedVisibleRows(scrollContainerRef, messages, onFocusedVisibleRows, !staticMode && !isLoading)
+  const onVisibleRows = useFocusedVisibleRows(scrollContainerRef, messages, onFocusedVisibleRows, !staticMode && !isLoading)
 
   useViewportObserver({
     scrollContainerRef,
     conversationId,
     onMessageSeen,
+    onVisibleRows: !staticMode && onFocusedVisibleRows ? onVisibleRows : undefined,
     enabled: !isLoading && messages.length > 0,
   })
 
