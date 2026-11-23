@@ -127,6 +127,66 @@ describe('XMPPClient MAM', () => {
     })
   })
 
+  describe.each(['chat', 'room'] as const)('detached %s date search', (kind) => {
+    const start = '2024-01-15T00:00:00.000Z'
+    const end = '2024-01-16T00:00:00.000Z'
+    const roomJid = 'team@conference.example.com'
+    const peer = 'alice@example.com'
+    const query = () => kind === 'chat'
+      ? xmppClient.messages.queryMAM({ with: peer, start, end, dateLookup: true })
+      : xmppClient.messages.queryRoomMAM({ roomJid, start, end, dateLookup: true })
+    const expectNoHistoryChange = () => {
+      for (const event of ['loading', 'messages', 'error']) {
+        expect(emitSDKSpy.mock.calls.map(call => call[0])).not.toContain(`${kind}:history-${event}`)
+      }
+    }
+
+    it.each([true, false])('waits for the cache without touching sync state (complete=%s)', async (complete) => {
+      await connectClient()
+      const store = kind === 'chat' ? mockStores.chat : mockStores.room
+      let finishWrite!: (saved: boolean) => void
+      const pendingWrite = new Promise<boolean>(resolve => { finishWrite = resolve })
+      const writeStarted = new Promise<void>(resolve => {
+        vi.mocked(store.saveDateLookupPage!).mockImplementation(() => { resolve(); return pendingWrite })
+      })
+      const from = kind === 'chat' ? 'me@example.com' : roomJid
+      const sender = kind === 'chat' ? `${peer}/phone` : `${roomJid}/Alice`
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async iq => {
+        const queryId = iq.children.find((child: { name?: string }) => child.name === 'query').attrs.queryid
+        mockXmppClientInstance._emit('stanza', createMockElement('message', { from }, [
+          { name: 'result', attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'date-archive-id' }, children: [
+            { name: 'forwarded', attrs: { xmlns: 'urn:xmpp:forward:0' }, children: [
+              { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:00:00Z' } },
+              { name: 'message', attrs: { from: sender, to: 'me@example.com', id: 'date-row', type: kind === 'chat' ? 'chat' : 'groupchat' }, children: [
+                { name: 'body', text: 'An archived message on the selected day' },
+              ] },
+            ] },
+          ] },
+        ]))
+        return createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: String(complete) } },
+        ])
+      })
+      const done = vi.fn()
+      const result = query().then(value => { done(); return value })
+      await writeStarted
+      expect(store.saveDateLookupPage).toHaveBeenCalledWith(kind === 'chat' ? peer : roomJid,
+        [expect.objectContaining({ id: 'date-row' })], false)
+      expect(done).not.toHaveBeenCalled()
+      expectNoHistoryChange()
+      finishWrite(true)
+      expect(await result).toMatchObject({ complete, messages: [expect.objectContaining({ id: 'date-row' })] })
+      expectNoHistoryChange()
+    })
+
+    it('reports a rejected archive request only to its caller', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockRejectedValue(new Error('Archive unavailable'))
+      await expect(query()).rejects.toThrow('Archive unavailable')
+      expectNoHistoryChange()
+    })
+  })
+
   describe('queryMAM', () => {
     it('should send correct MAM query IQ with data form filter', async () => {
       await connectClient()

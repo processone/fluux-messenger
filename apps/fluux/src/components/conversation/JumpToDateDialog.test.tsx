@@ -16,10 +16,10 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
 const PEER = 'alice@example.com'
 const message = (timestamp: Date) => ({ type: 'chat', id: 'm1', conversationId: PEER, from: PEER, body: 'hi', timestamp, isOutgoing: false })
 
-function open(loaded: ReturnType<typeof message>[] = [], initialDay?: string) {
+function open(loaded: ReturnType<typeof message>[] = [], initialDay?: string, archiveAvailable?: boolean) {
   const onLand = vi.fn()
   const onClose = vi.fn()
-  render(<JumpToDateDialog kind="chat" conversationId={PEER} initialDay={initialDay} readLoaded={() => loaded as never} onLand={onLand} onClose={onClose} />)
+  render(<JumpToDateDialog kind={archiveAvailable === false ? 'room' : 'chat'} conversationId={PEER} initialDay={initialDay} archiveAvailable={archiveAvailable} readLoaded={() => loaded as never} onLand={onLand} onClose={onClose} />)
   return { onLand, onClose }
 }
 
@@ -85,6 +85,27 @@ describe('JumpToDateDialog', () => {
     const now = new Date()
     expect(h.find.mock.calls[0][3]).toEqual(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7))
     expect(onLand).toHaveBeenCalled()
+  })
+
+  it.each([
+    ['monthAgo', new Date(2026, 2, 31, 12), new Date(2026, 1, 28)],
+    ['yearAgo', new Date(2024, 1, 29, 12), new Date(2023, 1, 28)],
+  ])('clamps the %s preset to the last day of the target month', async (shortcut, today, target) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(today)
+      h.find.mockResolvedValue({ kind: 'found', message: message(target), source: 'cache' })
+      open()
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: `chat.jumpToDate.${shortcut}` })) })
+      expect(h.find.mock.calls[0][3]).toEqual(target)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('does not offer the archive to the lookup when the room has no archive', async () => {
+    h.find.mockResolvedValue({ kind: 'none' })
+    open([], undefined, false)
+    await go('2024-03-10')
+    expect(h.find.mock.calls[0][0]).toBeUndefined()
   })
 
   it('lands on the latest loaded message when nothing comes after the day', async () => {

@@ -175,6 +175,7 @@ export interface ChatBindings {
   setMAMLoading: (conversationId: string, isLoading: boolean, requestId?: string) => void
   setMAMError: (conversationId: string, error: string | null, requestId?: string) => void
   resolveCorrectionReferences?: (conversationId: string, targetId: string, actor: MessageActor) => Promise<CorrectionReferences | null | undefined>
+  saveDateLookupPage?: (conversationId: string, messages: Message[], reachesLive: boolean) => Promise<boolean>
   reconcileHistoryMessages?: (messages: Message[]) => Promise<Message[]>
 
   /**
@@ -388,6 +389,7 @@ export interface RoomBindings {
   waitForMessageArrivals?: (roomJid: string) => Promise<boolean> | undefined
   updateReactions: (roomJid: string, messageId: string, reactorNick: string, emojis: string[]) => void
   resolveCorrectionReferences?: (roomJid: string, targetId: string, actor: MessageActor) => Promise<CorrectionReferences | null | undefined>
+  saveDateLookupPage?: (roomJid: string, messages: RoomMessage[], reachesLive: boolean) => Promise<boolean>
   reconcileHistoryMessages?: (messages: RoomMessage[], options?: { retractionsOnly?: boolean }) => Promise<RoomMessage[]>
   /** Lookup by the room's archive id without hydrating its resident window. */
   getMessageByArchiveId?: (roomJid: string, stanzaId: string) => Promise<RoomMessage | null>

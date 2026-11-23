@@ -33,13 +33,13 @@ function firstFrom(messages: readonly AnyMessage[], start: number): { first?: An
  * `start` and `end` are the bounds of the day the reader picked, in their own time
  * zone; the archive receives them as UTC instants.
  *
- * Check the resident window, then the cache. A recorded gap before a candidate
- * means the local history cannot establish that it comes first. If needed, ask
- * the archive for the selected day before looking further: the page limit alone
- * does not bound the server's count. The earliest confirmed candidate wins.
+ * A resident window spanning the day’s start can answer immediately unless a
+ * known gap crosses it. Cached rows may belong to separate blocks, so use them
+ * only alongside the day-bounded archive request or when the archive cannot answer.
+ * A page limit alone does not bound the server's count.
  */
 export async function findFirstMessageOfDay(
-  archive: DayArchive,
+  archive: DayArchive | undefined,
   kind: 'chat' | 'room',
   conversationId: string,
   start: Date,
@@ -60,46 +60,40 @@ export async function findFirstMessageOfDay(
   }
 
   // `after` is exclusive; one millisecond earlier keeps a message sent exactly at midnight
-  const [fromStart, beforeStart] = await Promise.all([
-    messageCache.readMessages(kind, conversationId, { after: new Date(from - 1), limit: 1 }),
-    messageCache.readMessages(kind, conversationId, { before: start, limit: 1 }),
-  ])
-  const cached = fromStart.status === 'ok' ? fromStart.value[0] as AnyMessage | undefined : undefined
-  const covered = beforeStart.status === 'ok' && beforeStart.value.length > 0
-  if (covered && cached && inDay(cached) && !hasGapBefore(cached)) {
-    log('cache')
-    return { kind: 'found', message: cached, source: 'cache' }
-  }
+  const fromStart = await messageCache.readMessages(kind, conversationId, { after: new Date(from - 1), limit: 1 })
+  const cached = fromStart.status === 'ok' ? fromStart.value[0] : undefined
 
-  const readArchive = (start: Date, end?: Date) => {
+  const readArchive = (archive: DayArchive, start: Date, end?: Date) => {
     const options = {
       start: start.toISOString(), ...(end ? { end: end.toISOString() } : {}),
-      max: ARCHIVE_PAGE, maxAutoPages: 1, preserveGapMarker: true,
+      max: ARCHIVE_PAGE, dateLookup: true,
     }
     return kind === 'room'
       ? archive.queryRoomMAM({ roomJid: conversationId, ...options })
       : archive.queryMAM({ with: conversationId, ...options })
   }
   let archived: AnyMessage | undefined
-  let dayComplete = false
-  let complete = false
-  try {
-    // MAM time bounds are inclusive. A result exactly at the next midnight
-    // is already the earliest later message; the caller labels it as later.
-    const day = await readArchive(start, end)
-    archived = day.messages.find((message) => message.timestamp >= start && message.timestamp <= end)
-    dayComplete = day.complete
-    log(`archive day page of ${day.messages.length}, complete=${dayComplete}`)
-    if (!archived && dayComplete && !inDay(loaded.first) && !inDay(cached)) {
-      // A complete day is not the live edge. Only an empty day needs a second
-      // query for the next message, so busy archives don't count years of rows.
-      const later = await readArchive(end)
-      archived = later.messages.find((message) => message.timestamp >= end)
-      complete = later.complete
-      log(`later archive page of ${later.messages.length}, complete=${complete}`)
+  let dayComplete = !archive && fromStart.status === 'ok'
+  let complete = dayComplete
+  if (archive) {
+    try {
+      // MAM time bounds are inclusive. A result exactly at the next midnight
+      // is already the earliest later message; the caller labels it as later.
+      const day = await readArchive(archive, start, end)
+      archived = day.messages.find((message) => message.timestamp >= start && message.timestamp <= end)
+      dayComplete = day.complete
+      log(`archive day page of ${day.messages.length}, complete=${dayComplete}`)
+      if (!archived && dayComplete && !inDay(loaded.first) && !inDay(cached)) {
+        // A complete day is not the live edge. Only an empty day needs a second
+        // query for the next message, so busy archives don't count years of rows.
+        const later = await readArchive(archive, end)
+        archived = later.messages.find((message) => message.timestamp >= end)
+        complete = later.complete
+        log(`later archive page of ${later.messages.length}, complete=${complete}`)
+      }
+    } catch (error) {
+      log(`archive failed: ${error instanceof Error ? error.message : String(error)}`)
     }
-  } catch (error) {
-    log(`archive failed: ${error instanceof Error ? error.message : String(error)}`)
   }
 
   // A message only this device holds (archiving off, or sent before it was on) can come first
@@ -107,6 +101,9 @@ export async function findFirstMessageOfDay(
   let best: [AnyMessage, 'resident' | 'cache' | 'archive'] | undefined
   for (const [message, source] of candidates) {
     if (!message) continue
+    // A later local row cannot prove an unanswered day empty. Same-day local
+    // rows remain useful unless a known hole may hide an earlier result.
+    if (!inDay(message) && !dayComplete && !archived) continue
     if (!archived && !complete && !(dayComplete && inDay(message)) && hasGapBefore(message)) continue
     if (!best || message.timestamp < best[0].timestamp) best = [message, source]
   }

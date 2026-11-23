@@ -1,3 +1,4 @@
+import { saveDateLookupPage } from './shared/dateLookupCache'
 import { badgeMessageKey } from '../diagnostics/badgeIdentity'
 import { reactionUpdate } from '../utils/reactions'
 import { isUnconfirmedDelivery, UNCONFIRMED_DELIVERY_ERROR } from '../utils/xmppError'
@@ -31,7 +32,7 @@ import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
 import type { HistoryQueryDirection } from './shared/mamState'
-import { gapMapFromPersisted, type GapInterval, type GapList, type GapMap } from './shared/mamGap'
+import { gapMapFromPersisted, getGapList, setGapList, type GapInterval, type GapList, type GapMap } from './shared/mamGap'
 import {
   isCaughtUpForCounting,
   type CoverageRecord,
@@ -764,6 +765,7 @@ interface ChatState {
   /** See ChatBindings.refreshLastMessageContent in core/types/storeBindings.ts for the contract. */
   refreshLastMessageContent: (conversationId: string, messageId: ChatMessageTarget, updates: Partial<StoredMessage>) => void
   resolveCorrectionReferences: (conversationId: string, targetId: string, actor: MessageActor) => Promise<CorrectionReferences | null | undefined>
+  saveDateLookupPage: (conversationId: string, messages: Message[], reachesLive: boolean) => Promise<boolean>
   reconcileHistoryMessages: (messages: Message[]) => Promise<Message[]>
   /**
    * Return the cached slice, hydrating the resident window unless `peek` or `oldest` is set.
@@ -3021,6 +3023,15 @@ export const chatStore = createStore<ChatState>()(
         if (epoch !== chatCacheEpoch) throw new DOMException('Correction lookup cancelled', 'AbortError')
         return references
       },
+
+      saveDateLookupPage: (conversationId, messages, reachesLive) => saveDateLookupPage(
+        'chat', conversationId, messages, reachesLive, captureChatCacheRead(conversationId),
+        (seams) => set(state => {
+          const gaps = setGapList(state.conversationGaps, conversationId, [...getGapList(state.conversationGaps, conversationId), ...seams])
+          return { conversationGaps: gaps }
+        }),
+        () => messageCache.saveMessages('chat', messages),
+      ),
 
       reconcileHistoryMessages: async (messages) => {
         const scope = captureStorageScope()

@@ -1,3 +1,4 @@
+import { saveDateLookupPage } from './shared/dateLookupCache'
 import { badgeMessageKey } from '../diagnostics/badgeIdentity'
 import { handoffMessageUpdate, messageUpdateFields } from './shared/messageUpdateHandoff'
 import { clearMessageIngressVersions } from './shared/messageIngress'
@@ -1175,6 +1176,7 @@ export interface RoomState {
   waitForMessageArrivals: (roomJid: string) => Promise<boolean> | undefined
   updateReactions: (roomJid: string, messageId: string, reactorNick: string, emojis: string[]) => void
   resolveCorrectionReferences: (roomJid: string, targetId: string, actor: MessageActor) => Promise<CorrectionReferences | null | undefined>
+  saveDateLookupPage: (roomJid: string, messages: RoomMessage[], reachesLive: boolean) => Promise<boolean>
   reconcileHistoryMessages: (messages: RoomMessage[], options?: { retractionsOnly?: boolean }) => Promise<RoomMessage[]>
   /** Room-scoped archive lookup for message links, without hydrating a resident window. */
   getMessageByArchiveId: (roomJid: string, stanzaId: string) => Promise<RoomMessage | null>
@@ -2564,6 +2566,16 @@ export const roomStore = createStore<RoomState>()(
     if (epoch !== roomCacheEpoch) throw new DOMException('Correction lookup cancelled', 'AbortError')
     return references
   },
+
+  saveDateLookupPage: (roomJid, messages, reachesLive) => saveDateLookupPage(
+    'room', roomJid, messages, reachesLive, captureRoomCacheRead(roomJid),
+    (seams) => set(state => {
+      const gaps = setGapList(state.roomGaps, roomJid, [...getGapList(state.roomGaps, roomJid), ...seams])
+      saveGapsToStorage(gaps)
+      return { roomGaps: gaps }
+    }),
+    () => messageCache.saveMessages('room', messages),
+  ),
 
   reconcileHistoryMessages: async (messages, options) => {
     const scope = captureStorageScope()

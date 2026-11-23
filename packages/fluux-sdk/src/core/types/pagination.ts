@@ -84,6 +84,8 @@ export interface HistoryQueryOptions {
    * contiguity outside the window.
    */
   preserveGapMarker?: boolean
+  /** Save detached date navigation results without changing history sync state. */
+  dateLookup?: boolean
   /**
    * Epoch ms a forward walk starts from: the timestamp of the message named by
    * `after`, or of `start`. Its pages heal the recorded history gaps at or above
@@ -142,6 +144,8 @@ export interface RoomHistoryQueryOptions {
    * contiguity outside the window.
    */
   preserveGapMarker?: boolean
+  /** Save detached date navigation results without changing history sync state. */
+  dateLookup?: boolean
   /**
    * Epoch ms a forward walk starts from: the timestamp of the message named by
    * `after`, or of `start`. Its pages heal the recorded history gaps at or above
