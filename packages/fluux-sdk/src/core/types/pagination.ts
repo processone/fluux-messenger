@@ -192,6 +192,10 @@ export interface HistorySearchOptions {
   with?: string
   /** Maximum results to return (default 20) */
   max?: number
+  /** Only messages at or after this instant (ISO 8601) */
+  start?: string
+  /** Only messages at or before this instant (ISO 8601) */
+  end?: string
   /** RSM cursor for backward pagination */
   before?: string
 }
@@ -208,6 +212,10 @@ export interface RoomHistorySearchOptions {
   roomJid: string
   /** Maximum results to return (default 20) */
   max?: number
+  /** Only messages at or after this instant (ISO 8601) */
+  start?: string
+  /** Only messages at or before this instant (ISO 8601) */
+  end?: string
   /** RSM cursor for backward pagination */
   before?: string
 }
@@ -226,6 +234,8 @@ export interface HistoryPagingSearchOptions {
   with: string
   /** Timestamp to start searching backward from (ISO 8601), defaults to now */
   end?: string
+  /** Oldest instant to search (ISO 8601); paging stops there */
+  start?: string
   /** Maximum pages to scan (default 20, each page ~100 messages) */
   maxPages?: number
   /** Maximum matching results to collect (default 50) */

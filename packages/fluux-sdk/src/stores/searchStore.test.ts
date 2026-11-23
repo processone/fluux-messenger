@@ -1997,6 +1997,32 @@ describe('searchStore', () => {
   // in: prefix
   // ===========================================================================
 
+  describe('date operators', () => {
+    const local = (y: number, m: number, d: number) => new Date(y, m - 1, d).getTime()
+
+    it('searches the words alone, within the span of the date operators', async () => {
+      searchStore.getState().search('report after:2024-03-01 before:2024-04-01')
+      await vi.runAllTimersAsync()
+      expect(searchIndex.search).toHaveBeenCalledWith('report', expect.objectContaining({
+        after: local(2024, 3, 2), before: local(2024, 4, 1),
+      }))
+    })
+
+    it('asks the server archive for the same span, its end included', async () => {
+      const client = createMockMAMClient()
+      setSearchClient(client as any)
+      connectionStore.getState().setMAMFulltextSearch(true)
+      searchStore.setState({ query: 'report on:2024-03-05' })
+      searchStore.getState().searchMAM()
+      await vi.runAllTimersAsync()
+      expect(client.messages.searchMessages).toHaveBeenCalledWith(expect.objectContaining({
+        query: 'report',
+        start: new Date(local(2024, 3, 5)).toISOString(),
+        end: new Date(local(2024, 3, 6) - 1).toISOString(),
+      }))
+    })
+  })
+
   describe('in: prefix', () => {
     describe('parseInPrefix', () => {
       it('should return null for non-prefixed query', () => {

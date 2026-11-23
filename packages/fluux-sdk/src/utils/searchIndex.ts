@@ -1101,6 +1101,24 @@ export async function updateMessage(
   await writeIndexBatch(indexable ? [message] : [], scopeJid, { message })
 }
 
+/** Where {@link search} looks. */
+export interface SearchOptions {
+  limit?: number
+  conversationId?: string
+  isRoom?: boolean
+  /** Only messages at or after this instant (epoch ms). */
+  after?: number
+  /** Only messages strictly before this instant (epoch ms). */
+  before?: number
+}
+
+/** Whether a document's time falls in the asked span; a malformed time counts as the oldest. */
+function inSpan(doc: DocEntry, options: SearchOptions | undefined): boolean {
+  const time = Number.isFinite(doc.timestamp) ? doc.timestamp : 0
+  return (options?.after === undefined || time >= options.after) &&
+    (options?.before === undefined || time < options.before)
+}
+
 /**
  * Search for messages matching the query.
  *
@@ -1114,10 +1132,11 @@ export async function updateMessage(
  */
 export async function search(
   query: string,
-  options?: { limit?: number; conversationId?: string; isRoom?: boolean }
+  options?: SearchOptions
 ): Promise<SearchIndexResult[]> {
   if (!isIndexedDBAvailable()) return []
   const limit = options?.limit ?? DEFAULT_SEARCH_LIMIT
+  if (options?.after !== undefined && options.before !== undefined && options.after >= options.before) return []
   const parsed = parseSearchQuery(query)
 
   // Collect all tokens needed for index lookup:
@@ -1226,6 +1245,7 @@ export async function search(
     if (!doc) continue
     if (options?.conversationId && doc.conversationId !== options.conversationId) continue
     if (options?.isRoom !== undefined && doc.isRoom !== options.isRoom) continue
+    if (!inSpan(doc, options)) continue
     // Post-filter: verify exact phrases appear contiguously in the body
     if (parsed.phrases.length > 0) {
       const bodyLower = doc.body.toLowerCase()
@@ -1306,11 +1326,15 @@ interface SearchSide { tokens: string[]; prefix: boolean; count: number }
 
 interface SearchPosition { negTime: number; docNo: number }
 
-function postingRange(token: string, after?: SearchPosition): IDBKeyRange {
-  const top: PostingKey = [token, Infinity, Infinity]
-  return after
-    ? IDBKeyRange.bound([token, after.negTime, after.docNo], top, true, false)
-    : IDBKeyRange.bound([token, -Infinity, -Infinity], top)
+/**
+ * A token's rows in the asked span, after a position when one is given. Keys hold
+ * the negative time, so `before` bounds the low end and `after` the high end; no
+ * row has an infinite docNo, so `[token, -t, Infinity]` falls between instants.
+ */
+function postingRange(token: string, after?: SearchPosition, span: SearchOptions = {}): IDBKeyRange {
+  const top: PostingKey = [token, span.after === undefined ? Infinity : -span.after, Infinity]
+  if (after) return IDBKeyRange.bound([token, after.negTime, after.docNo], top, true, false)
+  return IDBKeyRange.bound([token, span.before === undefined ? -Infinity : -span.before, Infinity], top)
 }
 
 /** Every distinct token starting with the prefix, by jumping past each one's rows. */
@@ -1333,7 +1357,7 @@ async function searchTimeSorted(
   parsed: ParsedQuery,
   uniqueAllTokens: string[],
   limit: number,
-  options: { conversationId?: string; isRoom?: boolean } | undefined,
+  options: SearchOptions | undefined,
   scopeJid: string | null,
 ): Promise<SearchIndexResult[]> {
   const prefixToken = parsed.lastTermPrefix ? parsed.terms[parsed.terms.length - 1] : null
@@ -1342,6 +1366,7 @@ async function searchTimeSorted(
   const keeps = (doc: DocEntry): boolean => {
     if (options?.conversationId && doc.conversationId !== options.conversationId) return false
     if (options?.isRoom !== undefined && doc.isRoom !== options.isRoom) return false
+    if (!inSpan(doc, options)) return false
     if (phrases.length === 0) return true
     const bodyLower = doc.body.toLowerCase()
     return phrases.every((phrase) => bodyLower.includes(phrase))
@@ -1386,10 +1411,10 @@ async function searchTimeSorted(
       if (!plan) {
         const prefixTokens = prefixToken ? await expandPrefix(rows, prefixToken) : []
         const sides: SearchSide[] = []
-        for (const token of exactTokens) sides.push({ tokens: [token], prefix: false, count: await rows.count(postingRange(token)) })
+        for (const token of exactTokens) sides.push({ tokens: [token], prefix: false, count: await rows.count(postingRange(token, undefined, options)) })
         if (prefixToken) {
           let count = 0
-          for (const token of prefixTokens) count += await rows.count(postingRange(token))
+          for (const token of prefixTokens) count += await rows.count(postingRange(token, undefined, options))
           sides.push({ tokens: prefixTokens, prefix: true, count })
         }
         sides.sort((a, b) => a.count - b.count)
@@ -1401,7 +1426,7 @@ async function searchTimeSorted(
       // The next page of the driving side, merged newest first.
       const positions: PostingKey[] = []
       for (const token of driver.tokens) {
-        positions.push(...await rows.getAllKeys(postingRange(token, after), pageSize))
+        positions.push(...await rows.getAllKeys(postingRange(token, after, options), pageSize))
       }
       positions.sort((a, b) => a[1] - b[1] || a[2] - b[2])
       const page = positions.filter((key, i) => i === 0 || key[1] !== positions[i - 1][1] || key[2] !== positions[i - 1][2])

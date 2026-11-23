@@ -14,6 +14,7 @@
 import { createStore } from 'zustand/vanilla'
 import * as searchIndex from '../utils/searchIndex'
 import { parseSearchQuery } from '../utils/searchIndex'
+import { parseSearchFilters, type ParsedSearchInput } from '../utils/searchFilters'
 import { generateMatchSnippet, type MatchSnippet } from '../utils/searchUtils'
 import { chatStore } from './chatStore'
 import { roomStore } from './roomStore'
@@ -201,6 +202,30 @@ let mamRsmCursor: string | undefined
 
 /** AbortController for paging search */
 let pagingAbortController: AbortController | null = null
+
+/** Locale numeric dates in the query are read in (`05/03/2024`); the runtime's when unset. */
+let searchLocale: string | undefined
+
+/**
+ * Set the locale whose numeric date order `after:`, `before:` and `on:` read,
+ * normally the interface language. ISO dates (`2024-03-05`) read the same everywhere.
+ */
+export function setSearchLocale(locale: string | undefined): void {
+  searchLocale = locale
+}
+
+/** The query split into its words and its operators, in the reader's locale. */
+export function parseSearchInput(query: string): ParsedSearchInput {
+  return parseSearchFilters(query, searchLocale)
+}
+
+/** MAM `start`/`end` for the query's dates: `end` is inclusive there, so one millisecond earlier. */
+function archiveSpan(input: ParsedSearchInput): { start?: string; end?: string } {
+  return {
+    ...(input.after !== undefined ? { start: new Date(input.after).toISOString() } : {}),
+    ...(input.before !== undefined ? { end: new Date(input.before - 1).toISOString() } : {}),
+  }
+}
 
 /**
  * Set the XMPPClient reference used for MAM search queries.
@@ -611,14 +636,18 @@ async function executeSearch(query: string): Promise<void> {
   const state = searchStore.getState()
   const scope = state.searchScope
   const filter = state.searchFilter
-  const parsed = parseSearchQuery(query)
+  const input = parseSearchInput(query)
+  const text = input.text
+  const parsed = parseSearchQuery(text)
   const phrases = parsed.phrases.length > 0 ? parsed.phrases : undefined
   try {
-    const indexResults = await searchIndex.search(query, {
+    const indexResults = await searchIndex.search(text, {
       limit: 50,
       ...(scope ? { conversationId: scope } : {}),
       ...(filter === 'conversations' ? { isRoom: false } : {}),
       ...(filter === 'rooms' ? { isRoom: true } : {}),
+      ...(input.after !== undefined ? { after: input.after } : {}),
+      ...(input.before !== undefined ? { before: input.before } : {}),
     })
 
     const retracted = await classifyRetractedCandidates(indexResults.map(indexResultToCandidate))
@@ -640,7 +669,7 @@ async function executeSearch(query: string): Promise<void> {
         ...(r.isDelayed ? { isDelayed: true } : {}),
         ...(r.isOutgoing ? { isOutgoing: true } : {}),
         ...(r.receivedAt !== undefined ? { receivedAt: r.receivedAt } : {}),
-        matchSnippet: generateMatchSnippet(r.body, query, 60, phrases),
+        matchSnippet: generateMatchSnippet(r.body, text, 60, phrases),
         source: 'local' as const,
       }
     })
@@ -677,7 +706,10 @@ async function executeMAMSearch(append: boolean): Promise<void> {
   const generation = ++mamSearchGeneration
   const scope = state.searchScope
   const supportsFulltext = connectionStore.getState().mamFulltextSearch
-  const parsed = parseSearchQuery(query)
+  const input = parseSearchInput(query)
+  const span = archiveSpan(input)
+  const text = input.text
+  const parsed = parseSearchQuery(text)
   const phrases = parsed.phrases.length > 0 ? parsed.phrases : undefined
 
   // Cancel any ongoing paging search
@@ -704,22 +736,24 @@ async function executeMAMSearch(append: boolean): Promise<void> {
         // Server fulltext search scoped to conversation
         if (isRoom) {
           const result = await clientRef.messages.searchRoomMessages({
-            query,
+            query: text,
             roomJid: scope,
+            ...span,
             max: 20,
             before: append ? mamRsmCursor : undefined,
           })
-          newResults = await roomMessagesToSearchResults(result.messages, scope, query, phrases)
+          newResults = await roomMessagesToSearchResults(result.messages, scope, text, phrases)
           hasMore = !result.complete
           mamRsmCursor = result.page.first
         } else {
           const result = await clientRef.messages.searchMessages({
-            query,
+            query: text,
             with: scope,
+            ...span,
             max: 20,
             before: append ? mamRsmCursor : undefined,
           })
-          newResults = await messagesToSearchResults(result.messages, query, phrases)
+          newResults = await messagesToSearchResults(result.messages, text, phrases)
           hasMore = !result.complete
           mamRsmCursor = result.page.first
         }
@@ -727,11 +761,11 @@ async function executeMAMSearch(append: boolean): Promise<void> {
         // Paging search (1:1 conversations only, no fulltext required)
         pagingAbortController = new AbortController()
         const result = await clientRef.messages.searchConversationHistory(
-          { query, with: scope, maxPages: 20, maxResults: 50 },
+          { query: text, with: scope, ...span, maxPages: 20, maxResults: 50 },
           pagingAbortController.signal
         )
         pagingAbortController = null
-        newResults = await messagesToSearchResults(result.messages, query, phrases)
+        newResults = await messagesToSearchResults(result.messages, text, phrases)
         hasMore = !result.complete
       } else {
         // Room paging search not supported — too complex without fulltext
@@ -752,11 +786,12 @@ async function executeMAMSearch(append: boolean): Promise<void> {
       }
 
       const result = await clientRef.messages.searchMessages({
-        query,
+        query: text,
+        ...span,
         max: 20,
         before: append ? mamRsmCursor : undefined,
       })
-      newResults = await messagesToSearchResults(result.messages, query, phrases)
+      newResults = await messagesToSearchResults(result.messages, text, phrases)
       hasMore = !result.complete
       mamRsmCursor = result.page.first
     }

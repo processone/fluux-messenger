@@ -108,6 +108,9 @@ export { writeSealHint as setSavedSealing } from './utils/savedSealHint'
 export { canSaveMessage, buildSavedMessage } from './utils/savedMessageBuilder'
 export { findLatestCopy } from './utils/savedLatestCopy'
 export { findFirstMessageOfDay, type FirstMessageOfDay, type DayArchive } from './utils/firstMessageOfDay'
+export { localDayBounds, localDayValue } from './utils/localDay'
+export { parseSearchFilters, parseDateSpan, removeSearchFilter, DATE_OPERATORS } from './utils/searchFilters'
+export type { ParsedSearchInput, SearchFilterToken, SearchOperator, DateOperator } from './utils/searchFilters'
 export { sameSavedMessage } from './utils/savedMessageKeys'
 export { usePresence } from './hooks/usePresence'
 export type { UsePresenceReturn } from './hooks/usePresence'
@@ -212,6 +215,8 @@ export {
   adminStore,
   blockingStore,
   searchStore,
+  setSearchLocale,
+  parseSearchInput,
 } from './stores'
 
 export type { CacheMigrationProgress, CacheMigrationState } from './stores/cacheMigrationStore'

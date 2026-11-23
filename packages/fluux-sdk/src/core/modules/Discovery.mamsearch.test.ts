@@ -167,4 +167,19 @@ describe('Discovery MAM Search Capability', () => {
     expect(sent).toContain('"var":"{urn:xmpp:fulltext:0}fulltext"')
     expect(sent).not.toContain('"var":"fulltext"')
   })
+
+  it('searchArchive sends a date span as the MAM start and end fields', async () => {
+    await connect()
+    mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(createMockElement('iq', { type: 'result' }, [
+      { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+    ]))
+
+    await getInternalSurfaceForTesting(xmppClient).mam.searchArchive({
+      query: 'hello', start: '2024-03-04T23:00:00.000Z', end: '2024-03-05T22:59:59.999Z',
+    })
+
+    const sent = JSON.stringify(mockXmppClientInstance.iqCaller.request.mock.calls.at(-1)?.[0])
+    expect(sent).toContain('"var":"start"},"children":[{"name":"value","attrs":{},"children":["2024-03-04T23:00:00.000Z"]')
+    expect(sent).toContain('"var":"end"},"children":[{"name":"value","attrs":{},"children":["2024-03-05T22:59:59.999Z"]')
+  })
 })

@@ -4,7 +4,7 @@ import { isSpamModerated } from '@/utils/spamModeration'
 import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import { useSearch, useRoomMessageSnapshots, chatStore, roomStore, getLocalPart } from '@fluux/sdk'
+import { useSearch, useRoomMessageSnapshots, chatStore, roomStore, getLocalPart, setSearchLocale } from '@fluux/sdk'
 import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
 import type { SearchResult, SearchResultContext, SearchFilterType, RoomMessage } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
@@ -55,6 +55,9 @@ export function SearchView() {
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
   const zoneRef = useSidebarZone()
+
+  // Numeric dates in after:, before: and on: read in the interface language's order
+  useEffect(() => setSearchLocale(i18n.language), [i18n.language])
 
   // Auto-focus search input on mount
   useEffect(() => {

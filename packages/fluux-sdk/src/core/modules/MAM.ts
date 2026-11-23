@@ -138,6 +138,14 @@ import {
 } from '../../utils/messageIdentity'
 
 
+/** The `start` and `end` fields of a search that asks for a time span. */
+function spanFields({ start, end }: { start?: string; end?: string }): Element[] {
+  return [
+    ...(start ? [xml('field', { var: 'start' }, xml('value', {}, start))] : []),
+    ...(end ? [xml('field', { var: 'end' }, xml('value', {}, end))] : []),
+  ]
+}
+
 /** XEP-0203: the date an archive or carbon envelope stamps on what it wraps. */
 function delayStamp(delayEl?: Element): Date | undefined {
   const stamp = delayEl?.attrs.stamp
@@ -1224,6 +1232,7 @@ export class MAM extends BaseModule {
     const formFields: Element[] = [
       xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
       xml('field', { var: MAM_FULLTEXT_FIELD }, xml('value', {}, query)),
+      ...spanFields(options),
     ]
 
     if (withJid) {
@@ -1309,6 +1318,7 @@ export class MAM extends BaseModule {
     const formFields: Element[] = [
       xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
       xml('field', { var: MAM_FULLTEXT_FIELD }, xml('value', {}, query)),
+      ...spanFields(options),
     ]
 
     const iq = this.buildMAMQuery(queryId, formFields, max, before ?? '', roomJid)
@@ -1385,7 +1395,7 @@ export class MAM extends BaseModule {
     signal?: AbortSignal
   ): Promise<HistoryResult> {
     const session = this.captureQuery()
-    const { query, with: withJid, end, maxPages = 20, maxResults = 50 } = options
+    const { query, with: withJid, start, end, maxPages = 20, maxResults = 50 } = options
     const parsed = parseSearchQuery(query)
     const phraseTokens = parsed.phrases.flatMap((p) => tokenize(p))
     const allTokens = [...new Set([...parsed.terms, ...phraseTokens])]
@@ -1408,7 +1418,9 @@ export class MAM extends BaseModule {
         with: withJid,
         max: 100,
         before: beforeCursor ?? '',
-        ...(page === 0 && end ? { end } : {}),
+        // Every page repeats the span: RSM pages through one fixed result set.
+        ...(start ? { start } : {}),
+        ...(end ? { end } : {}),
       })
 
       session.assertCurrent()
