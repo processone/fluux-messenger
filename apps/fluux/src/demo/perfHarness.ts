@@ -64,7 +64,7 @@ export async function installPerfHarness(opts: { scan?: boolean } = {}): Promise
     try {
       const reactScan = (window as unknown as { reactScan?: (o: unknown) => void }).reactScan
         ?? (await import('react-scan')).scan
-      reactScan({ enabled: true, log: false, onRender: (_f: unknown, renders: RenderRecord[]) => aggregateRenders(counts, renders) })
+      reactScan({ enabled: true, log: false, showToolbar: false, onRender: (_f: unknown, renders: RenderRecord[]) => aggregateRenders(counts, renders) })
     } catch (e) {
       console.warn('[perf] react-scan unavailable:', e)
     }

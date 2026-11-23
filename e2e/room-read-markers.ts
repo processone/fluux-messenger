@@ -1,4 +1,5 @@
 import { test, expect, type Locator } from '@playwright/test'
+import { createRequire } from 'node:module'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
@@ -18,6 +19,8 @@ const paragraphs = [
 // transport stand-in, not evidence of the real server's eligibility or identity.
 test('room read badges cap avatars, name every reader and move without rendering the timeline', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+  // React must see the packaged developer-tools hook while react-dom loads.
+  await page.addInitScript({ path: createRequire(import.meta.url).resolve('react-scan/dist/install-hook.global.js') })
   await bootDemo(page, `/demo.html?perf=scan&scene=showcase&tutorial=false#/rooms/${encodeURIComponent(LAUNCH_ROOM)}`)
   await page.waitForFunction(() => typeof (window as unknown as Scope).__perf?.reset === 'function')
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
