@@ -1014,11 +1014,9 @@ export function OpenPgpSettings() {
             <div className="flex-1 min-w-0">
               <div className="flex items-start gap-2">
                 <Lock className="size-4 mt-0.5 text-fluux-muted flex-shrink-0" />
-                <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <label className="text-sm font-medium text-fluux-text">
+                <label className="min-w-0 text-sm font-medium text-fluux-text">
                     {t('settings.encryption.openpgpLabel')}
-                  </label>
-                </div>
+                </label>
               </div>
               <p className="mt-1 text-xs text-fluux-muted leading-snug">
                 {t('settings.encryption.openpgpDescription')}
