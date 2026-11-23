@@ -107,20 +107,21 @@ async function setDraft(input: Locator, value: string): Promise<void> {
   await input.focus()
   await page.keyboard.press('ControlOrMeta+A')
   await page.keyboard.press('Backspace')
-  // Observe each edit before the next one so a lost insertion fails at its source.
-  let expected = ''
-  await expect(input).toHaveJSProperty('value', expected)
+  const readValue = () => input.evaluate(el => (el as unknown as { value: string }).value)
+  await expect.poll(readValue).toBe('')
   const lines = value.split('\n')
+  let typed = ''
   for (let i = 0; i < lines.length; i++) {
     if (lines[i]) {
       await page.keyboard.insertText(lines[i])
-      expected += lines[i]
-      await expect(input).toHaveJSProperty('value', expected)
+      typed += lines[i]
+      // Observe each input before the next key can replace a pending edit.
+      await expect.poll(readValue).toBe(typed)
     }
     if (i < lines.length - 1) {
       await page.keyboard.press('Shift+Enter')
-      expected += '\n'
-      await expect(input).toHaveJSProperty('value', expected)
+      typed += '\n'
+      await expect.poll(readValue).toBe(typed)
     }
   }
   // React commits the new text asynchronously. Two frames put us past the commit
@@ -646,15 +647,8 @@ test.describe('composer geometry', () => {
     const below = 'Lower line with plenty of plain letters for the caret'
     const caret = () => editor.evaluate(el => (el as unknown as { selectionStart: number }).selectionStart)
     for (const [prefix, suffix] of [['', 'tail text'], ['prefix ', 'tail text'], ['prefix ', '']]) {
-      await setDraft(editor, '')
       await editor.click()
-      const value = () => editor.evaluate(el => (el as unknown as { value: string }).value)
-      await page.keyboard.insertText(above)
-      await expect.poll(value).toBe(above)
-      await page.keyboard.press('Shift+Enter')
-      await expect.poll(value).toBe(`${above}\n`)
-      await page.keyboard.insertText(`${prefix}@Em`)
-      await expect.poll(value).toBe(`${above}\n${prefix}@Em`)
+      await setDraft(editor, `${above}\n${prefix}@Em`)
       await expect(picker).toBeVisible()
       await page.keyboard.press('Enter')
       const mention = editor.locator('[data-mention]')
