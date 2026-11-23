@@ -1,3 +1,4 @@
+import type { RoomReadMarkers } from './RoomReadMarkers'
 import { AvatarStateOwner } from '../../utils/avatarState'
 import { getBareJid, getDomain } from '../jid'
 import { resolveDefaultMucNick } from '../nick'
@@ -20,6 +21,8 @@ import type { FastTokenStorageAdapter } from '../fastTokenStorage'
 export interface ModuleDependencies {
   avatarState?: AvatarStateOwner
   stores: StoreBindings | null
+  /** Room-only peer markers; no dependency on private read-sync events. */
+  getRoomReadMarkers?: () => RoomReadMarkers
   flushRoomOccupants?: (roomJid?: string) => void
   waitForRoomOccupants?: (roomJid: string) => Promise<void>
   /**

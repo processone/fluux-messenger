@@ -73,6 +73,7 @@ import { findNewestGap, findOpenGap, type GapList } from '../../stores/shared/ma
 import {
   NS_MAM,
   MAM_FULLTEXT_FIELD,
+  NS_CHAT_MARKERS,
   NS_RSM,
   NS_DATA_FORMS,
   NS_FORWARD,
@@ -1030,9 +1031,13 @@ export class MAM extends BaseModule {
           const { complete, page: pageInfo } = this.parseMAMResponse(response)
           if (response.getChild('fin', NS_MAM)) this.observeArchive(JSON.stringify([true, roomJid]), session.isCurrent)
 
+          // Peer markers and targets share this page, but markers are not rows.
           // Drain buffer: E2EE decrypt first, then modification detection, then parse.
           const correctionStart = modifications.corrections.length
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
+            if (messageEl.getChild('displayed', NS_CHAT_MARKERS) && !messageEl.getChild('body')) {
+              continue
+            }
             const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)
             await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, 'room', delayStamp(forwardedDelayEl))
             session.assertCurrent()
@@ -1042,6 +1047,11 @@ export class MAM extends BaseModule {
             const msg = this.parseRoomArchiveMessage(forwarded, roomJid, me, archiveId)
             if (msg) collectedMessages.push(msg)
           }
+
+          // Resolve only after all targets in the page have been parsed.
+          await this.resolvePeerMarkers(roomJid, rawEntries, [...allMessages, ...collectedMessages],
+            isForward ? { after: currentAfter } : { before: currentBefore })
+          session.assertCurrent()
 
           if (!isForward) modifications.corrections.unshift(...modifications.corrections.splice(correctionStart))
 
@@ -1374,6 +1384,8 @@ export class MAM extends BaseModule {
         if (msg) collectedMessages.push(msg)
       }
 
+      await this.resolvePeerMarkers(roomJid, rawEntries, collectedMessages)
+      session.assertCurrent()
       const originalBodies = collectedMessages.map(message => message.body)
       const unresolved = await this.applyModifications(collectedMessages, modifications, roomMessageAuthor, undefined, undefined,
         (id, actor) => this.deps.stores?.room.resolveCorrectionReferences?.(roomJid, id, actor))
@@ -3272,6 +3284,19 @@ export class MAM extends BaseModule {
     return message
   }
 
+  private async resolvePeerMarkers(roomJid: string, entries: readonly RawArchiveEntry[], messages: readonly RoomMessage[],
+    cursor?: { before?: string; after?: string }): Promise<void> {
+    const markers = this.deps.getRoomReadMarkers?.()
+    if (!markers) return
+    const session = this.captureQuery()
+    markers.recordArchiveOrder(roomJid, entries.map(entry => entry.archiveId).filter((id): id is string => !!id), cursor)
+    for (const { messageEl } of entries) {
+      if (!messageEl.getChild('displayed', NS_CHAT_MARKERS) || messageEl.getChild('body')) continue
+      await markers.receive(roomJid, messageEl, messages, true)
+      session.assertCurrent()
+    }
+  }
+
   private async resolveRoomArchiveEntries(entries: RawArchiveEntry[], roomJid: string, me: RoomSelf): Promise<RoomMessage[]> {
     const session = this.captureQuery()
     const messages: RoomMessage[] = []
@@ -3282,6 +3307,8 @@ export class MAM extends BaseModule {
         if (message) messages.push(message)
       }
     }
+    await this.resolvePeerMarkers(roomJid, entries, messages)
+    session.assertCurrent()
     const unresolved = await this.applyModifications(messages, modifications, roomMessageAuthor)
     session.assertCurrent()
     this.emitUnresolvedRoomModifications(roomJid, unresolved)
@@ -3765,6 +3792,8 @@ export class MAM extends BaseModule {
       const message = this.parseRoomArchiveMessage(forwarded, roomJid, me, archiveId)
       if (message) messages.push(message)
     }
+    await this.resolvePeerMarkers(roomJid, entries, messages)
+    session.assertCurrent()
     await this.applyModifications(messages, modifications, roomMessageAuthor, from => getResource(from) || from)
     session.assertCurrent()
     const reconciled = await this.deps.stores.room.reconcileHistoryMessages?.(messages) ?? messages

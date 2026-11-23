@@ -77,7 +77,8 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | [XEP-0297](https://xmpp.org/extensions/xep-0297.html) | Stanza Forwarding            | ✅ Implemented | Used by Message Carbons, and to forward a room or one-to-one message to a one-to-one chat as a structured copy, with the quote marked as its XEP-0428 fallback; advertises `urn:xmpp:forward:0` |
 | [XEP-0313](https://xmpp.org/extensions/xep-0313.html) | Message Archive Management   | ✅ Implemented | History fetch for 1:1 chats and MUC rooms with scroll-up lazy loading, IndexedDB caching with MAM fallback, RSM pagination; archiving default (§6) shown in Privacy settings, changed only when the user overrides it |
 | [XEP-0431](https://xmpp.org/extensions/xep-0431.html) | Full Text Search in MAM      | ✅ Implemented | Search on server: detected from the `urn:xmpp:fulltext:0` feature on the account, query sent in the `{urn:xmpp:fulltext:0}fulltext` MAM field for chats and rooms |
-| [XEP-0334](https://xmpp.org/extensions/xep-0334.html) | Message Processing Hints     | ✅ Implemented | `<no-store/>` hint for transient messages (Quick Chat rooms), chat states and reactions                                    |
+| [XEP-0333](https://xmpp.org/extensions/xep-0333.html) | Chat Markers | Partial | Opt-in displayed positions in verified private rooms below 20 occupants; master switch plus per-room consent, no direct-chat markers. See [room read positions](docs/ROOM_READ_MARKERS.md) |
+| [XEP-0334](https://xmpp.org/extensions/xep-0334.html) | Message Processing Hints     | ✅ Implemented | `<store/>` for room read positions; `<no-store/>` hint for transient messages (Quick Chat rooms), chat states and reactions                                    |
 | [XEP-0357](https://xmpp.org/extensions/xep-0357.html) | Push Notifications           | ✅ Implemented | iOS: APNs token registered with a push app server (XEP-0050 command), then enabled on the user's server on every fresh session; the notification shows the contact name, or the room name and the occupant's nick |
 
 ## PubSub & PEP
@@ -132,7 +133,7 @@ The following XEPs are planned for future implementation:
 | XEP                                                   | Name                      | Category  |
 |-------------------------------------------------------|---------------------------|-----------|
 | [XEP-0184](https://xmpp.org/extensions/xep-0184.html) | Message Delivery Receipts | Messaging |
-| [XEP-0333](https://xmpp.org/extensions/xep-0333.html) | Chat Markers              | Messaging |
+| [XEP-0333](https://xmpp.org/extensions/xep-0333.html) | Chat Markers (direct chats) | Messaging |
 | [XEP-0384](https://xmpp.org/extensions/xep-0384.html) | OMEMO Encryption          | Security  |
 
 ## Custom Extensions

@@ -112,6 +112,7 @@ import { StateSnapshot } from './modules/stateSnapshot'
 import { Chat } from './modules/Chat'
 import { Roster } from './modules/Roster'
 import { MUC } from './modules/MUC'
+import { RoomReadMarkers } from './modules/RoomReadMarkers'
 import { Admin } from './modules/Admin'
 import { Profile } from './modules/Profile'
 import { Discovery } from './modules/Discovery'
@@ -317,6 +318,9 @@ export class XMPPClient {
    * Handles room operations, bookmarks, and group messaging.
    */
   public rooms!: MUC
+
+  /** Opt-in room peer read positions, separate from private XEP-0490 sync. */
+  public roomReadMarkers!: RoomReadMarkers
 
   /**
    * Server administration module (XEP-0133).
@@ -744,6 +748,7 @@ export class XMPPClient {
     // before login.
 
     const moduleDeps = {
+      getRoomReadMarkers: () => this.roomReadMarkers,
       stores: this.stores,
       flushRoomOccupants: (roomJid?: string) => this.storeBindings?.flushOccupants(roomJid),
       waitForRoomOccupants: (roomJid: string) => this.storeBindings?.waitForOccupants(roomJid) ?? Promise.resolve(),
@@ -772,6 +777,8 @@ export class XMPPClient {
     this.connection = new Connection(moduleDeps)
     this.connectionActor = this.connection.getConnectionActor()
     const pubsub = new PubSub(moduleDeps)
+    this.roomReadMarkers?.cancelPending()
+    this.roomReadMarkers = new RoomReadMarkers(moduleDeps)
     const mam = new MAM(moduleDeps)
     this.messages = new Chat(moduleDeps, mam)
     this.poll = new Poll(moduleDeps, this.messages)
@@ -862,6 +869,8 @@ export class XMPPClient {
       // Dispatch to MAM collectors first (before module routing)
       // This handles MAM query results without adding temporary listeners
       this.dispatchToMAMCollectors(stanza)
+      // Bodyless room markers must be consumed before Chat's body filtering.
+      if (this.roomReadMarkers.observe(stanza)) return
 
       // Order is derived from how narrowly each module declares its claims,
       // not from the position of a module in this list. See core/stanzaRouting.
@@ -1477,6 +1486,7 @@ export class XMPPClient {
    * ```
    */
   destroy(): void {
+    this.roomReadMarkers?.cancelPending()
     this.avatarState.cancel()
     // Unload all event hooks
     for (const hook of this.eventHooks.values()) {

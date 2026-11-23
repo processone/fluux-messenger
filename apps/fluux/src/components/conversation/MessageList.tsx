@@ -23,6 +23,7 @@ import { measureElementViewport } from '@/utils/viewportMetrics'
 import { useStaticContextLanding } from './useStaticContextLanding'
 import type { MessageListHandle, MessageListProps } from './messageListBoundary'
 import { useViewportObserver } from '@/hooks/useViewportObserver'
+import { useFocusedVisibleRows } from '@/hooks/useFocusedVisibleRows'
 import { useRenderCostProbe } from '@/hooks/useRenderCostProbe'
 import { countAnomalyMetric } from '@/utils/anomalyMetric'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
@@ -106,6 +107,7 @@ function noteRealWidthBucket(conversationId: string, realWidthPx: number | undef
 export function MessageList<T extends BaseMessage>({
   conversationId,
   timeline,
+  onFocusedVisibleRows,
   readMarkers,
   target,
   handleRef,
@@ -698,6 +700,8 @@ export function MessageList<T extends BaseMessage>({
   // --------------------------------------------------------------------------
   // VIEWPORT OBSERVER (tracks the bottom-most visible row for the read pointer)
   // --------------------------------------------------------------------------
+
+  useFocusedVisibleRows(scrollContainerRef, messages, onFocusedVisibleRows, !staticMode && !isLoading)
 
   useViewportObserver({
     scrollContainerRef,

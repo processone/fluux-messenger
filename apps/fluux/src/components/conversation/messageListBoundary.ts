@@ -135,6 +135,8 @@ export interface MessageListProps<T extends BaseMessage> {
   /** Unique identifier for this conversation/room. */
   conversationId: string
   timeline: ConversationTimeline<T>
+  /** Focused, measured viewport evidence only; static previews never call this. */
+  onFocusedVisibleRows?: (rows: readonly T[]) => void
   readMarkers?: ReadMarkers
   target?: MessageTargetRequest
   /** Filled with the command handle while the list is mounted. */

@@ -32,6 +32,25 @@ publiés sur votre compte XMPP ; si vous choisissez la sauvegarde de clé sur le
 serveur, la sauvegarde de la clé privée est chiffrée avant son envoi au serveur
 XMPP.
 
+## Positions de lecture facultatives dans les salons
+
+Le partage de votre position de lecture est désactivé par défaut pour chaque
+compte sur cet appareil. Activez le réglage général de confidentialité, puis
+choisissez chaque salon séparément dans ses informations. Seul l'affichage de
+messages entrants non chiffrés dans la fenêtre active peut partager une position,
+dans les salons vérifiés, non répertoriés, réservés aux membres et non anonymes,
+avec moins de 20 occupants. Les conversations individuelles et les messages
+privés à un occupant du salon ne partagent pas ces marqueurs.
+
+Un marqueur identifie votre occupant dans le salon et le message jusqu'auquel
+vous avez lu. Le salon et ses occupants peuvent voir ces métadonnées, et ses
+archives peuvent les conserver. Désactiver le partage arrête les nouvelles mises
+à jour sans effacer les marqueurs déjà conservés par le serveur ou les autres
+participants. Les marqueurs entrants valides peuvent rester visibles lorsque
+votre propre partage est désactivé. Cette fonction est distincte de la
+synchronisation privée de lecture entre vos propres appareils. Voir les
+[détails sur les positions de lecture](ROOM_READ_MARKERS.md) (en anglais).
+
 ## Notifications push iOS facultatives
 
 Les notifications push nécessitent l'autorisation d'iOS et la prise en charge
