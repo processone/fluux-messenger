@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Locator } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
@@ -54,6 +54,16 @@ test('room read badges cap avatars, name every reader and move without rendering
     await oldRow.scrollIntoViewIfNeeded()
   }
   const geometryReadings: object[] = []
+  // The readable-corner check also protects the following row's content.
+  const checkFollowingRow = async (badge: Box, tap: Box, following: Locator) => {
+    const nextColumn = (await following.locator('[data-msg-column]').first().boundingBox())!
+    const reading = { state: 'following-row-clearance', badge, tap, nextColumn }
+    geometryReadings.push(reading)
+    const bottom = Math.max(badge.y + badge.height, tap.y + tap.height)
+    if (bottom > nextColumn.y) await test.info().attach('room-marker-next-row-overlap', { body: JSON.stringify(reading, null, 2), contentType: 'application/json' })
+    expect(bottom,
+      'the paint and tap area leave the following message unobscured').toBeLessThanOrEqual(nextColumn.y)
+  }
   await page.evaluate(async ({ roomJid, id, body }) => {
     await (window as unknown as Scope).__roomStore.getState().updateMessage(roomJid, id, { body })
   }, { roomJid: LAUNCH_ROOM, id: fixture.id, body: fixture.shortBody })
@@ -76,6 +86,9 @@ test('room read badges cap avatars, name every reader and move without rendering
     await priorRow.scrollIntoViewIfNeeded()
     await expect(priorBadge).toBeVisible()
     const badge = (await priorBadge.boundingBox())!
+    const surface = (await priorBadge.locator('[data-read-marker-surface]').boundingBox())!
+    const tap = (await priorBadge.getByRole('button').boundingBox())!
+    await checkFollowingRow(surface, tap, oldRow)
     const controls = await priorRow.locator('button').evaluateAll(buttons => buttons
       .filter(button => !button.closest('[data-read-marker-row]'))
       .map(button => { const rect = button.getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width, height: rect.height } })
@@ -94,6 +107,7 @@ test('room read badges cap avatars, name every reader and move without rendering
     for (const actor of actors) await (window as unknown as Scope).__demoClient.simulateRoomDisplayed(roomJid, actor, target)
   }, { roomJid: LAUNCH_ROOM, actors: fixture.actors, target: fixture.old })
   const oldBadge = page.locator(`[data-read-marker-row="${fixture.old}"]`)
+  const nextRow = page.locator(`[data-message-row-id][data-stanza-id="${fixture.next}"]`)
   const checkGeometry = async (expected: Map<string, number> | undefined, reactions: boolean) => {
     const measured = new Map<string, number>()
     for (const layout of layouts) {
@@ -118,17 +132,23 @@ test('room read badges cap avatars, name every reader and move without rendering
         expect(clearOf(badge, reaction),
         'the corner badge leaves the reaction control unobscured').toBe(true)
       }
-      const textClear = await oldRow.locator('[data-msg-text]').first().evaluate((element, badge) => {
+      const textRects = await oldRow.locator('[data-msg-text]').first().evaluate(element => {
+        const rects: Box[] = []
         const text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
         for (let node = text.nextNode(); node; node = text.nextNode()) {
           const range = document.createRange(); range.selectNodeContents(node)
-          if (![...range.getClientRects()].every(rect => !rect.width || !rect.height || badge.x >= rect.right || badge.y >= rect.bottom
-            || badge.x + badge.width <= rect.left || badge.y + badge.height <= rect.top)) return false
+          for (const { x, y, width, height } of range.getClientRects()) {
+            if (width && height) rects.push({ x, y, width, height })
+          }
         }
-        return true
-      }, badge)
+        return rects
+      })
+      const textClear = textRects.every(rect => clearOf(badge, rect))
+      const reading = { direction, textDirection: message.direction, width, rowHeight: height, badge, tap, column, avatar, reactions, textClear, textRects }
+      geometryReadings.push(reading)
+      if (!textClear) await test.info().attach('room-marker-text-overlap', { body: JSON.stringify(reading, null, 2), contentType: 'application/json' })
       expect(textClear, 'the long paragraph stays readable, including at phone width').toBe(true)
-      geometryReadings.push({ direction, textDirection: message.direction, width, rowHeight: height, badge, tap, column, avatar, reactions, textClear })
+      await checkFollowingRow(badge, tap, nextRow)
     }
     await applyLayout({ message: paragraphs[0], direction: 'ltr', width: 1280 })
     return measured
