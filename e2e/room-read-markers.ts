@@ -198,6 +198,18 @@ test('room read badges cap avatars, name every reader and move without rendering
   await expect(page.locator(`[data-read-marker-row="${fixture.next}"]`).getByRole('button', { name: `Read through this message: ${fixture.names[0]}`, exact: true })).toBeVisible()
   await expect(oldBadge.getByText('+1', { exact: true })).toHaveCount(0)
   await checkGeometry(reactionHeights, true)
+  // Readers have still read through this row after advancing beyond it. Keep
+  // their open list stable even when its live badge has no readers left.
+  await oldBadge.getByRole('button', { name: `Read through this message: ${fixture.names.slice(1).join(', ')}`, exact: true }).click()
+  await expect(dialog).toBeVisible()
+  await page.evaluate(async ({ roomJid, actors, target }) => {
+    for (const actor of actors) await (window as unknown as Scope).__demoClient.simulateRoomDisplayed(roomJid, actor, target)
+  }, { roomJid: LAUNCH_ROOM, actors: fixture.actors.slice(1), target: fixture.next })
+  await expect(oldBadge).toHaveCount(0)
+  await expect(dialog).toBeVisible()
+  for (const name of fixture.names.slice(1)) await expect(dialog.getByText(name, { exact: true })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
   await test.info().attach('room-marker-corner-geometry', { body: JSON.stringify(geometryReadings, null, 2), contentType: 'application/json' })
   await test.info().attach('room-marker-render-counts', { body: JSON.stringify(result, null, 2), contentType: 'application/json' })
 })

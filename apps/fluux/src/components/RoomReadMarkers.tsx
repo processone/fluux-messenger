@@ -1,7 +1,7 @@
 import { memo, useCallback, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import type { MessageRowRef, RoomReadMarkers } from '@fluux/sdk'
+import type { MessageRowRef, RoomReader, RoomReadMarkers } from '@fluux/sdk'
 import { Avatar } from './Avatar'
 import { ModalShell } from './ModalShell'
 import { SettingsRow } from './ui/SettingsRow'
@@ -47,13 +47,15 @@ export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row
   const { t } = useTranslation()
   const read = useCallback(() => markers.readers(roomJid, row), [markers, roomJid, row])
   const readers = useSyncExternalStore(markers.subscribe, read)
-  const [open, setOpen] = useState(false)
+  // Names captured on opening remain true when readers advance past this row.
+  const [openReaders, setOpenReaders] = useState<readonly RoomReader[] | null>(null)
   // Overlay the trailing corner (right in LTR) without height or reaction moves.
-  if (!readers.length) return null
+  if (!readers.length && !openReaders) return null
   const title = t('readMarkers.readThrough')
   return (
-    <div className="absolute end-0 -bottom-0.5 z-10" data-read-marker-row={row.stanzaId}>
-      <button type="button" onClick={() => setOpen(true)}
+    <>
+    {readers.length > 0 && <div className="absolute end-0 -bottom-0.5 z-10" data-read-marker-row={row.stanzaId}>
+      <button type="button" onClick={() => setOpenReaders(readers)}
         aria-label={t('readMarkers.readers', { names: readers.map(reader => reader.nick).join(', ') })}
         className="min-h-7 flex items-center rounded-full py-0.5 text-xs text-fluux-muted">
         <span className="sr-only">{title}</span>
@@ -64,14 +66,15 @@ export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row
         {readers.length > 3 && <span aria-hidden="true">+{readers.length - 3}</span>}
         </span>
       </button>
-      {open && createPortal(<ModalShell title={title} dialogLabel={title} onClose={() => setOpen(false)} width="max-w-sm" panelClassName="max-h-[80vh] flex flex-col">
+    </div>}
+      {openReaders && createPortal(<ModalShell title={title} dialogLabel={title} onClose={() => setOpenReaders(null)} width="max-w-sm" panelClassName="max-h-[80vh] flex flex-col">
         <ul className="p-4 space-y-3 overflow-y-auto min-h-0" tabIndex={0} aria-label={title}>
-          {readers.map(reader => <li key={reader.occupantId} className="flex items-center gap-3 text-sm text-fluux-text">
+          {openReaders.map(reader => <li key={reader.occupantId} className="flex items-center gap-3 text-sm text-fluux-text">
             <Avatar identifier={`${roomJid}/${reader.occupantId}`} name={reader.nick} avatarUrl={reader.avatar} size="xs" />
             <span className="break-words min-w-0">{reader.nick}</span>
           </li>)}
         </ul>
       </ModalShell>, document.body)}
-    </div>
+    </>
   )
 })

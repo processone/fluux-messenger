@@ -82,7 +82,8 @@ Some last lines may wrap earlier; moving a reader does
 not resize a qualified row. Nick changes preserve identity, departures hide the reader,
 and reused nicknames do not inherit another person's position. Fluux hides your
 own marker. Each badge shows up to three avatars; its button opens a full named
-list with keyboard and touch support. Updates use per-row snapshots rather than
+list with keyboard and touch support. An open list keeps the names captured when
+it opened until you close it, even when readers advance. Updates use per-row snapshots rather than
 replacing the timeline's messages.
 
 Unread badges, the new-message divider, the local read pointer and private

@@ -1,5 +1,5 @@
 import { Profiler } from 'react'
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { MessageRowRef, RoomReadConsent, RoomReader } from '@fluux/sdk'
 import { RoomReadBadge, RoomReadCorner, RoomReadSharing } from './RoomReadMarkers'
@@ -84,6 +84,27 @@ describe('room read-marker controls', () => {
     expect(view.container).not.toContainElement(dialog)
     expect(document.body).toContainElement(dialog)
     for (const person of people) expect(within(dialog).getByText(person.nick)).toBeVisible()
+  })
+
+  it('keeps an open list until explicit close and never reopens it when badges return', async () => {
+    const markers = source()
+    markers.setReaders({ first: people })
+    render(<><input aria-label="Message composer" /><RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first' }} /></>)
+    fireEvent.click(screen.getByRole('button', { name: 'Read through this message: Sam, Jules, Noor, Maya' }))
+    const dialog = screen.getByRole('dialog', { name: 'Read through this message' })
+    act(() => markers.setReaders({ first: empty }))
+    expect(screen.getByRole('dialog', { name: 'Read through this message' })).toBe(dialog)
+    for (const person of people) expect(within(dialog).getByText(person.nick)).toBeVisible()
+    act(() => markers.setReaders({ first: [people[0]] }))
+    expect(screen.getByRole('dialog', { name: 'Read through this message' })).toBe(dialog)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Read through this message' })).not.toBeInTheDocument())
+    const composer = screen.getByRole('textbox', { name: 'Message composer' })
+    composer.focus()
+    act(() => markers.setReaders({ first: empty }))
+    act(() => markers.setReaders({ first: [people[1]] }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(composer).toHaveFocus()
   })
 
   it('updates only old and new badge subtrees when a reader moves, not the timeline or unrelated badge', () => {
