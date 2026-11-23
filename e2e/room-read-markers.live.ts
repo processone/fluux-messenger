@@ -284,14 +284,27 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await expect.poll(() => displayed(alice).length).toBe(paneHeld + 1)
     await alice.page.setViewportSize({ width: 1280, height: 800 })
 
-    const hidden = await alice.context.newPage(); await hidden.goto('about:blank')
-    await expect.poll(() => alice.page.evaluate(() => document.visibilityState)).toBe('hidden')
-    const held = displayed(alice).length
-    await say(bob, content[1])
-    await expect.poll(() => alice.received.some(frame => frame.includes(content[1]))).toBe(true)
-    await noPublication(alice, held, 'background-window')
-    await alice.page.bringToFront(); await hidden.close()
-    await expect.poll(() => displayed(alice).length).toBe(held + 1)
+    // The headed runner can lose real focus without changing document visibility.
+    // Disable its default focus emulation only for this native focus boundary.
+    const focusSession = await alice.context.newCDPSession(alice.page)
+    let away: Page | undefined
+    try {
+      await focusSession.send('Emulation.setFocusEmulationEnabled', { enabled: false })
+      away = await alice.context.newPage(); await away.goto('about:blank'); await away.bringToFront()
+      await expect.poll(() => alice.page.evaluate(() => document.hasFocus())).toBe(false)
+      const held = displayed(alice).length
+      await say(bob, content[1])
+      await expect.poll(() => alice.received.some(frame => frame.includes(content[1]))).toBe(true)
+      await noPublication(alice, held, 'unfocused-window')
+      await alice.page.bringToFront()
+      await expect.poll(() => alice.page.evaluate(() => document.hasFocus())).toBe(true)
+      await away.close(); away = undefined
+      await expect.poll(() => displayed(alice).length).toBe(held + 1)
+    } finally {
+      await away?.close().catch(() => {})
+      await focusSession.send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {})
+      await focusSession.detach().catch(() => {})
+    }
     await roomConsent(alice, false)
     const stopped = displayed(alice).length
     await bob.page.bringToFront(); await say(bob, content[2])

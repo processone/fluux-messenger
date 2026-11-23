@@ -14,6 +14,7 @@ const rect = (top: number, height: number) => ({ top, bottom: top + height, heig
 let notify: () => void
 let deliver: () => void
 let focused: boolean
+let visibility: DocumentVisibilityState
 let scroller: HTMLDivElement
 let message: HTMLDivElement
 let observe: ReturnType<typeof vi.fn>
@@ -25,9 +26,10 @@ function useViewing(seen: (rows: readonly RoomMessage[]) => void, enabled = true
 }
 beforeEach(() => {
   focused = true
+  visibility = 'visible'
   vi.useFakeTimers()
   vi.spyOn(document, 'hasFocus').mockImplementation(() => focused)
-  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+  vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility)
   observe = vi.fn(); disconnect = vi.fn()
   vi.stubGlobal('IntersectionObserver', class {
     constructor(callback: IntersectionObserverCallback) {
@@ -78,6 +80,21 @@ describe('focused visible room rows', () => {
     seen.mockClear()
     window.dispatchEvent(new Event('focus'))
     expect(seen).not.toHaveBeenCalled()
+  })
+
+  it('does not report a hidden document even with focus and measured rows', () => {
+    const seen = vi.fn()
+    const view = renderHook(() => useViewing(seen))
+    visibility = 'hidden'
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    notify()
+    expect(seen).not.toHaveBeenCalled()
+    visibility = 'visible'
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    expect(seen).not.toHaveBeenCalled()
+    notify()
+    expect(seen).toHaveBeenLastCalledWith([row])
+    view.unmount()
   })
 
   it.each(['aria-modal', 'data-modal'])('recovers after %s dialogs close without a scroll or refocus', async attribute => {
