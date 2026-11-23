@@ -926,6 +926,12 @@ em-emoji-picker {
 .sidebar-row { padding-block: 8px; column-gap: 12px; }
 [data-density="compact"] .sidebar-row { padding-block: 4px; column-gap: 8px; }
 
+/* Give narrow rows their preview line back before times crowd out drafts or typing. */
+.sidebar-row-content { container: sidebar-row-content / inline-size; }
+@container sidebar-row-content (max-width: 6rem) {
+  .sidebar-row-time { display: none; }
+}
+
 /* Command palette result rows + section labels. Same convention as the sidebar:
  * horizontal padding stays a utility (px-4); the density-varying vertical
  * padding + gap live here so a [data-density] flip needs no row re-render.
