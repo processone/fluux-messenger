@@ -1,4 +1,5 @@
 import { memo, useCallback, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import type { MessageRowRef, RoomReadMarkers } from '@fluux/sdk'
 import { Avatar } from './Avatar'
@@ -63,14 +64,14 @@ export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row
         {readers.length > 3 && <span aria-hidden="true">+{readers.length - 3}</span>}
         </span>
       </button>
-      {open && <ModalShell title={title} dialogLabel={title} onClose={() => setOpen(false)} width="max-w-sm" panelClassName="max-h-[80vh] flex flex-col">
+      {open && createPortal(<ModalShell title={title} dialogLabel={title} onClose={() => setOpen(false)} width="max-w-sm" panelClassName="max-h-[80vh] flex flex-col">
         <ul className="p-4 space-y-3 overflow-y-auto min-h-0" tabIndex={0} aria-label={title}>
           {readers.map(reader => <li key={reader.occupantId} className="flex items-center gap-3 text-sm text-fluux-text">
             <Avatar identifier={`${roomJid}/${reader.occupantId}`} name={reader.nick} avatarUrl={reader.avatar} size="xs" />
             <span className="break-words min-w-0">{reader.nick}</span>
           </li>)}
         </ul>
-      </ModalShell>}
+      </ModalShell>, document.body)}
     </div>
   )
 })

@@ -71,7 +71,7 @@ describe('room read-marker controls', () => {
   it('caps avatars at three and opens a fully named list with an accessible native button', () => {
     const markers = source()
     markers.setReaders({ first: people })
-    render(<RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first', stanzaId: 'archive-first' }} />)
+    const view = render(<RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first', stanzaId: 'archive-first' }} />)
     const opener = screen.getByRole('button', { name: 'Read through this message: Sam, Jules, Noor, Maya' })
     expect(opener.querySelectorAll('[data-read-marker-avatar]')).toHaveLength(3)
     expect(within(opener).getByText('+1')).toBeVisible()
@@ -81,6 +81,8 @@ describe('room read-marker controls', () => {
     // the actual keyboard and touch journeys are owned by the browser proof.
     fireEvent.click(opener)
     const dialog = screen.getByRole('dialog', { name: 'Read through this message' })
+    expect(view.container).not.toContainElement(dialog)
+    expect(document.body).toContainElement(dialog)
     for (const person of people) expect(within(dialog).getByText(person.nick)).toBeVisible()
   })
 

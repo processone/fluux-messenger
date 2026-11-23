@@ -149,6 +149,35 @@ test('room read badges cap avatars, name every reader and move without rendering
   for (const name of fixture.names) await expect(dialog.getByText(name, { exact: true })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(opener).toBeFocused()
+  // A mouseup can re-arm the row toolbar after the list opens. Observe the
+  // complete exposure window, failing on any click-through, rather than sleeping.
+  await opener.click()
+  await expect(dialog).toBeVisible()
+  const shield = await page.evaluate(async () => {
+    const until = performance.now() + 650
+    const started = performance.now()
+    let frames = 0
+    let points = 0
+    do {
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+      const overlay = document.querySelector('[data-modal="true"]')!
+      for (const control of document.querySelectorAll('button, [role="button"]')) {
+        if (overlay.contains(control)) continue
+        const rect = control.getBoundingClientRect()
+        const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2
+        if (!rect.width || !rect.height || x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue
+        if (!overlay.contains(document.elementFromPoint(x, y))) throw new Error('Reader list exposes an underlying control')
+        points++
+      }
+      frames++
+    } while (performance.now() < until)
+    return { frames, points, durationMs: performance.now() - started }
+  })
+  expect(shield.frames).toBeGreaterThan(0)
+  expect(shield.points).toBeGreaterThan(0)
+  await test.info().attach('room-marker-dialog-shield', { body: JSON.stringify(shield), contentType: 'application/json' })
+  await page.keyboard.press('Escape')
+  await expect(opener).toBeFocused()
   // Wait for a completed render/layout turn before the spaced update, not a sleep.
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
   const result = await page.evaluate(async ({ roomJid, actor, target }) => {

@@ -271,6 +271,8 @@ export class RoomReadMarkers extends BaseModule {
         request.retryAt = Date.now() + delay
         request.retryTimer = setTimeout(() => {
           if (this.discovery.get(key) !== request || !query.isCurrent()) return
+          // The elapsed timer is the due signal, even if wall time moved back.
+          request.retryAt = -Infinity
           const held = this.queued.get(key)
           if (held?.isCurrent() && held.epoch === (this.epochs.get(key) ?? 0)
             && held.consent === this.consentRevision && this.focused() && this.isEnabledFor(roomJid)) {

@@ -661,7 +661,7 @@ describe('RoomReadMarkers', () => {
     expect(send).toHaveBeenCalledTimes(1)
   })
 
-  it('retains proven badges and retries a failed discovery after bounded backoff without another presence', async () => {
+  it.each(['normal', 'early timer', 'backward wall clock'] as const)('retains badges and retries discovery with %s without another presence', async clock => {
     vi.useFakeTimers()
     await markers.receive(roomJid, marker('archive-a'))
     const display = markers.readers(roomJid, rows[0])
@@ -678,9 +678,11 @@ describe('RoomReadMarkers', () => {
     let published!: () => void
     const wire = new Promise<void>(resolve => { published = resolve })
     send.mockImplementation(async () => { published() })
+    if (clock === 'early timer') vi.spyOn(Date, 'now').mockReturnValue(Date.now() + ROOM_MARKER_DISCOVERY_RETRY_DELAYS[0] - 1)
+    if (clock === 'backward wall clock') vi.setSystemTime(Date.now() - ROOM_MARKER_DISCOVERY_RETRY_DELAYS.at(-1)!)
     await vi.advanceTimersToNextTimerAsync()
-    await wire
     expect(iq).toHaveBeenCalledTimes(beforeRetry + 1)
+    await wire
     expect(send).toHaveBeenCalledTimes(1)
     expect(markers.eligible(roomJid)).toBe(true)
   })
