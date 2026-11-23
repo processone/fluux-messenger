@@ -169,8 +169,18 @@ test('room read badges cap avatars, name every reader and move without rendering
   const opener = oldBadge.getByRole('button', { name: `Read through this message: ${fixture.names.join(', ')}`, exact: true })
   await expect(opener).toBeVisible()
   await expect(opener.getByText('+1', { exact: true })).toBeVisible()
+  // Establish real keyboard modality before checking the visible focus outline.
+  await page.keyboard.press('Tab')
+  await opener.focus()
+  const ring = await opener.evaluate(element => {
+    const style = getComputedStyle(element)
+    return { width: parseFloat(style.outlineWidth), offset: parseFloat(style.outlineOffset) }
+  })
+  geometryReadings.push({ state: 'keyboard-focus-ring', ring })
+  expect(ring.width, 'the focused badge has a visible keyboard ring').toBeGreaterThan(0)
+  expect(ring.width + ring.offset, 'the keyboard ring stays inside the tap area').toBeLessThanOrEqual(0)
   // Native keyboard activation and the full named list.
-  await opener.focus(); await opener.press('Space')
+  await opener.press('Space')
   const dialog = page.getByRole('dialog', { name: 'Read through this message' })
   for (const name of fixture.names) await expect(dialog.getByText(name, { exact: true })).toBeVisible()
   await page.keyboard.press('Escape')

@@ -59,7 +59,7 @@ export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row
     {readers.length > 0 && <div className="absolute end-0 -bottom-1 z-10" data-read-marker-row={row.stanzaId}>
       <button type="button" onClick={event => { event.currentTarget.focus({ preventScroll: true }); setOpenReaders(readers) }}
         aria-label={t('readMarkers.readers', { names: readers.map(reader => reader.nick).join(', ') })}
-        className="min-h-7 flex items-center rounded-full py-0.5 text-xs text-fluux-muted">
+        className="focus-ring-inset min-h-7 flex items-center rounded-full py-0.5 text-xs text-fluux-muted">
         <span className="sr-only">{title}</span>
         <span data-read-marker-surface className="flex h-6 items-center gap-1 rounded-full bg-fluux-bg px-1 shadow-sm hover:bg-fluux-hover">
         {readers.slice(0, 3).map(reader => <span key={reader.occupantId} aria-hidden="true" data-read-marker-avatar>
