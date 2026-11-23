@@ -393,6 +393,23 @@ describe('following while drafting', () => {
     expect(release).toHaveBeenCalledWith(true)
   })
 
+  it('does not hold an invisible toolbar while the composer is active', () => {
+    const { begin, result } = setup(() => true)
+    container.classList.add('composer-active')
+    mouse('mousemove', document.body, 10, 10)
+    mouse('mousemove', action)
+    expect(begin).not.toHaveBeenCalled()
+    expect(result.current.context.heldRow).toBeNull()
+  })
+
+  it('retains keyboard action focus even while the composing class is present', () => {
+    const { result } = setup(() => true)
+    container.classList.add('composer-active')
+    fireEvent.keyDown(action, { key: 'Tab' })
+    act(() => action.focus())
+    expect(result.current.context.heldRow).toBe(row)
+  })
+
   it('retains ordinary row hover while reading away from latest', () => {
     const { result } = setup(() => false)
     moveIntoRow()

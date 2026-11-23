@@ -157,7 +157,8 @@ export function useMessageInteractionHold({
         scrollRef.current?.closest('[data-conversation-column]')?.contains(active)
       const following = held.current ? followingBeforeHold.current : ports.current.isFollowing?.() ?? false
       return row && drafting && following &&
-        !(target instanceof Element && target.closest('[data-message-toolbar]')) ? null : row
+        !(target instanceof Element && target.closest('[data-message-toolbar]') &&
+          !target.closest('.composer-active')) ? null : row
     }
     // A control the hold itself reveals (the jump-to-latest FAB shows at 1px below the bottom only
     // while a hold is on) keeps the held row. Releasing there would hide the FAB, drop the pointer

@@ -552,6 +552,7 @@ export function MessageList<T extends BaseMessage>({
     lastUserInputAt,
     observeKeyboardNavigation,
     isAtBottom,
+    isAtObservedBottom,
     assumeAwayFromBottomForKeyboard,
     reassertUnreadMarker,
   } = useMessageListScroll({
@@ -586,7 +587,7 @@ export function MessageList<T extends BaseMessage>({
     conversationId,
     enabled: !staticMode,
     begin: beginInteractionHold,
-    isFollowing: () => windowAtLiveEdge !== false && isAtBottom(),
+    isFollowing: isAtObservedBottom,
     release: releaseInteractionHold,
     menuChanged: setInteractionMenuOpen,
   })

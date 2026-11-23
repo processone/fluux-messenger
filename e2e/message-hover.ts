@@ -2,6 +2,7 @@ import { test, expect, type Page, type Locator } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
+import { AT_BOTTOM_THRESHOLD } from '../apps/fluux/src/utils/scrollStateManager'
 import { AT_BOTTOM_OK_PX, waitForTopVisibleSettled, wheelAwayFromBottom } from './harness/scrollHarness'
 import { arrive, distance, keepJson, measureDuring, mountedMessageIndexes, readInteractionReadState, readInteractionView, scrollToBottomContainer, interactionScrollFrames, findAndRevealInteractionText, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
 
@@ -973,5 +974,73 @@ for (const kind of ['chat', 'room'] as const) {
     await reply.click()
     await expect(page.locator('[data-conversation-tail]').getByText(quotedText, { exact: true })).toBeVisible()
     await keepJson('drafting-action-release', await readInteractionView(page))
+  })
+}
+
+async function draftingPeerTyping(page: Page, kind: 'chat' | 'room') {
+  await page.evaluate(kind => {
+    const c = (window as unknown as { __demoClient: DemoClient }).__demoClient
+    if (kind === 'chat') c.emitSDK('chat:typing', { conversationId: 'emma@fluux.chat', jid: 'emma@fluux.chat', isTyping: true })
+    else c.emitSDK('room:typing', { roomJid: 'team@conference.fluux.chat', nick: 'Adrien', isTyping: true })
+  }, kind)
+  await expect(page.locator('[data-typing-pill]')).toBeVisible()
+}
+
+// The passive exception belongs to the exact latest endpoint, not the near-bottom band.
+for (const kind of ['chat', 'room'] as const) {
+  test(`${kind}: focused drafting just above latest keeps its hovered reading position`, async ({ page }) => {
+    const { list } = await setupInteraction(page, kind)
+    const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
+    await input.focus()
+    const bounds = (await list.boundingBox())!
+    await page.mouse.move(bounds.x + 20, bounds.y + bounds.height / 2)
+    await page.mouse.wheel(0, -AT_BOTTOM_THRESHOLD / 3)
+    await expect.poll(() => distance(page)).toBeGreaterThan(1)
+    expect(await distance(page), 'fixture stays inside the near-bottom band').toBeLessThan(AT_BOTTOM_THRESHOLD)
+    const id = await list.evaluate(list => {
+      const view = list.getBoundingClientRect()
+      return [...list.querySelectorAll<HTMLElement>('.message-row[data-message-id]')].find(row => {
+        const box = row.getBoundingClientRect()
+        return box.top > view.top + 40 && box.bottom < view.bottom - 40
+      })!.dataset.messageId!
+    })
+    const row = page.locator(`.message-row[data-message-id="${id}"]`)
+    await row.locator('[data-msg-text]').hover()
+    await expect(list).toHaveAttribute('data-message-interaction', await row.getAttribute('data-message-row-id') as string)
+    await waitForActions(page, id)
+    await measureDuring(page, id, async () => {
+      await draftingPeerTyping(page, kind)
+      await arrive(page, kind, ['near-latest-arrival'])
+    })
+    await expect(input).toBeFocused()
+    await expect(list).toHaveAttribute('data-message-interaction', await row.getAttribute('data-message-row-id') as string)
+    expect(await distance(page), 'do not pull the reader to latest').toBeGreaterThan(1)
+    await keepJson('drafting-near-latest', await readInteractionView(page, id))
+  })
+
+  test(`${kind}: focused drafting ignores invisible action hover while composing`, async ({ page }) => {
+    const { row, list } = await setupInteraction(page, kind)
+    await arrive(page, kind, ['hidden-toolbar-tail'])
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await row.locator('[data-msg-text]').hover()
+    await waitForActions(page)
+    const action = row.getByRole('button', { name: 'Reply', exact: true })
+    const box = (await action.boundingBox())!
+    const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
+    await input.focus()
+    await input.pressSequentially('Draft')
+    await expect(page.locator('.composer-active')).toHaveCount(1)
+    await expect(row.locator('[data-message-toolbar]')).toHaveCSS('opacity', '0')
+    const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    await page.mouse.move(point.x, point.y, { steps: 2 })
+    const hit = await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest('[data-message-toolbar]'), point)
+    expect(hit, 'fixture reaches an invisible pointer-interactive toolbar descendant').toBe(true)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await draftingPeerTyping(page, kind)
+    await arrive(page, kind, ['hidden-toolbar-arrival'])
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect(input).toBeFocused()
+    await keepJson('drafting-hidden-toolbar', await readInteractionView(page))
   })
 }
