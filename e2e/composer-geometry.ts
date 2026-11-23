@@ -107,10 +107,21 @@ async function setDraft(input: Locator, value: string): Promise<void> {
   await input.focus()
   await page.keyboard.press('ControlOrMeta+A')
   await page.keyboard.press('Backspace')
+  // Observe each edit before the next one so a lost insertion fails at its source.
+  let expected = ''
+  await expect(input).toHaveJSProperty('value', expected)
   const lines = value.split('\n')
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i]) await page.keyboard.insertText(lines[i])
-    if (i < lines.length - 1) await page.keyboard.press('Shift+Enter')
+    if (lines[i]) {
+      await page.keyboard.insertText(lines[i])
+      expected += lines[i]
+      await expect(input).toHaveJSProperty('value', expected)
+    }
+    if (i < lines.length - 1) {
+      await page.keyboard.press('Shift+Enter')
+      expected += '\n'
+      await expect(input).toHaveJSProperty('value', expected)
+    }
   }
   // React commits the new text asynchronously. Two frames put us past the commit
   // and the autosize that follows it, so the measurements below compare settled
@@ -246,6 +257,74 @@ async function waitForMessageLayoutSettled(scroller: Locator): Promise<void> {
 // ── Invariants ───────────────────────────────────────────────────────────────
 
 test.describe('composer geometry', () => {
+  test('accepts the first room insertion after select-all and Backspace', async ({ page, browserName }) => {
+    // Exercise Lexical's macOS Chromium text-replacement path on Linux CI too.
+    if (browserName === 'chromium' && process.platform !== 'darwin') {
+      await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { value: 'MacIntel' }))
+    }
+    const editor = await openStableComposer(page, 'room')
+    await editor.click()
+    await expect(editor).toBeFocused()
+    await expect(editor).toHaveJSProperty('value', '')
+
+    // Keep the zero-delay fallback from running between keyup and insertion. Real
+    // key events and beforeinput still run; only the page's timer is controlled.
+    const now = Date.now()
+    await page.clock.install({ time: now })
+    await page.clock.pauseAt(now + 5_000)
+    try {
+      await page.keyboard.press(browserName === 'chromium' ? 'Meta+a' : 'ControlOrMeta+A')
+      await page.keyboard.press('Backspace')
+      expect(await editor.evaluate(el => (el as HTMLTextAreaElement).value)).toBe('')
+      await page.keyboard.insertText('First line')
+      await expect(editor).toHaveJSProperty('value', 'First line')
+    } finally {
+      await page.clock.resume()
+    }
+  })
+
+  test('keeps the replacement guard within the room editing command', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'Only Chromium on macOS has this guard')
+    if (process.platform !== 'darwin') {
+      await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { value: 'MacIntel' }))
+    }
+    const editor = await openStableComposer(page, 'room')
+    await editor.click()
+
+    const now = Date.now()
+    await page.clock.install({ time: now })
+    await page.clock.pauseAt(now + 5_000)
+    const readDraft = () => editor.evaluate(el => (el as HTMLTextAreaElement).value)
+    try {
+      // Model Chromium delivering the unwanted replacement inside a handled
+      // key press. Backspace must not edit existing text here: a real edit emits
+      // an input event, which clears Lexical's guard independently of keyup.
+      await page.keyboard.down('Backspace')
+      await page.keyboard.insertText('Unwanted replacement')
+      expect(await readDraft()).toBe('')
+      await page.keyboard.up('Backspace')
+      await page.keyboard.insertText('Old draft')
+      expect(await readDraft()).toBe('Old draft')
+
+      await page.keyboard.down('Meta')
+      await page.keyboard.down('a')
+      expect(await editor.evaluate(() => window.getSelection()?.toString())).toBe('Old draft')
+      await page.keyboard.insertText('Unwanted replacement')
+      expect(await readDraft()).toBe('Old draft')
+      await page.keyboard.up('a')
+      await page.keyboard.up('Meta')
+
+      await page.keyboard.down('Meta')
+      await page.keyboard.down('a')
+      // macOS may omit the letter's keyup while Command is held.
+      await page.keyboard.up('Meta')
+      await page.keyboard.insertText('Replace selection')
+      expect(await readDraft()).toBe('Replace selection')
+    } finally {
+      await page.clock.resume()
+    }
+  })
+
   // Inline predictions are native text the engine lays out next to the caret. A
   // mirrored composer cannot paint it, so rooms used to opt out of it; the single
   // layer draws it like any other glyph, so neither composer may opt out any more.
