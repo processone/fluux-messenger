@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useRef, useEffect, useCallback } from 'react'
+import React, { lazy, Suspense, useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside, useIsMobileWeb, useAnchoredMenu } from '@/hooks'
 import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
@@ -188,16 +188,13 @@ export function AccountMenu({ onLogout, onOpenProfile, zoneRef }: AccountMenuPro
     [isMobile, menu.menuRef],
   )
 
-  // Focus enters the menu on opening: the current presence, or the first control.
-  useEffect(() => {
+  // Move focus as the menu mounts, before a later frame could steal it from the status field.
+  useLayoutEffect(() => {
     if (!isOpen) return
-    const frame = requestAnimationFrame(() => {
-      const el = getMenuEl()
-      const checked = el?.querySelector<HTMLElement>('[aria-checked="true"]:not(:disabled)')
-      ;(checked ?? el?.querySelector<HTMLElement>(ITEM_SELECTOR))?.focus()
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [isOpen, isMobile, getMenuEl])
+    const el = getMenuEl()
+    const checked = el?.querySelector<HTMLElement>('[aria-checked="true"]:not(:disabled)')
+    ;(checked ?? el?.querySelector<HTMLElement>(ITEM_SELECTOR))?.focus()
+  }, [isOpen, getMenuEl])
 
   const handleMenuKeyDown = (e: React.KeyboardEvent) => {
     const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Tab']
