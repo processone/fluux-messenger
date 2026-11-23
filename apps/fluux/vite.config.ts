@@ -194,6 +194,8 @@ export default defineConfig(({ mode }) => ({
         warn(warning)
       },
       output: {
+        // The demo's render-attribution probe identifies components by name.
+        keepNames: isE2EBuild,
         codeSplitting: {
           groups: [
             // Vite's preload helper on its own: `src/boot.ts` uses it before
