@@ -319,13 +319,27 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await expect(bob.page.getByRole('button', { name: 'Read through this message: AliceRenamed', exact: true })).toBeVisible()
     await shot(bob.page, 'nick-change')
 
-    // A fresh stream (not a simulated receiver call) replays archived markers.
-    await bob.page.evaluate(() => sessionStorage.clear())
-    await bob.page.reload()
-    await openRoom(bob)
-    await expect(bob.page.getByRole('button', { name: 'Read through this message: AliceRenamed', exact: true })).toBeVisible({ timeout: 30_000 })
-    await noPublication(bob, 0, 'replay-without-consent')
-    await shot(bob.page, 'archive-replay')
+    // Remove only protocol resumption state after unload has flushed it, while
+    // preserving the tab's sign-in. A fresh stream must replay archived markers.
+    await bob.page.addInitScript(() => {
+      for (const key of Object.keys(sessionStorage)) {
+        if (key.startsWith('fluux:session:') || key.startsWith('fluux:session-unconfirmed:')) sessionStorage.removeItem(key)
+      }
+    })
+    const replayStart = bob.sent.length
+    try {
+      await bob.page.reload()
+      await openRoom(bob)
+      await expect(bob.page.getByRole('button', { name: 'Read through this message: AliceRenamed', exact: true })).toBeVisible({ timeout: 30_000 })
+      expect(bob.sent.slice(replayStart).filter(frame => /<(?:[\w.-]+:)?resume(?:\s|\/?>)/.test(frame)),
+        'archive replay uses a fresh stream, not stream resumption').toHaveLength(0)
+      await noPublication(bob, 0, 'replay-without-consent')
+      await shot(bob.page, 'archive-replay')
+    } catch (error) {
+      if (evidence) await bob.page.screenshot({ path: `${evidence}/room-read-after-archive-replay-failure.png`,
+        mask: [bob.page.locator('input[type=password]')] }).catch(() => console.error('Archive-replay failure view could not be captured'))
+      throw error
+    }
 
     // Even explicit room consent cannot override a positive public-listing flag.
     await openRoom(alice, publicTitle)
