@@ -20,6 +20,7 @@ import {
   type ConversationTarget,
   type DecryptResult,
   type E2EEPlugin,
+  type XMLElementData,
 } from '@fluux/sdk'
 import { xml } from '@fluux/sdk/xmpp'
 import { WebOpenPGPPlugin } from '@fluux/openpgp-plugin/web'
@@ -42,11 +43,6 @@ const bobJid = 'bob@example.test'
 const toBob: ConversationTarget = { kind: 'direct', peer: bobJid }
 const toAlice: ConversationTarget = { kind: 'direct', peer: aliceJid }
 const hosts: E2EEManager[] = []
-
-// Opt-in transcript of actual host readings for local proof, never key bytes.
-function record(event: string, reading: unknown) {
-  if (process.env.FLUUX_E2EE_CONTRACT_PROOF) console.info(JSON.stringify({ event, reading }))
-}
 
 beforeEach(() => {
   // Disposable generated keys only; never use a person's passphrase or keychain.
@@ -87,12 +83,7 @@ async function identity(host: E2EEManager, protocolId: string, peer = bobJid) {
   const group = (await host.listPeerIdentities(peer)).find((g) => g.protocolId === protocolId)
   expect(group, `host exposes ${protocolId} peer identities`).toBeDefined()
   expect(group!.identities).toHaveLength(1)
-  const result = group!.identities[0]
-  record('peer-identity', {
-    protocolId, peer, trust: result.trust, usedForEncryption: result.usedForEncryption,
-    allowedDecisions: result.allowedDecisions, notUsedReason: result.notUsedReason,
-  })
-  return result
+  return group!.identities[0]
 }
 
 function body(text: string) {
@@ -108,7 +99,6 @@ function expectBody(result: DecryptResult | null, text: string, protocolId: stri
   expect(envelope).not.toBeNull()
   const receivedBody = envelope!.find((element) => element.name === 'body')?.children
   expect(receivedBody).toEqual([text])
-  record('decrypted-message', { protocolId, status: result!.status ?? 'ok', body: receivedBody })
 }
 
 async function send(host: E2EEManager, target: ConversationTarget, text: string) {
@@ -119,7 +109,7 @@ async function send(host: E2EEManager, target: ConversationTarget, text: string)
   return encrypted!.payload.stanzaElement
 }
 
-describe.each(protocols)('$name SDK host compatibility', ({ create }) => {
+describe.each(protocols)('$name SDK host compatibility', ({ name, create }) => {
   it('keeps listed identity trust, send eligibility and plaintext protection consistent', async () => {
     const net = newMockNetwork()
     const plugin = create()
@@ -159,7 +149,6 @@ describe.each(protocols)('$name SDK host compatibility', ({ create }) => {
     }
     expect(sent).toBeNull()
     await expect(alice.host.assertPlaintextPermitted(toBob)).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
-    record('refused-send', { protocolId: id, encryptedPayload: sent, plaintextPermitted: false })
 
     await alice.host.setIdentityTrust(id, bobJid, first.id, 'verified')
     const restored = await send(alice.host, toBob, 'Reauthorized private message')
@@ -185,8 +174,13 @@ describe.each(protocols)('$name SDK host compatibility', ({ create }) => {
     const sessions = new PluginStorageOmemoStore(createPluginStorage(bob.storage, `e2ee/${id}`))
     const senderDevices = (await plugin.ensureIdentity()).devices ?? []
     if (plugin instanceof OmemoPlugin) expect(senderDevices).toHaveLength(1)
-    const before = await Promise.all(senderDevices.map((device) => sessions.loadSession(aliceJid, Number(device.deviceId))))
+    const readSessions = () => Promise.all(senderDevices.map((device) => sessions.loadSession(aliceJid, Number(device.deviceId))))
+    const before = await readSessions()
     for (const session of before) expect(session).not.toBeNull()
+    // MAM uses the single-message entry point; batch is a separate API contract.
+    expectBody(await bob.host.decryptArchive(first, toAlice, { fromArchive: true }), 'First archived private message', id)
+    expectBody(await bob.host.decryptArchive(second, toAlice, { fromArchive: true }), 'Second archived private message', id)
+    expect(await readSessions()).toEqual(before)
     const replay = await bob.host.decryptArchiveBatch([first, second], toAlice, [
       { messageId: 'archive-first', fromArchive: true },
       { messageId: 'archive-second', fromArchive: true },
@@ -194,9 +188,7 @@ describe.each(protocols)('$name SDK host compatibility', ({ create }) => {
     expect(replay).toHaveLength(2)
     expectBody(replay[0], 'First archived private message', id)
     expectBody(replay[1], 'Second archived private message', id)
-    const after = await Promise.all(senderDevices.map((device) => sessions.loadSession(aliceJid, Number(device.deviceId))))
-    expect(after).toEqual(before)
-    record('archive-session-state', { protocolId: id, sessionsCompared: before.length, unchanged: true })
+    expect(await readSessions()).toEqual(before)
     // Neither message key was consumed by archive reads: live delivery still works.
     expectBody(await bob.host.decryptInbound(first, toAlice), 'First archived private message', id)
     expectBody(await bob.host.decryptInbound(second, toAlice), 'Second archived private message', id)
@@ -206,6 +198,58 @@ describe.each(protocols)('$name SDK host compatibility', ({ create }) => {
     const nextReply = await send(bob.host, toAlice, 'Live private reply after replay')
     expectBody(await alice.host.decryptInbound(nextReply, toBob), 'Live private reply after replay', id)
   }, 30_000)
+
+  describe('already-delivered archive overlap', () => {
+    let receiver: E2EEManager
+    let earlierChain: XMLElementData
+    let currentChain: XMLElementData
+    let protocolId: string
+
+    // Setup assertions are outside it.fails: a broken fixture must not satisfy
+    // an expected failure intended only for the final replay classification.
+    beforeEach(async () => {
+      const net = newMockNetwork()
+      const plugin = create()
+      protocolId = plugin.descriptor.id
+      const alice = await ready(aliceJid, net, [plugin])
+      const bob = await ready(bobJid, net, [create()])
+      receiver = bob.host
+      earlierChain = await send(alice.host, toBob, 'earlier chain private message')
+      expectBody(await receiver.decryptInbound(earlierChain, toAlice), 'earlier chain private message', protocolId)
+      const reply = await send(bob.host, toAlice, 'private reply advancing the ratchet')
+      expectBody(await alice.host.decryptInbound(reply, toBob), 'private reply advancing the ratchet', protocolId)
+      currentChain = await send(alice.host, toBob, 'current chain private message')
+      expectBody(await receiver.decryptInbound(currentChain, toAlice), 'current chain private message', protocolId)
+    })
+
+    for (const path of ['single', 'batch'] as const) {
+      async function replay(ciphertext: XMLElementData) {
+        if (path === 'single') return receiver.decryptArchive(ciphertext, toAlice, { fromArchive: true })
+        const results = await receiver.decryptArchiveBatch([ciphertext], toAlice, [{ fromArchive: true }])
+        expect(results).toHaveLength(1)
+        return results[0]
+      }
+
+      function expectHarmlessReplay(result: DecryptResult | null, text: string) {
+        if (name === 'OMEMO') {
+          expect(result).toMatchObject({ status: 'control-message', securityContext: { protocolId } })
+          expect(result!.plaintext).toBeUndefined()
+        } else expectBody(result, text, protocolId)
+      }
+
+      it(`${path}: treats a consumed current-chain message as a harmless replay`, async () => {
+        expectHarmlessReplay(await replay(currentChain), 'current chain private message')
+      })
+
+      // Known API gap, deliberately not fixed in a test-only change: earlier
+      // OMEMO chains throw permanent malformed-data (single) or return
+      // unverifiable with no plaintext (batch), instead of a harmless duplicate.
+      const checkEarlierChain = name === 'OMEMO' ? it.fails : it
+      checkEarlierChain(`${path}: treats a consumed earlier-chain message as a harmless replay${name === 'OMEMO' ? ' (known OMEMO gap; expected failure)' : ''}`, async () => {
+        expectHarmlessReplay(await replay(earlierChain), 'earlier chain private message')
+      })
+    }
+  })
 })
 
 it('isolates both protocols on one host and restores independent decisions after restart', async () => {
@@ -225,7 +269,6 @@ it('isolates both protocols on one host and restores independent decisions after
   await alice.host.shutdown()
   hosts.splice(hosts.indexOf(alice.host), 1)
   const restored = await ready(aliceJid, net, protocols.map(({ create }) => create()), alice.storage)
-  record('host-restarted', { protocols: plugins.map((plugin) => plugin.descriptor.id) })
   expect(await Promise.all(plugins.map((plugin) => restored.host.getOwnFingerprint(plugin.descriptor.id)))).toEqual(fingerprints)
   expect(await identity(restored.host, openpgp)).toMatchObject({
     id: pgpIdentity.id, fingerprint: pgpIdentity.fingerprint, trust: 'verified', usedForEncryption: true,
