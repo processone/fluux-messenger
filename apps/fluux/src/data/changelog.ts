@@ -48,6 +48,7 @@ export const changelog: ChangelogEntry[] = [
     }, {
       type: 'fixed',
       items: [
+        'Search on server now works with servers that offer archive search (XEP-0431), such as ejabberd with a MySQL database. Fluux used to miss what the server announced, so it said the server could not search archives, and searching rooms on the server never ran',
         'In Contacts and Search, pressing an arrow key in the search field and then Enter now opens the highlighted result right away',
         'Screen readers now name the remove button on each chosen contact in contact pickers, such as Invite to Room, so you can tell which contact it takes out of the selection, in every language',
         'Keyboard users keep their place in contact pickers: removing a chosen contact moves focus to a neighboring contact\'s remove button, or to the search field when no contact is left, instead of out of the window. After you remove one with the mouse, Tab stays in the window too',

@@ -72,6 +72,7 @@ import {
 import { findNewestGap, findOpenGap, type GapList } from '../../stores/shared/mamGap'
 import {
   NS_MAM,
+  MAM_FULLTEXT_FIELD,
   NS_RSM,
   NS_DATA_FORMS,
   NS_FORWARD,
@@ -1208,8 +1209,8 @@ export class MAM extends BaseModule {
   /**
    * Search the message archive using server-side fulltext search.
    *
-   * Requires server support for the `fulltext` form field in MAM queries
-   * (supported by ejabberd and some other servers). Use
+   * Requires server support for XEP-0431 (the `{urn:xmpp:fulltext:0}fulltext`
+   * MAM form field, offered by ejabberd with a MySQL backend). Use
    * `connectionStore.mamFulltextSearch` to check availability.
    *
    * @param options - Search options
@@ -1222,7 +1223,7 @@ export class MAM extends BaseModule {
 
     const formFields: Element[] = [
       xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
-      xml('field', { var: 'fulltext' }, xml('value', {}, query)),
+      xml('field', { var: MAM_FULLTEXT_FIELD }, xml('value', {}, query)),
     ]
 
     if (withJid) {
@@ -1307,7 +1308,7 @@ export class MAM extends BaseModule {
 
     const formFields: Element[] = [
       xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
-      xml('field', { var: 'fulltext' }, xml('value', {}, query)),
+      xml('field', { var: MAM_FULLTEXT_FIELD }, xml('value', {}, query)),
     ]
 
     const iq = this.buildMAMQuery(queryId, formFields, max, before ?? '', roomJid)

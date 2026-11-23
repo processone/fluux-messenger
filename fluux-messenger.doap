@@ -354,6 +354,15 @@
       </xmpp:SupportedXep>
     </implements>
 
+    <!-- XEP-0431: Full Text Search in MAM -->
+    <implements>
+      <xmpp:SupportedXep>
+        <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0431.html"/>
+        <xmpp:status>complete</xmpp:status>
+        <xmpp:note>Server-side archive search for chats and rooms when the account announces urn:xmpp:fulltext:0</xmpp:note>
+      </xmpp:SupportedXep>
+    </implements>
+
     <!-- XEP-0317: Hats -->
     <implements>
       <xmpp:SupportedXep>
