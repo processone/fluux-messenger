@@ -1,11 +1,12 @@
 /**
  * The "a pin-bottom loop already owns the bottom" claim.
  *
- * Two callers skip their own work while a pin loop is in flight: the row-growth re-pin (it would
+ * Callers skip competing work while a pin loop is in flight: the row-growth re-pin (it would
  * only stack a second loop — the running one re-reads scrollHeight every frame and picks the growth
  * up itself, and restarting costs a synchronous forced layout + repaint, the WebKitGTK hot path),
- * and the scroll-to-bottom FAB (a growth-driven scroll event fires at the pre-repin scrollTop, which
- * would flash the FAB while the loop is settling AT the bottom).
+ * the scroll-to-bottom FAB (a growth-driven scroll event fires at the pre-repin scrollTop, which
+ * would flash the FAB while the loop is settling AT the bottom), and passive message hover while
+ * drafting at latest (the same passing distance must not acquire an anchor that cancels following).
  *
  * Held as a DEADLINE, not a boolean. The leased frame-loop adapter now releases the claim on every
  * normal terminal path, including a stale lease and thrown controller frame work. The deadline
