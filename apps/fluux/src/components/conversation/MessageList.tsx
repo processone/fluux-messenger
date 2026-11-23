@@ -586,6 +586,7 @@ export function MessageList<T extends BaseMessage>({
     conversationId,
     enabled: !staticMode,
     begin: beginInteractionHold,
+    isFollowing: () => windowAtLiveEdge !== false && isAtBottom(),
     release: releaseInteractionHold,
     menuChanged: setInteractionMenuOpen,
   })

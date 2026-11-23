@@ -28,20 +28,23 @@ interface InteractionPorts {
   begin: (rowId: string) => boolean
   release: (resume: boolean) => void
   menuChanged?: (open: boolean) => void
+  /** Read the list-owned following intent before a hold temporarily clears it. */
+  isFollowing?: () => boolean
 }
 
 /** FLM-229: hover caused by moving content is not deliberate interaction. */
 export function useMessageInteractionHold({
-  scrollRef, conversationId, enabled, begin, release, menuChanged,
+  scrollRef, conversationId, enabled, begin, release, menuChanged, isFollowing,
 }: InteractionPorts & {
   scrollRef: RefObject<HTMLElement | null>
   conversationId: string
   enabled: boolean
 }) {
-  const ports = useRef({ begin, release, menuChanged })
-  ports.current = { begin, release, menuChanged }
+  const ports = useRef({ begin, release, menuChanged, isFollowing })
+  ports.current = { begin, release, menuChanged, isFollowing }
   const [heldMessageId, setHeldMessageId] = useState<string | null>(null)
   const held = useRef<{ id: string; row: HTMLElement } | null>(null)
+  const followingBeforeHold = useRef(false)
   const listeners = useRef(new Set<() => void>())
   const pointerRow = useRef<HTMLElement | null>(null)
   const focusRow = useRef<HTMLElement | null>(null)
@@ -69,6 +72,7 @@ export function useMessageInteractionHold({
   const cancel = useCallback(() => {
     clearLeave()
     held.current = null
+    followingBeforeHold.current = false
     pointerRow.current = null
     focusRow.current = null
     // Hold cancellation is not a physical mouseup; a selection drag can still be running.
@@ -89,7 +93,9 @@ export function useMessageInteractionHold({
       if (refresh) ports.current.begin(held.current.id)
       return
     }
+    const following = held.current ? followingBeforeHold.current : ports.current.isFollowing?.() ?? false
     if (!ports.current.begin(id)) return
+    followingBeforeHold.current = following
     held.current = { id, row }
     notify()
   }, [clearLeave, scrollRef, notify])
@@ -142,13 +148,24 @@ export function useMessageInteractionHold({
       const row = target instanceof Element ? target.closest<HTMLElement>('[data-message-row-id]') : null
       return row && scrollRef.current?.contains(row) ? row : null
     }
+    // Drafting at latest is passive over text, but directly entering the toolbar still holds.
+    // A hold clears the list's following flag, so retain its acquisition intent until release.
+    const hoverRowFor = (target: EventTarget | null) => {
+      const row = rowFor(target)
+      const active = document.activeElement
+      const drafting = active?.closest('.message-input') && !active.closest('[data-modal]') &&
+        scrollRef.current?.closest('[data-conversation-column]')?.contains(active)
+      const following = held.current ? followingBeforeHold.current : ports.current.isFollowing?.() ?? false
+      return row && drafting && following &&
+        !(target instanceof Element && target.closest('[data-message-toolbar]')) ? null : row
+    }
     // A control the hold itself reveals (the jump-to-latest FAB shows at 1px below the bottom only
     // while a hold is on) keeps the held row. Releasing there would hide the FAB, drop the pointer
     // back on the row and start a new hold: the two would trade the pointer on every move.
     const pointerRowFor = (target: EventTarget | null) =>
       target instanceof Element && target.closest('[data-interaction-bridge]')
         ? held.current?.row ?? null
-        : rowFor(target)
+        : hoverRowFor(target)
     const onMove = (event: MouseEvent) => {
       if (middlePress && (event.buttons & 4) !== 0 &&
         (Math.abs(middlePress.x - event.clientX) > MIDDLE_PAN_DEAD_ZONE ||
@@ -157,7 +174,7 @@ export function useMessageInteractionHold({
         ? point.x !== event.clientX || point.y !== event.clientY
         : Boolean(event.movementX || event.movementY)
       point = { x: event.clientX, y: event.clientY }
-      const row = rowFor(event.target)
+      const row = hoverRowFor(event.target)
       pointerRow.current = pointerRowFor(event.target)
       if (moved && hasHover()) {
         keyboard.current = false
