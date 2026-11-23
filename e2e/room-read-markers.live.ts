@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 // @ts-expect-error @xmpp/client has no published declarations.
 import { client as xmppClient, xml } from '@xmpp/client'
-import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
+import { test, expect, type Browser, type BrowserContext, type ConsoleMessage, type Page } from '@playwright/test'
 
 // Intent: issue #1453's approved room-only contract. Two actual application
 // sessions, actual server discovery, reflected identities and archived markers.
@@ -68,6 +68,10 @@ async function app(browser: Browser, name: 'alice' | 'bob', touch = false): Prom
     ...(videoDir ? { recordVideo: { dir: videoDir, size: { width: 1280, height: 800 } } } : {}) })
   const started = Date.now()
   const page = await context.newPage()
+  const startupError = (error: Error) => console.error('Live app startup error:', error.message)
+  const startupConsole = (message: ConsoleMessage) => { if (message.type() === 'error') console.error('Live app startup console error:', message.text()) }
+  page.on('pageerror', startupError)
+  page.on('console', startupConsole)
   const sent: string[] = [], received: string[] = []
   const sentObservers = new Set<() => void>()
   page.on('websocket', socket => {
@@ -75,8 +79,23 @@ async function app(browser: Browser, name: 'alice' | 'bob', touch = false): Prom
     socket.on('framereceived', frame => { if (typeof frame.payload === 'string') received.push(frame.payload) })
   })
   await page.addInitScript(() => { localStorage.setItem('i18nextLng', 'en'); localStorage.setItem('fluux-theme', 'dark') })
-  await page.goto('/')
-  await page.locator('#jid').fill(config!.users[name].jid)
+  try {
+    await page.goto('/')
+    await page.locator('#jid').fill(config!.users[name].jid)
+  } catch (error) {
+    if (evidence) {
+      const prefix = `${evidence}/room-read-${before ? 'before' : 'after'}-startup-${name}`
+      try {
+        await page.screenshot({ path: `${prefix}.png` })
+        writeFileSync(`${prefix}.html`, await page.content())
+      } catch { console.error('Live app startup evidence could not be captured') }
+    }
+    throw error
+  } finally {
+    // Stop startup diagnostics before any disposable password enters the page.
+    page.off('pageerror', startupError)
+    page.off('console', startupConsole)
+  }
   await page.locator('input[type=password]').first().fill(config!.users[name].password)
   await page.keyboard.press('Control+,')
   await page.locator('#server').fill(config!.ws)
