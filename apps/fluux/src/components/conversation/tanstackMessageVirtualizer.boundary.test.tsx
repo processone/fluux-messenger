@@ -163,8 +163,9 @@ it('jumps to a measured row using measured offsets before and inside the target'
   const scope = fixture({ size: 100, height: 8000 })
   scope.measure(3, 160)
   scope.measure(10, 180)
+  scope.measure(60, 140)
   const expected = scope.result.current.getOffsetForMessageId('row-60')!
-    - (scope.scroller.clientHeight - 100) / 2
+    - (scope.scroller.clientHeight - 140) / 2
   const writer = vi.spyOn(scope.scroller, 'scrollTo')
 
   act(() => scope.result.current.scrollToIndex(60, { align: 'center' }))
