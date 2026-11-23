@@ -1393,7 +1393,8 @@
         "added": "Lisätty",
         "changed": "Muutettu",
         "fixed": "Korjattu",
-        "removed": "Poistettu"
+        "removed": "Poistettu",
+        "viewFull": "Näytä koko muutosloki"
     },
     "about": {
         "title": "Tietoja",

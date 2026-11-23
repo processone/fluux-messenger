@@ -1393,7 +1393,8 @@
         "added": "Hozzáadva",
         "changed": "Módosítva",
         "fixed": "Javítva",
-        "removed": "Eltávolítva"
+        "removed": "Eltávolítva",
+        "viewFull": "Teljes változásnapló megtekintése"
     },
     "about": {
         "title": "Névjegy",

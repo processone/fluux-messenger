@@ -1397,7 +1397,8 @@
         "added": "Pridėta",
         "changed": "Pakeista",
         "fixed": "Pataisyta",
-        "removed": "Pašalinta"
+        "removed": "Pašalinta",
+        "viewFull": "Peržiūrėti visą pakeitimų žurnalą"
     },
     "about": {
         "title": "Apie",

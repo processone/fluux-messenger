@@ -1395,7 +1395,8 @@
         "added": "Lisatud",
         "changed": "Muudetud",
         "fixed": "Parandatud",
-        "removed": "Eemaldatud"
+        "removed": "Eemaldatud",
+        "viewFull": "Vaata täielikku muudatuste logi"
     },
     "about": {
         "title": "Teave",

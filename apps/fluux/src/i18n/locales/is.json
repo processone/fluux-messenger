@@ -1393,7 +1393,8 @@
         "added": "Bætt við",
         "changed": "Breytt",
         "fixed": "Lagað",
-        "removed": "Fjarlægt"
+        "removed": "Fjarlægt",
+        "viewFull": "Skoða alla breytingaskrána"
     },
     "about": {
         "title": "Um",

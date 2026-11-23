@@ -1396,7 +1396,8 @@
         "added": "Pievienots",
         "changed": "Mainīts",
         "fixed": "Labots",
-        "removed": "Noņemts"
+        "removed": "Noņemts",
+        "viewFull": "Skatīt pilnu izmaiņu žurnālu"
     },
     "about": {
         "title": "Par",

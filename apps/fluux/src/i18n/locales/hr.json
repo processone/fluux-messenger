@@ -1395,7 +1395,8 @@
         "added": "Dodano",
         "changed": "Promijenjeno",
         "fixed": "Popravljeno",
-        "removed": "Uklonjeno"
+        "removed": "Uklonjeno",
+        "viewFull": "Pogledaj cijeli popis promjena"
     },
     "about": {
         "title": "O aplikaciji",
