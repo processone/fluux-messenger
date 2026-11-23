@@ -11,7 +11,6 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  E2EEManager,
   E2EEEncryptionRequiredError,
   InMemoryStorageBackend,
   createPluginStorage,
@@ -26,6 +25,11 @@ import { xml } from '@fluux/sdk/xmpp'
 import { WebOpenPGPPlugin } from '@fluux/openpgp-plugin/web'
 import { clearSessionPassphrase, setSessionPassphrase } from '@fluux/openpgp-plugin'
 import { normalizeFingerprint } from '@fluux/openpgp-plugin/fingerprintCompare'
+// MAM's internal stanza entry point and the manager must share one class
+// declaration, rather than mixing source-private fields with built declarations.
+import { E2EEManager } from '../../../../packages/fluux-sdk/src/core/e2ee/E2EEManager'
+import { decryptStanzaInPlace } from '../../../../packages/fluux-sdk/src/core/e2ee/stanzaDecrypt'
+import { dataToElement } from '../../../../packages/omemo-plugin/src/stanzaData'
 import { OmemoPlugin } from '../../../../packages/omemo-plugin/src/OmemoPlugin'
 import { PluginStorageOmemoStore } from '../../../../packages/omemo-plugin/src/store'
 import {
@@ -204,9 +208,10 @@ describe.each(protocols)('$name SDK host compatibility', ({ name, create }) => {
     let earlierChain: XMLElementData
     let currentChain: XMLElementData
     let protocolId: string
+    let sender: E2EEManager
+    let readSessions: () => Promise<(Uint8Array | null)[]>
 
-    // it.fails also inverts hook failures. Ordinary checks below independently
-    // verify the fixture and exact known gap; expected failures retain the target.
+    // Real delivered traffic across a DH turn, shared by both archive entry points.
     beforeEach(async () => {
       const net = newMockNetwork()
       const plugin = create()
@@ -214,6 +219,11 @@ describe.each(protocols)('$name SDK host compatibility', ({ name, create }) => {
       const alice = await ready(aliceJid, net, [plugin])
       const bob = await ready(bobJid, net, [create()])
       receiver = bob.host
+      sender = alice.host
+      const sessions = new PluginStorageOmemoStore(createPluginStorage(bob.storage, `e2ee/${protocolId}`))
+      const devices = (await plugin.ensureIdentity()).devices ?? []
+      if (plugin instanceof OmemoPlugin) expect(devices).toHaveLength(1)
+      readSessions = () => Promise.all(devices.map((device) => sessions.loadSession(aliceJid, Number(device.deviceId))))
       earlierChain = await send(alice.host, toBob, 'earlier chain private message')
       expectBody(await receiver.decryptInbound(earlierChain, toAlice), 'earlier chain private message', protocolId)
       const reply = await send(bob.host, toAlice, 'private reply advancing the ratchet')
@@ -241,26 +251,32 @@ describe.each(protocols)('$name SDK host compatibility', ({ name, create }) => {
         expectHarmlessReplay(await replay(currentChain), 'current chain private message')
       })
 
-      if (name === 'OMEMO') {
-        if (path === 'single') {
-          it('single: exposes the known earlier-chain permanent malformed-data rejection', async () => {
-            await expect(replay(earlierChain)).rejects.toMatchObject({ kind: 'permanent', code: 'malformed-data' })
-          })
-        } else {
-          it('batch: exposes the known earlier-chain unverifiable result without plaintext', async () => {
-            const result = await replay(earlierChain)
-            expect(result).toMatchObject({ status: 'unverifiable', securityContext: { protocolId } })
-            expect(result!.plaintext).toBeUndefined()
-          })
-        }
-      }
+      it(`${path}: preserves sessions and live continuation after consumed earlier-chain replay`, async () => {
+        const before = await readSessions()
+        await replay(earlierChain)
+        expect(await readSessions()).toEqual(before)
+        const next = await send(sender, toBob, 'live after consumed replay')
+        expectBody(await receiver.decryptInbound(next, toAlice), 'live after consumed replay', protocolId)
+        const reply = await send(receiver, toAlice, 'reply after consumed replay')
+        expectBody(await sender.decryptInbound(reply, toBob), 'reply after consumed replay', protocolId)
+      })
 
-      // Known API gap, deliberately not fixed in a test-only change: earlier
-      // OMEMO chains throw permanent malformed-data (single) or return
-      // unverifiable with no plaintext (batch), instead of a harmless duplicate.
-      const checkEarlierChain = name === 'OMEMO' ? it.fails : it
-      checkEarlierChain(`${path}: treats a consumed earlier-chain message as a harmless replay${name === 'OMEMO' ? ' (known OMEMO gap; expected failure)' : ''}`, async () => {
+      it(`${path}: treats a consumed earlier-chain message as a harmless replay`, async () => {
         expectHarmlessReplay(await replay(earlierChain), 'earlier chain private message')
+      })
+    }
+
+    if (name === 'OMEMO') {
+      it('MAM: consumes an earlier-chain replay without a permanent failure or fallback body', async () => {
+        const stanza = xml('message', { from: aliceJid, to: bobJid, type: 'chat' },
+          dataToElement(earlierChain), xml('body', {}, '[This message is OMEMO-encrypted.]'))
+        const before = await readSessions()
+        const result = await decryptStanzaInPlace(stanza, receiver, aliceJid, 'archive')
+        expect(result.attempted).toBe(true)
+        expect(result.encryptedPayloadXml).toBeUndefined()
+        expect(result.securityContext?.failureReason).toBeUndefined()
+        expect(stanza.children).toEqual([])
+        expect(await readSessions()).toEqual(before)
       })
     }
   })
