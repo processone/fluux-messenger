@@ -170,7 +170,7 @@ async function openRoom(client: App, name = title) {
     const confirm = client.page.getByRole('button', { name: 'Join anyway', exact: true })
     if (await confirm.isVisible()) await confirm.click()
   }
-  await expect(client.page.getByRole('combobox', { name: /^Message / })).toBeVisible({ timeout: 30_000 })
+  await expect(client.page.getByRole('combobox', { name: `Message #${name}`, exact: true })).toBeVisible({ timeout: 30_000 })
 }
 async function privacy(client: App) {
   await client.page.getByRole('button', { name: 'Settings', exact: true }).click()
