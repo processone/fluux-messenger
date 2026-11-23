@@ -257,7 +257,7 @@ async function waitForMessageLayoutSettled(scroller: Locator): Promise<void> {
 // ── Invariants ───────────────────────────────────────────────────────────────
 
 test.describe('composer geometry', () => {
-  test('accepts the first room insertion after select-all and Backspace', async ({ page, browserName }, testInfo) => {
+  test('accepts the first room insertion after select-all and Backspace', async ({ page, browserName }) => {
     // Exercise Lexical's macOS Chromium text-replacement path on Linux CI too.
     if (browserName === 'chromium' && process.platform !== 'darwin') {
       await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { value: 'MacIntel' }))
@@ -267,17 +267,6 @@ test.describe('composer geometry', () => {
     await expect(editor).toBeFocused()
     await expect(editor).toHaveJSProperty('value', '')
 
-    await editor.evaluate(el => {
-      el.addEventListener('beforeinput', event => {
-        const input = event as InputEvent
-        if (input.inputType === 'insertText') {
-          console.log('room beforeinput', JSON.stringify({ trusted: input.isTrusted, canceled: input.defaultPrevented }))
-        }
-      })
-    })
-    page.on('console', message => {
-      if (message.text().startsWith('room beforeinput ')) console.log(message.text())
-    })
     // Keep the zero-delay fallback from running between keyup and insertion. Real
     // key events and beforeinput still run; only the page's timer is controlled.
     const now = Date.now()
@@ -288,16 +277,10 @@ test.describe('composer geometry', () => {
       await page.keyboard.press('Backspace')
       expect(await editor.evaluate(el => (el as HTMLTextAreaElement).value)).toBe('')
       await page.keyboard.insertText('First line')
-      const state = await editor.evaluate(el => ({ focused: document.activeElement === el, value: (el as HTMLTextAreaElement).value, text: el.textContent }))
-      console.log('first insertion', state)
-      await testInfo.attach('first insertion', { body: JSON.stringify(state), contentType: 'application/json' })
+      await expect(editor).toHaveJSProperty('value', 'First line')
     } finally {
       await page.clock.resume()
     }
-    if (process.env.FLUUX_CAPTURE_FIRST_INSERTION) {
-      await editor.locator('..').screenshot({ path: process.env.FLUUX_CAPTURE_FIRST_INSERTION, caret: 'initial' })
-    }
-    await expect(editor).toHaveJSProperty('value', 'First line')
   })
 
   test('keeps the replacement guard within the room editing command', async ({ page, browserName }) => {
@@ -331,10 +314,12 @@ test.describe('composer geometry', () => {
       await page.keyboard.up('a')
       await page.keyboard.up('Meta')
 
-      await page.keyboard.press('Meta+a')
+      await page.keyboard.down('Meta')
+      await page.keyboard.down('a')
+      // macOS may omit the letter's keyup while Command is held.
+      await page.keyboard.up('Meta')
       await page.keyboard.insertText('Replace selection')
       expect(await readDraft()).toBe('Replace selection')
-      console.log('room replacement guard', 'held Backspace and select-all kept the draft; released select-all accepted the new text')
     } finally {
       await page.clock.resume()
     }

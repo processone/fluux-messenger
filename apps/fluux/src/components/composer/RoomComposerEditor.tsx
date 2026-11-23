@@ -156,14 +156,14 @@ export function RoomComposerEditor(props: RoomComposerEditorProps) {
     root.addEventListener('keydown', onNativeKeyDown)
     cleanups.push(() => root.removeEventListener('keydown', onNativeKeyDown))
 
-    // Lexical suppresses macOS Chromium's accidental text replacement during a
-    // handled Backspace or select-all, but its fallback timer can outlive the key
-    // press and swallow an independent insertion with no keydown. Keep the guard
-    // during the key press, and retire this Lexical 0.53 shim when upstream stops
-    // dropping insertText after release: https://github.com/meta/lexical/issues/9250.
-    const onNativeKeyUp = (event: KeyboardEvent) => {
+    // Lexical's macOS Chromium replacement guard can outlive the key press and
+    // swallow an independent insertion. Clear it on key release; macOS may
+    // report Command's keyup but not the letter's after Select All.
+    // https://github.com/meta/lexical/issues/9250 left macOS Chromium affected.
+    // Remove this shim only when the composer regression passes without it.
+    const onNativeKeyUp = () => {
       const state = editor._inputState
-      if (!state.isInsertTextAfterHandledSelectionCommand || state.lastKeyCode !== event.key) return
+      if (!state.isInsertTextAfterHandledSelectionCommand) return
       state.isInsertTextAfterHandledSelectionCommand = false
       if (state.handledSelectionCommandTimeoutId !== null) {
         clearTimeout(state.handledSelectionCommandTimeoutId)
