@@ -1301,6 +1301,9 @@ const SEARCH_PAGE_MAX = 1024
 const LOOKUP_BATCH = 128
 
 /** Position in key order: negative time, then document number. */
+/** One word of the query: its tokens (several for a prefix) and how many rows they hold. */
+interface SearchSide { tokens: string[]; prefix: boolean; count: number }
+
 interface SearchPosition { negTime: number; docNo: number }
 
 function postingRange(token: string, after?: SearchPosition): IDBKeyRange {
@@ -1369,7 +1372,9 @@ async function searchTimeSorted(
   } else {
     let after: SearchPosition | undefined
     let pageSize = SEARCH_PAGE_START
-    let plan: { tokens: string[]; count: number }[] | undefined
+    let plan: SearchSide[] | undefined
+    // Documents already taken, so a correction that moves one past the cursor cannot repeat it.
+    const seen = new Set<string>()
     while (limited.length < limit) {
       const tx = db.transaction([DOCS_STORE, POSTINGS_STORE], 'readonly')
       void tx.done.catch(() => {})
@@ -1380,12 +1385,12 @@ async function searchTimeSorted(
       // Worked out once: later pages reuse it.
       if (!plan) {
         const prefixTokens = prefixToken ? await expandPrefix(rows, prefixToken) : []
-        const sides: { tokens: string[]; count: number }[] = []
-        for (const token of exactTokens) sides.push({ tokens: [token], count: await rows.count(postingRange(token)) })
+        const sides: SearchSide[] = []
+        for (const token of exactTokens) sides.push({ tokens: [token], prefix: false, count: await rows.count(postingRange(token)) })
         if (prefixToken) {
           let count = 0
           for (const token of prefixTokens) count += await rows.count(postingRange(token))
-          sides.push({ tokens: prefixTokens, count })
+          sides.push({ tokens: prefixTokens, prefix: true, count })
         }
         sides.sort((a, b) => a.count - b.count)
         plan = sides
@@ -1404,7 +1409,10 @@ async function searchTimeSorted(
       if (page.length === 0) { await tx.done; break }
 
       let survivors = page
-      for (const side of others) {
+      // A prefix that does not drive is matched on the documents' own tokens below:
+      // probing every expansion for every candidate would cost candidates x expansions.
+      const prefixChecked = others.some((side) => side.prefix)
+      for (const side of others.filter((other) => !other.prefix)) {
         const kept: PostingKey[] = []
         for (let i = 0; i < survivors.length; i += LOOKUP_BATCH) {
           const batch = survivors.slice(i, i + LOOKUP_BATCH)
@@ -1424,7 +1432,10 @@ async function searchTimeSorted(
       const numbers = docs.index('docNo')
       for (const key of survivors) {
         const doc = await numbers.get(key[2])
-        if (doc && keeps(doc)) matches.push(doc)
+        if (!doc || seen.has(doc.indexId) || !keeps(doc)) continue
+        if (prefixChecked && !doc.tokens.some((token) => token.startsWith(prefixToken as string))) continue
+        seen.add(doc.indexId)
+        matches.push(doc)
       }
       await tx.done
 
@@ -1620,7 +1631,7 @@ async function markPostingsReady(scopeJid: string | null): Promise<void> {
  * database, so a quit continues where it stopped, and two windows serialize on
  * the transaction. The loop checks the account between batches, so an account
  * switch ends it. A full disk ends it quietly and the next login retries. Search
- * keeps using the old lists; nothing here changes what it returns.
+ * keeps using the old lists until the ready marker is written; nothing here changes what it returns.
  */
 export async function migrateSearchPostings(): Promise<void> {
   if (!isIndexedDBAvailable()) return

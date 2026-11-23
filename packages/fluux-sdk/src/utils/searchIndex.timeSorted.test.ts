@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import 'fake-indexeddb/auto'
-import { IDBFactory } from 'fake-indexeddb'
+import { IDBFactory, IDBObjectStore } from 'fake-indexeddb'
 import { openDB } from 'idb'
 import type { Message } from '../core/types'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
 import * as messageCache from './messageCache'
 import {
-  _resetDBForTesting, closeSearchIndex, indexMessage, indexMessages, initSearchIndex,
+  _resetDBForTesting, closeSearchIndex, indexMessage, indexMessages, initSearchIndex, updateMessage,
   isPostingsReady, migrateSearchPostings, search, type SearchIndexResult,
 } from './searchIndex'
 
@@ -180,7 +180,7 @@ describe('search on the time-sorted index', () => {
 
   it('walks past many candidates that fail the other words', async () => {
     await initSearchIndex(SCOPE)
-    // 600 newer messages hold only "needle"; the 3 oldest also hold "thread".
+    // "needle" (600 rows) drives; 700 "thread" rows exist, but only the 3 oldest share a message with it.
     const make = (i: number, body: string) => ({
       type: 'chat', id: `p${i}`, conversationId: 'alice@example.test', from: 'alice@example.test',
       body, timestamp: new Date(1_700_000_000_000 + i * 1000), isOutgoing: false,
@@ -188,9 +188,58 @@ describe('search on the time-sorted index', () => {
     await indexMessages([
       ...[0, 1, 2].map(i => make(i, 'needle thread')),
       ...Array.from({ length: 600 }, (_, i) => make(10 + i, 'needle only')),
+      ...Array.from({ length: 700 }, (_, i) => make(1000 + i, 'thread only')),
     ], {}, SCOPE)
+    const pages = vi.spyOn(IDBObjectStore.prototype, 'getAllKeys')
     expect((await search('needle thread')).map(r => r.messageId)).toEqual(['p2', 'p1', 'p0'])
+    // More than one page of the driving word was read.
+    expect(pages.mock.calls.filter(([range]) => String((range as IDBKeyRange).lower?.[0]) === 'needle').length).toBeGreaterThan(1)
     expect((await search('needle thr')).map(r => r.messageId)).toEqual(['p2', 'p1', 'p0'])
+  })
+
+  it('matches a non-driving prefix on the documents, not by probing every expansion', async () => {
+    await initSearchIndex(SCOPE)
+    const make = (i: number, body: string) => ({
+      type: 'chat', id: `x${i}`, conversationId: 'alice@example.test', from: 'alice@example.test',
+      body, timestamp: new Date(1_700_000_000_000 + i * 1000), isOutgoing: false,
+    }) as Message
+    await indexMessages([
+      make(0, 'needle zzzmatch'),
+      ...Array.from({ length: 20 }, (_, i) => make(1 + i, `needle other`)),
+      ...Array.from({ length: 300 }, (_, i) => make(100 + i, `zzz${i} filler zzzx${i}`)),
+    ], {}, SCOPE)
+    const probes = vi.spyOn(IDBObjectStore.prototype, 'getKey')
+    expect((await search('needle zzz')).map(r => r.messageId)).toEqual(['x0'])
+    // No lookup per expansion: the 600 expanded tokens are never probed per candidate.
+    expect(probes.mock.calls.length).toBeLessThan(25)
+  })
+
+  it('does not return a message twice when a correction moves it past the cursor between pages', async () => {
+    await initSearchIndex(SCOPE)
+    const stamp = new Date(1_700_000_000_000)
+    const make = (i: number, body: string) => ({
+      type: 'chat', id: `d${i}`, conversationId: 'alice@example.test', from: 'alice@example.test',
+      body, timestamp: stamp, isOutgoing: false,
+    }) as Message
+    await indexMessages([
+      make(0, 'needle thread'),
+      ...Array.from({ length: 599 }, (_, i) => make(1 + i, 'needle words thread')),
+    ], {}, SCOPE)
+    let corrected = false
+    const real = messageCache.areRetractedInCache
+    vi.spyOn(messageCache, 'areRetractedInCache').mockImplementation(async (messages, scope) => {
+      if (!corrected) {
+        corrected = true
+        // The correction lands between page transactions and keeps the phrase.
+        await updateMessage(make(0, 'needle thread, corrected'), SCOPE)
+      }
+      return real(messages, scope)
+    })
+    const results = await search('"needle thread"', { limit: 50 })
+    expect(corrected).toBe(true)
+    const found = results.map(r => r.messageId)
+    expect(new Set(found).size).toBe(found.length)
+    expect(found.filter(id => id === 'd0')).toHaveLength(1)
   })
 
   it('reads a conversation of more than 5,000 documents through the rows', async () => {
