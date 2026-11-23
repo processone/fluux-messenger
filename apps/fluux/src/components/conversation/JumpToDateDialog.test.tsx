@@ -16,11 +16,12 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
 const PEER = 'alice@example.com'
 const message = (timestamp: Date) => ({ type: 'chat', id: 'm1', conversationId: PEER, from: PEER, body: 'hi', timestamp, isOutgoing: false })
 
-function open(loaded: ReturnType<typeof message>[] = [], initialDay?: string, archiveAvailable?: boolean) {
+function open(loaded: ReturnType<typeof message>[] = [], initialDay?: string, archiveAvailable?: boolean, windowAtLiveEdge = true) {
   const onLand = vi.fn()
+  const onRecenterToLatest = vi.fn()
   const onClose = vi.fn()
-  render(<JumpToDateDialog kind={archiveAvailable === false ? 'room' : 'chat'} conversationId={PEER} initialDay={initialDay} archiveAvailable={archiveAvailable} readLoaded={() => loaded as never} onLand={onLand} onClose={onClose} />)
-  return { onLand, onClose }
+  render(<JumpToDateDialog kind={archiveAvailable === false ? 'room' : 'chat'} conversationId={PEER} initialDay={initialDay} archiveAvailable={archiveAvailable} windowAtLiveEdge={windowAtLiveEdge} onRecenterToLatest={onRecenterToLatest} readLoaded={() => loaded as never} onLand={onLand} onClose={onClose} />)
+  return { onLand, onRecenterToLatest, onClose }
 }
 
 async function go(day: string) {
@@ -106,6 +107,15 @@ describe('JumpToDateDialog', () => {
     open([], undefined, false)
     await go('2024-03-10')
     expect(h.find.mock.calls[0][0]).toBeUndefined()
+  })
+
+  it('recenters to latest instead of landing on a parked window when nothing comes after the day', async () => {
+    h.find.mockResolvedValue({ kind: 'none' })
+    const stale = { ...message(new Date(2024, 2, 9, 20)), id: 'stale-window-last' }
+    const { onLand, onRecenterToLatest } = open([message(new Date(2024, 2, 9, 8)), stale], undefined, undefined, false)
+    await go('2024-03-10')
+    expect(onRecenterToLatest).toHaveBeenCalledOnce()
+    expect(onLand).not.toHaveBeenCalled()
   })
 
   it('lands on the latest loaded message when nothing comes after the day', async () => {

@@ -211,6 +211,8 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     isLoadingOlder: activeHistoryState?.isLoading,
     historyGaps: activeHistoryState?.gaps,
     archiveAvailable: activeRoom?.supportsMAM,
+    windowAtLiveEdge,
+    recenterToLatest,
     isHistoryComplete: activeRoom?.supportsMAM === false || activeHistoryState?.isHistoryComplete,
     clearFirstNewMessageId,
     advanceReadPointer,

@@ -51,6 +51,21 @@ describe('durable date-lookup page', () => {
     expect((await getMessages('chat', peer)).map(row => row.id)).toEqual([old.id, recent.id])
   })
 
+  it('applies a restored pending chat retraction to a date page before saving without consuming the record', async () => {
+    const message = chat('retracted-page-row', at(7, 16))
+    const pending = [{ targetId: message.id, actorJid: peer, retractedAt: Date.now() }]
+    chatStore.setState({ pendingRetractions: new Map([[peer, pending]]) })
+
+    const reconciled = await chatStore.getState().reconcileHistoryMessages([message])
+    expect(reconciled[0]).toMatchObject({ isRetracted: true })
+    expect(chatStore.getState().pendingRetractions.get(peer)).toHaveLength(1)
+
+    expect(await chatStore.getState().saveDateLookupPage(peer, reconciled, false)).toBe(true)
+
+    expect(await cache.getMessage('chat', peer, message.id)).toMatchObject({ isRetracted: true, body: '' })
+    expect(chatStore.getState().pendingRetractions.get(peer)).toHaveLength(1)
+  })
+
   it('splits a recorded room gap around a saved page without touching its catch-up status', async () => {
     const earliest = room('earliest', at(2, 14))
     const recent = room('recent', at(10, 28))

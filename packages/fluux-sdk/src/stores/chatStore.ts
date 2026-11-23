@@ -3041,7 +3041,18 @@ export const chatStore = createStore<ChatState>()(
           return Array.from(conversations, id => get().messages.get(id) ?? []).flat()
         }, scope.jid)
         scope.assertCurrent()
-        return reconciled
+        const state = get()
+        const reconciledByConversation = new Map<string, Message[]>()
+        for (const id of conversations) {
+          const page = reconciled.filter(message => message.conversationId === id)
+          reconciledByConversation.set(id, resolvePendingRetractions(state, id, page, { persist: false }).messages)
+        }
+        const offsets = new Map<string, number>()
+        return reconciled.map(message => {
+          const offset = offsets.get(message.conversationId) ?? 0
+          offsets.set(message.conversationId, offset + 1)
+          return reconciledByConversation.get(message.conversationId)?.[offset] ?? message
+        })
       },
 
       refreshLastMessageContent: (conversationId, messageId, updates) => {

@@ -32,6 +32,8 @@ export interface ConversationThreadSource<M extends ThreadMessage> {
   isHistoryComplete?: boolean
   historyGaps?: readonly GapInterval[]
   archiveAvailable?: boolean
+  windowAtLiveEdge?: boolean
+  recenterToLatest?: () => void
   clearFirstNewMessageId: (id: string) => void
   advanceReadPointer: (id: string, row: MessageRowRef) => void
   /** Jumps the list to a message. Must keep one identity across renders. */
@@ -58,7 +60,7 @@ const VIEWPORT_LIST_KIND = { chat: 'conversation', room: 'room' } as const
  */
 export function useConversationThread<M extends ThreadMessage>(source: ConversationThreadSource<M>) {
   const {
-    kind, id, displayMessages, allMessages, readAllMessages, fetchOlderHistory, isLoadingOlder, isHistoryComplete, historyGaps, archiveAvailable,
+    kind, id, displayMessages, allMessages, readAllMessages, fetchOlderHistory, isLoadingOlder, isHistoryComplete, historyGaps, archiveAvailable, windowAtLiveEdge, recenterToLatest,
     clearFirstNewMessageId, advanceReadPointer, setTargetMessageId, triggerAnimation, activeAnimation, clearAnimation,
     onSearchInConversation, onShowSavedInConversation, findOnPageRef,
   } = source
@@ -307,7 +309,7 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
       onSeeReaction: handleSeeReaction,
       onReplayEasterEgg: handleReplayEasterEgg,
       jumpToDate: dateDialog && dateDialog.conversationId === id
-        ? { kind, conversationId: id, initialDay: dateDialog.day, readLoaded: readAllMessages, gaps: historyGaps, archiveAvailable, onLand: setTargetMessageId, onClose: closeJumpToDate }
+        ? { kind, conversationId: id, initialDay: dateDialog.day, readLoaded: readAllMessages, gaps: historyGaps, archiveAvailable, windowAtLiveEdge, onRecenterToLatest: recenterToLatest, onLand: setTargetMessageId, onClose: closeJumpToDate }
         : null,
       activeAnimation,
       clearAnimation,

@@ -238,12 +238,13 @@ vi.mock('@fluux/sdk/react', () => ({
     activeConversationId: null,
     interiorPlacementVersions: new Map(),
   }),
-  useConnectionStore: (selector: (state: { jid: string; ownAvatar: null; ownNickname: string; status: string }) => unknown) => {
+  useConnectionStore: (selector: (state: { jid: string; ownAvatar: null; ownNickname: string; status: string; serverInfo: null }) => unknown) => {
     return selector({
       jid: 'me@example.com/resource',
       ownAvatar: null,
       ownNickname: 'Me',
       status: 'online',
+      serverInfo: null,
     })
   },
   useRosterStore: (selector: (state: { contacts: Map<string, Contact> }) => unknown) => {

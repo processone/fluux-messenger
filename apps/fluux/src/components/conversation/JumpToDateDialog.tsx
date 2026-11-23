@@ -17,8 +17,12 @@ export interface JumpToDateDialogProps {
   readLoaded?: () => readonly (Message | RoomMessage)[]
   /** Recorded archive holes surrounding the resident and cached messages. */
   gaps?: readonly GapInterval[]
-  /** False when this room does not offer an archive. */
+  /** False when the server is known not to offer an archive. */
   archiveAvailable?: boolean
+  /** Whether the current resident window still reaches the live edge. */
+  windowAtLiveEdge?: boolean
+  /** Replaces a parked resident window with the latest cached messages. */
+  onRecenterToLatest?: () => void
   /** Moves the list to the message, as opening a search result does. */
   onLand: (target: string | MessageRowRef) => void
   onClose: () => void
@@ -51,7 +55,7 @@ const PRESETS = [
  * behaves as after opening a search result: highlighted landing row, older and newer
  * history on scroll, and the button back to the latest messages.
  */
-export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded, gaps, archiveAvailable, onLand, onClose }: JumpToDateDialogProps) {
+export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded, gaps, archiveAvailable, windowAtLiveEdge = true, onRecenterToLatest, onLand, onClose }: JumpToDateDialogProps) {
   const { t, i18n } = useTranslation()
   const { client } = useXMPPContext()
   const addToast = useToastStore((s) => s.addToast)
@@ -81,8 +85,9 @@ export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded,
     const land = (message: Message | RoomMessage) => onLand(kind === 'room' ? messageRowRef(message) : message.id)
     const latest = loaded.at(-1)
     if (result.kind === 'none' && latest) {
-      // Nothing from that day on: the latest message is the closest one
-      land(latest)
+      // A parked window's last row is not necessarily the live edge.
+      if (windowAtLiveEdge === false && onRecenterToLatest) onRecenterToLatest()
+      else land(latest)
       addToast('info', t('chat.jumpToDate.showingLatest', { date: formatLocalizedDate(bounds.start, lang) }))
       close()
       return

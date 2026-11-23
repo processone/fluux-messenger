@@ -36,6 +36,8 @@ const h = vi.hoisted(() => ({
   triggerAnimation: undefined as unknown as (...args: unknown[]) => void,
   setTargetMessageId: undefined as unknown as (...args: unknown[]) => void,
   findFirstMessageOfDay: vi.fn(),
+  archiveMessages: {},
+  serverInfo: null as { features: string[] } | null,
   emptySet: new Set<string>(),
   emptyMap: new Map<string, number>(),
   blocked: new Set<string>(),
@@ -53,7 +55,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     useContactIdentities: () => new Map(),
     useReferencedMessage: () => undefined,
     useRoomMessageSnapshots: (_jid: string, messages: unknown) => messages,
-    useXMPPContext: () => ({ client: { e2ee: null } }),
+    useXMPPContext: () => ({ client: { e2ee: null, messages: h.archiveMessages } }),
     findFirstMessageOfDay: h.findFirstMessageOfDay,
     useXMPP: () => ({ client: { profile: { fetchProfileDetails: vi.fn().mockResolvedValue(null) } }, sendRawXml: vi.fn(), onStanza: vi.fn(() => vi.fn()), on: vi.fn(() => vi.fn()), setPresence: vi.fn(), xml: vi.fn(), isConnected: () => false, getJid: () => null }),
     useRosterActions: () => ({ addContact: vi.fn(), removeContact: vi.fn(), renameContact: vi.fn() }),
@@ -91,7 +93,7 @@ vi.mock('@fluux/sdk/react', () => ({
     interiorPlacementVersions: h.emptyMap, getVotedPollIds: () => h.emptySet, getDismissedPollIds: () => h.emptySet,
   }),
   useConnectionStore: (selector: (s: unknown) => unknown) => selector({
-    jid: 'me@example.com/resource', ownAvatar: null, ownNickname: 'Me', status: 'online', httpUploadService: { supportsRetention: false },
+    jid: 'me@example.com/resource', ownAvatar: null, ownNickname: 'Me', status: 'online', serverInfo: h.serverInfo, httpUploadService: { supportsRetention: false },
   }),
   useBlockingStore: (selector: (s: unknown) => unknown) => selector({ blockedJids: h.blocked }),
   useIgnoreStore: (selector: (s: unknown) => unknown) => selector({ ignoredUsers: h.ignored }),
@@ -296,6 +298,7 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
     h.listProps = null
     h.composerProps = null
     h.headerProps = null
+    h.serverInfo = null
     h.focus = vi.fn()
     h.reportViewport = vi.fn()
     kind.activate(firstId, kind.messages())
@@ -595,11 +598,45 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
       act(() => { (h.headerProps!.onJumpToDate as () => void)() })
       fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
-      expect(h.findFirstMessageOfDay).toHaveBeenCalledWith(undefined, kind.viewportKind, firstId, new Date(2024, 2, 10), new Date(2024, 2, 11),
+      expect(h.findFirstMessageOfDay).toHaveBeenCalledWith(h.archiveMessages, kind.viewportKind, firstId, new Date(2024, 2, 10), new Date(2024, 2, 11),
         expect.arrayContaining([expect.objectContaining({ id: landing.id })]), undefined)
       expect(kind.storeSpies.setTargetMessageId).toHaveBeenCalledWith(
         kind.name === 'room' ? expect.objectContaining({ id: landing.id }) : landing.id)
       expect(screen.queryByLabelText('chat.jumpToDate.date')).toBeNull()
+    })
+
+    it('recenters after an empty date lookup from a parked window', async () => {
+      const active = kind.name === 'chat' ? h.chat! : h.room!
+      const recenterToLatest = vi.fn()
+      active.windowAtLiveEdge = false
+      active.recenterToLatest = recenterToLatest
+      h.findFirstMessageOfDay.mockResolvedValue({ kind: 'none' })
+      kind.mount()
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
+      expect(recenterToLatest).toHaveBeenCalledOnce()
+      expect(kind.storeSpies.setTargetMessageId).not.toHaveBeenCalled()
+    })
+
+    it('uses local history only when a chat server is known not to offer MAM', async () => {
+      if (kind.name !== 'chat') return
+      h.serverInfo = { features: [] }
+      h.findFirstMessageOfDay.mockResolvedValue({ kind: 'unknown' })
+      const unsupported = kind.mount()
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
+      expect(h.findFirstMessageOfDay.mock.calls[0][0]).toBeUndefined()
+
+      unsupported.unmount()
+      h.findFirstMessageOfDay.mockClear()
+      h.serverInfo = null
+      kind.mount()
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
+      expect(h.findFirstMessageOfDay.mock.calls[0][0]).toBe(h.archiveMessages)
     })
 
     it('does not land a pending date lookup after switching conversations', async () => {
