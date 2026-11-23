@@ -77,6 +77,11 @@ and [iOS](IOS_DEVELOPMENT.md) host guides.
 | `shell` | Open an external link and return; deep links where supported; close/reopen; tray or macOS hide behavior; updates where offered; theme/fullscreen; keyboard focus, Enter, long press and mobile keyboard resize. On iOS, check the blurred app-switcher snapshot and that the cover clears as the app returns, and haptic feedback only for accepted holds and successful reactions. On a foldable iPhone, check the split at the hinge half open in both orientations and the usual layout fully open and closed. Check unavailable actions are hidden. |
 | `secrets` | Remember/reopen a test session, log out, confirm secrets are removed; exercise passphrase unlock where used and keychain denial/retry where available; rotation only where supported. Never capture secret contents in artifacts. |
 
+For native macOS composer caret paint, run the packaged
+[composer caret lab](../scripts/lab/composer-caret/README.md) when room-editor
+rendering or its native host changes. It checks real caret pixels in the empty
+room editor and direct-chat control; browser focus checks alone do not cover it.
+
 For the macOS unread widget, also qualify gallery registration, signed shared-container reads,
 row links, closed-window updates, stale snapshots, sign-out, and app replacement, as listed in
 [macOS widget qualification](MACOS_WIDGET.md#required-signed-qualification). Unsigned widget
