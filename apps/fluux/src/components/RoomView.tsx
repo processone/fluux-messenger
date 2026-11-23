@@ -1811,7 +1811,8 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     occupants,
     roomNickname,
     roomJid,
-    messageNicks
+    messageNicks,
+    references
   )
   const mentionListboxId = `${useId()}-mention-autocomplete`
 

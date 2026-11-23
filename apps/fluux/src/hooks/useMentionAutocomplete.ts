@@ -51,7 +51,8 @@ export function useMentionAutocomplete(
   occupants: Map<string, RoomOccupant>,
   ownNickname: string,
   roomJid: string,
-  messageNicks?: Set<string>
+  messageNicks?: Set<string>,
+  references: readonly MentionReference[] = []
 ): {
   state: MentionAutocompleteState
   selectMatch: (index: number) => { newText: string; newCursorPosition: number; reference: MentionReference }
@@ -90,7 +91,9 @@ export function useMentionAutocomplete(
       }
     }
 
-    if (atIndex === -1) {
+    // Completed mention text is not an unfinished query, even when the caret
+    // returns to its trailing edge. The draft references own that distinction.
+    if (atIndex === -1 || references.some(ref => atIndex >= ref.begin && atIndex < ref.end)) {
       return { isActive: false, query: '', triggerIndex: -1 }
     }
 

@@ -637,6 +637,82 @@ test.describe('composer geometry', () => {
     }
   })
 
+  // A completed mention must not become a fresh query when Left returns to its
+  // trailing edge. Otherwise the picker consumes Up/Down instead of changing lines.
+  test('vertical arrows leave a completed mention on the middle line', async ({ page }) => {
+    const editor = await openRoomComposer(page)
+    const picker = page.locator('[role="listbox"][id$="-mention-autocomplete"]')
+    const above = 'Upper line with plenty of plain letters for the caret'
+    const below = 'Lower line with plenty of plain letters for the caret'
+    const caret = () => editor.evaluate(el => (el as unknown as { selectionStart: number }).selectionStart)
+    for (const [prefix, suffix] of [['', 'tail text'], ['prefix ', 'tail text'], ['prefix ', '']]) {
+      await setDraft(editor, '')
+      await editor.click()
+      const value = () => editor.evaluate(el => (el as unknown as { value: string }).value)
+      await page.keyboard.insertText(above)
+      await expect.poll(value).toBe(above)
+      await page.keyboard.press('Shift+Enter')
+      await expect.poll(value).toBe(`${above}\n`)
+      await page.keyboard.insertText(`${prefix}@Em`)
+      await expect.poll(value).toBe(`${above}\n${prefix}@Em`)
+      await expect(picker).toBeVisible()
+      await page.keyboard.press('Enter')
+      const mention = editor.locator('[data-mention]')
+      await expect(mention).toHaveText('@Emma')
+      const end = above.length + 1 + prefix.length + (await mention.textContent())!.length
+      await expect.poll(caret).toBe(end + 1)
+      await page.keyboard.insertText(suffix)
+      await page.keyboard.press('Shift+Enter')
+      await page.keyboard.insertText(below)
+      const draft = await editor.evaluate(el => (el as unknown as { value: string }).value)
+      for (const [key, destination] of [['ArrowUp', 1], ['ArrowDown', 3]] as const) {
+        // Set up just outside the token; the move onto it and the vertical move
+        // are native keys, as in the reported reproduction.
+        await editor.evaluate((el, offset) => {
+          (el as unknown as { setSelectionRange: (start: number, end: number) => void }).setSelectionRange(offset, offset)
+        }, end + 1)
+        await expect.poll(caret).toBe(end + 1)
+        await page.keyboard.press('ArrowLeft')
+        await expect.poll(caret).toBe(end)
+        await page.keyboard.press(key)
+        await expect.poll(async () => draft.slice(0, await caret()).split('\n').length,
+          `${key} at ${JSON.stringify(prefix)}@Emma${suffix}`).toBe(destination)
+        await expect(picker).not.toBeVisible()
+        expect(await editor.evaluate(el => (el as unknown as { value: string }).value)).toBe(draft)
+      }
+    }
+  })
+
+  test('unfinished mention queries keep picker arrow navigation', async ({ page }) => {
+    const editor = await openRoomComposer(page)
+    await setDraft(editor, '')
+    await editor.click()
+    await page.keyboard.insertText('@')
+    await expect.poll(() => editor.evaluate(el => (el as unknown as { value: string }).value)).toBe('@')
+    const picker = page.locator('[role="listbox"][id$="-mention-autocomplete"]')
+    const options = picker.getByRole('option')
+    await expect(picker).toBeVisible()
+    expect(await options.count()).toBeGreaterThan(1)
+    const selected = () => picker.locator('[aria-selected="true"]')
+    const first = await options.nth(0).getAttribute('id')
+    const second = await options.nth(1).getAttribute('id')
+    const caret = () => editor.evaluate(el => (el as unknown as { selectionStart: number }).selectionStart)
+    const start = await caret()
+    await expect(selected()).toHaveAttribute('id', first!)
+    await page.keyboard.press('ArrowDown')
+    await expect(selected()).toHaveAttribute('id', second!)
+    expect(await caret()).toBe(start)
+    await page.keyboard.press('ArrowUp')
+    await expect(selected()).toHaveAttribute('id', first!)
+    expect(await caret()).toBe(start)
+    await page.keyboard.press('ArrowDown')
+    await expect(selected()).toHaveAttribute('id', second!)
+    const picked = await selected().locator('.font-medium').textContent()
+    await page.keyboard.press('Enter')
+    await expect(editor.locator('[data-mention]')).toHaveText(picked!)
+    await expect(picker).not.toBeVisible()
+  })
+
   /**
    * A mention is one unit: one Backspace removes all of it and the references
    * the message is sent with follow. Replaces the old manual offset arithmetic.
