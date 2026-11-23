@@ -13,6 +13,7 @@ const ROOT_INFO = new TextEncoder().encode('OMEMO Root Chain')
 const MSG_INFO = new TextEncoder().encode('OMEMO Message Key Material')
 const ZERO32 = new Uint8Array(32)
 const MAX_SKIP = 1000
+export const MAX_RETIRED_CHAINS = 1000
 
 interface Header {
   dhPub: Uint8Array
@@ -31,6 +32,14 @@ export interface RatchetState {
   ns: number
   nr: number
   pn: number
+  /**
+   * dhPubHex -> final receive counter. Retain one public marker per retired
+   * receiving chain, not message keys or plaintext, for the newest 1,000 chains.
+   * Like the current-chain nr check, this recognizes consumed indices, not fresh
+   * authentication of replays. Evicted, replaced-session and already-discarded
+   * pre-upgrade chains cannot be recognized through these markers.
+   */
+  retiredChains: Map<string, number>
   skipped: Map<string, Uint8Array> // `${dhPubHex}:${n}` -> messageKey
 }
 
@@ -55,8 +64,12 @@ function deriveMsgKeys(mk: Uint8Array): { enc: Uint8Array; auth: Uint8Array; iv:
   return { enc: okm.slice(0, 32), auth: okm.slice(32, 64), iv: okm.slice(64, 80) }
 }
 
+function chainId(dhPub: Uint8Array): string {
+  return [...dhPub].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 function hexKey(dhPub: Uint8Array, n: number): string {
-  return [...dhPub].map((b) => b.toString(16).padStart(2, '0')).join('') + ':' + n
+  return chainId(dhPub) + ':' + n
 }
 
 function sealMessage(
@@ -102,6 +115,7 @@ export function initRatchetInitiator(sharedSecret: Uint8Array, remoteSpkPub: Uin
     nr: 0,
     pn: 0,
     skipped: new Map(),
+    retiredChains: new Map(),
   }
 }
 
@@ -118,6 +132,7 @@ export function initRatchetResponder(sharedSecret: Uint8Array, spkPriv: Uint8Arr
     nr: 0,
     pn: 0,
     skipped: new Map(),
+    retiredChains: new Map(),
   }
 }
 
@@ -141,7 +156,7 @@ export function ratchetDecrypt(
   ad: Uint8Array,
 ): { state: RatchetState; plaintext: Uint8Array } {
   const header = decodeOmemoMessage(authMessage.message)
-  let s: RatchetState = { ...state, skipped: new Map(state.skipped) }
+  let s: RatchetState = { ...state, skipped: new Map(state.skipped), retiredChains: new Map(state.retiredChains) }
 
   // A previously-skipped (out-of-order) message: consume its stored key exactly once.
   const skipId = hexKey(header.dhPub, header.n)
@@ -156,9 +171,23 @@ export function ratchetDecrypt(
     throw new OmemoError('duplicate', 'ratchet message already consumed')
   }
 
+  // A retired chain must never ratchet backwards. Skipped keys above still own
+  // undelivered messages; lower indices without a key have already been consumed.
+  const retiredUntil = s.retiredChains.get(chainId(header.dhPub))
+  if (retiredUntil !== undefined) {
+    if (header.n < retiredUntil) throw new OmemoError('duplicate', 'ratchet message already consumed')
+    throw new OmemoError('malformed', 'message exceeds retired ratchet chain')
+  }
+
   const isNewRemote = !s.dhRemote || !bytesEqual(s.dhRemote, header.dhPub)
   if (isNewRemote) {
     s = skipMessageKeys(s, header.pn)
+    if (s.dhRemote) {
+      s.retiredChains.set(chainId(s.dhRemote), s.nr)
+      if (s.retiredChains.size > MAX_RETIRED_CHAINS) {
+        s.retiredChains.delete(s.retiredChains.keys().next().value!)
+      }
+    }
     s = dhRatchet(s, header.dhPub)
   }
   s = skipMessageKeys(s, header.n)
@@ -210,6 +239,7 @@ interface SerializableState {
   ns: number
   nr: number
   pn: number
+  retiredChains?: [string, number][] // absent in sessions written before replay tracking
   skipped: [string, number[]][]
 }
 
@@ -224,6 +254,7 @@ export function serializeRatchet(s: RatchetState): Uint8Array {
     ns: s.ns,
     nr: s.nr,
     pn: s.pn,
+    retiredChains: [...s.retiredChains.entries()],
     skipped: [...s.skipped.entries()].map(([k, v]) => [k, [...v]]),
   }
   return new TextEncoder().encode(JSON.stringify(obj))
@@ -246,6 +277,7 @@ export function deserializeRatchet(bytes: Uint8Array): RatchetState {
     ns: o.ns,
     nr: o.nr,
     pn: o.pn,
+    retiredChains: new Map(o.retiredChains ?? []),
     skipped: new Map(o.skipped.map(([k, v]) => [k, Uint8Array.from(v)])),
   }
 }
