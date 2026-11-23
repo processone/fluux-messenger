@@ -288,11 +288,16 @@ export class RoomReadMarkers extends BaseModule {
     }
   }
 
+  /** @internal Join-owned exclusions only; not a positive eligibility proof. */
+  mayQualify(roomJid: string): boolean {
+    const room = this.getRoomWithOccupants(roomJid)
+    return !!room?.joined && !room.isJoining && room.isPrivate !== false && room.isNonAnonymous !== false
+      && room.occupants.size < ROOM_MARKER_OCCUPANT_LIMIT
+  }
+
   /** @internal Revalidate a read-only room proof without publishing a position. */
   async ensureEligible(roomJid: string): Promise<boolean> {
-    const room = this.getRoomWithOccupants(roomJid)
-    if (!room?.joined || room.isJoining || room.isPrivate === false || room.isNonAnonymous === false
-      || room.occupants.size >= ROOM_MARKER_OCCUPANT_LIMIT) return false
+    if (!this.mayQualify(roomJid)) return false
     return this.eligible(roomJid) || this.discover(roomJid)
   }
 

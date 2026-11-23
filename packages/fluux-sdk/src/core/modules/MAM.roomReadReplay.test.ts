@@ -12,7 +12,7 @@ import { makeReadPointer } from '../../stores/shared/readPointer'
 import { setStorageScopeJid } from '../../utils/storageScope'
 import { isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
 import { getResource } from '../jid'
-import { MAM_CATCHUP_BACKWARD_MAX } from '../../utils/mamCatchUpUtils'
+import { MAM_BACKGROUND_CONCURRENCY, MAM_CATCHUP_BACKWARD_MAX } from '../../utils/mamCatchUpUtils'
 
 const MAM_NS = 'urn:xmpp:mam:2'
 const RSM_NS = 'http://jabber.org/protocol/rsm'
@@ -199,6 +199,46 @@ describe('room read positions after cached reconnect', () => {
     await replayed
     expect(h.markers.readers(fixture.room, h.target)).toEqual([])
     expect(h.deps.emitSDK).not.toHaveBeenCalled()
+    h.markers.cancelPending()
+  })
+
+  it.each(['success', 'failure'] as const)('bounds multi-room recovery and releases slots after %s', async outcome => {
+    const h = harness()
+    // Scheduling-only eligibility stand-ins; protocol qualification is covered
+    // by the real room fixture above. Request counts are measured, not seeded.
+    vi.spyOn(h.markers, 'mayQualify').mockReturnValue(true)
+    vi.spyOn(h.markers, 'ensureEligible').mockResolvedValue(true)
+    const rooms = Array.from({ length: MAM_BACKGROUND_CONCURRENCY + 1 }, (_, i) => `${i}-${fixture.room}`)
+    let release!: () => void
+    let atCapacity!: () => void
+    let allFinished!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const capacity = new Promise<void>(resolve => { atCapacity = resolve })
+    const finished = new Promise<void>(resolve => { allFinished = resolve })
+    let started = 0, active = 0, peak = 0, completed = 0
+    h.sendIQ.mockImplementation(async iq => {
+      const ordinal = ++started
+      active++; peak = Math.max(peak, active)
+      if (started === MAM_BACKGROUND_CONCURRENCY) atCapacity()
+      try {
+        await gate
+        if (outcome === 'failure' && ordinal === 1) throw new Error('Archive request failed')
+        const response = parse(fixture.afterFin)
+        response.attrs.from = iq.attrs.to
+        return response
+      } finally {
+        active--
+        if (++completed === rooms.length) allFinished()
+      }
+    })
+    try {
+      await Promise.all(rooms.map(room => h.mam.fetchPreviewForRoom(room)))
+      await capacity
+      expect(started).toBe(MAM_BACKGROUND_CONCURRENCY)
+    } finally { release() }
+    await finished
+    expect(started).toBe(rooms.length)
+    expect(peak).toBe(MAM_BACKGROUND_CONCURRENCY)
     h.markers.cancelPending()
   })
 

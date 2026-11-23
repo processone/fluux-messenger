@@ -59,6 +59,7 @@ import {
   isConnectionError,
   MAM_CATCHUP_FORWARD_MAX,
   MAM_CATCHUP_BACKWARD_MAX,
+  MAM_BACKGROUND_CONCURRENCY,
   MAM_CACHE_LOAD_LIMIT,
   MAM_ROOM_FORWARD_MAX_PAGES,
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
@@ -265,6 +266,8 @@ export class MAM extends BaseModule {
   private correctionQueries = new Map<string, CorrectionReconciliation>()
   private observedArchives = new Map<string, () => boolean>()
   private peerMarkerReplays = new Map<string, { isCurrent: () => boolean; task: Promise<void> }>()
+  private activePeerMarkerReplays = 0
+  private peerMarkerReplayWaiters: Array<() => void> = []
 
   /**
    * Record that an archive answered in the current session. Entries from an
@@ -3290,6 +3293,18 @@ export class MAM extends BaseModule {
     return message
   }
 
+  private async runPeerMarkerReplay(operation: () => Promise<void>): Promise<void> {
+    if (this.activePeerMarkerReplays < MAM_BACKGROUND_CONCURRENCY) this.activePeerMarkerReplays++
+    else await new Promise<void>(resolve => { this.peerMarkerReplayWaiters.push(resolve) })
+    try { await operation() }
+    finally {
+      const next = this.peerMarkerReplayWaiters.shift()
+      // Transfer the reserved slot directly, so new arrivals cannot jump ahead.
+      if (next) next()
+      else this.activePeerMarkerReplays--
+    }
+  }
+
   /** Cached edges can lie after every peer marker. Recover one latest page,
    * independent of forward catch-up, without timeline or coverage writes. */
   private async restorePeerMarkers(roomJid: string): Promise<void> {
@@ -3298,21 +3313,25 @@ export class MAM extends BaseModule {
       if (!replay.isCurrent()) this.peerMarkerReplays.delete(room)
     }
     const markers = this.deps.getRoomReadMarkers?.()
-    if (!markers) return
-    const eligible = await markers.ensureEligible(roomJid)
-    session.assertCurrent()
-    if (!eligible) return
+    if (!markers?.mayQualify(roomJid)) return
     const held = this.peerMarkerReplays.get(roomJid)
     if (held) return held.task
-    const task = Promise.resolve().then(async () => {
+    let queried = false
+    const task: Promise<void> = this.runPeerMarkerReplay(async () => {
       session.assertCurrent()
-      if (!markers.eligible(roomJid)) return
+      const eligible = await markers.ensureEligible(roomJid)
+      session.assertCurrent()
+      if (!eligible) return
+      queried = true
       const page = await this.queryOneArchivedEntry(roomJid, true, { before: '' }, MAM_CATCHUP_BACKWARD_MAX)
       session.assertCurrent()
       if (page.kind !== 'page') return
       // Only resident/cache targets have passed through their normal content
       // owners. Raw page rows have not been decrypted and are not candidates.
       await this.resolvePeerMarkers(roomJid, page.entries, [], { before: '' })
+    }).finally(() => {
+      // A queued room can stop qualifying; do not consume its page before a query.
+      if (!queried && this.peerMarkerReplays.get(roomJid)?.task === task) this.peerMarkerReplays.delete(roomJid)
     })
     this.peerMarkerReplays.set(roomJid, { isCurrent: session.isCurrent, task })
     await task

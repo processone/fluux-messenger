@@ -56,7 +56,8 @@ Live and archived markers share one validator and archive-ID resolver. Marker
 positions are separate from message data and local read state. After a fresh
 session, cached history in a qualifying room triggers at most one read-only page
 of the latest 50 archived stanzas to restore recent peer positions. Cached preview
-and catch-up share this page without waiting for recovery to finish. Recovery
+and catch-up share this page without waiting for recovery to finish. At most two
+recovery jobs run concurrently, including discovery and archive resolution. Recovery
 skips rooms the join already identifies as public, anonymous or too large. It
 resolves only resident or cached targets that passed normal content processing;
 newer offline rows remain the responsibility of ordinary catch-up. The recovery
