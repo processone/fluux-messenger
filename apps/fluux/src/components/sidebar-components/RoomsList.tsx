@@ -454,7 +454,7 @@ export const RoomItem = memo(function RoomItem({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             <div className="flex-1 min-w-0">
               {showTyping ? (
                 <TypingIndicator variant="compact" typingUsers={typingNicks} />

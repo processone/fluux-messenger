@@ -266,6 +266,9 @@ export const ConversationItem = memo(function ConversationItem({
   if (!conversation) return null
   const isGroupChat = conversation.type === 'groupchat'
   const avatarSize = densityMode === 'compact' ? 'sm' : 'md'
+  const hasPreview = !!conversation.lastMessage && isPreviewableMessage(conversation.lastMessage)
+  // Fit the name and empty preview's time within the existing compact avatar height.
+  const compactTimestampOnly = densityMode === 'compact' && !!conversation.lastMessage && !draft && !hasPreview
   const menuProps = getItemMenuProps(conversation)
   // While the long-press / context menu is open, highlight the targeted cell so
   // the user can clearly see which conversation the action will apply to.
@@ -365,15 +368,15 @@ export const ConversationItem = memo(function ConversationItem({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p dir="auto" className={`truncate ${conversation.unreadCount > 0 ? 'font-semibold text-fluux-text' : 'font-medium'}`}>{conversation.name}</p>
+            <p dir="auto" className={`truncate ${compactTimestampOnly ? 'leading-5' : ''} ${conversation.unreadCount > 0 ? 'font-semibold text-fluux-text' : 'font-medium'}`}>{conversation.name}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             <div className="flex-1 min-w-0">
               {draft ? (
                 <p className="truncate text-xs opacity-75 italic">
                   {t('conversations.draft')}: {draft}
                 </p>
-              ) : conversation.lastMessage && isPreviewableMessage(conversation.lastMessage) && (
+              ) : conversation.lastMessage && hasPreview && (
                 // A bodiless encrypted placeholder carries a timestamp but no
                 // preview; do not turn it into a blank "Me:" line.
                 <p dir="auto" className={`truncate text-xs opacity-75 ${conversation.lastMessage.isRetracted ? 'italic' : ''}`}>
@@ -384,7 +387,7 @@ export const ConversationItem = memo(function ConversationItem({
               )}
             </div>
             {conversation.lastMessage && (
-              <span className="text-xs text-fluux-muted flex-shrink-0 whitespace-nowrap">
+              <span className={`text-xs text-fluux-muted flex-shrink-0 whitespace-nowrap ${compactTimestampOnly ? 'leading-3' : ''}`}>
                 {formatConversationTime(conversation.lastMessage.timestamp, t, currentLang, timeFormat)}
               </span>
             )}
