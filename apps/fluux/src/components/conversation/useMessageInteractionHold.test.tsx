@@ -19,12 +19,12 @@ beforeEach(() => {
   document.body.append(container)
 })
 afterEach(() => { container.remove(); vi.useRealTimers(); vi.unstubAllGlobals() })
-function setup() {
+function setup(isFollowing = () => false) {
   const begin = vi.fn(() => true)
   const release = vi.fn()
   const scrollRef = { current: container }
   const hook = renderHook(({ conversationId }) => useMessageInteractionHold({
-    scrollRef, conversationId, enabled: true, begin, release,
+    scrollRef, conversationId, enabled: true, begin, release, isFollowing,
   }), { initialProps: { conversationId: 'emma@fluux.chat' } })
   return { ...hook, begin, release }
 }
@@ -358,5 +358,85 @@ describe('FLM-245 interaction cleanup', () => {
         expect(release).not.toHaveBeenCalled()
       }
     } finally { input.remove() }
+  })
+})
+
+// The selected drafting behavior distinguishes passive text from direct action hover.
+describe('following while drafting', () => {
+  let input: HTMLTextAreaElement
+  beforeEach(() => {
+    container.dataset.conversationColumn = ''
+    input = document.createElement('textarea')
+    input.className = 'message-input'
+    container.append(input)
+    input.focus()
+  })
+
+  it('does not acquire an anchor from message text at the live edge', () => {
+    const { begin, result } = setup(() => true)
+    moveIntoRow()
+    expect(document.activeElement).toBe(input)
+    expect(begin).not.toHaveBeenCalled()
+    expect(result.current.context.heldRow).toBeNull()
+  })
+
+  it('holds direct action hover, then releases on returning to text even after acquisition clears following', () => {
+    let following = true
+    const { result, release } = setup(() => following)
+    mouse('mousemove', document.body, 10, 10)
+    mouse('mousemove', action)
+    expect(result.current.context.heldRow).toBe(row)
+    following = false
+    mouse('mousemove', row, 110, 210)
+    act(() => vi.advanceTimersByTime(100))
+    expect(result.current.context.heldRow).toBeNull()
+    expect(release).toHaveBeenCalledWith(true)
+  })
+
+  it('does not hold an invisible toolbar while the composer is active', () => {
+    const { begin, result } = setup(() => true)
+    container.classList.add('composer-active')
+    mouse('mousemove', document.body, 10, 10)
+    mouse('mousemove', action)
+    expect(begin).not.toHaveBeenCalled()
+    expect(result.current.context.heldRow).toBeNull()
+  })
+
+  it('retains keyboard action focus even while the composing class is present', () => {
+    const { result } = setup(() => true)
+    container.classList.add('composer-active')
+    fireEvent.keyDown(action, { key: 'Tab' })
+    act(() => action.focus())
+    expect(result.current.context.heldRow).toBe(row)
+  })
+
+  it('retains ordinary row hover while reading away from latest', () => {
+    const { result } = setup(() => false)
+    moveIntoRow()
+    expect(result.current.context.heldRow).toBe(row)
+  })
+
+  it('does not treat an editor in another conversation column as this list composer', () => {
+    const other = document.createElement('div')
+    other.dataset.conversationColumn = ''
+    document.body.append(other)
+    other.append(input)
+    try {
+      input.focus()
+      const { result } = setup(() => true)
+      moveIntoRow()
+      expect(result.current.context.heldRow).toBe(row)
+    } finally { other.remove() }
+  })
+
+  it('keeps an open menu held when the pointer returns to text', () => {
+    const { result, release } = setup(() => true)
+    mouse('mousemove', document.body, 10, 10)
+    mouse('mousemove', action)
+    act(() => result.current.context.setMenuOpen(row.dataset.messageRowId!, true, vi.fn()))
+    mouse('mousemove', row, 110, 210)
+    act(() => vi.advanceTimersByTime(200))
+    expect(result.current.context.heldRow).toBe(row)
+    expect(release).not.toHaveBeenCalled()
   })
 })
