@@ -448,47 +448,48 @@ export const RoomItem = memo(function RoomItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p dir="auto" className={`truncate ${room.unreadCount > 0 ? 'font-semibold text-fluux-text' : 'font-medium'}`}>{room.name}</p>
-            <div className="ms-auto flex flex-shrink-0 items-center gap-2">
-              {/* Timestamp */}
-              {lastMessage && (
-                <span className="text-xs text-fluux-muted">
-                  {formatConversationTime(lastMessage.timestamp, t, currentLang, timeFormat)}
-                </span>
-              )}
-              {room.mentionsCount > 0 && (
-                <span role="img" aria-label={t('rooms.mentionsCount', { count: room.mentionsCount })} className="min-w-5 h-5 px-1.5 bg-fluux-badge-strong text-white text-xs font-bold rounded-full flex-shrink-0 flex items-center justify-center">
-                  @{room.mentionsCount}
-                </span>
+            {room.mentionsCount > 0 && (
+              <span role="img" aria-label={t('rooms.mentionsCount', { count: room.mentionsCount })} className="min-w-5 h-5 px-1.5 bg-fluux-badge-strong text-white text-xs font-bold rounded-full flex-shrink-0 flex items-center justify-center">
+                @{room.mentionsCount}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              {showTyping ? (
+                <TypingIndicator variant="compact" typingUsers={typingNicks} />
+              ) : (
+                <p dir="auto" className={`truncate text-xs opacity-75 ${draft ? 'italic' : ''}`}>
+                  {draft ? (
+                    <>{t('conversations.draft')}: {draft}</>
+                  ) : room.isJoining ? (
+                    <span className="italic">{t('rooms.joining')}</span>
+                  ) : lastMessage ? (
+                    <span className={lastMessage.isRetracted ? 'italic' : ''}>
+                      {lastMessage.isOutgoing ? `${t('chat.me')}: ` : `${lastMessage.nick}: `}
+                      {formatLocalizedPreview(lastMessage, t)}
+                    </span>
+                  ) : room.joined ? (
+                    room.subject ? (
+                      <span className="text-fluux-muted">{room.subject}</span>
+                    ) : (
+                      <span className="text-fluux-muted italic">{t('rooms.noMessages')}</span>
+                    )
+                  ) : (
+                    <>
+                      {room.nickname && t('rooms.asNickname', { nickname: room.nickname })}
+                      {room.autojoin && ` • ${t('rooms.autoJoin')}`}
+                    </>
+                  )}
+                </p>
               )}
             </div>
+            {lastMessage && (
+              <span className="text-xs text-fluux-muted flex-shrink-0 whitespace-nowrap">
+                {formatConversationTime(lastMessage.timestamp, t, currentLang, timeFormat)}
+              </span>
+            )}
           </div>
-          {showTyping ? (
-            <TypingIndicator variant="compact" typingUsers={typingNicks} />
-          ) : (
-            <p dir="auto" className={`truncate text-xs opacity-75 ${draft ? 'italic' : ''}`}>
-              {draft ? (
-                <>{t('conversations.draft')}: {draft}</>
-              ) : room.isJoining ? (
-                <span className="italic">{t('rooms.joining')}</span>
-              ) : lastMessage ? (
-                <span className={lastMessage.isRetracted ? 'italic' : ''}>
-                  {lastMessage.isOutgoing ? `${t('chat.me')}: ` : `${lastMessage.nick}: `}
-                  {formatLocalizedPreview(lastMessage, t)}
-                </span>
-              ) : room.joined ? (
-                room.subject ? (
-                  <span className="text-fluux-muted">{room.subject}</span>
-                ) : (
-                  <span className="text-fluux-muted italic">{t('rooms.noMessages')}</span>
-                )
-              ) : (
-                <>
-                  {room.nickname && t('rooms.asNickname', { nickname: room.nickname })}
-                  {room.autojoin && ` • ${t('rooms.autoJoin')}`}
-                </>
-              )}
-            </p>
-          )}
         </div>
         </div>
       </Tooltip>

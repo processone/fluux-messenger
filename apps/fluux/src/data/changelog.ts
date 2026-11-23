@@ -38,6 +38,7 @@ export const changelog: ChangelogEntry[] = [
     }, {
       type: 'changed',
       items: [
+        'Messages and Rooms give names the first line and show the time beside the preview instead, so more of each name fits without widening the sidebar. Room mentions stay by the name and unread counts stay on the avatar',
         'Fluux has a refreshed look: the icon rail, sidebar and app bar form one frame with the conversation floating inside it as a rounded panel, the composer lifts off the message list, and messages dissolve under the header and above the composer instead of being cut at a hard edge. Day separators and reaction chips are drawn as pills, your own reactions are tinted, titles follow a clear size hierarchy, and the scroll bar thumb hides about a second after you stop scrolling while its strip stays',
         'Messages from you and from other people now share one flat layout, with a single header per run from the same sender instead of a tinted bubble for your own. A message in a run whose encryption trust differs from its header shows a shield in the gutter, swapping for the timestamp on hover',
         'Settings, contact profiles and the server overview now group their rows in filled cards on a wider column, each page carrying a one-line description under its title, instead of outlined boxes in a narrow one. Settings → Encryption opens an overview with a row for OpenPGP and one for OMEMO, each on its own screen with a back arrow',

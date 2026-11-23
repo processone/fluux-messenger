@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import type { Room } from '@fluux/sdk'
+import { formatConversationTime } from '@/utils/dateFormat'
+
+// Approved sidebar design: timestamps follow previews; mentions stay by names.
+// This DOM test owns slot membership. Browser geometry owns actual fit.
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
@@ -130,8 +134,8 @@ describe('RoomItem tooltip', () => {
 })
 
 describe('RoomItem unread indicators', () => {
-  it('keeps the unread count on the avatar and the timestamp at the metadata edge', () => {
-    const { container } = renderRoom(makeRoom({
+  it('keeps the unread count on the avatar and the timestamp after the preview', () => {
+    const room = makeRoom({
       unreadCount: 37,
       mentionsCount: 0,
       lastMessage: {
@@ -145,20 +149,23 @@ describe('RoomItem unread indicators', () => {
         isOutgoing: false,
         nick: 'alice',
       },
-    }))
+    })
+    renderRoom(room)
 
-    const metadata = container.querySelector('.ms-auto') as HTMLElement
-    const timestamp = metadata.querySelector('.text-xs') as HTMLElement
+    const timestamp = screen.getByText(formatConversationTime(room.lastMessage!.timestamp, (key: string) => key, 'en', '24h'))
+    const preview = screen.getByText(/hello/)
+    const name = screen.getByText(room.name)
     const badge = screen.getByText('37')
 
     expect(timestamp).not.toBeNull()
-    expect(metadata.contains(badge)).toBe(false)
-    expect(metadata.querySelector('.bg-fluux-gray')).toBeNull()
+    expect(timestamp.parentElement!.contains(preview)).toBe(true)
+    expect(timestamp.parentElement!.contains(badge)).toBe(false)
+    expect(name.parentElement!.contains(timestamp)).toBe(false)
     expect(badge).toHaveClass('absolute', 'rounded-full')
   })
 
-  it('renders the mention-count badge after the timestamp in the same metadata slot', () => {
-    const { container } = renderRoom(makeRoom({
+  it('keeps the mention count beside the name, separate from the preview timestamp', () => {
+    const room = makeRoom({
       unreadCount: 37,
       mentionsCount: 3,
       lastMessage: {
@@ -172,14 +179,16 @@ describe('RoomItem unread indicators', () => {
         isOutgoing: false,
         nick: 'alice',
       },
-    }))
+    })
+    renderRoom(room)
 
-    const metadata = container.querySelector('.ms-auto') as HTMLElement
-    const timestamp = metadata.querySelector('.text-xs') as HTMLElement
+    const timestamp = screen.getByText(formatConversationTime(room.lastMessage!.timestamp, (key: string) => key, 'en', '24h'))
+    const preview = screen.getByText(/hello/)
+    const name = screen.getByText(room.name)
     const badge = screen.getByText('@3')
 
-    expect(metadata.contains(badge)).toBe(true)
-    expect(timestamp.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(metadata.querySelector('.size-3')).toBeNull()
+    expect(name.parentElement!.contains(badge)).toBe(true)
+    expect(name.parentElement!.contains(timestamp)).toBe(false)
+    expect(timestamp.parentElement!.contains(preview)).toBe(true)
   })
 })
