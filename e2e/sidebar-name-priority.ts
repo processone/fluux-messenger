@@ -11,7 +11,7 @@ type DemoWindow = Window & {
   __demoClient: DemoClient
   __chatStore: typeof chatStore
   __roomStore: typeof roomStore
-  __settingsStore: { getState: () => { setThemeMode: (mode: 'light' | 'dark') => void; setTimeFormat: (format: '12h' | '24h') => void } }
+  __settingsStore: { getState: () => { setThemeMode: (mode: 'light' | 'dark') => void; setTimeFormat: (format: '12h' | '24h') => void; setFontSize: (size: number) => void } }
   __themeStore: { getState: () => { setActiveTheme: (id: string) => void } }
   __i18n: { changeLanguage: (language: string) => Promise<unknown> }
 }
@@ -124,6 +124,26 @@ for (const mode of ['light', 'dark'] as const) {
       await test.info().attach(`${view}-${mode}-geometry`, { body: JSON.stringify(measured, null, 2), contentType: 'application/json' })
       await capture(page, `${view}-${mode}`)
     }
+    // The captain's narrow-only exception must not hide default-width times
+    // when the existing text-size setting is increased.
+    const baseFont = await page.locator('html').evaluate(element => parseFloat(getComputedStyle(element).fontSize))
+    const largerTextReadings = []
+    for (const size of [105, 120]) {
+      await page.evaluate(size => (window as unknown as DemoWindow).__settingsStore.getState().setFontSize(size), size)
+      await expect.poll(() => page.locator('html').evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeCloseTo(baseFont * size / 100, 3)
+      for (const view of ['messages', 'rooms'] as const) {
+        await page.locator(`[data-nav="${view}"]`).click()
+        await expect(page.locator('aside')).toHaveCSS('width', '288px')
+        for (const row of await rows(page, view).all()) {
+          const reading = await geometry(row, false)
+          expect(reading.timeVisible).toBe(true)
+          largerTextReadings.push({ size, view, ...reading })
+        }
+      }
+    }
+    await test.info().attach(`${mode}-larger-text`, { body: JSON.stringify(largerTextReadings, null, 2), contentType: 'application/json' })
+    await page.evaluate(() => (window as unknown as DemoWindow).__settingsStore.getState().setFontSize(100))
+    await expect.poll(() => page.locator('html').evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeCloseTo(baseFont, 3)
     // A name's script direction must not move it away from the avatar.
     await page.locator('[data-nav="messages"]').click()
     const row = rows(page, 'messages').first()
