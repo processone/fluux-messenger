@@ -63,6 +63,17 @@ function createRoomMessage(roomJid: string, overrides: Partial<RoomMessage> = {}
   }
 }
 
+/**
+ * Put the open database back in the state of one not yet copied to the time-sorted
+ * index: a search then reads the old posting lists, as an upgraded database does.
+ */
+async function useOldLists(scope = 'test@example.com') {
+  await initSearchIndex(scope)
+  const db = await openDB(`fluux-search-index:${scope}`)
+  await db.delete('search-meta', 'postings-ready')
+  db.close()
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -188,7 +199,8 @@ describe('searchIndex', () => {
     })
 
     it('should read a legacy document without optional identity fields', async () => {
-      await initSearchIndex('test@example.com')
+      // A legacy document has no time-sorted rows, so only the old lists find it.
+      await useOldLists()
       const db = await openDB('fluux-search-index:test@example.com')
       const tx = db.transaction(['search-tokens', 'search-docs'], 'readwrite')
       await tx.objectStore('search-docs').put({
@@ -369,7 +381,14 @@ describe('searchIndex', () => {
     })
   })
 
-  describe('scoped searches read only what can appear', () => {
+  // Both read paths owe the same scoped answers; only the old lists are pinned to
+  // how they read, because the time-sorted path reads differently by design.
+  describe.each([
+    { path: 'old lists', old: true },
+    { path: 'time-sorted index', old: false },
+  ])('scoped searches read only what can appear ($path)', ({ old }) => {
+    beforeEach(async () => { if (old) await useOldLists() })
+
     async function seed() {
       for (let i = 0; i < 60; i++) {
         await indexMessage(createChatMessage(i % 2 ? 'alice@example.com' : 'bob@example.com', {
@@ -396,7 +415,7 @@ describe('searchIndex', () => {
       expect(rooms[0].isRoom).toBe(true)
     })
 
-    it('never fetches a document outside the conversation or type filter', async () => {
+    it.runIf(old)('never fetches a document outside the conversation or type filter', async () => {
       await seed()
       const fetched: string[] = []
       const get = IDBObjectStore.prototype.get
@@ -467,7 +486,7 @@ describe('searchIndex', () => {
       vi.restoreAllMocks()
     })
 
-    it('probes one rare candidate without enumerating the conversation', async () => {
+    it.runIf(old)('probes one rare candidate without enumerating the conversation', async () => {
       for (let i = 0; i < 80; i++) {
         await indexMessage(createChatMessage('alice@example.com', {
           id: `busy-${i}`, body: `ordinary chatter ${i}`,

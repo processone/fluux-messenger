@@ -8,7 +8,7 @@
  * @module SearchIndex
  */
 
-import { openDB, type IDBPDatabase, type IDBPTransaction, type DBSchema } from 'idb'
+import { openDB, type IDBPDatabase, type IDBPObjectStore, type IDBPTransaction, type DBSchema } from 'idb'
 import { openGuarded } from './idbConnection'
 import type { Message, RoomMessage } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
@@ -1104,8 +1104,9 @@ export async function updateMessage(
 /**
  * Search for messages matching the query.
  *
- * Tokenizes the query, looks up posting lists for each term, intersects them,
- * and returns matching documents sorted by timestamp (newest first).
+ * Tokenizes the query and returns matching documents sorted by timestamp (newest
+ * first). Once the time-sorted index is ready it walks that index newest first and
+ * stops at the limit; until then it intersects the old posting lists.
  *
  * Supports quoted phrases: `"exact phrase"` requires the phrase to appear
  * contiguously in the message body. Unquoted terms use AND matching with
@@ -1131,6 +1132,11 @@ export async function search(
   const scopeJid = getStorageScopeJid()
   await ensureRetractionLedger(scopeJid)
   const db = await getDB(scopeJid)
+  // The time-sorted index answers only once it holds every document; until then
+  // the old lists do, so a half-copied index can never hide a message.
+  if ((await db.get(META_STORE, POSTINGS_READY_KEY)) !== undefined) {
+    return searchTimeSorted(db, parsed, uniqueAllTokens, limit, options, scopeJid)
+  }
   const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readonly')
   const tokensStore = tx.objectStore(TOKENS_STORE)
   const docsStore = tx.objectStore(DOCS_STORE)
@@ -1234,30 +1240,30 @@ export async function search(
 
   // Judge retractions newest first and stop once the limit is filled: the cache
   // is read for the documents that can appear, not for every match.
-  const toMessage = (doc: DocEntry): Message | RoomMessage => {
-    const fields = {
-      id: doc.messageId ?? doc.indexId.replace(/^(chat:|room:)/, ''),
-      from: doc.from,
-      body: doc.body,
-      timestamp: new Date(doc.timestamp),
-      stanzaId: doc.stanzaId,
-      originId: doc.originId,
-      isOutgoing: doc.isOutgoing ?? false,
-      isDelayed: doc.isDelayed,
-      ...(doc.receivedAt !== undefined ? { receivedAt: new Date(doc.receivedAt) } : {}),
-    }
-    return doc.isRoom
-      ? { ...fields, type: 'groupchat', roomJid: doc.conversationId,
-        nick: doc.nick ?? doc.from.split('/')[1], occupantId: doc.occupantId }
-      : { ...fields, type: 'chat', conversationId: doc.conversationId }
-  }
   const limited: DocEntry[] = []
   const retracted: (Message | RoomMessage)[] = []
+  await takeUnretracted(scoped, limited, retracted, limit, scopeJid)
+  await removeRetracted(retracted, scopeJid)
+  return limited.map(docToResult)
+}
+
+/**
+ * Take documents newest first until the limit is filled, setting aside the ones a
+ * retraction says are gone. The cache is read for the documents that can appear,
+ * not for every match. Shared by both search paths, so both keep the same check.
+ */
+async function takeUnretracted(
+  candidates: DocEntry[],
+  limited: DocEntry[],
+  retracted: (Message | RoomMessage)[],
+  limit: number,
+  scopeJid: string | null,
+): Promise<void> {
   const CHUNK_MIN = 25
-  for (let start = 0; start < scoped.length && limited.length < limit;) {
-    const chunk = scoped.slice(start, start + Math.max(limit - limited.length, CHUNK_MIN))
+  for (let start = 0; start < candidates.length && limited.length < limit;) {
+    const chunk = candidates.slice(start, start + Math.max(limit - limited.length, CHUNK_MIN))
     start += chunk.length
-    const messages = chunk.map(toMessage)
+    const messages = chunk.map(docToMessage)
     const cachedRetractions = await messageCache.areRetractedInCache(messages, scopeJid)
     for (const [index, doc] of chunk.entries()) {
       const message = messages[index]
@@ -1268,7 +1274,10 @@ export async function search(
       }
     }
   }
+}
 
+/** Drop the documents of retracted messages that a search turned up. */
+async function removeRetracted(retracted: (Message | RoomMessage)[], scopeJid: string | null): Promise<void> {
   for (const message of retracted) {
     try {
       await removeMessage(message, scopeJid, message.type === 'groupchat'
@@ -1277,29 +1286,201 @@ export async function search(
       console.warn('Failed to remove a retracted search document:', error)
     }
   }
+}
 
-  return limited.map((doc) => {
-    // Derive nick: prefer stored nick, fall back to resource part of occupant JID
-    const nick = doc.nick ?? (doc.isRoom ? doc.from.split('/')[1] : undefined)
-    return {
-      indexId: doc.indexId,
-      messageId: doc.messageId ?? doc.indexId.replace(/^(chat:|room:)/, ''),
-      conversationId: doc.conversationId,
-      from: doc.from,
-      ...(nick ? { nick } : {}),
-      timestamp: doc.timestamp,
-      isRoom: doc.isRoom,
-      body: doc.body,
-      // Stated unconditionally, not spread conditionally: the result type requires
-      // them so a future edit cannot drop a tier and leave the document ownerless.
-      stanzaId: doc.stanzaId,
-      originId: doc.originId,
-      occupantId: doc.occupantId,
-      ...(doc.isDelayed ? { isDelayed: true } : {}),
-      ...(doc.isOutgoing ? { isOutgoing: true } : {}),
-      ...(doc.receivedAt !== undefined ? { receivedAt: doc.receivedAt } : {}),
+// =============================================================================
+// Search on the time-sorted index
+// =============================================================================
+
+/** A conversation this small is read whole and matched in memory. */
+const SMALL_CONVERSATION_DOCS = 5000
+/** Candidates read per page, and the most a page grows to when few survive. */
+const SEARCH_PAGE_START = 128
+const SEARCH_PAGE_MAX = 1024
+/** Other exact words checked by key lookups, this many at a time. */
+const LOOKUP_BATCH = 128
+
+/** Position in key order: negative time, then document number. */
+interface SearchPosition { negTime: number; docNo: number }
+
+function postingRange(token: string, after?: SearchPosition): IDBKeyRange {
+  const top: PostingKey = [token, Infinity, Infinity]
+  return after
+    ? IDBKeyRange.bound([token, after.negTime, after.docNo], top, true, false)
+    : IDBKeyRange.bound([token, -Infinity, -Infinity], top)
+}
+
+/** Every distinct token starting with the prefix, by jumping past each one's rows. */
+async function expandPrefix(
+  rows: IDBPObjectStore<SearchIndexSchema, ['search-docs', 'search-postings'], 'search-postings', 'readonly'>,
+  prefix: string,
+): Promise<string[]> {
+  const tokens: string[] = []
+  let cursor = await rows.openKeyCursor(IDBKeyRange.bound([prefix], [prefix + '\uffff']))
+  while (cursor) {
+    const token = cursor.key[0]
+    tokens.push(token)
+    cursor = await cursor.continue([token + '\u0000', -Infinity, -Infinity])
+  }
+  return tokens
+}
+
+async function searchTimeSorted(
+  db: IDBPDatabase<SearchIndexSchema>,
+  parsed: ParsedQuery,
+  uniqueAllTokens: string[],
+  limit: number,
+  options: { conversationId?: string; isRoom?: boolean } | undefined,
+  scopeJid: string | null,
+): Promise<SearchIndexResult[]> {
+  const prefixToken = parsed.lastTermPrefix ? parsed.terms[parsed.terms.length - 1] : null
+  const exactTokens = prefixToken ? uniqueAllTokens.filter((t) => t !== prefixToken) : uniqueAllTokens
+  const phrases = parsed.phrases.map((phrase) => phrase.toLowerCase())
+  const keeps = (doc: DocEntry): boolean => {
+    if (options?.conversationId && doc.conversationId !== options.conversationId) return false
+    if (options?.isRoom !== undefined && doc.isRoom !== options.isRoom) return false
+    if (phrases.length === 0) return true
+    const bodyLower = doc.body.toLowerCase()
+    return phrases.every((phrase) => bodyLower.includes(phrase))
+  }
+
+  const limited: DocEntry[] = []
+  const retracted: (Message | RoomMessage)[] = []
+  const judge = (docs: DocEntry[]) => takeUnretracted(docs, limited, retracted, limit, scopeJid)
+
+  // A small conversation is cheaper to read whole than to walk word by word.
+  let small: DocEntry[] | undefined
+  if (options?.conversationId) {
+    const range = IDBKeyRange.only(options.conversationId)
+    const tx = db.transaction([DOCS_STORE], 'readonly')
+    const index = tx.objectStore(DOCS_STORE).index('conversationId')
+    if (await index.count(range) <= SMALL_CONVERSATION_DOCS) small = await index.getAll(range)
+    await tx.done
+  }
+
+  if (small) {
+    const matches = small.filter((doc) =>
+      keeps(doc) &&
+      exactTokens.every((token) => doc.tokens.includes(token)) &&
+      (prefixToken === null || doc.tokens.some((token) => token.startsWith(prefixToken))))
+    const time = (doc: DocEntry) => (Number.isFinite(doc.timestamp) ? doc.timestamp : 0)
+    matches.sort((a, b) => time(b) - time(a) || (a.docNo ?? 0) - (b.docNo ?? 0))
+    await judge(matches)
+  } else {
+    let after: SearchPosition | undefined
+    let pageSize = SEARCH_PAGE_START
+    let plan: { tokens: string[]; count: number }[] | undefined
+    while (limited.length < limit) {
+      const tx = db.transaction([DOCS_STORE, POSTINGS_STORE], 'readonly')
+      void tx.done.catch(() => {})
+      const rows = tx.objectStore(POSTINGS_STORE)
+      const docs = tx.objectStore(DOCS_STORE)
+
+      // The driving side is the one with the fewest rows; the rest are lookups.
+      // Worked out once: later pages reuse it.
+      if (!plan) {
+        const prefixTokens = prefixToken ? await expandPrefix(rows, prefixToken) : []
+        const sides: { tokens: string[]; count: number }[] = []
+        for (const token of exactTokens) sides.push({ tokens: [token], count: await rows.count(postingRange(token)) })
+        if (prefixToken) {
+          let count = 0
+          for (const token of prefixTokens) count += await rows.count(postingRange(token))
+          sides.push({ tokens: prefixTokens, count })
+        }
+        sides.sort((a, b) => a.count - b.count)
+        plan = sides
+      }
+      if (plan.some((side) => side.count === 0)) { await tx.done; break }
+      const [driver, ...others] = plan
+
+      // The next page of the driving side, merged newest first.
+      const positions: PostingKey[] = []
+      for (const token of driver.tokens) {
+        positions.push(...await rows.getAllKeys(postingRange(token, after), pageSize))
+      }
+      positions.sort((a, b) => a[1] - b[1] || a[2] - b[2])
+      const page = positions.filter((key, i) => i === 0 || key[1] !== positions[i - 1][1] || key[2] !== positions[i - 1][2])
+        .slice(0, pageSize)
+      if (page.length === 0) { await tx.done; break }
+
+      let survivors = page
+      for (const side of others) {
+        const kept: PostingKey[] = []
+        for (let i = 0; i < survivors.length; i += LOOKUP_BATCH) {
+          const batch = survivors.slice(i, i + LOOKUP_BATCH)
+          const found = await Promise.all(batch.map(async (key) => {
+            for (const token of side.tokens) {
+              if (await rows.getKey([token, key[1], key[2]]) !== undefined) return true
+            }
+            return false
+          }))
+          kept.push(...batch.filter((_, j) => found[j]))
+        }
+        survivors = kept
+        if (survivors.length === 0) break
+      }
+
+      const matches: DocEntry[] = []
+      const numbers = docs.index('docNo')
+      for (const key of survivors) {
+        const doc = await numbers.get(key[2])
+        if (doc && keeps(doc)) matches.push(doc)
+      }
+      await tx.done
+
+      const last = page[page.length - 1]
+      after = { negTime: last[1], docNo: last[2] }
+      const exhausted = page.length < pageSize
+      // The retraction check leaves this transaction; the next page opens its own.
+      await judge(matches)
+      if (exhausted) break
+      if (matches.length < limit) pageSize = Math.min(pageSize * 2, SEARCH_PAGE_MAX)
     }
-  })
+  }
+
+  await removeRetracted(retracted, scopeJid)
+  return limited.map(docToResult)
+}
+
+function docToMessage(doc: DocEntry): Message | RoomMessage {
+  const fields = {
+    id: doc.messageId ?? doc.indexId.replace(/^(chat:|room:)/, ''),
+    from: doc.from,
+    body: doc.body,
+    timestamp: new Date(doc.timestamp),
+    stanzaId: doc.stanzaId,
+    originId: doc.originId,
+    isOutgoing: doc.isOutgoing ?? false,
+    isDelayed: doc.isDelayed,
+    ...(doc.receivedAt !== undefined ? { receivedAt: new Date(doc.receivedAt) } : {}),
+  }
+  return doc.isRoom
+    ? { ...fields, type: 'groupchat', roomJid: doc.conversationId,
+      nick: doc.nick ?? doc.from.split('/')[1], occupantId: doc.occupantId }
+    : { ...fields, type: 'chat', conversationId: doc.conversationId }
+}
+
+function docToResult(doc: DocEntry): SearchIndexResult {
+  // Derive nick: prefer stored nick, fall back to resource part of occupant JID
+  const nick = doc.nick ?? (doc.isRoom ? doc.from.split('/')[1] : undefined)
+  return {
+    indexId: doc.indexId,
+    messageId: doc.messageId ?? doc.indexId.replace(/^(chat:|room:)/, ''),
+    conversationId: doc.conversationId,
+    from: doc.from,
+    ...(nick ? { nick } : {}),
+    timestamp: doc.timestamp,
+    isRoom: doc.isRoom,
+    body: doc.body,
+    // Stated unconditionally, not spread conditionally: the result type requires
+    // them so a future edit cannot drop a tier and leave the document ownerless.
+    stanzaId: doc.stanzaId,
+    originId: doc.originId,
+    occupantId: doc.occupantId,
+    ...(doc.isDelayed ? { isDelayed: true } : {}),
+    ...(doc.isOutgoing ? { isOutgoing: true } : {}),
+    ...(doc.receivedAt !== undefined ? { receivedAt: doc.receivedAt } : {}),
+  }
 }
 
 // =============================================================================
