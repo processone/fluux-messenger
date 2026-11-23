@@ -256,8 +256,8 @@ export interface UseMessageListScrollResult {
   observeKeyboardNavigation: (conversationId: string) => void
   /** The list-owned at-bottom flag, read on demand. The flag itself never leaves the hook. */
   isAtBottom: () => boolean
-  /** Exact bottom in the last observed viewport, before pending layout changes. */
-  isAtObservedBottom: () => boolean
+  /** Latest in the last observed viewport, including catch-up owned by the bottom pin. */
+  isFollowingLatest: () => boolean
   /** A keyboard selection moves the view: the reader is no longer at the live edge. */
   assumeAwayFromBottomForKeyboard: () => void
   reassertUnreadMarker: () => void
@@ -2604,10 +2604,10 @@ export function useMessageListScroll({
     interactionMenuOpen,
     observeKeyboardNavigation,
     isAtBottom: () => isAtBottomRef.current,
-    isAtObservedBottom: () => {
+    isFollowingLatest: () => {
       const geometry = engine.session.snapshotFor(conversationId)?.geometry
-      return windowAtLiveEdge !== false && !!geometry && geometry.height >= geometry.client &&
-        geometry.height - geometry.client - geometry.top <= 1
+      return windowAtLiveEdge !== false && (pinBottomClaim().isHeld() ||
+        (!!geometry && geometry.height >= geometry.client && geometry.height - geometry.client - geometry.top <= 1))
     },
     assumeAwayFromBottomForKeyboard: assumeAwayFromBottom,
     reassertUnreadMarker,

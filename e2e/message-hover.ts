@@ -1044,3 +1044,62 @@ for (const kind of ['chat', 'room'] as const) {
     await keepJson('drafting-hidden-toolbar', await readInteractionView(page))
   })
 }
+
+// Native pointer movement must not take ownership while a live-edge pin absorbs row growth.
+for (const kind of ['chat', 'room'] as const) {
+  test(`${kind}: focused drafting keeps following while the pointer moves during row growth`, async ({ page }) => {
+    const { list } = await setupInteraction(page, kind)
+    const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
+    await input.focus()
+    const point = await list.evaluate(list => {
+      const view = list.getBoundingClientRect()
+      const text = [...list.querySelectorAll('[data-msg-text]')].find(text => {
+        const box = text.getBoundingClientRect()
+        return box.top > view.top + 40 && box.bottom < view.bottom - 40
+      })!.getBoundingClientRect()
+      return { x: text.left + 40, y: text.top + text.height / 2 }
+    })
+    await page.evaluate(() => {
+      const scope = window as Window & { __draftingMotion?: { trusted: boolean; overMessage: boolean; height: number; distance: number; held: string | null }[]; __draftingMotionStop?: () => void }
+      scope.__draftingMotion = []
+      const record = (event: MouseEvent) => {
+        const list = document.querySelector('[data-message-list]')!
+        scope.__draftingMotion!.push({ trusted: event.isTrusted,
+          overMessage: event.target instanceof Element && !!event.target.closest('[data-message-body]'),
+          height: list.scrollHeight, distance: list.scrollHeight - list.scrollTop - list.clientHeight,
+          held: list.getAttribute('data-message-interaction') })
+      }
+      window.addEventListener('mousemove', record, true)
+      scope.__draftingMotionStop = () => window.removeEventListener('mousemove', record, true)
+    })
+    try {
+      await Promise.all([
+        (async () => {
+          for (let frame = 0; frame < 24; frame++) {
+            await page.mouse.move(point.x + (frame % 2) * 80, point.y)
+            await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())))
+          }
+        })(),
+        page.evaluate(async ({ kind, target }) => {
+          const c = (window as unknown as { __demoClient: DemoClient }).__demoClient
+          for (let lines = 1; lines <= 12; lines++) {
+            await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+            const updates = { body: 'Notes on the bookmarks proposal.\n' + Array.from({ length: lines }, (_, i) => `${i + 1}. Keep the latest discussion visible while a reply is drafted.`).join('\n') }
+            if (kind === 'chat') c.emitSDK('chat:message-updated', { conversationId: 'emma@fluux.chat', messageId: target, updates })
+            else c.emitSDK('room:message-updated', { roomJid: 'team@conference.fluux.chat', messageId: target, updates })
+          }
+        }, { kind, target: TARGET }),
+      ])
+    } finally {
+      await page.evaluate(() => (window as Window & { __draftingMotionStop?: () => void }).__draftingMotionStop?.())
+    }
+    const samples = await page.evaluate(() => (window as Window & { __draftingMotion?: { trusted: boolean; overMessage: boolean; height: number; distance: number; held: string | null }[] }).__draftingMotion!)
+    await keepJson('drafting-moving-pointer', samples)
+    expect(samples.filter(sample => sample.trusted && sample.overMessage).length).toBeGreaterThan(1)
+    expect(Math.max(...samples.map(sample => sample.height))).toBeGreaterThan(Math.min(...samples.map(sample => sample.height)))
+    expect(samples.every(sample => sample.held === null), 'passive motion must never acquire an anchor').toBe(true)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await expect(input).toBeFocused()
+  })
+}
