@@ -1723,6 +1723,9 @@ export const RoomMessageInput = memo(function RoomMessageInput({
 
   // Mention state
   const [cursorPosition, setCursorPosition] = useState(0)
+  // Only an editor edit opens mentions. Bind its caret to that exact text so a
+  // restored/prefilled draft or a later selection report cannot become a query.
+  const [mentionInput, setMentionInput] = useState<{ text: string; position: number } | null>(null)
   const composerRef = useRef<MessageComposerHandle>(null)
 
   // Forward ref to parent for focus after staging attachment
@@ -1807,7 +1810,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   // Mention autocomplete hook
   const { state: mentionState, selectMatch, moveSelection, dismiss } = useMentionAutocomplete(
     text,
-    cursorPosition,
+    mentionInput?.text === text ? mentionInput.position : null,
     occupants,
     roomNickname,
     roomJid,
@@ -2153,8 +2156,20 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         ariaProps={inputAriaProps}
         mergedRef={mergedRef}
         onEdit={handleEditorEdit}
-        onChange={onChange}
-        onSelect={onSelect ?? noopSelect}
+        onChange={(e) => {
+          setMentionInput({ text: e.target.value, position: e.target.selectionStart })
+          onChange(e)
+        }}
+        onSelect={(e) => {
+          const { value: selectedText, selectionStart: position, selectionEnd } = e.currentTarget
+          // A duplicate report for the edit's own collapsed caret is not a new move.
+          setMentionInput(previous =>
+            previous?.text === selectedText && previous.position === position && position === selectionEnd
+              ? previous
+              : null
+          )
+          onSelect?.(e)
+        }}
         onKeyDown={handleKeyDown}
         onPaste={onPaste}
       />
@@ -2319,5 +2334,3 @@ function RoomJoinPrompt({
     </div>
   )
 }
-
-const noopSelect = () => {}
