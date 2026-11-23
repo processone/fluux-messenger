@@ -264,6 +264,7 @@ export class MAM extends BaseModule {
   readonly correctionReceipts = new CorrectionReceipts(this.deps)
   private correctionQueries = new Map<string, CorrectionReconciliation>()
   private observedArchives = new Map<string, () => boolean>()
+  private peerMarkerReplays = new Map<string, { isCurrent: () => boolean; task: Promise<void> }>()
 
   /**
    * Record that an archive answered in the current session. Entries from an
@@ -1933,6 +1934,9 @@ export class MAM extends BaseModule {
     messages: Array<{ timestamp?: Date; stanzaId?: string }>,
     options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
   ): Promise<void> {
+    const session = this.captureQuery()
+    if (messages.length) await this.restorePeerMarkers(roomJid)
+    session.assertCurrent()
     const endUpdate = this.deps.stores?.connection?.beginUpdate?.([`room:${roomJid}`, 'rooms'])
     await this.runCatchUpHistory(messages, options, {
       label: roomJid,
@@ -2434,7 +2438,10 @@ export class MAM extends BaseModule {
       // The delayed background room catch-up will correct the preview later if stale.
       const cached = await this.deps.stores?.room.loadPreviewFromCache(roomJid)
       session.assertCurrent()
-      if (cached) return
+      if (cached) {
+        await this.restorePeerMarkers(roomJid)
+        return
+      }
 
       const queryId = `preview_${generateUUID()}`
 
@@ -3283,6 +3290,37 @@ export class MAM extends BaseModule {
     }
     badgeMessageKey(message, messageEl)
     return message
+  }
+
+  /** Cached edges can lie after every peer marker. Recover one latest page,
+   * independent of forward catch-up, without timeline or coverage writes. */
+  private async restorePeerMarkers(roomJid: string): Promise<void> {
+    const session = this.captureQuery()
+    for (const [room, replay] of this.peerMarkerReplays) {
+      if (!replay.isCurrent()) this.peerMarkerReplays.delete(room)
+    }
+    const markers = this.deps.getRoomReadMarkers?.()
+    if (!markers) return
+    const eligible = await markers.ensureEligible(roomJid)
+    session.assertCurrent()
+    if (!eligible) return
+    const held = this.peerMarkerReplays.get(roomJid)
+    if (held) return held.task
+    const task = Promise.resolve().then(async () => {
+      session.assertCurrent()
+      if (!markers.eligible(roomJid)) return
+      const page = await this.queryOneArchivedEntry(roomJid, true, { before: '' }, MAM_CATCHUP_BACKWARD_MAX)
+      session.assertCurrent()
+      if (page.kind !== 'page') return
+      const me = roomSelf(this.deps.stores?.room.getRoom(roomJid))
+      const messages = page.entries.flatMap(entry => {
+        const message = this.parseRoomArchiveMessage(entry.forwarded, roomJid, me, entry.archiveId)
+        return message ? [message] : []
+      })
+      await this.resolvePeerMarkers(roomJid, page.entries, messages, { before: '' })
+    })
+    this.peerMarkerReplays.set(roomJid, { isCurrent: session.isCurrent, task })
+    await task
   }
 
   private async resolvePeerMarkers(roomJid: string, entries: readonly RawArchiveEntry[], messages: readonly RoomMessage[],

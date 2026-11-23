@@ -287,6 +287,11 @@ export class RoomReadMarkers extends BaseModule {
     }
   }
 
+  /** @internal Revalidate a read-only room proof without publishing a position. */
+  async ensureEligible(roomJid: string): Promise<boolean> {
+    return this.eligible(roomJid) || this.discover(roomJid)
+  }
+
   eligible(roomJid: string): boolean {
     const key = this.roomKey(roomJid)
     const proof = this.proofs.get(key)

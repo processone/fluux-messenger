@@ -53,8 +53,13 @@ preference bridge. Two devices can still send the same position before either re
 reflection. Storing markers depends on the server honoring the storage hint.
 
 Live and archived markers share one validator and archive-ID resolver. Marker
-positions are separate from message data and local read state. A MAM page resolves
-its markers after parsing the page's targets. Only a standalone marker and its
+positions are separate from message data and local read state. After a fresh
+session, cached history in a qualifying room triggers at most one read-only page
+of the latest 50 archived stanzas to restore recent peer positions. Cached preview
+and catch-up share this page. The recovery page does not insert timeline rows or
+change archive coverage or local read pointers. It cannot restore markers outside
+that page; ordinary history queries can still resolve them when encountered.
+A MAM page resolves its markers after parsing the page's targets. Only a standalone marker and its
 identity/storage metadata bypass normal message processing; additional encryption,
 reaction, retraction or moderation payloads still reach their existing owners.
 Unresolved, foreign or ambiguous
