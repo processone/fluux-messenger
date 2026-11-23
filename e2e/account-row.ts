@@ -74,6 +74,42 @@ test.describe('account row (desktop)', () => {
     await expect(page).toHaveURL(/settings\/profile/)
   })
 
+  test('opening focus cannot steal status message input on the next frame', async ({ page }) => {
+    await page.clock.install()
+    await boot(page)
+    const menu = page.getByRole('menu')
+    await row(page).click()
+    await menu.getByRole('menuitemradio', { name: 'Away' }).click()
+    await expect(row(page)).toContainText('Away')
+
+    // Recreate the WebKit shard failure: the second open and field focus happen
+    // before the next frame, which must not move focus back to the presence item.
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000))
+    await row(page).press('Enter')
+    const away = menu.getByRole('menuitemradio', { name: 'Away', checked: true })
+    const openedOnAway = await away.evaluate(el => el === document.activeElement)
+    const status = menu.getByLabel('Status Message')
+    await status.focus()
+    await page.clock.runFor(32)
+    const keptFocus = await status.evaluate(el => el === document.activeElement)
+    await page.keyboard.insertText('In a meeting')
+    const typed = await status.inputValue()
+    await page.clock.resume()
+    await menu.getByRole('button', { name: 'Save' }).click()
+    await expect(menu).toHaveCount(0)
+    const displayed = await row(page).innerText()
+    await shot(page, 'status-after-fast-open')
+    expect({ openedOnAway, keptFocus, typed, displayed }).toEqual({
+      openedOnAway: true,
+      keptFocus: true,
+      typed: 'In a meeting',
+      displayed: expect.stringContaining('In a meeting'),
+    })
+
+    await row(page).click()
+    await expect(status).toHaveValue('In a meeting')
+  })
+
   test('a long name and a long status end in ellipses inside the sidebar and hover discloses both in full', async ({ page }) => {
     await boot(page, 200)
     await page.evaluate(n => (window as unknown as { __connectionStore: { getState(): { setOwnNickname(n: string): void } } }).__connectionStore.getState().setOwnNickname(n), LONG_NAME)
