@@ -1,4 +1,5 @@
 import { badgeMessageKey } from '../../diagnostics/badgeIdentity'
+import { isStandaloneRoomReadMarker } from './RoomReadMarkers'
 /**
  * Message Archive Management (XEP-0313) module.
  *
@@ -1035,7 +1036,7 @@ export class MAM extends BaseModule {
           // Drain buffer: E2EE decrypt first, then modification detection, then parse.
           const correctionStart = modifications.corrections.length
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
-            if (messageEl.getChild('displayed', NS_CHAT_MARKERS) && !messageEl.getChild('body')) {
+            if (isStandaloneRoomReadMarker(messageEl)) {
               continue
             }
             const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)

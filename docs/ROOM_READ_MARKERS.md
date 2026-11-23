@@ -28,8 +28,9 @@ room's discovery count must match the full roster. Nineteen occupants, including
 yourself, may qualify; twenty do not. Presence and configuration updates invalidate
 previous discovery evidence. Fluux cannot react to a server change it has not been
 told about. A failed room-information request is not negative room evidence:
-Fluux retains the last proven display and retries after a bounded delay while
-sending remains gated.
+Fluux retains the last proven display and retries with increasing delays capped
+at one minute while sending remains gated. Presence, configuration or connection
+changes reset that backoff.
 
 ## Sending and receiving
 
@@ -53,7 +54,10 @@ reflection. Storing markers depends on the server honoring the storage hint.
 
 Live and archived markers share one validator and archive-ID resolver. Marker
 positions are separate from message data and local read state. A MAM page resolves
-its markers after parsing the page's targets. Unresolved, foreign or ambiguous
+its markers after parsing the page's targets. Only a standalone marker and its
+identity/storage metadata bypass normal message processing; additional encryption,
+reaction, retraction or moderation payloads still reach their existing owners.
+Unresolved, foreign or ambiguous
 targets never move to a different message. Position order comes from server-ordered
 archive pages and undelayed room delivery, never from opaque IDs, nicknames or
 marker timestamps. When two positions have no known order, a read-only, bounded
@@ -71,7 +75,10 @@ position alone.
 Each reader appears over the lower-right corner of their most recently displayed
 message (lower-left for right-to-left message text), identified by the room's occupant
 ID. Qualifying messages reserve trailing space after their text and reactions so
-badges cannot cover them. Some last lines may wrap earlier; moving a reader does
+badges cannot cover them. The spacer does not increase a text line's height;
+the visible badge is 24 pixels high within a transparent 28-pixel tap area anchored
+to the message column, outside the sender's avatar gutter.
+Some last lines may wrap earlier; moving a reader does
 not resize a qualified row. Nick changes preserve identity, departures hide the reader,
 and reused nicknames do not inherit another person's position. Fluux hides your
 own marker. Each badge shows up to three avatars; its button opens a full named

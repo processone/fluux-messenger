@@ -17,6 +17,10 @@ const accountsFile = process.env.FLUUX_LIVE_ACCOUNTS
 const evidence = process.env.FLUUX_LIVE_EVIDENCE
 const videoDir = process.env.FLUUX_LIVE_VIDEO
 const before = process.env.FLUUX_ROOM_READ_BEFORE === '1'
+// Pin only disposable room names for serial, matched Before/After captures.
+const fixtureId = process.env.FLUUX_ROOM_READ_FIXTURE_ID
+if (fixtureId && !/^[a-f0-9]{8}$/.test(fixtureId)) throw new Error('Room fixture ID must contain eight lowercase hexadecimal characters')
+const roomId = () => fixtureId ?? randomUUID().slice(0, 8)
 const config = accountsFile ? JSON.parse(readFileSync(accountsFile, 'utf8')) as {
   ws: string; users: Record<'alice' | 'bob', { jid: string; password: string }>
 } : undefined
@@ -60,6 +64,14 @@ async function noPublication(client: App, count: number, name: string) {
 const shot = async (page: Page, name: string) => {
   if (!evidence) return
   await page.mouse.move(1270, 790)
+  // Keep the recording at real speed, but photograph the completed view rather
+  // than an opening dialog's first translucent frame. Ignore infinite pulses.
+  await page.evaluate(async () => {
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+    await Promise.all(document.getAnimations()
+      .filter(animation => animation.playState === 'running' && Number.isFinite(animation.effect?.getComputedTiming().iterations))
+      .map(animation => animation.finished.catch(() => {})))
+  })
   await page.screenshot({ path: `${evidence}/room-read-${before ? 'before' : 'after'}-${name}.png` })
 }
 async function app(browser: Browser, name: 'alice' | 'bob', touch = false): Promise<App> {
@@ -182,9 +194,9 @@ async function say(client: App, body: string) {
 test('two real clients share only opted-in focused reading, keep identity and replay the archive', async ({ browser }) => {
   if (evidence) mkdirSync(evidence, { recursive: true })
   const owner = await peer('alice'), member = await peer('bob')
-  const room = `read-${randomUUID().slice(0, 8)}@conference.localhost`
-  const publicRoom = `public-${randomUUID().slice(0, 8)}@conference.localhost`
-  const otherRoom = `other-${randomUUID().slice(0, 8)}@conference.localhost`
+  const room = `read-${roomId()}@conference.localhost`
+  const publicRoom = `public-${roomId()}@conference.localhost`
+  const otherRoom = `other-${roomId()}@conference.localhost`
   const clients: App[] = []
   try {
     await provision(owner, room, title, false)

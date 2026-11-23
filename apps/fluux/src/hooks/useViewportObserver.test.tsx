@@ -102,6 +102,19 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('useViewportObserver', () => {
+  it('does not search document covers for a list without a viewing callback', () => {
+    const query = vi.spyOn(document, 'querySelector')
+    const scroller = createScrollContainer(['msg1'])
+    const { unmount } = renderHook(() => useViewportObserver({ scrollContainerRef: scroller, conversationId: 'juliet@example.test', onMessageSeen: vi.fn(), enabled: true }))
+    expect(query).not.toHaveBeenCalled()
+    const added = document.createElement('div')
+    added.dataset.messageId = 'msg2'
+    scroller.current.appendChild(added)
+    act(() => moCallback([{ target: scroller.current, addedNodes: [added], removedNodes: [], type: 'childList' } as unknown as MutationRecord], {} as MutationObserver))
+    expect(query).not.toHaveBeenCalled()
+    unmount()
+  })
+
   // FLM-250 / FLM-249: a hidden newest-row report is ignored by the SDK.
   // Focus before bottom confirmation must allow a fresh report of that same row.
   describe('focus recovery', () => {

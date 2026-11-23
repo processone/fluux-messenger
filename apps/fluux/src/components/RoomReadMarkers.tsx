@@ -36,7 +36,7 @@ export function RoomReadCorner({ markers, roomJid }: {
   const snapshot = useCallback(() => markers.showsBadges(roomJid), [markers, roomJid])
   const eligible = useSyncExternalStore(markers.subscribe, snapshot)
   if (!eligible) return null
-  return <span aria-hidden="true" data-read-marker-corner className="inline-block h-7 w-32 shrink-0 align-bottom pointer-events-none" />
+  return <span aria-hidden="true" data-read-marker-corner className="inline-block h-0 w-32 shrink-0 align-baseline pointer-events-none" />
 }
 
 /** Subscribes below the memoized message row: only moved badges receive new snapshots. */
@@ -51,15 +51,17 @@ export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row
   if (!readers.length) return null
   const title = t('readMarkers.readThrough')
   return (
-    <div className="absolute end-2 bottom-0 z-10" data-read-marker-row={row.stanzaId}>
+    <div className="absolute end-0 -bottom-0.5 z-10" data-read-marker-row={row.stanzaId}>
       <button type="button" onClick={() => setOpen(true)}
         aria-label={t('readMarkers.readers', { names: readers.map(reader => reader.nick).join(', ') })}
-        className="min-h-7 flex items-center gap-1 rounded-full bg-fluux-bg px-1 text-xs text-fluux-muted shadow-sm hover:bg-fluux-hover">
+        className="min-h-7 flex items-center rounded-full py-0.5 text-xs text-fluux-muted">
         <span className="sr-only">{title}</span>
-        {readers.slice(0, 3).map(reader => <span key={reader.occupantId} aria-hidden="true">
+        <span data-read-marker-surface className="flex h-6 items-center gap-1 rounded-full bg-fluux-bg px-1 shadow-sm hover:bg-fluux-hover">
+        {readers.slice(0, 3).map(reader => <span key={reader.occupantId} aria-hidden="true" data-read-marker-avatar>
           <Avatar identifier={`${roomJid}/${reader.occupantId}`} name={reader.nick} avatarUrl={reader.avatar} size="xs" />
         </span>)}
         {readers.length > 3 && <span aria-hidden="true">+{readers.length - 3}</span>}
+        </span>
       </button>
       {open && <ModalShell title={title} dialogLabel={title} onClose={() => setOpen(false)} width="max-w-sm" panelClassName="max-h-[80vh] flex flex-col">
         <ul className="p-4 space-y-3 overflow-y-auto min-h-0" tabIndex={0} aria-label={title}>

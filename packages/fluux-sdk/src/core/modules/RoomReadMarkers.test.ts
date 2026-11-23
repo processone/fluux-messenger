@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
-import { RoomReadMarkers, clearRoomReadMarkersLocalData, ROOM_MARKER_ORDER_PAGE_LIMIT } from './RoomReadMarkers'
+import { RoomReadMarkers, clearRoomReadMarkersLocalData, ROOM_MARKER_ORDER_PAGE_LIMIT, ROOM_MARKER_DISCOVERY_RETRY_DELAYS } from './RoomReadMarkers'
 import { MAM } from './MAM'
 import { parse } from 'ltx'
 import { parseMessageContent } from './messagingUtils'
@@ -16,6 +16,7 @@ import { emitLocalRead } from '../../stores/localReadEvents'
 // the protocol boundary, not private implementation state or string searches.
 const jid = 'alice@localhost'
 const roomJid = fixture.room
+const capturedTarget = parse(fixture.marker).getChild('displayed', 'urn:xmpp:chat-markers:0')!.attrs.id
 const features: string[] = parse(fixture.disco).getChildren('feature').map((feature: Element) => feature.attrs.var)
 const fixtureCount = Number(parse(fixture.disco).getChild('x', 'jabber:x:data')!.getChildren('field').find((field: Element) => field.attrs.var === 'muc#roominfo_occupants')!.getChildText('value'))
 const disco = (flags = features, count = fixtureCount) => xml('iq', { type: 'result', from: roomJid },
@@ -70,6 +71,56 @@ describe('RoomReadMarkers', () => {
   })
 
   afterEach(() => { markers.cancelPending(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); setStorageScopeJid(null) })
+
+  it.each([
+    ['encryption', () => xml('openpgp', { xmlns: 'urn:xmpp:openpgp:0' })],
+    ['reaction', () => xml('reactions', { xmlns: 'urn:xmpp:reactions:0', id: capturedTarget }, xml('reaction', {}, '👍'))],
+    ['retraction', () => xml('retract', { xmlns: 'urn:xmpp:message-retract:1', id: capturedTarget })],
+    ['moderation', () => xml('apply-to', { xmlns: 'urn:xmpp:fasten:0', id: capturedTarget }, xml('moderated', { xmlns: 'urn:xmpp:message-moderate:0' }))],
+  ] as const)('does not consume a marker carrying %s content while sharing is off', (_kind, content) => {
+    const packet = parse(fixture.marker) as Element
+    expect(markers.observe(packet)).toBe(true)
+    packet.children.push(content())
+    // The payload is opaque here: its ordinary owner must still receive it.
+    expect(markers.observe(packet)).toBe(false)
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it.each(['presence', 'connection'] as const)('caps growing discovery backoff and resets it after %s changes', async reset => {
+    vi.useFakeTimers()
+    await markers.receive(roomJid, marker('archive-a'))
+    const display = markers.readers(roomJid, rows[0])
+    iq.mockRejectedValue(new Error('Room information unavailable'))
+    markers.observe(xml('presence', { from: `${roomJid}/Bob` }))
+    await vi.advanceTimersByTimeAsync(0)
+    const initial = iq.mock.calls.length
+    for (const [index, delay] of ROOM_MARKER_DISCOVERY_RETRY_DELAYS.entries()) {
+      await vi.advanceTimersByTimeAsync(delay - 1)
+      expect(iq).toHaveBeenCalledTimes(initial + index)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(iq).toHaveBeenCalledTimes(initial + index + 1)
+    }
+    await vi.advanceTimersByTimeAsync(ROOM_MARKER_DISCOVERY_RETRY_DELAYS.at(-1)!)
+    const capped = initial + ROOM_MARKER_DISCOVERY_RETRY_DELAYS.length + 1
+    expect(iq).toHaveBeenCalledTimes(capped)
+    expect(markers.readers(roomJid, rows[0])).toBe(display)
+    expect(send).not.toHaveBeenCalled()
+    if (reset === 'presence') {
+      markers.observe(xml('presence', { from: `${roomJid}/Bob` }))
+      await vi.advanceTimersByTimeAsync(0)
+    } else {
+      const connection = {} as ReturnType<ModuleDependencies['getXmpp']>
+      dependencies.getXmpp = () => connection
+      await markers.receive(roomJid, marker('archive-a'))
+    }
+    expect(iq).toHaveBeenCalledTimes(capped + 1)
+    iq.mockResolvedValue(disco())
+    await vi.advanceTimersByTimeAsync(ROOM_MARKER_DISCOVERY_RETRY_DELAYS[0] - 1)
+    expect(iq).toHaveBeenCalledTimes(capped + 1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(markers.eligible(roomJid)).toBe(true)
+    expect(iq).toHaveBeenCalledTimes(capped + 2)
+  })
 
   it('starts with both consent gates off; enabling one room does not enable another', async () => {
     expect(markers.getConsent()).toEqual({ enabled: false, rooms: [] })
@@ -371,6 +422,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('runs the real MAM ingress before body filtering, resolving page targets without adding marker rows', async () => {
+    const reactionArchiveId = 'reaction-archive-id'
     const collectors = new Map<string, (stanza: Element) => void>()
     dependencies.registerMAMCollector = (id, collector) => { collectors.set(id, collector); return () => { collectors.delete(id) } }
     dependencies.getRoomReadMarkers = () => markers
@@ -385,13 +437,17 @@ describe('RoomReadMarkers', () => {
         xml('body', {}, rows[1].body), xml('stanza-id', { xmlns: 'urn:xmpp:sid:0', by: roomJid, id: 'archive-b' }),
         xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: 'bob-id' })))
       deliver('marker-archive-id', marker('archive-b'))
+      const mixed = marker('archive-b')
+      mixed.children.push(xml('reactions', { xmlns: 'urn:xmpp:reactions:0', id: 'archive-b' }, xml('reaction', {}, '👍')))
+      deliver(reactionArchiveId, mixed)
       return xml('iq', { type: 'result', from: roomJid }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
-        xml('set', { xmlns: 'http://jabber.org/protocol/rsm' }, xml('first', {}, 'archive-b'), xml('last', {}, 'marker-archive-id'))))
+        xml('set', { xmlns: 'http://jabber.org/protocol/rsm' }, xml('first', {}, 'archive-b'), xml('last', {}, reactionArchiveId))))
     })
     const pointer = room.readPointer
     const archive = await new MAM(dependencies).queryRoomArchive({ roomJid, before: '' })
     expect(archive.messages).toHaveLength(1)
     expect(archive.messages[0].body).toBe(rows[1].body)
+    expect(archive.messages[0].reactions?.['👍']).toContain(rows[1].nick)
     expect(markers.readers(roomJid, archive.messages[0])).toMatchObject([{ occupantId: 'bob-id', nick: 'Bob' }])
     expect(room.readPointer).toBe(pointer)
     expect(stores.room.addMessage).not.toHaveBeenCalled()

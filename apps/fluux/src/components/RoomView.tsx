@@ -1389,6 +1389,9 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   const readMarkerCorner = useMemo(() => peerReadMarkers && !message.isPrivate
     ? <RoomReadCorner markers={peerReadMarkers} roomJid={roomJid} /> : undefined,
   [peerReadMarkers, roomJid, message.isPrivate])
+  const readMarkerBadge = useMemo(() => peerReadMarkers && !message.isPrivate
+    ? <RoomReadBadge markers={peerReadMarkers} roomJid={roomJid} row={{ id: message.id, occupantId: message.occupantId, stanzaId: message.stanzaId }} /> : undefined,
+  [peerReadMarkers, roomJid, message.id, message.occupantId, message.stanzaId, message.isPrivate])
 
   const nickExtras = (
     <>
@@ -1458,7 +1461,6 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 
   return (
     <>
-      <div className="relative room-read-marker-host">
       <MessageBubble
         message={message}
         showAvatar={showAvatar}
@@ -1487,6 +1489,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         senderOccupantJid={`${roomJid}/${message.nick}`}
         nickExtras={nickExtras}
         readMarkerCorner={readMarkerCorner}
+        readMarkerBadge={readMarkerBadge}
         myReactions={myReactions}
         onReaction={supportsReactions ? handleReaction : undefined}
         getReactorName={getReactorName}
@@ -1525,8 +1528,6 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         isCurrentMatch={isCurrentMatch}
       />
 
-      {peerReadMarkers && !message.isPrivate && <RoomReadBadge markers={peerReadMarkers} roomJid={roomJid} row={message} />}
-      </div>
 
       {/* Delete own message confirmation dialog */}
       {showDeleteConfirm && (

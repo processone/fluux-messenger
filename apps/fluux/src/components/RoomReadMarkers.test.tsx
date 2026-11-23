@@ -73,7 +73,7 @@ describe('room read-marker controls', () => {
     markers.setReaders({ first: people })
     render(<RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first', stanzaId: 'archive-first' }} />)
     const opener = screen.getByRole('button', { name: 'Read through this message: Sam, Jules, Noor, Maya' })
-    expect(opener.querySelectorAll(':scope > span[aria-hidden="true"]')).toHaveLength(4) // three avatars and the overflow count
+    expect(opener.querySelectorAll('[data-read-marker-avatar]')).toHaveLength(3)
     expect(within(opener).getByText('+1')).toBeVisible()
     opener.focus()
     expect(opener).toHaveFocus()

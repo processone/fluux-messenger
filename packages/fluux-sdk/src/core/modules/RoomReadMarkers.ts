@@ -17,9 +17,10 @@ interface DiscoveryProof { features: string[]; count: number; epoch: number; con
 interface AccountState { consent: RoomReadConsent; sent: Record<string, Position> }
 interface DiscoveryRequest {
   epoch: number; connection: DiscoveryProof['connection']; task: Promise<boolean>; isCurrent: () => boolean
-  retryAt?: number; retryTimer?: ReturnType<typeof setTimeout>
+  retryStep: number; retryAt?: number; retryTimer?: ReturnType<typeof setTimeout>
 }
-const REQUEST_RETRY_MS = 5_000
+export const ROOM_MARKER_DISCOVERY_RETRY_DELAYS = [5_000, 10_000, 20_000, 40_000, 60_000] as const
+const REQUEST_RETRY_MS = ROOM_MARKER_DISCOVERY_RETRY_DELAYS[0]
 export const ROOM_MARKER_ORDER_PAGE_LIMIT = 20
 export const ROOM_READ_MARKERS_STORAGE_KEY = 'fluux-room-read-markers'
 const STORAGE_PREFIX = ROOM_READ_MARKERS_STORAGE_KEY + ':'
@@ -47,6 +48,16 @@ const CONTRADICTORY = ['muc_public', 'muc_open', 'muc_semianonymous', 'muc_anony
 const keyOf = (row: MessageRowRef) => JSON.stringify([row.id, row.occupantId ?? '', row.stanzaId ?? ''])
 const canMark = (row: RoomMessage, roomJid: string) => !!getRoomModerationId(row) && row.roomJid === roomJid && !row.isPrivate
   && !row.systemEvent && !row.securityContext && !row.encryptedPayload && !row.unsupportedEncryption && !row.contentAvailability
+
+/** Only a standalone marker may bypass the ordinary message owners. */
+export function isStandaloneRoomReadMarker(stanza: Element): boolean {
+  return stanza.is('message') && stanza.attrs.type === 'groupchat' && !!stanza.getChild('displayed', NS_CHAT_MARKERS)
+    && stanza.children.every(child => typeof child === 'string' ? !child.trim() :
+      child.is('displayed', NS_CHAT_MARKERS) || child.is('occupant-id', NS_OCCUPANT_ID)
+      || child.is('stanza-id', NS_STANZA_ID) || child.is('origin-id', NS_STANZA_ID)
+      || child.is('delay', NS_DELAY) || child.is('archived', 'urn:xmpp:mam:tmp')
+      || ['store', 'no-store', 'no-copy', 'no-permanent-store'].some(name => child.is(name, NS_HINTS)))
+}
 
 /**
  * Room-only XEP-0333. Peer positions never enter the message or local-read stores.
@@ -213,12 +224,12 @@ export class RoomReadMarkers extends BaseModule {
     const proof = this.proofs.get(key)
     if (proof?.epoch === epoch && proof.connection === connection) return Promise.resolve(this.eligible(roomJid))
     const pending = this.discovery.get(key)
-    if (pending?.epoch === epoch && pending.connection === connection && pending.isCurrent()
-      && (pending.retryAt === undefined || Date.now() < pending.retryAt)) return pending.task
+    const continuing = pending?.epoch === epoch && pending.connection === connection && pending.isCurrent()
+    if (continuing && (pending.retryAt === undefined || Date.now() < pending.retryAt)) return pending.task
     clearTimeout(pending?.retryTimer)
     const query = this.capture()
     const task = Promise.resolve().then(() => this.queryDiscovery(roomJid))
-    const entry: DiscoveryRequest = { epoch, connection, task, isCurrent: query.isCurrent }
+    const entry: DiscoveryRequest = { epoch, connection, task, isCurrent: query.isCurrent, retryStep: continuing ? pending.retryStep : 0 }
     this.discovery.set(key, entry)
     void task.finally(() => {
       if (this.discovery.get(key) === entry && entry.retryAt === undefined) this.discovery.delete(key)
@@ -253,11 +264,13 @@ export class RoomReadMarkers extends BaseModule {
       if (query.isCurrent() && epoch === (this.epochs.get(key) ?? 0) && request?.epoch === epoch) {
         // A transport failure is not negative room evidence. Retain the last
         // proven display; the old epoch still forbids sending until rechecked.
-        request.retryAt = Date.now() + REQUEST_RETRY_MS
+        const delay = ROOM_MARKER_DISCOVERY_RETRY_DELAYS[request.retryStep]
+        request.retryStep = Math.min(request.retryStep + 1, ROOM_MARKER_DISCOVERY_RETRY_DELAYS.length - 1)
+        // Slow persistent failures without losing eventual recovery. A new
+        // roster/config epoch or connection restarts the initial delay.
+        request.retryAt = Date.now() + delay
         request.retryTimer = setTimeout(() => {
-          if (this.discovery.get(key) !== request) return
-          this.discovery.delete(key)
-          if (!query.isCurrent()) return
+          if (this.discovery.get(key) !== request || !query.isCurrent()) return
           const held = this.queued.get(key)
           if (held?.isCurrent() && held.epoch === (this.epochs.get(key) ?? 0)
             && held.consent === this.consentRevision && this.focused() && this.isEnabledFor(roomJid)) {
@@ -266,7 +279,7 @@ export class RoomReadMarkers extends BaseModule {
             if (held && this.queued.get(key) === held) this.queued.delete(key)
             if (this.positions.has(key)) void this.discover(roomJid).catch(() => {})
           }
-        }, REQUEST_RETRY_MS)
+        }, delay)
       }
       return false
     }
@@ -408,7 +421,7 @@ export class RoomReadMarkers extends BaseModule {
     }
     if (stanza.is('message') && stanza.attrs.type === 'groupchat' && stanza.getChild('displayed', NS_CHAT_MARKERS) && !stanza.getChild('body')) {
       void this.receive(roomJid, stanza, [], !!stanza.getChild('delay', NS_DELAY)).catch(() => {})
-      return true
+      return isStandaloneRoomReadMarker(stanza)
     }
     return false
   }

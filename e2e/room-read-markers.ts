@@ -29,6 +29,7 @@ test('room read badges cap avatars, name every reader and move without rendering
     const readers = [...room.occupants.values()].filter(person => person.nick !== room.nickname).slice(0, 4)
     const rows = scope.__roomStore.getState().messages.get(roomJid)!.filter(row => !row.isPrivate && !row.securityContext && !row.encryptedPayload && !row.contentAvailability)
     const prior = rows.at(-3)!, old = rows.at(-2)!, next = rows.at(-1)!
+    const shortBody = old.body
     if (!prior.stanzaId || !old.stanzaId || !next.stanzaId || readers.length !== 4) throw new Error('Showcase room lacks marker fixture identities')
     // A normal paragraph, rather than the showcase's short mention or poll.
     await scope.__roomStore.getState().updateMessage(roomJid, old.id, {
@@ -38,7 +39,7 @@ test('room read badges cap avatars, name every reader and move without rendering
     // Establish qualification before measuring: every row keeps the same corner
     // space whether or not that row currently holds a badge.
     await scope.__demoClient.simulateRoomDisplayed(roomJid, readers[0].occupantId!, prior.stanzaId)
-    return { prior: prior.stanzaId, id: old.id, old: old.stanzaId, next: next.stanzaId, names: readers.map(reader => reader.nick), actors: readers.map(reader => reader.occupantId!), actor: readers[0].occupantId! }
+    return { shortBody, prior: prior.stanzaId, id: old.id, old: old.stanzaId, next: next.stanzaId, names: readers.map(reader => reader.nick), actors: readers.map(reader => reader.occupantId!), actor: readers[0].occupantId! }
   }, { roomJid: LAUNCH_ROOM, body: paragraphs[0].body })
   const oldRow = page.locator(`[data-message-row-id][data-stanza-id="${fixture.old}"]`)
   const layouts = paragraphs.flatMap(message => ['ltr', 'rtl'].flatMap(direction => [1280, 390].map(width => ({ message, direction, width }))))
@@ -53,6 +54,20 @@ test('room read badges cap avatars, name every reader and move without rendering
     await oldRow.scrollIntoViewIfNeeded()
   }
   const geometryReadings: object[] = []
+  await page.evaluate(async ({ roomJid, id, body }) => {
+    await (window as unknown as Scope).__roomStore.getState().updateMessage(roomJid, id, { body })
+  }, { roomJid: LAUNCH_ROOM, id: fixture.id, body: fixture.shortBody })
+  await expect(oldRow.locator('[data-msg-text]')).toHaveText(fixture.shortBody)
+  const singleLine = await oldRow.evaluate(element => {
+    const corner = element.querySelector<HTMLElement>('[data-read-marker-corner]')!
+    const reserved = element.getBoundingClientRect().height
+    corner.style.display = 'none'
+    const unreserved = element.getBoundingClientRect().height
+    corner.style.removeProperty('display')
+    return { reserved, unreserved }
+  })
+  expect(singleLine.reserved, 'the trailing spacer adds no fixed row height').toBe(singleLine.unreserved)
+  geometryReadings.push({ state: 'one-line-without-readers', ...singleLine })
   const priorRow = page.locator(`[data-message-row-id][data-stanza-id="${fixture.prior}"]`)
   const priorBadge = page.locator(`[data-read-marker-row="${fixture.prior}"]`)
   // The preceding showcase poll exercises structured content, not just prose.
@@ -89,7 +104,15 @@ test('room read badges cap avatars, name every reader and move without rendering
       const height = (await oldRow.boundingBox())!.height
       measured.set(key, height)
       if (expected) expect(height, 'a reader move does not resize a qualified row').toBe(expected.get(key))
-      const badge = (await oldBadge.boundingBox())!
+      const badge = (await oldBadge.locator('[data-read-marker-surface]').boundingBox())!
+      const tap = (await oldBadge.getByRole('button').boundingBox())!
+      const column = (await oldRow.locator('[data-msg-column]').boundingBox())!
+      const avatar = (await oldRow.locator('[data-msg-avatar-column]').boundingBox())!
+      expect(badge.height, 'the visible badge stays compact').toBe(24)
+      expect(tap.height, 'the transparent tap target remains reachable').toBe(28)
+      expect(tap.x).toBeGreaterThanOrEqual(column.x)
+      expect(tap.x + tap.width).toBeLessThanOrEqual(column.x + column.width)
+      expect(clearOf(tap, avatar), 'the tap area never covers the avatar or its gutter').toBe(true)
       if (reactions) {
         const reaction = (await oldRow.locator('[data-reaction-emoji="👍"]').boundingBox())!
         expect(clearOf(badge, reaction),
@@ -105,7 +128,7 @@ test('room read badges cap avatars, name every reader and move without rendering
         return true
       }, badge)
       expect(textClear, 'the long paragraph stays readable, including at phone width').toBe(true)
-      geometryReadings.push({ direction, textDirection: message.direction, width, rowHeight: height, badge, reactions, textClear })
+      geometryReadings.push({ direction, textDirection: message.direction, width, rowHeight: height, badge, tap, column, avatar, reactions, textClear })
     }
     await applyLayout({ message: paragraphs[0], direction: 'ltr', width: 1280 })
     return measured

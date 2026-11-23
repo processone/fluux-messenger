@@ -225,11 +225,13 @@ export function useViewportObserver({
     // Track which rows the message list mounts/unmounts. With virtualization, only the
     // visible window + overscan is mounted: rows scroll in (added) and out (removed) as
     // the user scrolls, so the observer must follow the window, not assume rows persist.
-    let covered = isViewportCovered(scrollContainer)
+    let covered = watchesViews && isViewportCovered(scrollContainer)
     const mutationObserver = new MutationObserver((mutations) => {
-      const wasCovered = covered
-      covered = isViewportCovered(scrollContainer)
-      if (wasCovered && !covered) reportVisibleRows()
+      if (watchesViews && onVisibleRowsRef.current) {
+        const wasCovered = covered
+        covered = isViewportCovered(scrollContainer)
+        if (wasCovered && !covered) reportVisibleRows()
+      }
       for (const mutation of mutations) {
         if (mutation.target !== scrollContainer && !scrollContainer.contains(mutation.target)) continue
         // Newly mounted rows start being observed; the IO fires automatically for any
