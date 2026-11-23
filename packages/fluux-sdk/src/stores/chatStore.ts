@@ -3026,9 +3026,9 @@ export const chatStore = createStore<ChatState>()(
 
       saveDateLookupPage: (conversationId, messages, reachesLive) => saveDateLookupPage(
         'chat', conversationId, messages, reachesLive, captureChatCacheRead(conversationId),
-        (seams) => set(state => {
-          const gaps = setGapList(state.conversationGaps, conversationId, [...getGapList(state.conversationGaps, conversationId), ...seams])
-          return { conversationGaps: gaps }
+        (transition) => set(state => {
+          const gaps = setGapList(state.conversationGaps, conversationId, transition(getGapList(state.conversationGaps, conversationId)))
+          return gaps === state.conversationGaps ? state : { conversationGaps: gaps }
         }),
         () => messageCache.saveMessages('chat', messages),
       ),

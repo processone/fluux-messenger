@@ -2569,8 +2569,9 @@ export const roomStore = createStore<RoomState>()(
 
   saveDateLookupPage: (roomJid, messages, reachesLive) => saveDateLookupPage(
     'room', roomJid, messages, reachesLive, captureRoomCacheRead(roomJid),
-    (seams) => set(state => {
-      const gaps = setGapList(state.roomGaps, roomJid, [...getGapList(state.roomGaps, roomJid), ...seams])
+    (transition) => set(state => {
+      const gaps = setGapList(state.roomGaps, roomJid, transition(getGapList(state.roomGaps, roomJid)))
+      if (gaps === state.roomGaps) return state
       saveGapsToStorage(gaps)
       return { roomGaps: gaps }
     }),

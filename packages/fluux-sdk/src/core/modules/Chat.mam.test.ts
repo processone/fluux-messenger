@@ -163,6 +163,16 @@ describe('XMPPClient MAM', () => {
             ] },
           ] },
         ]))
+        mockXmppClientInstance._emit('stanza', createMockElement('message', { from }, [
+          { name: 'result', attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'date-retraction' }, children: [
+            { name: 'forwarded', attrs: { xmlns: 'urn:xmpp:forward:0' }, children: [
+              { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:05:00Z' } },
+              { name: 'message', attrs: { from: sender, to: 'me@example.com', id: 'retraction-stanza', type: kind === 'chat' ? 'chat' : 'groupchat' }, children: [
+                { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'older-day-row' } },
+              ] },
+            ] },
+          ] },
+        ]))
         return createMockElement('iq', { type: 'result' }, [
           { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: String(complete) } },
         ])
@@ -173,9 +183,11 @@ describe('XMPPClient MAM', () => {
       expect(store.saveDateLookupPage).toHaveBeenCalledWith(kind === 'chat' ? peer : roomJid,
         [expect.objectContaining({ id: 'date-row' })], false)
       expect(done).not.toHaveBeenCalled()
+      expect(emitSDKSpy.mock.calls.map(call => call[0])).not.toContain(`${kind}:retraction-pending`)
       expectNoHistoryChange()
       finishWrite(true)
       expect(await result).toMatchObject({ complete, messages: [expect.objectContaining({ id: 'date-row' })] })
+      expect(emitSDKSpy).toHaveBeenCalledWith(`${kind}:retraction-pending`, expect.objectContaining({ targetId: 'older-day-row' }))
       expectNoHistoryChange()
     })
 

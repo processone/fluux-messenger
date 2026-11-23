@@ -788,9 +788,11 @@ export class MAM extends BaseModule {
         modifications.retractions.length + modifications.corrections.length +
         modifications.fastenings.length + modifications.reactions.length > 0
 
-      if (!dateLookup) this.emitUnresolvedChatModifications(conversationId, { ...unresolved, fastenings: [], reactions: [] })
-      unresolved.corrections = []
-      unresolved.retractions = []
+      if (!dateLookup) {
+        this.emitUnresolvedChatModifications(conversationId, { ...unresolved, fastenings: [], reactions: [] })
+        unresolved.corrections = []
+        unresolved.retractions = []
+      }
       const reconciled = await this.deps.stores?.chat.reconcileHistoryMessages?.(allMessages)
       session.assertCurrent()
       if (reconciled) allMessages.splice(0, allMessages.length, ...reconciled)
@@ -801,6 +803,7 @@ export class MAM extends BaseModule {
           throw new Error('Could not save the date lookup page')
         }
         session.assertCurrent()
+        this.emitUnresolvedChatModifications(conversationId, unresolved)
         return { messages: allMessages, complete: isComplete, page: lastPage }
       }
       this.deps.emitSDK('chat:history-messages', {
@@ -859,7 +862,7 @@ export class MAM extends BaseModule {
       if (!dateLookup && session.isAccountCurrent()) this.deps.emitSDK('chat:history-loading', { conversationId, requestId, isLoading: false })
       // A crash may leave metadata counting a placeholder the signal transaction
       // already removed. Replaying that signal must invalidate the stale count.
-      if (!dateLookup && processedArchiveSignal && session.isCurrent()) {
+      if (processedArchiveSignal && session.isCurrent()) {
         await this.deps.stores?.chat.recomputeUnreadForConversation?.(conversationId)
       }
     }
@@ -1071,6 +1074,7 @@ export class MAM extends BaseModule {
                 throw new Error('Could not save the date lookup page')
               }
               session.assertCurrent()
+              this.emitUnresolvedRoomModifications(roomJid, unresolved)
               return { messages: collectedMessages, complete, page: pageInfo }
             }
             // Ordinary catch-up updates the room incrementally.
