@@ -33,7 +33,7 @@ export interface ConversationThreadSource<M extends ThreadMessage> {
   clearFirstNewMessageId: (id: string) => void
   advanceReadPointer: (id: string, row: MessageRowRef) => void
   /** Jumps the list to a message. Must keep one identity across renders. */
-  setTargetMessageId: (messageId: string) => void
+  setTargetMessageId: (target: string | MessageRowRef) => void
   /** Starts an easter egg animation in a conversation. Must keep one identity across renders. */
   triggerAnimation: (id: string, animation: string, senderName: string) => void
   /** The animation now playing in this conversation, or null. */
@@ -84,6 +84,11 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
 
   const handleSearchInConversation = id && onSearchInConversation ? () => onSearchInConversation(id) : undefined
   const handleShowSaved = id && onShowSavedInConversation ? () => onShowSavedInConversation(id) : undefined
+  // The day the jump-to-date dialog opens on (`yyyy-MM-dd`), '' for today; null while closed
+  const [jumpToDateDay, setJumpToDateDay] = useState<string | null>(null)
+  const handleJumpToDate = id ? () => setJumpToDateDay('') : undefined
+  const openJumpToDateAt = useCallback((day: string) => setJumpToDateDay(day), [])
+  const closeJumpToDate = useCallback(() => setJumpToDateDay(null), [])
 
   // Stable identities below: they reach memoized rows and the memoized composer
   const handleEditLastMessage = useCallback(() => {
@@ -174,6 +179,7 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
   useEffect(() => {
     setReplyingTo(null)
     setEditingMessage(null)
+    setJumpToDateDay(null)
     // Releases the preview URL and any photo preparation of the previous conversation
     clearPendingAttachment()
     clearSelection()
@@ -236,9 +242,10 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
     clearPendingAttachment,
     composerHandleRef,
     focusComposer,
-    /** The header's search and saved handlers. */
+    /** The header's search, saved and jump-to-date handlers. */
     handleSearchInConversation,
     handleShowSaved,
+    handleJumpToDate,
     /** Props shared by the view's message list: spread them into it. */
     listProps: {
       listHandleRef,
@@ -256,6 +263,7 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
       highlightTerms: find.highlightTerms,
       currentMatchId: find.currentMatchId,
       lastSentMessageId,
+      onJumpToDate: openJumpToDateAt,
     },
     /** Props shared by the view's composer: spread them into it. */
     composerProps: {
@@ -294,6 +302,9 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
       onMouseLeave: handleMouseLeave,
       onSeeReaction: handleSeeReaction,
       onReplayEasterEgg: handleReplayEasterEgg,
+      jumpToDate: id && jumpToDateDay !== null
+        ? { kind, conversationId: id, initialDay: jumpToDateDay || undefined, readLoaded: readAllMessages, onLand: setTargetMessageId, onClose: closeJumpToDate }
+        : null,
       activeAnimation,
       clearAnimation,
     },

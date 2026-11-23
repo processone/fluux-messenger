@@ -627,6 +627,7 @@ vi.mock('lucide-react', () => ({
   Info: () => <span>Info</span>,
   Lock: () => <span>Lock</span>,
   MessageSquare: () => <span>MessageSquare</span>,
+  CalendarDays: () => <span>Calendar</span>,
   Archive: () => <span>Archive</span>,
   AlertTriangle: () => <span>AlertTriangle</span>,
   Award: () => <span>Award</span>,

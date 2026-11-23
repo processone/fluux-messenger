@@ -412,6 +412,7 @@ vi.mock('lucide-react', () => ({
   ShieldOff: () => <span data-testid="icon-shield-off">ShieldOff</span>,
   ShieldX: () => <span data-testid="icon-shield-x">ShieldX</span>,
   AlertTriangle: () => <span data-testid="icon-alert-triangle">AlertTriangle</span>,
+  CalendarDays: () => <span data-testid="icon-calendar">Calendar</span>,
   Archive: () => <span data-testid="icon-archive">Archive</span>,
   ArchiveRestore: () => <span data-testid="icon-archive-restore">Unarchive</span>,
   User: () => <span data-testid="icon-user">User</span>,

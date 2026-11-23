@@ -13,7 +13,7 @@ vi.mock('react-i18next', () => ({
 }))
 
 // Test host: gives the component a real scroll element + a controllable getTopDate.
-function Host({ getTopDate, suppressed }: { getTopDate: () => string | null; suppressed?: boolean }) {
+function Host({ getTopDate, suppressed, onSelect }: { getTopDate: () => string | null; suppressed?: boolean; onSelect?: (date: string) => void }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     // expose the scroller so the test can dispatch scroll events
@@ -22,7 +22,7 @@ function Host({ getTopDate, suppressed }: { getTopDate: () => string | null; sup
   return (
     <div style={{ position: 'relative' }}>
       <div ref={ref} data-scroller style={{ overflow: 'auto' }} />
-      <FloatingDateHeader scrollerRef={ref} getTopDate={getTopDate} suppressed={suppressed} />
+      <FloatingDateHeader scrollerRef={ref} getTopDate={getTopDate} suppressed={suppressed} onSelect={onSelect} />
     </div>
   )
 }
@@ -132,5 +132,20 @@ describe('FloatingDateHeader', () => {
     })
 
     expect(container.querySelector('[data-floating-date-pill]')).toHaveTextContent('Yesterday')
+  })
+
+  it('opens jump to date at its day when clicked, and leaves the tab order while hidden', () => {
+    vi.setSystemTime(new Date('2026-06-30T12:00:00'))
+    const onSelect = vi.fn()
+    const { container } = render(<Host getTopDate={() => '2026-06-28'} onSelect={onSelect} />)
+    scroll(container)
+    const pill = container.querySelector('[data-floating-date-pill] button') as HTMLButtonElement
+    expect(pill.getAttribute('aria-label')).toBe('chat.jumpToDate.fromPill')
+    expect(pill.tabIndex).toBe(0)
+    fireEvent.click(pill)
+    expect(onSelect).toHaveBeenCalledWith('2026-06-28')
+
+    scroll(container, 0)
+    expect(pill.tabIndex).toBe(-1)
   })
 })

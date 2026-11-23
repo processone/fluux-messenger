@@ -21,7 +21,7 @@ import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
 import { ConnectionStepSlot } from './ConnectionStep'
 import { UpdateStatus } from './UpdateStatus'
-import { Archive, ArchiveRestore, ArrowLeft, Ban, Clock, Copy, Hash, Bookmark, Loader2, Lock, Pencil, Search, Shield, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, Trash2, User, UserPlus } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, Ban, CalendarDays, Clock, Copy, Hash, Bookmark, Loader2, Lock, Pencil, Search, Shield, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, Trash2, User, UserPlus } from 'lucide-react'
 import { waitsOnlyForTrustData, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
@@ -36,6 +36,8 @@ export interface ChatHeaderProps {
   jid: string
   onBack?: () => void
   onSearchInConversation?: () => void
+  /** Open the jump-to-date dialog. */
+  onJumpToDate?: () => void
   /** Open the Saved tab narrowed to this conversation. The button shows only where something is saved. */
   onShowSavedInConversation?: () => void
   encryptionState?: ConversationEncryptionState
@@ -73,6 +75,7 @@ export function ChatHeader({
   jid,
   onBack,
   onSearchInConversation,
+  onJumpToDate,
   onShowSavedInConversation,
   encryptionState,
   onEncryptionClick,
@@ -121,6 +124,9 @@ export function ChatHeader({
   }
   if (onSearchInConversation) {
     overflowEntries.push({ kind: 'action', key: 'search', label: t('chat.searchInConversation', 'Search in conversation'), icon: Search, onSelect: onSearchInConversation, kebabClassName: kebabClass('search') })
+  }
+  if (onJumpToDate) {
+    overflowEntries.push({ kind: 'action', key: 'jumpToDate', label: t('chat.jumpToDate.title'), icon: CalendarDays, onSelect: onJumpToDate })
   }
   if (!isGroupChat) {
     if (onRenameContact) {
