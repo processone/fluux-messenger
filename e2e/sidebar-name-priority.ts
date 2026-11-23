@@ -1,8 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { chatStore, roomStore } from '@fluux/sdk/stores'
-import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
-import type { useThemeStore } from '../apps/fluux/src/stores/themeStore'
 import { bootDemo } from './harness/demoBoot'
 
 // Approved design intent: give names the first line without widening the sidebar.
@@ -13,8 +11,8 @@ type DemoWindow = Window & {
   __demoClient: DemoClient
   __chatStore: typeof chatStore
   __roomStore: typeof roomStore
-  __settingsStore: typeof useSettingsStore
-  __themeStore: typeof useThemeStore
+  __settingsStore: { getState: () => { setThemeMode: (mode: 'light' | 'dark') => void } }
+  __themeStore: { getState: () => { setActiveTheme: (id: string) => void } }
   __i18n: { changeLanguage: (language: string) => Promise<unknown> }
 }
 const rows = (page: Page, view: 'messages' | 'rooms') =>
@@ -58,7 +56,7 @@ for (const mode of ['light', 'dark'] as const) {
     await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
     await bootDemo(page, '/demo.html?scene=showcase&virt=1')
     await page.evaluate(mode => {
-      const w = window as DemoWindow
+      const w = window as unknown as DemoWindow
       w.__themeStore.getState().setActiveTheme('fluux')
       w.__settingsStore.getState().setThemeMode(mode)
     }, mode)
@@ -77,7 +75,7 @@ for (const mode of ['light', 'dark'] as const) {
     await page.setViewportSize({ width: 1200, height: 780 })
     await bootDemo(page, '/demo.html?scene=showcase&virt=1&density=compact')
     await page.evaluate(async mode => {
-      const w = window as DemoWindow
+      const w = window as unknown as DemoWindow
       w.__themeStore.getState().setActiveTheme('fluux')
       w.__settingsStore.getState().setThemeMode(mode)
       await w.__i18n.changeLanguage('fr')
@@ -98,7 +96,7 @@ for (const mode of ['light', 'dark'] as const) {
       const id = (await row.getAttribute(view === 'messages' ? 'data-conv-id' : 'data-room-jid'))!
       const order = await rows(page, view).evaluateAll(elements => elements.map(e => e.getAttribute('data-conv-id') ?? e.getAttribute('data-room-jid')))
       await page.evaluate(({ view, id }) => {
-        const w = window as DemoWindow
+        const w = window as unknown as DemoWindow
         if (view === 'messages') {
           const store = w.__chatStore
           const conversations = new Map(store.getState().conversations)
@@ -117,7 +115,7 @@ for (const mode of ['light', 'dark'] as const) {
       await page.setViewportSize({ width: 320, height: 780 })
       await geometry(row, false)
       await page.evaluate(({ view, id }) => {
-        const w = window as DemoWindow
+        const w = window as unknown as DemoWindow
         if (view === 'rooms') {
           w.__roomStore.getState().setDraft(id, '')
           w.__roomStore.getState().updateRoom(id, { unreadCount: 0, mentionsCount: 0 })
