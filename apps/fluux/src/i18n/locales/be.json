@@ -1054,7 +1054,6 @@
             "openLogs": "Адкрыць папку журналаў"
         },
         "encryption": {
-            "experimental": "Эксперыментальна",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

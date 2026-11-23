@@ -1053,7 +1053,6 @@
             "openLogs": "Atvērt žurnālu mapi"
         },
         "encryption": {
-            "experimental": "Eksperimentāls",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

@@ -1058,7 +1058,6 @@
             "openLogs": "Iftaħ il-folder tar-reġistri"
         },
         "encryption": {
-            "experimental": "Sperimentali",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

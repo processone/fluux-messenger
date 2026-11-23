@@ -1056,7 +1056,6 @@
             "openLogs": "Oscail fillteán na logaí"
         },
         "encryption": {
-            "experimental": "Turgnamhach",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

@@ -1050,7 +1050,6 @@
             "openLogs": "Åbn logfilmappe"
         },
         "encryption": {
-            "experimental": "Eksperimentel",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

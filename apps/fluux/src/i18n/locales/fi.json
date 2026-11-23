@@ -1050,7 +1050,6 @@
             "openLogs": "Avaa lokikansio"
         },
         "encryption": {
-            "experimental": "Kokeellinen",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

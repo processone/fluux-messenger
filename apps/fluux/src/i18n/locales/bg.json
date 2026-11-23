@@ -1050,7 +1050,6 @@
             "openLogs": "Отваряне на папката с дневници"
         },
         "encryption": {
-            "experimental": "Експериментално",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

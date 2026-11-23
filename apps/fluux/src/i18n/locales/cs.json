@@ -1056,7 +1056,6 @@
             "openLogs": "Otevřít složku protokolů"
         },
         "encryption": {
-            "experimental": "Experimentální",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

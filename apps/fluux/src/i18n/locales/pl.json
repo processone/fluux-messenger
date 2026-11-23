@@ -1056,7 +1056,6 @@
             "openLogs": "Otwórz folder dzienników"
         },
         "encryption": {
-            "experimental": "Eksperymentalne",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

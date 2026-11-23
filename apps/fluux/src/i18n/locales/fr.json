@@ -1085,7 +1085,6 @@
             "openLogs": "Ouvrir le dossier des journaux"
         },
         "encryption": {
-            "experimental": "Expérimental",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

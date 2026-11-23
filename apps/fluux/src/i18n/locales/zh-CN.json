@@ -1050,7 +1050,6 @@
             "openLogs": "打开日志文件夹"
         },
         "encryption": {
-            "experimental": "实验性",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

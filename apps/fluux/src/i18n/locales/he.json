@@ -1052,7 +1052,6 @@
             "openLogs": "פתיחת תיקיית היומנים"
         },
         "encryption": {
-            "experimental": "ניסיוני",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

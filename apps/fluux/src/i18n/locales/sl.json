@@ -1056,7 +1056,6 @@
             "openLogs": "Odpri mapo dnevnikov"
         },
         "encryption": {
-            "experimental": "Eksperimentalno",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

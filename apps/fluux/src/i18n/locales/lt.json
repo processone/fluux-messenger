@@ -1054,7 +1054,6 @@
             "openLogs": "Atverti žurnalų aplanką"
         },
         "encryption": {
-            "experimental": "Eksperimentinis",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

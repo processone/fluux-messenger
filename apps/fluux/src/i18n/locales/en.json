@@ -918,7 +918,6 @@
             "disable": "Disable advanced mode"
         },
         "encryption": {
-            "experimental": "Experimental",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

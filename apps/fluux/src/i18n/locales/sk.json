@@ -1055,7 +1055,6 @@
             "openLogs": "Otvoriť priečinok záznamov"
         },
         "encryption": {
-            "experimental": "Experimentálne",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

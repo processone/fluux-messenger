@@ -1051,7 +1051,6 @@
             "openLogs": "Άνοιγμα φακέλου καταγραφών"
         },
         "encryption": {
-            "experimental": "Πειραματικό",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

@@ -16,9 +16,7 @@ export interface E2EERegistrationFailure {
  * User preference for end-to-end encryption, scoped per account.
  *
  * E2EE is currently **opt-in and off by default** because:
- * - OpenPGP plugin is experimental (RustCrypto backend, no signature
- *   verification, no passphrase protection on the secret key, no
- *   persistence across app restarts).
+ * - The OpenPGP backend has not been independently audited.
  * - First-time users should not silently have a key generated and
  *   published to their server without consent.
  *

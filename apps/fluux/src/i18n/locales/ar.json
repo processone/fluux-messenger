@@ -1058,7 +1058,6 @@
             "openLogs": "فتح مجلد السجلات"
         },
         "encryption": {
-            "experimental": "تجريبي",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

@@ -1054,7 +1054,6 @@
             "openLogs": "Deschide dosarul jurnalelor"
         },
         "encryption": {
-            "experimental": "Experimental",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {
