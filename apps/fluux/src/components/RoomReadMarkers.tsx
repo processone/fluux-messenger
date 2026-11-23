@@ -57,7 +57,7 @@ export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row
     {/* Include the row's existing bottom padding, not just the button's padding,
         so the painted badge cannot rise into the preceding text line. */}
     {readers.length > 0 && <div className="absolute end-0 -bottom-1 z-10" data-read-marker-row={row.stanzaId}>
-      <button type="button" onClick={() => setOpenReaders(readers)}
+      <button type="button" onClick={event => { event.currentTarget.focus({ preventScroll: true }); setOpenReaders(readers) }}
         aria-label={t('readMarkers.readers', { names: readers.map(reader => reader.nick).join(', ') })}
         className="min-h-7 flex items-center rounded-full py-0.5 text-xs text-fluux-muted">
         <span className="sr-only">{title}</span>

@@ -86,6 +86,23 @@ describe('room read-marker controls', () => {
     for (const person of people) expect(within(dialog).getByText(person.nick)).toBeVisible()
   })
 
+  it('returns focus to the trigger when pointer activation does not focus the button', async () => {
+    const markers = source()
+    markers.setReaders({ first: people })
+    render(<><input aria-label="Message composer" /><RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first' }} /></>)
+    const composer = screen.getByRole('textbox', { name: 'Message composer' })
+    const opener = screen.getByRole('button', { name: 'Read through this message: Sam, Jules, Noor, Maya' })
+    composer.focus()
+    expect(composer).toHaveFocus()
+    // WebKit does not automatically focus a pointer-activated button. The event
+    // must establish the return target before the real modal captures focus.
+    fireEvent.click(opener)
+    expect(screen.getByRole('dialog', { name: 'Read through this message' })).toBeVisible()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(opener).toHaveFocus())
+  })
+
   it('keeps an open list until explicit close and never reopens it when badges return', async () => {
     const markers = source()
     markers.setReaders({ first: people })
