@@ -605,12 +605,13 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
     it('does not land a pending date lookup after switching conversations', async () => {
       let resolve!: (result: unknown) => void
       h.findFirstMessageOfDay.mockReturnValueOnce(new Promise((done) => { resolve = done }))
-      kind.mount()
+      const { rerender } = kind.mount()
       act(() => { (h.headerProps!.onJumpToDate as () => void)() })
       fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
       fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' }))
       expect(h.findFirstMessageOfDay).toHaveBeenCalled()
-      act(() => kind.activate(secondId, kind.messages()))
+      kind.activate(secondId, kind.messages())
+      rerender(kind.name === 'chat' ? <ChatView /> : <RoomView />)
       expect(screen.queryByLabelText('chat.jumpToDate.date')).toBeNull()
       await act(async () => resolve({ kind: 'found', message: kind.messages()[0], source: 'archive' }))
       expect(kind.storeSpies.setTargetMessageId).not.toHaveBeenCalled()
