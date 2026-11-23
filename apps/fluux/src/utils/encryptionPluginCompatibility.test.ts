@@ -205,8 +205,8 @@ describe.each(protocols)('$name SDK host compatibility', ({ name, create }) => {
     let currentChain: XMLElementData
     let protocolId: string
 
-    // Setup assertions are outside it.fails: a broken fixture must not satisfy
-    // an expected failure intended only for the final replay classification.
+    // it.fails also inverts hook failures. Ordinary checks below independently
+    // verify the fixture and exact known gap; expected failures retain the target.
     beforeEach(async () => {
       const net = newMockNetwork()
       const plugin = create()
@@ -240,6 +240,20 @@ describe.each(protocols)('$name SDK host compatibility', ({ name, create }) => {
       it(`${path}: treats a consumed current-chain message as a harmless replay`, async () => {
         expectHarmlessReplay(await replay(currentChain), 'current chain private message')
       })
+
+      if (name === 'OMEMO') {
+        if (path === 'single') {
+          it('single: exposes the known earlier-chain permanent malformed-data rejection', async () => {
+            await expect(replay(earlierChain)).rejects.toMatchObject({ kind: 'permanent', code: 'malformed-data' })
+          })
+        } else {
+          it('batch: exposes the known earlier-chain unverifiable result without plaintext', async () => {
+            const result = await replay(earlierChain)
+            expect(result).toMatchObject({ status: 'unverifiable', securityContext: { protocolId } })
+            expect(result!.plaintext).toBeUndefined()
+          })
+        }
+      }
 
       // Known API gap, deliberately not fixed in a test-only change: earlier
       // OMEMO chains throw permanent malformed-data (single) or return
