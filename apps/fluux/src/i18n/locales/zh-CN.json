@@ -1873,7 +1873,22 @@
         "sent": "消息已发送。可以删除此导入项。"
     },
     "search": {
+        "filtersBuilding": "Fluux 仍在为 from:、is: 和 has: 准备此设备上的历史记录。完成后将显示结果。",
+        "needsWords": "添加一个词，或 from:、has: 等筛选条件，以在这些日期内搜索",
+        "values": {
+            "mine": "你自己的消息",
+            "link": "包含链接的消息",
+            "image": "包含图片的消息",
+            "file": "包含文件的消息",
+            "poll": "包含投票的消息"
+        },
         "chip": {
+            "from": "来自 {{name}}",
+            "mine": "我发送的",
+            "link": "含链接",
+            "image": "含图片",
+            "file": "含文件",
+            "poll": "含投票",
             "list": "搜索筛选",
             "after": "{{date}} 之后",
             "before": "{{date}} 之前",
@@ -1888,6 +1903,9 @@
             "thisYear": "今年"
         },
         "operators": {
+            "from": "某人发送的消息，或 from:me",
+            "is": "is:mine 表示你自己的消息",
+            "has": "包含链接、图片、文件或投票的消息",
             "label": "筛选",
             "in": "在某个对话或房间中搜索",
             "after": "某日期之后的消息",
@@ -1915,6 +1933,7 @@
         "goToMessage": "转到消息",
         "loadingContext": "正在加载消息…",
         "errors": {
+            "serverNeedsWords": "服务器存档需要输入搜索词，一对一对话内除外",
             "failed": "搜索失败",
             "archiveRooms": "服务器不支持搜索房间存档",
             "archiveUnsupported": "服务器不支持搜索存档。请尝试在某个对话中搜索。",

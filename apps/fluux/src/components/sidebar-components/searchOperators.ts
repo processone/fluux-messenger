@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next'
 import { format } from 'date-fns'
-import { DATE_OPERATORS, localDayValue, type SearchFilterToken } from '@fluux/sdk'
+import { DATE_OPERATORS, HAS_VALUES, TOKEN_OPERATORS, localDayValue, type SearchFilterToken } from '@fluux/sdk'
 import { getDateLocale } from '@/utils/dateFormat'
 
 /** One line of the operator autocomplete under the search field. */
@@ -11,10 +11,15 @@ export interface OperatorSuggestion {
   insert: string
   /** i18n key of the line's description. */
   hintKey: string
+  /** A name shown instead of the hint (a contact or a room nick for `from:`). */
+  label?: string
 }
 
+/** Someone `from:` can name: the value typed and the name shown. */
+export interface SenderOption { value: string; label: string }
+
 /** Operators offered while typing their name, in this order. `in:` only works first in the query. */
-export const SEARCH_OPERATOR_NAMES = ['in', ...DATE_OPERATORS] as const
+export const SEARCH_OPERATOR_NAMES = ['in', ...TOKEN_OPERATORS, ...DATE_OPERATORS] as const
 
 /** The word the caret is in, when it is the last one of the query. */
 export function lastWord(query: string): string {
@@ -42,12 +47,32 @@ function dateValues(now: Date): Array<{ value: string; hintKey: string }> {
  * typed (two letters at least, so ordinary words rarely trigger it), then values
  * once the colon is there.
  */
-export function operatorSuggestions(query: string, now = new Date()): OperatorSuggestion[] {
+/** A value with spaces goes in quotes, so the operator keeps it whole. */
+const quoted = (value: string) => (/\s/.test(value) ? `"${value}"` : value)
+
+export function operatorSuggestions(query: string, now = new Date(), senders: readonly SenderOption[] = []): OperatorSuggestion[] {
   const word = lastWord(query)
   const operator = /^([a-z]+):(.*)$/i.exec(word)
   if (operator) {
     const [, name, partial] = operator
-    if (!(DATE_OPERATORS as readonly string[]).includes(name.toLowerCase())) return []
+    const lower = partial.replace(/^"/, '').toLowerCase()
+    const op = name.toLowerCase()
+    if (op === 'has') {
+      return HAS_VALUES.filter((value) => value.startsWith(lower) && value !== lower)
+        .map((value) => ({ id: `has-${value}`, insert: `${name}:${value}`, hintKey: `search.values.${value}` }))
+    }
+    if (op === 'is') {
+      return 'mine'.startsWith(lower) && lower !== 'mine' ? [{ id: 'is-mine', insert: `${name}:mine`, hintKey: 'search.values.mine' }] : []
+    }
+    if (op === 'from') {
+      const people = senders
+        .filter(({ value, label }) => value.toLowerCase().startsWith(lower) || label.toLowerCase().startsWith(lower))
+        .slice(0, 8)
+        .map(({ value, label }) => ({ id: `from-${value}`, insert: `${name}:${quoted(value)}`, hintKey: '', label }))
+      const me = 'me'.startsWith(lower) && lower !== 'me' ? [{ id: 'from-me', insert: `${name}:me`, hintKey: 'search.values.mine' }] : []
+      return [...me, ...people]
+    }
+    if (!(DATE_OPERATORS as readonly string[]).includes(op)) return []
     return dateValues(now)
       .filter(({ value }) => value.startsWith(partial) && value !== partial)
       .map(({ value, hintKey }) => ({ id: `${name}-${value}`, insert: `${name}:${value}`, hintKey }))
@@ -77,7 +102,11 @@ export function describeSpan(range: { start: number; end: number }, lang: string
 
 /** The text of a filter chip: what the operator keeps, or what was typed when it was not understood. */
 export function filterChipLabel(filter: SearchFilterToken, t: TFunction, lang: string): string {
-  if (!filter.valid || !filter.range) return filter.raw
+  if (!filter.valid) return filter.raw
+  if (filter.op === 'is' || (filter.op === 'from' && filter.value.toLowerCase() === 'me')) return t('search.chip.mine')
+  if (filter.op === 'from') return t('search.chip.from', { name: filter.value })
+  if (filter.op === 'has') return t(`search.chip.${filter.value.toLowerCase()}`)
+  if (!filter.range) return filter.raw
   const date = describeSpan(filter.range, lang)
   return t(`search.chip.${filter.op === 'during' ? 'on' : filter.op}`, { date })
 }

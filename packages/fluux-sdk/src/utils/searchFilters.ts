@@ -1,5 +1,6 @@
 /**
- * Search operators typed in the query: `after:`, `before:`, `on:` and `during:`.
+ * Search operators typed in the query: `after:`, `before:`, `on:` and `during:`
+ * for dates, `from:`, `is:mine` and `has:` for who sent a message and what it holds.
  *
  * Dates read as the reader's own days ({@link localDayBounds}), in ISO order
  * (`2024-03-05`, `2024-03`, `2024`) or in the numeric order of their locale
@@ -10,11 +11,20 @@
  */
 
 import { localDayBounds } from './localDay'
+import type { Message, RoomMessage } from '../core/types'
 
 /** Operators that narrow a search by date. */
 export const DATE_OPERATORS = ['after', 'before', 'on', 'during'] as const
 export type DateOperator = typeof DATE_OPERATORS[number]
-export type SearchOperator = DateOperator
+/** Operators that narrow a search by sender or content; they need the filter index. */
+export const TOKEN_OPERATORS = ['from', 'is', 'has'] as const
+export type TokenOperator = typeof TOKEN_OPERATORS[number]
+export type SearchOperator = DateOperator | TokenOperator
+/** Values of `has:`. */
+export const HAS_VALUES = ['link', 'image', 'file', 'poll'] as const
+export type HasValue = typeof HAS_VALUES[number]
+/** Values of `is:`. */
+export const IS_VALUES = ['mine'] as const
 
 /** One operator found in the query. */
 export interface SearchFilterToken {
@@ -38,9 +48,15 @@ export interface ParsedSearchInput {
   after?: number
   /** Messages strictly before this instant (epoch ms). */
   before?: number
+  /** Only the reader's own messages (`is:mine` or `from:me`). */
+  mine?: boolean
+  /** What every message must hold (`has:`). */
+  has: HasValue[]
+  /** Senders named by `from:`, as typed; each is a separate condition. */
+  from: string[]
 }
 
-const OPERATOR_PATTERN = new RegExp(`(^|\\s)(${DATE_OPERATORS.join('|')}):("[^"]*"?|\\S*)`, 'gi')
+const OPERATOR_PATTERN = new RegExp(`(^|\\s)(${[...DATE_OPERATORS, ...TOKEN_OPERATORS].join('|')}):("[^"]*"?|\\S*)`, 'gi')
 
 /** Whether the locale writes the day before the month in numeric dates (`05/03` for 5 March). */
 function dayFirst(locale?: string): boolean {
@@ -100,9 +116,23 @@ export function parseSearchFilters(query: string, locale?: string): ParsedSearch
   const filters: SearchFilterToken[] = []
   let after: number | undefined
   let before: number | undefined
+  let mine = false
+  const has = new Set<HasValue>()
+  const from: string[] = []
   const text = query.replace(OPERATOR_PATTERN, (raw, lead: string, op: string, rawValue: string) => {
     const value = rawValue.replace(/^"|"$/g, '')
     const operator = op.toLowerCase() as SearchOperator
+    if ((TOKEN_OPERATORS as readonly string[]).includes(operator)) {
+      const lower = value.toLowerCase()
+      const isMine = (operator === 'is' && lower === 'mine') || (operator === 'from' && lower === 'me')
+      const valid = isMine || (operator === 'has' && (HAS_VALUES as readonly string[]).includes(lower)) ||
+        (operator === 'from' && value.trim().length > 0)
+      filters.push({ op: operator, value, raw: raw.slice(lead.length), valid })
+      if (isMine) mine = true
+      else if (valid && operator === 'has') has.add(lower as HasValue)
+      else if (valid && operator === 'from') from.push(value.trim())
+      return lead
+    }
     const range = value ? parseDateSpan(value, locale) ?? undefined : undefined
     filters.push({ op: operator, value, raw: raw.slice(lead.length), ...(range ? { range } : {}), valid: !!range })
     if (range) {
@@ -113,7 +143,82 @@ export function parseSearchFilters(query: string, locale?: string): ParsedSearch
     }
     return lead
   }).replace(/\s+/g, ' ').trim()
-  return { text, filters, ...(after !== undefined ? { after } : {}), ...(before !== undefined ? { before } : {}) }
+  return {
+    text, filters, has: [...has], from,
+    ...(after !== undefined ? { after } : {}), ...(before !== undefined ? { before } : {}), ...(mine ? { mine } : {}),
+  }
+}
+
+/** Whether the query asks for `from:`, `is:` or `has:`, which only the filter index can answer. */
+export function hasTokenFilters(input: ParsedSearchInput): boolean {
+  return !!input.mine || input.has.length > 0 || input.from.length > 0
+}
+
+// =============================================================================
+// Filter tokens
+// =============================================================================
+
+/**
+ * Reserved tokens the search index files next to a message's words. The leading
+ * control character is one the tokenizer always splits on, so no typed word can
+ * ever equal one of them.
+ */
+const MARK = '\u0001'
+
+export const filterToken = {
+  mine: `${MARK}is:mine`,
+  has: (value: HasValue) => `${MARK}has:${value}`,
+  /** The bare JID of a one-to-one sender. */
+  from: (bareJid: string) => `${MARK}from:${bareJid.toLowerCase()}`,
+  /** A room nick, kept so `from:<nick>` finds a sender without an occupant id. */
+  nick: (nick: string) => `${MARK}nick:${nick.toLowerCase()}`,
+  /** A room occupant id (XEP-0421), which outlives nick changes. */
+  occupant: (occupantId: string) => `${MARK}occ:${occupantId}`,
+}
+
+/** The parts of a message its filter tokens read. */
+export type FilterTokenSource = Pick<Message | RoomMessage, 'type' | 'from' | 'isOutgoing' | 'body' | 'attachment' | 'poll'> &
+  { nick?: string; occupantId?: string }
+
+const LINK_PATTERN = /(?:\bhttps?:\/\/|\bwww\.)\S/i
+const IMAGE_EXTENSION = /\.(?:avif|bmp|gif|heic|jpe?g|png|svg|webp)(?:[?#]|$)/i
+
+function isImage(attachment: NonNullable<FilterTokenSource['attachment']>): boolean {
+  if (attachment.mediaType) return attachment.mediaType.startsWith('image/')
+  return IMAGE_EXTENSION.test(attachment.name ?? '') || IMAGE_EXTENSION.test(attachment.url)
+}
+
+/**
+ * The filter tokens of one message: who sent it (`from:`, `is:mine`) and what it
+ * holds (`has:`). A file's own URL in the body does not count as a link.
+ */
+export function messageFilterTokens(message: FilterTokenSource): string[] {
+  const tokens: string[] = []
+  if (message.isOutgoing) tokens.push(filterToken.mine)
+  if (message.type === 'groupchat') {
+    if (message.nick) tokens.push(filterToken.nick(message.nick))
+    if (message.occupantId) tokens.push(filterToken.occupant(message.occupantId))
+  } else if (!message.isOutgoing && message.from) {
+    tokens.push(filterToken.from(message.from.split('/')[0]))
+  }
+  const body = message.attachment ? (message.body ?? '').split(message.attachment.url).join(' ') : message.body ?? ''
+  if (LINK_PATTERN.test(body)) tokens.push(filterToken.has('link'))
+  if (message.attachment) {
+    tokens.push(filterToken.has('file'))
+    if (isImage(message.attachment)) tokens.push(filterToken.has('image'))
+  }
+  if (message.poll) tokens.push(filterToken.has('poll'))
+  return tokens
+}
+
+/**
+ * Whether a message carries at least one token of every group: the check the
+ * index makes with its rows, done on a message in hand (an archive page).
+ */
+export function matchesFilterTokens(message: FilterTokenSource, groups: readonly (readonly string[])[]): boolean {
+  if (groups.length === 0) return true
+  const tokens = new Set(messageFilterTokens(message))
+  return groups.every((group) => group.some((token) => tokens.has(token)))
 }
 
 /** The query without one of its operators, as typed. */

@@ -236,6 +236,11 @@ export interface HistoryPagingSearchOptions {
   end?: string
   /** Oldest instant to search (ISO 8601); paging stops there */
   start?: string
+  /**
+   * What else a message must satisfy, checked on each page (`from:`, `has:`).
+   * With a filter the query may be empty: the filter alone picks the messages.
+   */
+  filter?: (message: Message) => boolean
   /** Maximum pages to scan (default 20, each page ~100 messages) */
   maxPages?: number
   /** Maximum matching results to collect (default 50) */

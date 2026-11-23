@@ -140,7 +140,7 @@ import {
 import { NS_MAM, NS_PING } from './namespaces'
 import { createDefaultStoreBindings } from './defaultStoreBindings'
 import { createPresenceReader, type PresenceReader } from './presenceReader'
-import { initSearchIndex, backfillFromMessageCache, migrateSearchPostings, updateMessage as updateSearchIndex } from '../utils/searchIndex'
+import { initSearchIndex, backfillFromMessageCache, migrateSearchPostings, migrateSearchFilters, updateMessage as updateSearchIndex } from '../utils/searchIndex'
 import { getMessagesWithEncryptedPayload, updateMessage, deleteMessage, deleteMessageForRecovery } from '../utils/messageCache'
 import { queryPepNodeSymbol, publishPepNodeSymbol } from './rawXmppAccess'
 
@@ -1224,6 +1224,7 @@ export class XMPPClient {
         await initSearchIndex(scopedJid)
         await backfillFromMessageCache()
         await migrateSearchPostings()
+        await migrateSearchFilters()
       } catch {
         // Ignore — search index is non-critical for connection
       }

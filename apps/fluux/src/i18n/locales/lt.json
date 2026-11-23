@@ -1877,7 +1877,22 @@
         "sent": "Žinutė išsiųsta. Galite pašalinti šį importuotą elementą."
     },
     "search": {
+        "filtersBuilding": "Fluux vis dar ruošia šio įrenginio istoriją filtrams from:, is: ir has:. Rezultatai pasirodys, kai tai bus baigta.",
+        "needsWords": "Pridėkite žodį arba filtrą, pvz., from: ar has:, kad ieškotumėte šiose datose",
+        "values": {
+            "mine": "Jūsų pačių žinutės",
+            "link": "Žinutės su nuoroda",
+            "image": "Žinutės su paveikslėliu",
+            "file": "Žinutės su failu",
+            "poll": "Žinutės su apklausa"
+        },
         "chip": {
+            "from": "Siuntėjas: {{name}}",
+            "mine": "Išsiųsta manęs",
+            "link": "Su nuoroda",
+            "image": "Su paveikslėliu",
+            "file": "Su failu",
+            "poll": "Su apklausa",
             "list": "Paieškos filtrai",
             "after": "Po: {{date}}",
             "before": "Iki: {{date}}",
@@ -1892,6 +1907,9 @@
             "thisYear": "Šie metai"
         },
         "operators": {
+            "from": "Asmens žinutės, arba from:me",
+            "is": "is:mine jūsų pačių žinutėms",
+            "has": "Žinutės su nuoroda, paveikslėliu, failu ar apklausa",
             "label": "Filtrai",
             "in": "Ieškoti viename pokalbyje ar kambaryje",
             "after": "Žinutės po datos",
@@ -1919,6 +1937,7 @@
         "goToMessage": "Eiti į žinutę",
         "loadingContext": "Įkeliamos žinutės…",
         "errors": {
+            "serverNeedsWords": "Serverio archyvui reikia paieškos žodžių, išskyrus pokalbį dviese",
             "failed": "Paieška nepavyko",
             "archiveRooms": "Serveris nepalaiko kambarių archyvo paieškos",
             "archiveUnsupported": "Serveris nepalaiko archyvo paieškos. Pabandykite ieškoti pokalbio viduje.",

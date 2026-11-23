@@ -1395,11 +1395,12 @@ export class MAM extends BaseModule {
     signal?: AbortSignal
   ): Promise<HistoryResult> {
     const session = this.captureQuery()
-    const { query, with: withJid, start, end, maxPages = 20, maxResults = 50 } = options
+    const { query, with: withJid, start, end, maxPages = 20, maxResults = 50, filter } = options
     const parsed = parseSearchQuery(query)
     const phraseTokens = parsed.phrases.flatMap((p) => tokenize(p))
     const allTokens = [...new Set([...parsed.terms, ...phraseTokens])]
-    if (allTokens.length === 0 && parsed.phrases.length === 0) {
+    const wordless = allTokens.length === 0 && parsed.phrases.length === 0
+    if (wordless && !filter) {
       return { messages: [], complete: true, page: {} }
     }
 
@@ -1430,7 +1431,8 @@ export class MAM extends BaseModule {
       // Match messages client-side
       for (const msg of result.messages) {
         if (matches.length >= maxResults) break
-        if (!msg.isRetracted && msg.body && this.matchesQuery(msg.body, allTokens, parsed.phrases)) {
+        if (!msg.isRetracted && (msg.body || wordless) && (wordless || this.matchesQuery(msg.body ?? '', allTokens, parsed.phrases)) &&
+          (!filter || filter(msg))) {
           matches.push(msg)
         }
       }

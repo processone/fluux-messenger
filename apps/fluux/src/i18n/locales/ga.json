@@ -1879,7 +1879,22 @@
         "sent": "Teachtaireacht seolta. Is féidir an mhír iompórtáilte seo a bhaint."
     },
     "search": {
+        "filtersBuilding": "Tá Fluux fós ag ullmhú na staire ar an ngléas seo do from:, is: agus has:. Beidh na torthaí le feiceáil nuair a bheidh sé críochnaithe.",
+        "needsWords": "Cuir focal leis, nó scagaire ar nós from: nó has:, chun cuardach a dhéanamh laistigh de na dátaí seo",
+        "values": {
+            "mine": "Do theachtaireachtaí féin",
+            "link": "Teachtaireachtaí le nasc",
+            "image": "Teachtaireachtaí le híomhá",
+            "file": "Teachtaireachtaí le comhad",
+            "poll": "Teachtaireachtaí le vótáil"
+        },
         "chip": {
+            "from": "Ó {{name}}",
+            "mine": "Seolta agamsa",
+            "link": "Le nasc",
+            "image": "Le híomhá",
+            "file": "Le comhad",
+            "poll": "Le vótáil",
             "list": "Scagairí cuardaigh",
             "after": "I ndiaidh {{date}}",
             "before": "Roimh {{date}}",
@@ -1894,6 +1909,9 @@
             "thisYear": "An bhliain seo"
         },
         "operators": {
+            "from": "Teachtaireachtaí ó dhuine, nó from:me",
+            "is": "is:mine do do theachtaireachtaí féin",
+            "has": "Teachtaireachtaí le nasc, íomhá, comhad nó vótáil",
             "label": "Scagairí",
             "in": "Cuardaigh i gcomhrá nó i seomra amháin",
             "after": "Teachtaireachtaí i ndiaidh dáta",
@@ -1921,6 +1939,7 @@
         "goToMessage": "Téigh chuig an teachtaireacht",
         "loadingContext": "Teachtaireachtaí á lódáil…",
         "errors": {
+            "serverNeedsWords": "Teastaíonn focail ó chartlann an fhreastalaí le cuardach a dhéanamh, ach amháin laistigh de chomhrá idir beirt",
             "failed": "Theip ar an gcuardach",
             "archiveRooms": "Ní thacaíonn an freastalaí le cuardach cartlainne do sheomraí",
             "archiveUnsupported": "Ní thacaíonn an freastalaí le cuardach cartlainne. Bain triail as cuardach laistigh de chomhrá.",

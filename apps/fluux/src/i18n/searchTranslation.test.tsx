@@ -102,7 +102,7 @@ beforeEach(async () => {
     isSearchingMAM: false, mamResults: [], hasMoreMAMResults: false, mamError: null,
     searchScope: null, searchMAM: vi.fn(), loadMoreMAMResults: vi.fn(), setSearchScope: vi.fn(),
     resultContext: new Map(), searchFilter: 'all', setSearchFilter: vi.fn(),
-    inPrefixSuggestions: [], isInPrefixActive: false, selectInPrefixSuggestion: vi.fn(),
+    inPrefixSuggestions: [], isInPrefixActive: false, selectInPrefixSuggestion: vi.fn(), filtersBuilding: false,
   }
   vi.mocked(useSearch).mockImplementation(() => searchState)
   vi.mocked(getMessages).mockResolvedValue([])

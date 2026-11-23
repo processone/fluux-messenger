@@ -63,7 +63,7 @@ async function expectRowsMatchDocuments(db: IDBPDatabase<any>, options: { allNum
   const numbers = docs.filter(d => d.docNo !== undefined).map(d => d.docNo)
   expect(new Set(numbers).size).toBe(numbers.length)
   if (options.allNumbered) expect(numbers).toHaveLength(docs.length)
-  const expected = docs.flatMap(d => d.docNo === undefined ? [] : d.tokens.map((t: string) => [t, -(Number.isFinite(d.timestamp) ? d.timestamp : 0), d.docNo]))
+  const expected = docs.flatMap(d => d.docNo === undefined ? [] : [...d.tokens, ...d.filterTokens ?? []].map((t: string) => [t, -(Number.isFinite(d.timestamp) ? d.timestamp : 0), d.docNo]))
   const actual = (await db.getAllKeys('search-postings')) as unknown as [string, number, number][]
   expect(actual).toHaveLength(expected.length)
   expect(new Set(actual.map(k => JSON.stringify(k)))).toEqual(new Set(expected.map(k => JSON.stringify(k))))
@@ -127,13 +127,13 @@ describe('time-sorted search index', () => {
   })
 
   describe('upgrading a version 4 database', () => {
-    it('opens at version 5, not ready, with the old lists untouched and search unchanged', async () => {
+    it('opens at version 6, not ready, with the old lists untouched and search unchanged', async () => {
       await seedV4(Array.from({ length: 5 }, (_, i) => legacyDoc(i + 1, `shared word number${i}`)))
       const before = await (async () => { await initSearchIndex(SCOPE); return search('shared') })()
       expect(before).toHaveLength(5)
       expect(await isPostingsReady(SCOPE)).toBe(false)
       const db = await openRaw()
-      expect(db.version).toBe(5)
+      expect(db.version).toBe(6)
       expect((await db.get('search-tokens', 'shared')).postings).toHaveLength(5)
       expect(await db.count('search-postings')).toBe(0)
       db.close()

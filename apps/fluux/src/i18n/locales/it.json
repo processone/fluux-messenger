@@ -1877,7 +1877,22 @@
         "sent": "Messaggio inviato. Puoi eliminare questo elemento importato."
     },
     "search": {
+        "filtersBuilding": "Fluux sta ancora preparando la cronologia su questo dispositivo per from:, is: e has:. I risultati appariranno al termine.",
+        "needsWords": "Aggiungi una parola, o un filtro come from: o has:, per cercare in queste date",
+        "values": {
+            "mine": "I tuoi messaggi",
+            "link": "Messaggi con un link",
+            "image": "Messaggi con un'immagine",
+            "file": "Messaggi con un file",
+            "poll": "Messaggi con un sondaggio"
+        },
         "chip": {
+            "from": "Da {{name}}",
+            "mine": "Inviati da me",
+            "link": "Con link",
+            "image": "Con immagine",
+            "file": "Con file",
+            "poll": "Con sondaggio",
             "list": "Filtri di ricerca",
             "after": "Dopo {{date}}",
             "before": "Prima di {{date}}",
@@ -1892,6 +1907,9 @@
             "thisYear": "Quest'anno"
         },
         "operators": {
+            "from": "Messaggi di una persona, o from:me",
+            "is": "is:mine per i tuoi messaggi",
+            "has": "Messaggi con un link, un'immagine, un file o un sondaggio",
             "label": "Filtri",
             "in": "Cerca in una conversazione o stanza",
             "after": "Messaggi dopo una data",
@@ -1919,6 +1937,7 @@
         "goToMessage": "Vai al messaggio",
         "loadingContext": "Caricamento dei messaggi…",
         "errors": {
+            "serverNeedsWords": "L'archivio del server ha bisogno di parole da cercare, tranne in una conversazione a due",
             "failed": "Ricerca non riuscita",
             "archiveRooms": "Il server non supporta la ricerca nell'archivio delle stanze",
             "archiveUnsupported": "Il server non supporta la ricerca nell'archivio. Prova a cercare all'interno di una conversazione.",

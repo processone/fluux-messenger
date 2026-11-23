@@ -1879,7 +1879,22 @@
         "sent": "Sporočilo je poslano. Ta uvoženi element lahko odstranite."
     },
     "search": {
+        "filtersBuilding": "Fluux še pripravlja zgodovino na tej napravi za from:, is: in has:. Rezultati se bodo prikazali, ko bo končano.",
+        "needsWords": "Dodajte besedo ali filter, kot je from: ali has:, za iskanje v teh datumih",
+        "values": {
+            "mine": "Vaša lastna sporočila",
+            "link": "Sporočila s povezavo",
+            "image": "Sporočila s sliko",
+            "file": "Sporočila z datoteko",
+            "poll": "Sporočila z anketo"
+        },
         "chip": {
+            "from": "Od: {{name}}",
+            "mine": "Moja sporočila",
+            "link": "S povezavo",
+            "image": "S sliko",
+            "file": "Z datoteko",
+            "poll": "Z anketo",
             "list": "Filtri iskanja",
             "after": "Po: {{date}}",
             "before": "Pred: {{date}}",
@@ -1894,6 +1909,9 @@
             "thisYear": "To leto"
         },
         "operators": {
+            "from": "Sporočila osebe, ali from:me",
+            "is": "is:mine za vaša lastna sporočila",
+            "has": "Sporočila s povezavo, sliko, datoteko ali anketo",
             "label": "Filtri",
             "in": "Iskanje v enem pogovoru ali sobi",
             "after": "Sporočila po datumu",
@@ -1921,6 +1939,7 @@
         "goToMessage": "Pojdi na sporočilo",
         "loadingContext": "Nalaganje sporočil …",
         "errors": {
+            "serverNeedsWords": "Arhiv strežnika potrebuje besede za iskanje, razen v pogovoru med dvema osebama",
             "failed": "Iskanje ni uspelo",
             "archiveRooms": "Strežnik ne podpira iskanja po arhivu sob",
             "archiveUnsupported": "Strežnik ne podpira iskanja po arhivu. Poskusite iskati znotraj pogovora.",

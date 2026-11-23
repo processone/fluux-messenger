@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseDateSpan, parseSearchFilters, removeSearchFilter } from './searchFilters'
+import { filterToken, matchesFilterTokens, messageFilterTokens, parseDateSpan, parseSearchFilters, removeSearchFilter } from './searchFilters'
 
 const day = (y: number, m: number, d: number) => new Date(y, m - 1, d).getTime()
 
@@ -57,5 +57,47 @@ describe('search date operators', () => {
 
   it('removes one operator from the query as typed', () => {
     expect(removeSearchFilter('a after:2024 b', { raw: 'after:2024' })).toBe('a b')
+  })
+})
+
+describe('sender and content operators', () => {
+  it('reads from:, is:mine and has:, and reports values it does not know', () => {
+    const parsed = parseSearchFilters('plan from:alice from:"Bob Smith" has:image has:nope is:mine', 'en')
+    expect(parsed.text).toBe('plan')
+    expect(parsed.from).toEqual(['alice', 'Bob Smith'])
+    expect(parsed.has).toEqual(['image'])
+    expect(parsed.mine).toBe(true)
+    expect(parsed.filters.filter(f => !f.valid).map(f => f.raw)).toEqual(['has:nope'])
+    expect(parseSearchFilters('from:me', 'en')).toMatchObject({ mine: true, from: [] })
+  })
+})
+
+describe('message filter tokens', () => {
+  const chat = { type: 'chat' as const, from: 'alice@example.com/phone', isOutgoing: false, body: 'hi' }
+
+  it('names a one-to-one sender by bare JID, and the reader by is:mine', () => {
+    expect(messageFilterTokens(chat)).toEqual([filterToken.from('alice@example.com')])
+    expect(messageFilterTokens({ ...chat, isOutgoing: true })).toEqual([filterToken.mine])
+  })
+
+  it('names a room sender by nick and occupant id', () => {
+    expect(messageFilterTokens({ type: 'groupchat', from: 'r@muc/Al', nick: 'Al', occupantId: 'occ-1', isOutgoing: false, body: '' }))
+      .toEqual([filterToken.nick('al'), filterToken.occupant('occ-1')])
+  })
+
+  it('finds links, files, images and polls, but not a file URL as a link', () => {
+    const tokens = (extra: object) => messageFilterTokens({ ...chat, ...extra }).filter(t => t.includes('has:'))
+    expect(tokens({ body: 'see https://example.com/x' })).toEqual([filterToken.has('link')])
+    expect(tokens({ body: 'www.example.com' })).toEqual([filterToken.has('link')])
+    const url = 'https://up.example.com/a.png'
+    expect(tokens({ body: url, attachment: { url } })).toEqual([filterToken.has('file'), filterToken.has('image')])
+    expect(tokens({ body: '', attachment: { url: 'https://up/x', mediaType: 'application/pdf' } })).toEqual([filterToken.has('file')])
+    expect(tokens({ body: 'Lunch?', poll: { title: 'Lunch?' } })).toEqual([filterToken.has('poll')])
+  })
+
+  it('needs one token of every group', () => {
+    const groups = [[filterToken.has('link')], [filterToken.from('bob@example.com'), filterToken.from('alice@example.com')]]
+    expect(matchesFilterTokens({ ...chat, body: 'https://x.y' }, groups)).toBe(true)
+    expect(matchesFilterTokens({ ...chat, body: 'no link' }, groups)).toBe(false)
   })
 })

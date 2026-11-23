@@ -22,7 +22,7 @@ vi.mock('@/stores/settingsStore', () => ({
 }))
 vi.mock('@fluux/sdk/react', () => ({ useRoomStore: () => undefined, useRosterStore: () => undefined }))
 
-const search = vi.hoisted(() => ({ query: '', calls: [] as string[], none: [] as never[] }))
+const search = vi.hoisted(() => ({ query: '', calls: [] as string[], none: [] as never[], filtersBuilding: false }))
 vi.mock('@fluux/sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@fluux/sdk')>()
   const { useState } = await import('react')
@@ -35,7 +35,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
         isSearchingMAM: false, mamResults: search.none, hasMoreMAMResults: false, mamError: null, searchScope: null,
         searchMAM: vi.fn(), loadMoreMAMResults: vi.fn(), setSearchScope: vi.fn(), resultContext: new Map(),
         searchFilter: 'all', setSearchFilter: vi.fn(), inPrefixSuggestions: search.none, isInPrefixActive: false,
-        selectInPrefixSuggestion: vi.fn(), clearSearch: () => setQuery(''),
+        selectInPrefixSuggestion: vi.fn(), filtersBuilding: search.filtersBuilding, clearSearch: () => setQuery(''),
         search: (next: string) => { search.calls.push(next); setQuery(next) },
       }
     },
@@ -48,6 +48,7 @@ describe('SearchView filters', () => {
   beforeEach(() => {
     search.query = ''
     search.calls = []
+    search.filtersBuilding = false
   })
 
   it('shows a chip per operator, and removing one keeps the rest of the query', () => {
@@ -93,5 +94,28 @@ describe('SearchView filters', () => {
     render(<SearchView />)
     fireEvent.click(screen.getByRole('button', { name: 'after:' }))
     expect(search.calls.at(-1)).toBe('after:')
+  })
+
+  it('names senders and content in the chips', () => {
+    search.query = 'from:alice is:mine has:image'
+    render(<SearchView />)
+    expect(screen.getByText('search.chip.from{"name":"alice"}')).toBeTruthy()
+    expect(screen.getByText('search.chip.mine')).toBeTruthy()
+    expect(screen.getByText('search.chip.image')).toBeTruthy()
+  })
+
+  it('says when the filters wait for the index, and when dates alone leave nothing to search', () => {
+    search.query = 'has:image'
+    search.filtersBuilding = true
+    const { unmount } = render(<SearchView />)
+    expect(screen.getByRole('status').textContent).toContain('search.filtersBuilding')
+    expect(screen.queryByText('search.noResults')).toBeNull()
+    unmount()
+
+    search.query = 'after:2024-03-01'
+    search.filtersBuilding = false
+    render(<SearchView />)
+    expect(screen.getByText('search.needsWords')).toBeTruthy()
+    expect(screen.queryByText('search.searchServer')).toBeNull()
   })
 })

@@ -1873,7 +1873,22 @@
         "sent": "메시지를 보냈습니다. 가져온 항목을 삭제할 수 있습니다."
     },
     "search": {
+        "filtersBuilding": "Fluux가 from:, is:, has:를 위해 이 기기의 기록을 아직 준비하고 있습니다. 완료되면 결과가 표시됩니다.",
+        "needsWords": "이 기간 안에서 검색하려면 단어 또는 from:, has: 같은 필터를 추가하세요",
+        "values": {
+            "mine": "내 메시지",
+            "link": "링크가 있는 메시지",
+            "image": "이미지가 있는 메시지",
+            "file": "파일이 있는 메시지",
+            "poll": "투표가 있는 메시지"
+        },
         "chip": {
+            "from": "보낸 사람: {{name}}",
+            "mine": "내가 보냄",
+            "link": "링크 포함",
+            "image": "이미지 포함",
+            "file": "파일 포함",
+            "poll": "투표 포함",
             "list": "검색 필터",
             "after": "{{date}} 이후",
             "before": "{{date}} 이전",
@@ -1888,6 +1903,9 @@
             "thisYear": "올해"
         },
         "operators": {
+            "from": "특정 사람의 메시지, 또는 from:me",
+            "is": "is:mine으로 내 메시지 검색",
+            "has": "링크, 이미지, 파일 또는 투표가 있는 메시지",
             "label": "필터",
             "in": "대화 또는 대화방 하나에서 검색",
             "after": "특정 날짜 이후의 메시지",
@@ -1915,6 +1933,7 @@
         "goToMessage": "메시지로 이동",
         "loadingContext": "메시지 불러오는 중…",
         "errors": {
+            "serverNeedsWords": "일대일 대화가 아니면 서버 보관함 검색에는 검색어가 필요합니다",
             "failed": "검색에 실패했습니다",
             "archiveRooms": "서버가 대화방 보관함 검색을 지원하지 않습니다",
             "archiveUnsupported": "서버가 보관함 검색을 지원하지 않습니다. 대화 안에서 검색해 보세요.",

@@ -1879,7 +1879,22 @@
         "sent": "Zpráva odeslána. Tuto importovanou položku můžete odstranit."
     },
     "search": {
+        "filtersBuilding": "Fluux stále připravuje historii na tomto zařízení pro from:, is: a has:. Výsledky se zobrazí po dokončení.",
+        "needsWords": "Přidejte slovo nebo filtr, například from: nebo has:, pro hledání v těchto datech",
+        "values": {
+            "mine": "Vaše vlastní zprávy",
+            "link": "Zprávy s odkazem",
+            "image": "Zprávy s obrázkem",
+            "file": "Zprávy se souborem",
+            "poll": "Zprávy s anketou"
+        },
         "chip": {
+            "from": "Od: {{name}}",
+            "mine": "Odeslané mnou",
+            "link": "S odkazem",
+            "image": "S obrázkem",
+            "file": "Se souborem",
+            "poll": "S anketou",
             "list": "Filtry hledání",
             "after": "Po: {{date}}",
             "before": "Před: {{date}}",
@@ -1894,6 +1909,9 @@
             "thisYear": "Tento rok"
         },
         "operators": {
+            "from": "Zprávy od osoby, nebo from:me",
+            "is": "is:mine pro vaše vlastní zprávy",
+            "has": "Zprávy s odkazem, obrázkem, souborem nebo anketou",
             "label": "Filtry",
             "in": "Hledat v jedné konverzaci nebo místnosti",
             "after": "Zprávy po datu",
@@ -1921,6 +1939,7 @@
         "goToMessage": "Přejít na zprávu",
         "loadingContext": "Načítání zpráv…",
         "errors": {
+            "serverNeedsWords": "Archiv serveru potřebuje slova k hledání, kromě konverzace mezi dvěma lidmi",
             "failed": "Hledání se nezdařilo",
             "archiveRooms": "Server nepodporuje hledání v archivu místností",
             "archiveUnsupported": "Server nepodporuje hledání v archivu. Zkuste hledat uvnitř konverzace.",

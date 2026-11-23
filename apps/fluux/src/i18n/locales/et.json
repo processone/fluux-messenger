@@ -1875,7 +1875,22 @@
         "sent": "Sõnum saadetud. Võid selle imporditud üksuse eemaldada."
     },
     "search": {
+        "filtersBuilding": "Fluux valmistab selle seadme ajalugu ette filtrite from:, is: ja has: jaoks. Tulemused ilmuvad, kui see on valmis.",
+        "needsWords": "Lisage sõna või filter, näiteks from: või has:, et otsida nende kuupäevade piires",
+        "values": {
+            "mine": "Teie enda sõnumid",
+            "link": "Sõnumid lingiga",
+            "image": "Sõnumid pildiga",
+            "file": "Sõnumid failiga",
+            "poll": "Sõnumid küsitlusega"
+        },
         "chip": {
+            "from": "Saatja: {{name}}",
+            "mine": "Minu saadetud",
+            "link": "Lingiga",
+            "image": "Pildiga",
+            "file": "Failiga",
+            "poll": "Küsitlusega",
             "list": "Otsingufiltrid",
             "after": "Pärast {{date}}",
             "before": "Enne {{date}}",
@@ -1890,6 +1905,9 @@
             "thisYear": "See aasta"
         },
         "operators": {
+            "from": "Inimese sõnumid, või from:me",
+            "is": "is:mine teie enda sõnumite jaoks",
+            "has": "Sõnumid, milles on link, pilt, fail või küsitlus",
             "label": "Filtrid",
             "in": "Otsi ühest vestlusest või ruumist",
             "after": "Sõnumid pärast kuupäeva",
@@ -1917,6 +1935,7 @@
         "goToMessage": "Ava sõnum",
         "loadingContext": "Sõnumite laadimine…",
         "errors": {
+            "serverNeedsWords": "Serveri arhiiv vajab otsimiseks sõnu, välja arvatud kahe inimese vestluses",
             "failed": "Otsing ebaõnnestus",
             "archiveRooms": "Server ei toeta ruumide arhiivist otsimist",
             "archiveUnsupported": "Server ei toeta arhiivist otsimist. Proovige otsida vestluse sees.",

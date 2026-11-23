@@ -4,9 +4,9 @@ import { isSpamModerated } from '@/utils/spamModeration'
 import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import { useSearch, useRoomMessageSnapshots, chatStore, roomStore, getLocalPart, setSearchLocale, parseSearchInput, removeSearchFilter } from '@fluux/sdk'
+import { useSearch, useRoomMessageSnapshots, chatStore, roomStore, getLocalPart, setSearchLocale, parseSearchFilters, removeSearchFilter, hasTokenFilters } from '@fluux/sdk'
 import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
-import type { SearchResult, SearchResultContext, SearchFilterType, RoomMessage } from '@fluux/sdk'
+import type { SearchResult, SearchResultContext, SearchFilterType, RoomMessage, SearchFilterToken } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { RoomAvatar } from '../RoomAvatar'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
@@ -16,8 +16,8 @@ import { useDayChange } from '@/hooks/useDayChange'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 import { useSidebarZone } from './types'
-import { Search, SearchX, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash, CalendarDays, AlertTriangle, Filter } from 'lucide-react'
-import { applySuggestion, filterChipLabel, operatorSuggestions, SEARCH_OPERATOR_NAMES } from './searchOperators'
+import { Search, SearchX, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash, CalendarDays, AlertTriangle, Filter, User, Link, Image, Paperclip, BarChart3 } from 'lucide-react'
+import { applySuggestion, filterChipLabel, operatorSuggestions, SEARCH_OPERATOR_NAMES, type SenderOption } from './searchOperators'
 import { TextInput } from '../ui/TextInput'
 import { ListEmpty } from '../ui/ListEmpty'
 
@@ -26,7 +26,43 @@ const SEARCH_ERROR_KEYS = new Map([
   ['Server does not support archive search for rooms', 'search.errors.archiveRooms'],
   ['Server does not support archive search. Try searching within a conversation.', 'search.errors.archiveUnsupported'],
   ['Server search failed', 'search.errors.serverFailed'],
+  ['The server archive needs words to search', 'search.errors.serverNeedsWords'],
 ])
+
+const CHIP_ICONS = { link: Link, image: Image, file: Paperclip, poll: BarChart3 } as const
+
+/** The icon of a chip: who for from: and is:, what for has:, a calendar for dates. */
+function chipIcon(filter: SearchFilterToken) {
+  if (!filter.valid) return AlertTriangle
+  if (filter.op === 'from' || filter.op === 'is') return User
+  if (filter.op === 'has') return CHIP_ICONS[filter.value.toLowerCase() as keyof typeof CHIP_ICONS] ?? Filter
+  return CalendarDays
+}
+
+/**
+ * Who `from:` can name: in a room scope its occupants by nick, otherwise the
+ * one-to-one conversations by JID and the occupants of every joined room.
+ */
+function senderOptions(scope: string | null): SenderOption[] {
+  const options: SenderOption[] = []
+  const seen = new Set<string>()
+  const add = (value: string, label: string) => {
+    if (seen.has(value.toLowerCase())) return
+    seen.add(value.toLowerCase())
+    options.push({ value, label })
+  }
+  for (const [jid, room] of roomStore.getState().rooms) {
+    if (scope && scope !== jid) continue
+    // The reader is from:me, not their own nick
+    for (const occupant of room.occupants?.values() ?? []) if (occupant.nick !== room.nickname) add(occupant.nick, occupant.nick)
+  }
+  if (!scope || !roomStore.getState().rooms.has(scope)) {
+    for (const [jid, entity] of chatStore.getState().conversationEntities) {
+      if (!scope || scope === jid) add(jid, entity.name || jid)
+    }
+  }
+  return options
+}
 
 function translateSearchError(t: TFunction, message: string): string {
   return t(SEARCH_ERROR_KEYS.get(message) ?? 'search.errors.failed')
@@ -47,7 +83,7 @@ export function SearchView() {
     isSearchingMAM, mamResults: rawMamResults, hasMoreMAMResults, mamError, searchScope,
     searchMAM, loadMoreMAMResults, setSearchScope, resultContext,
     searchFilter, setSearchFilter,
-    inPrefixSuggestions, isInPrefixActive, selectInPrefixSuggestion,
+    inPrefixSuggestions, isInPrefixActive, selectInPrefixSuggestion, filtersBuilding,
   } = useSearch()
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -109,13 +145,16 @@ export function SearchView() {
     if (previewResult && hiddenResults.has(previewResult.indexId)) latestRef.current.setPreviewResult(null)
   }, [previewResult, hiddenResults])
 
-  // Parsed again on each render: cheap, and the locale effect above runs before any typing
-  const parsedInput = useMemo(() => parseSearchInput(query), [query, i18n.language])
+  // Read in the same locale the store gets from the effect above
+  const parsedInput = useMemo(() => parseSearchFilters(query, i18n.language), [query, i18n.language])
   const chips = parsedInput.filters.filter((filter) => filter.value)
   const operatorOptions = useMemo(
-    () => (isInPrefixActive || dismissedFor === query ? [] : operatorSuggestions(query)),
-    [query, isInPrefixActive, dismissedFor],
+    () => (isInPrefixActive || dismissedFor === query ? [] : operatorSuggestions(query, new Date(),
+      /\bfrom:\S*$/i.test(query) ? senderOptions(searchScope) : [])),
+    [query, isInPrefixActive, dismissedFor, searchScope],
   )
+  // Dates only narrow a search: alone they leave nothing to look for
+  const needsWords = !!query.trim() && !isInPrefixActive && !parsedInput.text && !hasTokenFilters(parsedInput)
   const suggestionCount = isInPrefixActive ? inPrefixSuggestions.length : operatorOptions.length
   const suggestionsOpen = suggestionCount > 0
 
@@ -232,7 +271,7 @@ export function SearchView() {
                     ${i === inPrefixHighlight ? 'bg-fluux-hover text-fluux-text' : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'}`}
                 >
                   <span className="font-mono text-fluux-text flex-shrink-0">{option.insert}</span>
-                  <span className="truncate text-xs">{t(option.hintKey)}</span>
+                  <span className="truncate text-xs">{option.label ?? t(option.hintKey)}</span>
                 </button>
               ))}
               {isInPrefixActive && inPrefixSuggestions.map((s, i) => (
@@ -280,14 +319,14 @@ export function SearchView() {
           )}
           {chips.map((filter) => {
             const label = filterChipLabel(filter, t, currentLang)
+            const Icon = chipIcon(filter)
             return (
               <li key={filter.raw}
                 className={`flex items-center gap-1 min-w-0 max-w-full text-xs rounded ps-2 ${filter.valid
                   ? 'bg-fluux-brand/15 text-fluux-text' : 'bg-fluux-red/20 text-fluux-error'}`}
                 title={filter.valid ? undefined : t('search.chip.invalid', { filter: filter.raw })}
               >
-                {filter.valid ? <CalendarDays className="size-3 flex-shrink-0" aria-hidden />
-                  : <AlertTriangle className="size-3 flex-shrink-0" aria-hidden />}
+                <Icon className="size-3 flex-shrink-0" aria-hidden />
                 <span className="truncate">{label}</span>
                 {!filter.valid && <span className="sr-only">{t('search.chip.invalid', { filter: filter.raw })}</span>}
                 <button
@@ -335,7 +374,18 @@ export function SearchView() {
           </div>
         )}
 
-        {!isSearching && !isInPrefixActive && query && results.length === 0 && mamResults.length === 0 && !isSearchingMAM && (
+        {!isSearching && filtersBuilding && (
+          <p role="status" className="flex items-start gap-2 mx-2 my-3 p-2 rounded bg-fluux-hover text-xs text-fluux-muted">
+            <Loader2 className="size-3.5 mt-0.5 flex-shrink-0 animate-spin" aria-hidden />
+            {t('search.filtersBuilding')}
+          </p>
+        )}
+
+        {!isSearching && needsWords && (
+          <ListEmpty icon={Filter} title={t('search.needsWords')} />
+        )}
+
+        {!isSearching && !isInPrefixActive && !filtersBuilding && !needsWords && query && results.length === 0 && mamResults.length === 0 && !isSearchingMAM && (
           <ListEmpty icon={SearchX} title={t('search.noResults')} />
         )}
 
@@ -366,7 +416,7 @@ export function SearchView() {
         )}
 
         {/* MAM search button */}
-        {!isSearching && !isInPrefixActive && query && !isSearchingMAM && mamResults.length === 0 && (
+        {!isSearching && !isInPrefixActive && !needsWords && query && !isSearchingMAM && mamResults.length === 0 && (
           <div className="px-2 py-3">
             <button
               type="button"
@@ -639,9 +689,11 @@ function HighlightedSnippet({
     <p className="text-xs text-fluux-muted line-clamp-1 mt-0.5">
       {nick && <span className="font-medium text-fluux-text">{nick}: </span>}
       {before}
-      <mark className="search-match px-0.5">
-        {match}
-      </mark>
+      {match && (
+        <mark className="search-match px-0.5">
+          {match}
+        </mark>
+      )}
       {after}
     </p>
   )

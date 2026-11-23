@@ -1879,7 +1879,22 @@
         "sent": "Wiadomość wysłana. Możesz usunąć ten zaimportowany element."
     },
     "search": {
+        "filtersBuilding": "Fluux wciąż przygotowuje historię na tym urządzeniu dla from:, is: i has:. Wyniki pojawią się po zakończeniu.",
+        "needsWords": "Dodaj słowo lub filtr, taki jak from: lub has:, aby szukać w tym zakresie dat",
+        "values": {
+            "mine": "Twoje własne wiadomości",
+            "link": "Wiadomości z linkiem",
+            "image": "Wiadomości z obrazem",
+            "file": "Wiadomości z plikiem",
+            "poll": "Wiadomości z ankietą"
+        },
         "chip": {
+            "from": "Od: {{name}}",
+            "mine": "Wysłane przeze mnie",
+            "link": "Z linkiem",
+            "image": "Z obrazem",
+            "file": "Z plikiem",
+            "poll": "Z ankietą",
             "list": "Filtry wyszukiwania",
             "after": "Po: {{date}}",
             "before": "Przed: {{date}}",
@@ -1894,6 +1909,9 @@
             "thisYear": "Ten rok"
         },
         "operators": {
+            "from": "Wiadomości od osoby, lub from:me",
+            "is": "is:mine dla twoich własnych wiadomości",
+            "has": "Wiadomości z linkiem, obrazem, plikiem lub ankietą",
             "label": "Filtry",
             "in": "Szukaj w jednej rozmowie lub pokoju",
             "after": "Wiadomości po dacie",
@@ -1921,6 +1939,7 @@
         "goToMessage": "Przejdź do wiadomości",
         "loadingContext": "Wczytywanie wiadomości…",
         "errors": {
+            "serverNeedsWords": "Archiwum serwera wymaga słów do wyszukania, z wyjątkiem rozmowy jeden na jeden",
             "failed": "Wyszukiwanie nie powiodło się",
             "archiveRooms": "Serwer nie obsługuje wyszukiwania w archiwum pokoi",
             "archiveUnsupported": "Serwer nie obsługuje wyszukiwania w archiwum. Spróbuj wyszukać wewnątrz rozmowy.",

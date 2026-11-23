@@ -1877,7 +1877,22 @@
         "sent": "Mesaj trimis. Puteți șterge acest element importat."
     },
     "search": {
+        "filtersBuilding": "Fluux încă pregătește istoricul de pe acest dispozitiv pentru from:, is: și has:. Rezultatele vor apărea când se termină.",
+        "needsWords": "Adăugați un cuvânt sau un filtru precum from: sau has: pentru a căuta în aceste date",
+        "values": {
+            "mine": "Propriile mesaje",
+            "link": "Mesaje cu un link",
+            "image": "Mesaje cu o imagine",
+            "file": "Mesaje cu un fișier",
+            "poll": "Mesaje cu un sondaj"
+        },
         "chip": {
+            "from": "De la {{name}}",
+            "mine": "Trimise de mine",
+            "link": "Cu link",
+            "image": "Cu imagine",
+            "file": "Cu fișier",
+            "poll": "Cu sondaj",
             "list": "Filtre de căutare",
             "after": "După {{date}}",
             "before": "Înainte de {{date}}",
@@ -1892,6 +1907,9 @@
             "thisYear": "Anul acesta"
         },
         "operators": {
+            "from": "Mesaje de la o persoană, sau from:me",
+            "is": "is:mine pentru propriile mesaje",
+            "has": "Mesaje cu un link, o imagine, un fișier sau un sondaj",
             "label": "Filtre",
             "in": "Caută într-o conversație sau cameră",
             "after": "Mesaje după o dată",
@@ -1919,6 +1937,7 @@
         "goToMessage": "Mergi la mesaj",
         "loadingContext": "Se încarcă mesajele…",
         "errors": {
+            "serverNeedsWords": "Arhiva serverului are nevoie de cuvinte pentru căutare, cu excepția unei conversații între două persoane",
             "failed": "Căutarea a eșuat",
             "archiveRooms": "Serverul nu acceptă căutarea în arhiva camerelor",
             "archiveUnsupported": "Serverul nu acceptă căutarea în arhivă. Încercați să căutați într-o conversație.",

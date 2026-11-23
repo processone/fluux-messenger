@@ -1873,7 +1873,22 @@
         "sent": "Üzenet elküldve. Ezt az importált elemet törölheti."
     },
     "search": {
+        "filtersBuilding": "A Fluux még előkészíti az eszközön lévő előzményeket a from:, is: és has: szűrőkhöz. Az eredmények a befejezés után jelennek meg.",
+        "needsWords": "Adjon meg egy szót vagy egy szűrőt, például from: vagy has:, hogy ezeken a dátumokon belül keressen",
+        "values": {
+            "mine": "Saját üzenetei",
+            "link": "Hivatkozást tartalmazó üzenetek",
+            "image": "Képet tartalmazó üzenetek",
+            "file": "Fájlt tartalmazó üzenetek",
+            "poll": "Szavazást tartalmazó üzenetek"
+        },
         "chip": {
+            "from": "Feladó: {{name}}",
+            "mine": "Általam küldött",
+            "link": "Hivatkozással",
+            "image": "Képpel",
+            "file": "Fájllal",
+            "poll": "Szavazással",
             "list": "Keresési szűrők",
             "after": "{{date}} után",
             "before": "{{date}} előtt",
@@ -1888,6 +1903,9 @@
             "thisYear": "Ebben az évben"
         },
         "operators": {
+            "from": "Egy személy üzenetei, vagy from:me",
+            "is": "is:mine a saját üzeneteihez",
+            "has": "Hivatkozást, képet, fájlt vagy szavazást tartalmazó üzenetek",
             "label": "Szűrők",
             "in": "Keresés egy beszélgetésben vagy szobában",
             "after": "Üzenetek egy dátum után",
@@ -1915,6 +1933,7 @@
         "goToMessage": "Ugrás az üzenetre",
         "loadingContext": "Üzenetek betöltése…",
         "errors": {
+            "serverNeedsWords": "A szerver archívumában való kereséshez szavak kellenek, kivéve egy kétszemélyes beszélgetésen belül",
             "failed": "A keresés sikertelen",
             "archiveRooms": "A szerver nem támogatja a szobák archívumában való keresést",
             "archiveUnsupported": "A szerver nem támogatja az archívumban való keresést. Próbáljon egy beszélgetésen belül keresni.",

@@ -1876,7 +1876,22 @@
         "sent": "Ziņojums nosūtīts. Varat dzēst šo importēto vienumu."
     },
     "search": {
+        "filtersBuilding": "Fluux vēl sagatavo šīs ierīces vēsturi filtriem from:, is: un has:. Rezultāti parādīsies, kad tas būs pabeigts.",
+        "needsWords": "Pievienojiet vārdu vai filtru, piemēram, from: vai has:, lai meklētu šajos datumos",
+        "values": {
+            "mine": "Jūsu pašu ziņas",
+            "link": "Ziņas ar saiti",
+            "image": "Ziņas ar attēlu",
+            "file": "Ziņas ar failu",
+            "poll": "Ziņas ar aptauju"
+        },
         "chip": {
+            "from": "No: {{name}}",
+            "mine": "Manas ziņas",
+            "link": "Ar saiti",
+            "image": "Ar attēlu",
+            "file": "Ar failu",
+            "poll": "Ar aptauju",
             "list": "Meklēšanas filtri",
             "after": "Pēc: {{date}}",
             "before": "Pirms: {{date}}",
@@ -1891,6 +1906,9 @@
             "thisYear": "Šis gads"
         },
         "operators": {
+            "from": "Personas ziņas, vai from:me",
+            "is": "is:mine jūsu pašu ziņām",
+            "has": "Ziņas ar saiti, attēlu, failu vai aptauju",
             "label": "Filtri",
             "in": "Meklēt vienā sarunā vai istabā",
             "after": "Ziņas pēc datuma",
@@ -1918,6 +1936,7 @@
         "goToMessage": "Doties uz ziņu",
         "loadingContext": "Ielādē ziņas…",
         "errors": {
+            "serverNeedsWords": "Servera arhīvam meklēšanai vajag vārdus, izņemot sarunu divatā",
             "failed": "Meklēšana neizdevās",
             "archiveRooms": "Serveris neatbalsta istabu arhīva meklēšanu",
             "archiveUnsupported": "Serveris neatbalsta arhīva meklēšanu. Mēģiniet meklēt sarunas iekšienē.",

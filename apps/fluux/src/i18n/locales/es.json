@@ -1877,7 +1877,22 @@
         "sent": "Mensaje enviado. Puedes eliminar este elemento importado."
     },
     "search": {
+        "filtersBuilding": "Fluux todavía está preparando el historial de este dispositivo para from:, is: y has:. Los resultados aparecerán cuando termine.",
+        "needsWords": "Añade una palabra, o un filtro como from: o has:, para buscar en estas fechas",
+        "values": {
+            "mine": "Tus propios mensajes",
+            "link": "Mensajes con un enlace",
+            "image": "Mensajes con una imagen",
+            "file": "Mensajes con un archivo",
+            "poll": "Mensajes con una encuesta"
+        },
         "chip": {
+            "from": "De {{name}}",
+            "mine": "Enviados por mí",
+            "link": "Con enlace",
+            "image": "Con imagen",
+            "file": "Con archivo",
+            "poll": "Con encuesta",
             "list": "Filtros de búsqueda",
             "after": "Después de {{date}}",
             "before": "Antes de {{date}}",
@@ -1892,6 +1907,9 @@
             "thisYear": "Este año"
         },
         "operators": {
+            "from": "Mensajes de una persona, o from:me",
+            "is": "is:mine para tus propios mensajes",
+            "has": "Mensajes con un enlace, una imagen, un archivo o una encuesta",
             "label": "Filtros",
             "in": "Buscar en una conversación o sala",
             "after": "Mensajes después de una fecha",
@@ -1919,6 +1937,7 @@
         "goToMessage": "Ir al mensaje",
         "loadingContext": "Cargando mensajes…",
         "errors": {
+            "serverNeedsWords": "El archivo del servidor necesita palabras para buscar, salvo en una conversación individual",
             "failed": "La búsqueda falló",
             "archiveRooms": "El servidor no admite la búsqueda en el archivo de las salas",
             "archiveUnsupported": "El servidor no admite la búsqueda en el archivo. Prueba a buscar dentro de una conversación.",

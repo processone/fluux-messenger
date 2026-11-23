@@ -1873,7 +1873,22 @@
         "sent": "Viesti lähetetty. Voit poistaa tämän tuodun kohteen."
     },
     "search": {
+        "filtersBuilding": "Fluux valmistelee vielä tämän laitteen historiaa suodattimille from:, is: ja has:. Tulokset näkyvät, kun se on valmis.",
+        "needsWords": "Lisää sana tai suodatin, kuten from: tai has:, hakeaksesi näiltä päiviltä",
+        "values": {
+            "mine": "Omat viestisi",
+            "link": "Viestit, joissa on linkki",
+            "image": "Viestit, joissa on kuva",
+            "file": "Viestit, joissa on tiedosto",
+            "poll": "Viestit, joissa on äänestys"
+        },
         "chip": {
+            "from": "Lähettäjä: {{name}}",
+            "mine": "Minun lähettämäni",
+            "link": "Linkki",
+            "image": "Kuva",
+            "file": "Tiedosto",
+            "poll": "Äänestys",
             "list": "Hakusuodattimet",
             "after": "{{date}} jälkeen",
             "before": "Ennen {{date}}",
@@ -1888,6 +1903,9 @@
             "thisYear": "Tänä vuonna"
         },
         "operators": {
+            "from": "Henkilön viestit, tai from:me",
+            "is": "is:mine omille viesteillesi",
+            "has": "Viestit, joissa on linkki, kuva, tiedosto tai äänestys",
             "label": "Suodattimet",
             "in": "Hae yhdestä keskustelusta tai huoneesta",
             "after": "Viestit päivämäärän jälkeen",
@@ -1915,6 +1933,7 @@
         "goToMessage": "Siirry viestiin",
         "loadingContext": "Ladataan viestejä…",
         "errors": {
+            "serverNeedsWords": "Palvelimen arkisto tarvitsee hakusanoja, paitsi kahdenkeskisessä keskustelussa",
             "failed": "Haku epäonnistui",
             "archiveRooms": "Palvelin ei tue huoneiden arkistohakua",
             "archiveUnsupported": "Palvelin ei tue arkistohakua. Kokeile hakea keskustelun sisältä.",

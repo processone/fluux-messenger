@@ -1875,7 +1875,22 @@
         "sent": "Poruka je poslana. Ovu uvezenu stavku možete ukloniti."
     },
     "search": {
+        "filtersBuilding": "Fluux još priprema povijest na ovom uređaju za from:, is: i has:. Rezultati će se pojaviti kada završi.",
+        "needsWords": "Dodajte riječ ili filtar poput from: ili has: za pretraživanje unutar ovih datuma",
+        "values": {
+            "mine": "Vaše vlastite poruke",
+            "link": "Poruke s poveznicom",
+            "image": "Poruke sa slikom",
+            "file": "Poruke s datotekom",
+            "poll": "Poruke s anketom"
+        },
         "chip": {
+            "from": "Od: {{name}}",
+            "mine": "Moje poruke",
+            "link": "S poveznicom",
+            "image": "Sa slikom",
+            "file": "S datotekom",
+            "poll": "S anketom",
             "list": "Filtri pretrage",
             "after": "Nakon: {{date}}",
             "before": "Prije: {{date}}",
@@ -1890,6 +1905,9 @@
             "thisYear": "Ova godina"
         },
         "operators": {
+            "from": "Poruke od osobe, ili from:me",
+            "is": "is:mine za vaše vlastite poruke",
+            "has": "Poruke s poveznicom, slikom, datotekom ili anketom",
             "label": "Filtri",
             "in": "Pretraži jedan razgovor ili sobu",
             "after": "Poruke nakon datuma",
@@ -1917,6 +1935,7 @@
         "goToMessage": "Idi na poruku",
         "loadingContext": "Učitavanje poruka…",
         "errors": {
+            "serverNeedsWords": "Arhiva poslužitelja treba riječi za pretragu, osim unutar razgovora jedan na jedan",
             "failed": "Pretraga nije uspjela",
             "archiveRooms": "Poslužitelj ne podržava pretragu arhive soba",
             "archiveUnsupported": "Poslužitelj ne podržava pretragu arhive. Pokušajte pretraživati unutar razgovora.",

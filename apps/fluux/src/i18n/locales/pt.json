@@ -1877,7 +1877,22 @@
         "sent": "Mensagem enviada. Pode eliminar este item importado."
     },
     "search": {
+        "filtersBuilding": "O Fluux ainda está a preparar o histórico neste dispositivo para from:, is: e has:. Os resultados aparecerão quando terminar.",
+        "needsWords": "Adicione uma palavra, ou um filtro como from: ou has:, para pesquisar nestas datas",
+        "values": {
+            "mine": "As suas próprias mensagens",
+            "link": "Mensagens com uma ligação",
+            "image": "Mensagens com uma imagem",
+            "file": "Mensagens com um ficheiro",
+            "poll": "Mensagens com uma sondagem"
+        },
         "chip": {
+            "from": "De {{name}}",
+            "mine": "Enviadas por mim",
+            "link": "Com ligação",
+            "image": "Com imagem",
+            "file": "Com ficheiro",
+            "poll": "Com sondagem",
             "list": "Filtros de pesquisa",
             "after": "Depois de {{date}}",
             "before": "Antes de {{date}}",
@@ -1892,6 +1907,9 @@
             "thisYear": "Este ano"
         },
         "operators": {
+            "from": "Mensagens de uma pessoa, ou from:me",
+            "is": "is:mine para as suas próprias mensagens",
+            "has": "Mensagens com uma ligação, uma imagem, um ficheiro ou uma sondagem",
             "label": "Filtros",
             "in": "Pesquisar numa conversa ou sala",
             "after": "Mensagens depois de uma data",
@@ -1919,6 +1937,7 @@
         "goToMessage": "Ir para a mensagem",
         "loadingContext": "A carregar mensagens…",
         "errors": {
+            "serverNeedsWords": "O arquivo do servidor precisa de palavras para pesquisar, exceto numa conversa individual",
             "failed": "A pesquisa falhou",
             "archiveRooms": "O servidor não suporta a pesquisa no arquivo das salas",
             "archiveUnsupported": "O servidor não suporta a pesquisa no arquivo. Tente pesquisar dentro de uma conversa.",

@@ -14,7 +14,7 @@
 import { createStore } from 'zustand/vanilla'
 import * as searchIndex from '../utils/searchIndex'
 import { parseSearchQuery } from '../utils/searchIndex'
-import { parseSearchFilters, type ParsedSearchInput } from '../utils/searchFilters'
+import { filterToken, matchesFilterTokens, parseSearchFilters, type ParsedSearchInput } from '../utils/searchFilters'
 import { generateMatchSnippet, type MatchSnippet } from '../utils/searchUtils'
 import { chatStore } from './chatStore'
 import { roomStore } from './roomStore'
@@ -166,6 +166,12 @@ export interface SearchState {
   inPrefixSuggestions: InPrefixSuggestion[]
   /** Whether the `in:` autocomplete is active */
   isInPrefixActive: boolean
+  /**
+   * Whether the query uses `from:`, `is:` or `has:` while this device is still
+   * giving its stored messages their filter tokens: the results would be partial,
+   * so none are shown until it is done.
+   */
+  filtersBuilding: boolean
 
   /** Execute a local search (debounced internally) */
   search: (query: string) => void
@@ -217,6 +223,46 @@ export function setSearchLocale(locale: string | undefined): void {
 /** The query split into its words and its operators, in the reader's locale. */
 export function parseSearchInput(query: string): ParsedSearchInput {
   return parseSearchFilters(query, searchLocale)
+}
+
+/**
+ * The tokens `from:<name>` stands for. In a one-to-one chat: the contact whose
+ * JID, local part or name it is. In a room: the nick, plus the occupant ids
+ * (XEP-0421) that nick has now among the occupants, which also find the
+ * person's messages sent under an earlier nick.
+ */
+export function senderFilterTokens(name: string, scope: string | null): string[] {
+  const lower = name.toLowerCase()
+  const tokens = new Set([filterToken.nick(name)])
+  if (name.includes('@')) tokens.add(filterToken.from(name))
+  for (const [jid, entity] of chatStore.getState().conversationEntities) {
+    if (scope && scope !== jid) continue
+    if (jid.toLowerCase() === lower || jid.split('@')[0].toLowerCase() === lower || entity.name?.toLowerCase() === lower) {
+      tokens.add(filterToken.from(jid))
+    }
+  }
+  for (const [jid, room] of roomStore.getState().rooms) {
+    if (scope && scope !== jid) continue
+    for (const occupant of room.occupants?.values() ?? []) {
+      if (occupant.occupantId && occupant.nick.toLowerCase() === lower) tokens.add(filterToken.occupant(occupant.occupantId))
+    }
+  }
+  return [...tokens]
+}
+
+/** One group of filter tokens per `from:`, `is:mine` and `has:`; a message needs a token of each. */
+function filterGroupsFor(input: ParsedSearchInput, scope: string | null): string[][] {
+  return [
+    ...(input.mine ? [[filterToken.mine]] : []),
+    ...input.has.map((value) => [filterToken.has(value)]),
+    ...input.from.map((name) => senderFilterTokens(name, scope)),
+  ]
+}
+
+/** The start of a body, for a result found by its filters alone: no word to highlight. */
+function leadSnippet(body: string): MatchSnippet {
+  const text = body.length > 120 ? `${body.slice(0, 120)}…` : body
+  return { text, matchStart: 0, matchEnd: 0 }
 }
 
 /** MAM `start`/`end` for the query's dates: `end` is inclusive there, so one millisecond earlier. */
@@ -399,7 +445,7 @@ function messageToSearchResult(msg: Message, query: string, phrases?: string[]):
     from: msg.from,
     timestamp: msg.timestamp.getTime(),
     body: msg.body || '',
-    matchSnippet: generateMatchSnippet(msg.body || '', query, 60, phrases),
+    matchSnippet: query ? generateMatchSnippet(msg.body || '', query, 60, phrases) : leadSnippet(msg.body || ''),
     source: 'mam',
     ...(msg.isDelayed ? { isDelayed: true } : {}),
     ...(msg.isOutgoing ? { isOutgoing: true } : {}),
@@ -424,7 +470,7 @@ function roomMessageToSearchResult(msg: RoomMessage, roomJid: string, query: str
     nick: msg.nick,
     timestamp: msg.timestamp.getTime(),
     body: msg.body || '',
-    matchSnippet: generateMatchSnippet(msg.body || '', query, 60, phrases),
+    matchSnippet: query ? generateMatchSnippet(msg.body || '', query, 60, phrases) : leadSnippet(msg.body || ''),
     source: 'mam',
     ...(msg.isDelayed ? { isDelayed: true } : {}),
     ...(msg.isOutgoing ? { isOutgoing: true } : {}),
@@ -632,7 +678,9 @@ export function getInPrefixSuggestions(term: string): InPrefixSuggestion[] {
 /**
  * Perform the actual local search and update the store.
  */
-async function executeSearch(query: string): Promise<void> {
+async function executeSearch(rawQuery: string): Promise<void> {
+  // The field may end with a space (a completed suggestion adds one); the store keeps it as typed
+  const query = rawQuery.trim()
   const state = searchStore.getState()
   const scope = state.searchScope
   const filter = state.searchFilter
@@ -640,8 +688,16 @@ async function executeSearch(query: string): Promise<void> {
   const text = input.text
   const parsed = parseSearchQuery(text)
   const phrases = parsed.phrases.length > 0 ? parsed.phrases : undefined
+  const filterGroups = filterGroupsFor(input, scope)
   try {
+    if (filterGroups.length > 0 && !await searchIndex.isFilterIndexReady()) {
+      if (searchStore.getState().query.trim() === query) {
+        searchStore.setState({ results: [], isSearching: false, error: null, filtersBuilding: true })
+      }
+      return
+    }
     const indexResults = await searchIndex.search(text, {
+      ...(filterGroups.length > 0 ? { filterGroups } : {}),
       limit: 50,
       ...(scope ? { conversationId: scope } : {}),
       ...(filter === 'conversations' ? { isRoom: false } : {}),
@@ -669,7 +725,7 @@ async function executeSearch(query: string): Promise<void> {
         ...(r.isDelayed ? { isDelayed: true } : {}),
         ...(r.isOutgoing ? { isOutgoing: true } : {}),
         ...(r.receivedAt !== undefined ? { receivedAt: r.receivedAt } : {}),
-        matchSnippet: generateMatchSnippet(r.body, text, 60, phrases),
+        matchSnippet: text ? generateMatchSnippet(r.body, text, 60, phrases) : leadSnippet(r.body),
         source: 'local' as const,
       }
     })
@@ -677,16 +733,16 @@ async function executeSearch(query: string): Promise<void> {
 
     // Only update if the query hasn't changed while we were searching
     const current = searchStore.getState()
-    if (current.query === query) {
+    if (current.query.trim() === query) {
       // A no-match query maps to a fresh empty array; keeping the previous (also
       // empty) one avoids invalidating useSearch for a result set that did not change.
       const nextResults = results.length === 0 && current.results.length === 0 ? current.results : results
-      searchStore.setState({ results: nextResults, isSearching: false, error: null })
+      searchStore.setState({ results: nextResults, isSearching: false, error: null, filtersBuilding: false })
       // Fire-and-forget: load context messages for results
       void fetchResultContexts(results, query)
     }
   } catch (err) {
-    if (searchStore.getState().query === query) {
+    if (searchStore.getState().query.trim() === query) {
       searchStore.setState({
         isSearching: false,
         error: err instanceof Error ? err.message : 'Search failed',
@@ -711,6 +767,16 @@ async function executeMAMSearch(append: boolean): Promise<void> {
   const text = input.text
   const parsed = parseSearchQuery(text)
   const phrases = parsed.phrases.length > 0 ? parsed.phrases : undefined
+  // The archive filters by text and date; from:, is: and has: are checked here on each page
+  const filterGroups = filterGroupsFor(input, scope)
+  const kept = <T extends Message | RoomMessage>(messages: T[]) =>
+    filterGroups.length ? messages.filter((message) => matchesFilterTokens(message, filterGroups)) : messages
+  const scopeIsRoom = !!scope && roomStore.getState().rooms.has(scope)
+  // Without words only the client-side paging of a one-to-one chat can look for filters alone
+  if (!text && (filterGroups.length === 0 || !scope || scopeIsRoom)) {
+    searchStore.setState({ isSearchingMAM: false, mamError: 'The server archive needs words to search' })
+    return
+  }
 
   // Cancel any ongoing paging search
   if (pagingAbortController) {
@@ -730,9 +796,9 @@ async function executeMAMSearch(append: boolean): Promise<void> {
 
     if (scope) {
       // Conversation-scoped search
-      const isRoom = roomStore.getState().rooms.has(scope)
+      const isRoom = scopeIsRoom
 
-      if (supportsFulltext) {
+      if (supportsFulltext && text) {
         // Server fulltext search scoped to conversation
         if (isRoom) {
           const result = await clientRef.messages.searchRoomMessages({
@@ -742,7 +808,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
             max: 20,
             before: append ? mamRsmCursor : undefined,
           })
-          newResults = await roomMessagesToSearchResults(result.messages, scope, text, phrases)
+          newResults = await roomMessagesToSearchResults(kept(result.messages), scope, text, phrases)
           hasMore = !result.complete
           mamRsmCursor = result.page.first
         } else {
@@ -753,7 +819,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
             max: 20,
             before: append ? mamRsmCursor : undefined,
           })
-          newResults = await messagesToSearchResults(result.messages, text, phrases)
+          newResults = await messagesToSearchResults(kept(result.messages), text, phrases)
           hasMore = !result.complete
           mamRsmCursor = result.page.first
         }
@@ -761,7 +827,10 @@ async function executeMAMSearch(append: boolean): Promise<void> {
         // Paging search (1:1 conversations only, no fulltext required)
         pagingAbortController = new AbortController()
         const result = await clientRef.messages.searchConversationHistory(
-          { query: text, with: scope, ...span, maxPages: 20, maxResults: 50 },
+          {
+            query: text, with: scope, ...span, maxPages: 20, maxResults: 50,
+            ...(filterGroups.length ? { filter: (message: Message) => matchesFilterTokens(message, filterGroups) } : {}),
+          },
           pagingAbortController.signal
         )
         pagingAbortController = null
@@ -791,7 +860,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
         max: 20,
         before: append ? mamRsmCursor : undefined,
       })
-      newResults = await messagesToSearchResults(result.messages, text, phrases)
+      newResults = await messagesToSearchResults(kept(result.messages), text, phrases)
       hasMore = !result.complete
       mamRsmCursor = result.page.first
     }
@@ -904,6 +973,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
   searchFilter: 'all',
   inPrefixSuggestions: [],
   isInPrefixActive: false,
+  filtersBuilding: false,
 
   search: (query: string) => {
     if (debounceTimer) {
@@ -913,7 +983,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
 
     const trimmed = query.trim()
     if (!trimmed) {
-      set({ query: '', isSearching: false, results: [], error: null, mamResults: [], mamError: null, hasMoreMAMResults: false, searchFilter: 'all', inPrefixSuggestions: [], isInPrefixActive: false })
+      set({ query: '', isSearching: false, results: [], error: null, mamResults: [], mamError: null, hasMoreMAMResults: false, searchFilter: 'all', inPrefixSuggestions: [], isInPrefixActive: false, filtersBuilding: false })
       mamSearchGeneration++  // Cancel any in-flight MAM search
       return
     }
@@ -986,6 +1056,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
       searchFilter: 'all',
       inPrefixSuggestions: [],
       isInPrefixActive: false,
+      filtersBuilding: false,
     })
   },
 

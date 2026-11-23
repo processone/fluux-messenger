@@ -1881,7 +1881,22 @@
         "sent": "Messaġġ mibgħut. Tista’ tħassar dan l-oġġett importat."
     },
     "search": {
+        "filtersBuilding": "Fluux għadu qed jipprepara l-istorja fuq dan l-apparat għal from:, is: u has:. Ir-riżultati jidhru meta jlesti.",
+        "needsWords": "Żid kelma, jew filtru bħal from: jew has:, biex tfittex f'dawn id-dati",
+        "values": {
+            "mine": "Il-messaġġi tiegħek",
+            "link": "Messaġġi b'link",
+            "image": "Messaġġi b'immaġni",
+            "file": "Messaġġi b'fajl",
+            "poll": "Messaġġi bi stħarriġ"
+        },
         "chip": {
+            "from": "Minn {{name}}",
+            "mine": "Mibgħuta minni",
+            "link": "B'link",
+            "image": "B'immaġni",
+            "file": "B'fajl",
+            "poll": "Bi stħarriġ",
             "list": "Filtri tat-tiftix",
             "after": "Wara {{date}}",
             "before": "Qabel {{date}}",
@@ -1896,6 +1911,9 @@
             "thisYear": "Din is-sena"
         },
         "operators": {
+            "from": "Messaġġi minn persuna, jew from:me",
+            "is": "is:mine għall-messaġġi tiegħek",
+            "has": "Messaġġi b'link, immaġni, fajl jew stħarriġ",
             "label": "Filtri",
             "in": "Fittex f'konversazzjoni jew kamra waħda",
             "after": "Messaġġi wara data",
@@ -1923,6 +1941,7 @@
         "goToMessage": "Mur għall-messaġġ",
         "loadingContext": "Qed jitgħabbew il-messaġġi…",
         "errors": {
+            "serverNeedsWords": "L-arkivju tas-server jeħtieġ kliem biex ifittex, ħlief f'konversazzjoni bejn tnejn",
             "failed": "It-tiftix falla",
             "archiveRooms": "Is-server ma jappoġġax it-tiftix fl-arkivju tal-kmamar",
             "archiveUnsupported": "Is-server ma jappoġġax it-tiftix fl-arkivju. Ipprova fittex ġewwa konversazzjoni.",

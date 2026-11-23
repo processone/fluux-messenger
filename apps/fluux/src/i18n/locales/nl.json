@@ -1873,7 +1873,22 @@
         "sent": "Bericht verzonden. Je kunt dit geïmporteerde item verwijderen."
     },
     "search": {
+        "filtersBuilding": "Fluux is de geschiedenis op dit apparaat nog aan het voorbereiden voor from:, is: en has:. De resultaten verschijnen zodra dit klaar is.",
+        "needsWords": "Voeg een woord toe, of een filter zoals from: of has:, om binnen deze datums te zoeken",
+        "values": {
+            "mine": "Je eigen berichten",
+            "link": "Berichten met een link",
+            "image": "Berichten met een afbeelding",
+            "file": "Berichten met een bestand",
+            "poll": "Berichten met een peiling"
+        },
         "chip": {
+            "from": "Van {{name}}",
+            "mine": "Door mij verzonden",
+            "link": "Met link",
+            "image": "Met afbeelding",
+            "file": "Met bestand",
+            "poll": "Met peiling",
             "list": "Zoekfilters",
             "after": "Na {{date}}",
             "before": "Vóór {{date}}",
@@ -1888,6 +1903,9 @@
             "thisYear": "Dit jaar"
         },
         "operators": {
+            "from": "Berichten van een persoon, of from:me",
+            "is": "is:mine voor je eigen berichten",
+            "has": "Berichten met een link, afbeelding, bestand of peiling",
             "label": "Filters",
             "in": "Zoeken in één gesprek of kamer",
             "after": "Berichten na een datum",
@@ -1915,6 +1933,7 @@
         "goToMessage": "Ga naar bericht",
         "loadingContext": "Berichten laden…",
         "errors": {
+            "serverNeedsWords": "Het serverarchief heeft woorden nodig om te zoeken, behalve in een één-op-ééngesprek",
             "failed": "Zoeken mislukt",
             "archiveRooms": "De server ondersteunt geen archiefzoekopdrachten voor kamers",
             "archiveUnsupported": "De server ondersteunt geen archiefzoekopdrachten. Probeer te zoeken binnen een gesprek.",

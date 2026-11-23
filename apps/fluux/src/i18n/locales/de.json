@@ -1875,7 +1875,22 @@
         "sent": "Nachricht gesendet. Du kannst diesen importierten Inhalt entfernen."
     },
     "search": {
+        "filtersBuilding": "Fluux bereitet den Verlauf auf diesem Gerät noch für from:, is: und has: vor. Die Ergebnisse erscheinen, sobald dies abgeschlossen ist.",
+        "needsWords": "Fügen Sie ein Wort oder einen Filter wie from: oder has: hinzu, um in diesem Zeitraum zu suchen",
+        "values": {
+            "mine": "Ihre eigenen Nachrichten",
+            "link": "Nachrichten mit einem Link",
+            "image": "Nachrichten mit einem Bild",
+            "file": "Nachrichten mit einer Datei",
+            "poll": "Nachrichten mit einer Umfrage"
+        },
         "chip": {
+            "from": "Von {{name}}",
+            "mine": "Von mir gesendet",
+            "link": "Mit Link",
+            "image": "Mit Bild",
+            "file": "Mit Datei",
+            "poll": "Mit Umfrage",
             "list": "Suchfilter",
             "after": "Nach {{date}}",
             "before": "Vor {{date}}",
@@ -1890,6 +1905,9 @@
             "thisYear": "Dieses Jahr"
         },
         "operators": {
+            "from": "Nachrichten von einer Person, oder from:me",
+            "is": "is:mine für Ihre eigenen Nachrichten",
+            "has": "Nachrichten mit einem Link, einem Bild, einer Datei oder einer Umfrage",
             "label": "Filter",
             "in": "In einer Unterhaltung oder einem Raum suchen",
             "after": "Nachrichten nach einem Datum",
@@ -1917,6 +1935,7 @@
         "goToMessage": "Zur Nachricht gehen",
         "loadingContext": "Nachrichten werden geladen…",
         "errors": {
+            "serverNeedsWords": "Das Serverarchiv braucht Suchbegriffe, außer in einer Unterhaltung zu zweit",
             "failed": "Suche fehlgeschlagen",
             "archiveRooms": "Der Server unterstützt keine Archivsuche für Räume",
             "archiveUnsupported": "Der Server unterstützt keine Archivsuche. Versuchen Sie, innerhalb einer Unterhaltung zu suchen.",

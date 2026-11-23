@@ -1873,7 +1873,22 @@
         "sent": "Message sent. You can remove this imported item."
     },
     "search": {
+        "filtersBuilding": "Fluux is still preparing the history on this device for from:, is: and has:. Results will appear once it is done.",
+        "needsWords": "Add a word, or a filter such as from: or has:, to search within these dates",
+        "values": {
+            "mine": "Your own messages",
+            "link": "Messages with a link",
+            "image": "Messages with an image",
+            "file": "Messages with a file",
+            "poll": "Messages with a poll"
+        },
         "chip": {
+            "from": "From {{name}}",
+            "mine": "Sent by me",
+            "link": "With a link",
+            "image": "With an image",
+            "file": "With a file",
+            "poll": "With a poll",
             "list": "Search filters",
             "after": "After {{date}}",
             "before": "Before {{date}}",
@@ -1888,6 +1903,9 @@
             "thisYear": "This year"
         },
         "operators": {
+            "from": "Messages from a person, or from:me",
+            "is": "is:mine for your own messages",
+            "has": "Messages with a link, an image, a file or a poll",
             "label": "Filters",
             "in": "Search one conversation or room",
             "after": "Messages after a date",
@@ -1915,6 +1933,7 @@
         "goToMessage": "Go to message",
         "loadingContext": "Loading messages…",
         "errors": {
+            "serverNeedsWords": "The server archive needs words to search, except within a one-to-one conversation",
             "failed": "Search failed",
             "archiveRooms": "Server does not support archive search for rooms",
             "archiveUnsupported": "Server does not support archive search. Try searching within a conversation.",

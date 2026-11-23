@@ -1873,7 +1873,22 @@
         "sent": "Beskeden er sendt. Du kan fjerne dette importerede element."
     },
     "search": {
+        "filtersBuilding": "Fluux forbereder stadig historikken på denne enhed til from:, is: og has:. Resultaterne vises, når det er færdigt.",
+        "needsWords": "Tilføj et ord, eller et filter som from: eller has:, for at søge inden for disse datoer",
+        "values": {
+            "mine": "Dine egne beskeder",
+            "link": "Beskeder med et link",
+            "image": "Beskeder med et billede",
+            "file": "Beskeder med en fil",
+            "poll": "Beskeder med en afstemning"
+        },
         "chip": {
+            "from": "Fra {{name}}",
+            "mine": "Sendt af mig",
+            "link": "Med link",
+            "image": "Med billede",
+            "file": "Med fil",
+            "poll": "Med afstemning",
             "list": "Søgefiltre",
             "after": "Efter {{date}}",
             "before": "Før {{date}}",
@@ -1888,6 +1903,9 @@
             "thisYear": "I år"
         },
         "operators": {
+            "from": "Beskeder fra en person, eller from:me",
+            "is": "is:mine for dine egne beskeder",
+            "has": "Beskeder med et link, et billede, en fil eller en afstemning",
             "label": "Filtre",
             "in": "Søg i en samtale eller et rum",
             "after": "Beskeder efter en dato",
@@ -1915,6 +1933,7 @@
         "goToMessage": "Gå til besked",
         "loadingContext": "Indlæser beskeder…",
         "errors": {
+            "serverNeedsWords": "Serverarkivet skal bruge ord for at søge, undtagen i en samtale mellem to",
             "failed": "Søgningen mislykkedes",
             "archiveRooms": "Serveren understøtter ikke arkivsøgning for rum",
             "archiveUnsupported": "Serveren understøtter ikke arkivsøgning. Prøv at søge inden for en samtale.",

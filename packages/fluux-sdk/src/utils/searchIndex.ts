@@ -24,6 +24,7 @@ import * as messageCache from './messageCache'
 import { setChatIdentityObserver } from './chatIdentityObserver'
 import { roomRetractionRecordApplies } from './moderation'
 import { getRoomModerationId, roomStanzaIdsMergeable } from './roomStanzaId'
+import { messageFilterTokens } from './searchFilters'
 
 import {
   archiveIdentityConflict,
@@ -42,7 +43,7 @@ import {
 } from './messageIdentity'
 
 const DB_NAME = 'fluux-search-index'
-const DB_VERSION = 5
+const DB_VERSION = 6
 const TOKENS_STORE = 'search-tokens'
 const DOCS_STORE = 'search-docs'
 const META_STORE = 'search-meta'
@@ -52,6 +53,9 @@ const POSTINGS_STORE = 'search-postings'
 const NEXT_DOC_NO_KEY = 'next-doc-no'
 const POSTINGS_READY_KEY = 'postings-ready'
 const POSTINGS_CURSOR_KEY = 'postings-cursor'
+/** Meta keys of the filter tokens copy (version 6): every document carries `filterTokens` once ready. */
+const FILTERS_READY_KEY = 'filters-ready'
+const FILTERS_CURSOR_KEY = 'filters-cursor'
 const pendingMutations = new Map<string | null, Promise<void>>()
 const pendingMaintenance = new Map<string | null, Promise<unknown>>()
 
@@ -113,6 +117,12 @@ interface DocEntry {
   receivedAt?: number
   /** Derived room-scoped lookup keys; older room documents receive them on upgrade. */
   identityKeys?: string[]
+  /**
+   * Reserved tokens for `from:`, `is:mine` and `has:` ({@link messageFilterTokens}).
+   * They get time-sorted rows like words but stay out of the old token lists.
+   * Absent on a document the version 6 copy has not reached yet.
+   */
+  filterTokens?: string[]
   /**
    * Short unique number naming this document in {@link POSTINGS_STORE} rows.
    * Absent until the background copy or a write numbers the document.
@@ -265,7 +275,10 @@ function getDB(
       const numberedDocs = tx.objectStore(DOCS_STORE)
       if (!numberedDocs.indexNames.contains('docNo')) numberedDocs.createIndex('docNo', 'docNo', { unique: true })
       // A brand-new database has nothing to copy, so it starts ready.
-      if (oldVersion === 0) void tx.objectStore(META_STORE).put({ key: POSTINGS_READY_KEY, value: '1' })
+      if (oldVersion === 0) {
+        void tx.objectStore(META_STORE).put({ key: POSTINGS_READY_KEY, value: '1' })
+        void tx.objectStore(META_STORE).put({ key: FILTERS_READY_KEY, value: '1' })
+      }
       // Guarded: a later version bump re-runs this callback on a store that
       // already has the index, and re-creating it throws ConstraintError,
       // which aborts the upgrade and leaves search unable to open.
@@ -594,13 +607,14 @@ function createDocEntry(
     if (message.receivedAt) doc.receivedAt = message.receivedAt.getTime()
     doc.identityKeys = roomDocumentIdentityKeys(doc)
   }
+  doc.filterTokens = messageFilterTokens(message)
   return doc
 }
 
 function sameIndexDocument(a: DocEntry, b: DocEntry): boolean {
   return (Object.keys({ ...a, ...b }) as Array<keyof DocEntry>).every(key => {
     if (key === 'docNo') return true
-    if (key === 'tokens' || key === 'identityKeys') {
+    if (key === 'tokens' || key === 'identityKeys' || key === 'filterTokens') {
       const left = a[key] ?? []
       const right = b[key] ?? []
       return left.length === right.length && left.every((value, i) => value === right[i])
@@ -621,7 +635,8 @@ function postingKeys(doc: DocEntry): PostingKey[] {
   // A malformed delay stamp can persist as NaN, which no key can hold: such a
   // document sorts as the oldest instead of failing every write and every copy.
   const time = Number.isFinite(doc.timestamp) ? doc.timestamp : 0
-  return doc.docNo === undefined ? [] : doc.tokens.map(token => [token, -time, doc.docNo as number])
+  if (doc.docNo === undefined) return []
+  return [...doc.tokens, ...doc.filterTokens ?? []].map(token => [token, -time, doc.docNo as number])
 }
 
 const postingKeyId = (key: PostingKey) => `${key[0]}\u0000${key[1]}\u0000${key[2]}`
@@ -1110,6 +1125,11 @@ export interface SearchOptions {
   after?: number
   /** Only messages strictly before this instant (epoch ms). */
   before?: number
+  /**
+   * Filter tokens a message must carry: one token of each group (`from:alice`
+   * may name several). Answered only once {@link isFilterIndexReady}.
+   */
+  filterGroups?: string[][]
 }
 
 /** Whether a document's time falls in the asked span; a malformed time counts as the oldest. */
@@ -1146,11 +1166,17 @@ export async function search(
 
   // Deduplicate tokens for index lookup
   const uniqueAllTokens = [...new Set(allTokens)]
-  if (uniqueAllTokens.length === 0) return []
+  const filterGroups = (options?.filterGroups ?? []).filter((group) => group.length > 0)
+  if (uniqueAllTokens.length === 0 && filterGroups.length === 0) return []
 
   const scopeJid = getStorageScopeJid()
   await ensureRetractionLedger(scopeJid)
   const db = await getDB(scopeJid)
+  if (filterGroups.length > 0) {
+    // A half-copied filter index would hide messages without saying so
+    if (!await isFilterIndexReady(scopeJid)) return []
+    return searchTimeSorted(db, parsed, uniqueAllTokens, limit, { ...options, filterGroups }, scopeJid)
+  }
   // The time-sorted index answers only once it holds every document; until then
   // the old lists do, so a half-copied index can never hide a message.
   if ((await db.get(META_STORE, POSTINGS_READY_KEY)) !== undefined) {
@@ -1363,6 +1389,7 @@ async function searchTimeSorted(
   const prefixToken = parsed.lastTermPrefix ? parsed.terms[parsed.terms.length - 1] : null
   const exactTokens = prefixToken ? uniqueAllTokens.filter((t) => t !== prefixToken) : uniqueAllTokens
   const phrases = parsed.phrases.map((phrase) => phrase.toLowerCase())
+  const filterGroups = options?.filterGroups ?? []
   const keeps = (doc: DocEntry): boolean => {
     if (options?.conversationId && doc.conversationId !== options.conversationId) return false
     if (options?.isRoom !== undefined && doc.isRoom !== options.isRoom) return false
@@ -1389,6 +1416,7 @@ async function searchTimeSorted(
   if (small) {
     const matches = small.filter((doc) =>
       keeps(doc) &&
+      filterGroups.every((group) => group.some((token) => doc.filterTokens?.includes(token))) &&
       exactTokens.every((token) => doc.tokens.includes(token)) &&
       (prefixToken === null || doc.tokens.some((token) => token.startsWith(prefixToken))))
     const time = (doc: DocEntry) => (Number.isFinite(doc.timestamp) ? doc.timestamp : 0)
@@ -1416,6 +1444,12 @@ async function searchTimeSorted(
           let count = 0
           for (const token of prefixTokens) count += await rows.count(postingRange(token, undefined, options))
           sides.push({ tokens: prefixTokens, prefix: true, count })
+        }
+        // A filter is one more side: `has:image` with few rows drives a search, words or none
+        for (const group of filterGroups) {
+          let count = 0
+          for (const token of group) count += await rows.count(postingRange(token, undefined, options))
+          sides.push({ tokens: group, prefix: false, count })
         }
         sides.sort((a, b) => a.count - b.count)
         plan = sides
@@ -1686,6 +1720,105 @@ export async function isPostingsReady(scopeJid: string | null = getStorageScopeJ
   return (await db.get(META_STORE, POSTINGS_READY_KEY)) !== undefined
 }
 
+// =============================================================================
+// Filter tokens copy (version 6)
+// =============================================================================
+
+/** Documents given filter tokens per transaction: each batch also reads the message cache. */
+const FILTERS_COPY_BATCH_SIZE = 100
+
+/**
+ * One copy batch: read the documents after the cursor, look their messages up in
+ * the cache (a stored document has no attachment or poll), then give each one
+ * its filter tokens and rows in one write transaction with the cursor. A
+ * document written meanwhile already carries its tokens and is left alone, as
+ * is one deleted meanwhile. Resolves to how many documents it read.
+ */
+async function copyFiltersBatch(scopeJid: string | null): Promise<number> {
+  const db = await getDB(scopeJid)
+  if (await db.get(META_STORE, FILTERS_READY_KEY)) return 0
+  const cursor = (await db.get(META_STORE, FILTERS_CURSOR_KEY))?.value
+  const batch = await db.getAll(DOCS_STORE,
+    cursor === undefined ? undefined : IDBKeyRange.lowerBound(cursor, true), FILTERS_COPY_BATCH_SIZE)
+  if (batch.length === 0) return 0
+  const pending = batch.filter((doc) => doc.filterTokens === undefined)
+  const cached = pending.length ? await messageCache.resolveMessagesForIndex(pending.map(docToMessage), scopeJid) : []
+  const sources = new Map(pending.map((doc, i) => [doc.indexId, cached[i]?.message]))
+
+  const tx = db.transaction([TOKENS_STORE, DOCS_STORE, POSTINGS_STORE, META_STORE], 'readwrite')
+  void tx.done.catch(() => {})
+  try {
+    const docs = tx.objectStore(DOCS_STORE)
+    const writer = createDocumentWriter(tx)
+    for (const { indexId } of pending) {
+      const current = await docs.get(indexId)
+      if (!current || current.filterTokens !== undefined) continue
+      const source = sources.get(indexId)
+      // The document's own body decides has:link; the cache row adds what the document lacks
+      const filterTokens = messageFilterTokens({ ...docToMessage(current), attachment: source?.attachment, poll: source?.poll })
+      await writer.put({ ...current, filterTokens })
+    }
+    await writer.flush()
+    await tx.objectStore(META_STORE).put({ key: FILTERS_CURSOR_KEY, value: batch[batch.length - 1].indexId })
+    await tx.done
+    return batch.length
+  } catch (error) {
+    try { tx.abort() } catch { /* Already finished. */ }
+    await tx.done.catch(() => {})
+    throw error
+  }
+}
+
+/** Set the filters ready marker once no document is left after the cursor. */
+async function markFiltersReady(scopeJid: string | null): Promise<void> {
+  const db = await getDB(scopeJid)
+  const tx = db.transaction([DOCS_STORE, META_STORE], 'readwrite')
+  void tx.done.catch(() => {})
+  const meta = tx.objectStore(META_STORE)
+  const cursor = (await meta.get(FILTERS_CURSOR_KEY))?.value
+  const rest = await tx.objectStore(DOCS_STORE).getAll(
+    cursor === undefined ? undefined : IDBKeyRange.lowerBound(cursor, true), 1)
+  if (rest.length === 0) await meta.put({ key: FILTERS_READY_KEY, value: '1' })
+  await tx.done
+}
+
+/**
+ * Give every stored document its filter tokens (`from:`, `is:mine`, `has:`), in
+ * the background, the way {@link migrateSearchPostings} copies the rows: a
+ * resumable cursor in the database, small batches with a pause between them, an
+ * account switch ending the loop and a full disk ending it quietly until the next
+ * login. A search with such a filter answers nothing until the ready marker is
+ * written, and the interface says the index is still being built.
+ */
+export async function migrateSearchFilters(): Promise<void> {
+  if (!isIndexedDBAvailable()) return
+  const scope = captureStorageScope()
+  await maintainIndex(scope.jid, async () => {
+    try {
+      for (;;) {
+        scope.assertCurrent()
+        if (await copyFiltersBatch(scope.jid) > 0) {
+          await new Promise(resolve => setTimeout(resolve, POSTINGS_COPY_PAUSE_MS))
+          continue
+        }
+        scope.assertCurrent()
+        await markFiltersReady(scope.jid)
+        if (await isFilterIndexReady(scope.jid)) return
+      }
+    } catch (error) {
+      if (!isStorageFull(error)) throw error
+      console.warn('[searchIndex] Not enough storage to add search filters; retrying at next login')
+    }
+  })
+}
+
+/** Whether every document carries its filter tokens, so `from:`, `is:` and `has:` can be answered. */
+export async function isFilterIndexReady(scopeJid: string | null = getStorageScopeJid()): Promise<boolean> {
+  if (!isIndexedDBAvailable()) return false
+  const db = await getDB(scopeJid)
+  return (await db.get(META_STORE, FILTERS_READY_KEY)) !== undefined
+}
+
 /**
  * Progress info emitted during index rebuild.
  */
@@ -1773,6 +1906,7 @@ async function clearIndexData(scopeJid: string | null): Promise<void> {
     await tx.objectStore(META_STORE).clear()
     // An empty index has nothing to copy: whatever is written next numbers itself.
     await tx.objectStore(META_STORE).put({ key: POSTINGS_READY_KEY, value: '1' })
+    await tx.objectStore(META_STORE).put({ key: FILTERS_READY_KEY, value: '1' })
     await tx.done
   })
 }

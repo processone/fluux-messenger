@@ -1873,7 +1873,22 @@
         "sent": "Skilaboð send. Þú getur fjarlægt þetta innflutta atriði."
     },
     "search": {
+        "filtersBuilding": "Fluux er enn að undirbúa ferilinn á þessu tæki fyrir from:, is: og has:. Niðurstöður birtast þegar því er lokið.",
+        "needsWords": "Bættu við orði, eða síu eins og from: eða has:, til að leita innan þessara dagsetninga",
+        "values": {
+            "mine": "Þín eigin skilaboð",
+            "link": "Skilaboð með tengli",
+            "image": "Skilaboð með mynd",
+            "file": "Skilaboð með skrá",
+            "poll": "Skilaboð með könnun"
+        },
         "chip": {
+            "from": "Frá {{name}}",
+            "mine": "Sent af mér",
+            "link": "Með tengli",
+            "image": "Með mynd",
+            "file": "Með skrá",
+            "poll": "Með könnun",
             "list": "Leitarsíur",
             "after": "Eftir {{date}}",
             "before": "Fyrir {{date}}",
@@ -1888,6 +1903,9 @@
             "thisYear": "Þetta ár"
         },
         "operators": {
+            "from": "Skilaboð frá einstaklingi, eða from:me",
+            "is": "is:mine fyrir þín eigin skilaboð",
+            "has": "Skilaboð með tengli, mynd, skrá eða könnun",
             "label": "Síur",
             "in": "Leita í einu samtali eða herbergi",
             "after": "Skilaboð eftir dagsetningu",
@@ -1915,6 +1933,7 @@
         "goToMessage": "Fara í skilaboð",
         "loadingContext": "Hleð skilaboðum…",
         "errors": {
+            "serverNeedsWords": "Skjalasafn þjónsins þarf orð til að leita að, nema innan samtals milli tveggja",
             "failed": "Leit mistókst",
             "archiveRooms": "Þjónninn styður ekki leit í skjalasafni herbergja",
             "archiveUnsupported": "Þjónninn styður ekki leit í skjalasafni. Prófaðu að leita innan samtals.",

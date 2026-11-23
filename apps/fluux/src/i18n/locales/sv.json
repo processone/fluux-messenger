@@ -1873,7 +1873,22 @@
         "sent": "Meddelandet har skickats. Du kan ta bort det importerade objektet."
     },
     "search": {
+        "filtersBuilding": "Fluux förbereder fortfarande historiken på den här enheten för from:, is: och has:. Resultaten visas när det är klart.",
+        "needsWords": "Lägg till ett ord, eller ett filter som from: eller has:, för att söka inom de här datumen",
+        "values": {
+            "mine": "Dina egna meddelanden",
+            "link": "Meddelanden med en länk",
+            "image": "Meddelanden med en bild",
+            "file": "Meddelanden med en fil",
+            "poll": "Meddelanden med en omröstning"
+        },
         "chip": {
+            "from": "Från {{name}}",
+            "mine": "Skickat av mig",
+            "link": "Med länk",
+            "image": "Med bild",
+            "file": "Med fil",
+            "poll": "Med omröstning",
             "list": "Sökfilter",
             "after": "Efter {{date}}",
             "before": "Före {{date}}",
@@ -1888,6 +1903,9 @@
             "thisYear": "I år"
         },
         "operators": {
+            "from": "Meddelanden från en person, eller from:me",
+            "is": "is:mine för dina egna meddelanden",
+            "has": "Meddelanden med en länk, en bild, en fil eller en omröstning",
             "label": "Filter",
             "in": "Sök i en konversation eller ett rum",
             "after": "Meddelanden efter ett datum",
@@ -1915,6 +1933,7 @@
         "goToMessage": "Gå till meddelandet",
         "loadingContext": "Laddar meddelanden…",
         "errors": {
+            "serverNeedsWords": "Serverarkivet behöver ord att söka efter, utom i en konversation mellan två",
             "failed": "Sökningen misslyckades",
             "archiveRooms": "Servern stöder inte arkivsökning för rum",
             "archiveUnsupported": "Servern stöder inte arkivsökning. Försök söka inom en konversation.",

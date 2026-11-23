@@ -34,4 +34,13 @@ describe('search operator suggestions', () => {
     expect(describeSpan(span('2024'), 'en')).toBe('2024')
     expect(describeSpan(span('2024-03-01..2024-03-15'), 'en')).toBe('Mar 1, 2024 → Mar 15, 2024')
   })
+
+  it('offers has: and is: values, and people for from:, quoting names with spaces', () => {
+    expect(operatorSuggestions('has:i', NOW).map(s => s.insert)).toEqual(['has:image'])
+    expect(operatorSuggestions('is:', NOW).map(s => s.insert)).toEqual(['is:mine'])
+    const senders = [{ value: 'alice@example.com', label: 'Alice' }, { value: 'Bob Smith', label: 'Bob Smith' }]
+    expect(operatorSuggestions('from:', NOW, senders).map(s => s.insert)).toEqual(['from:me', 'from:alice@example.com', 'from:"Bob Smith"'])
+    expect(operatorSuggestions('from:b', NOW, senders).map(s => [s.insert, s.label])).toEqual([['from:"Bob Smith"', 'Bob Smith']])
+    expect(operatorSuggestions('fr', NOW).map(s => s.insert)).toEqual(['from:'])
+  })
 })
