@@ -1399,7 +1399,8 @@
         "added": "Curtha leis",
         "changed": "Athraithe",
         "fixed": "Deisithe",
-        "removed": "Bainte"
+        "removed": "Bainte",
+        "viewFull": "Féach ar an loga athruithe iomlán"
     },
     "about": {
         "title": "Maidir Le",

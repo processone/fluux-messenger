@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { lazy, Suspense, useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside, useIsMobileWeb, useAnchoredMenu } from '@/hooks'
 import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
@@ -23,11 +23,12 @@ import { Avatar } from '../Avatar'
 import { Tooltip } from '../Tooltip'
 import { ModalOverlay } from '../ModalOverlay'
 import { AboutModal } from '../AboutModal'
-import { ChangelogModal } from '../ChangelogModal'
 import { TextInput } from '../ui/TextInput'
 import { BottomSheet } from '../ui/BottomSheet'
 import { DEGRADED_STATUS_GRACE_MS, useConnectionStep } from '../ConnectionStep'
 import { PRESENCE_COLORS } from '@/constants/ui'
+
+const ChangelogModal = lazy(() => import('../ChangelogModal').then((m) => ({ default: m.ChangelogModal })))
 
 export { DEGRADED_STATUS_GRACE_MS }
 
@@ -430,7 +431,11 @@ export function AccountMenu({ onLogout, onOpenProfile, zoneRef }: AccountMenuPro
       </BottomSheet>
 
       {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
-      {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
+      {showChangelog && (
+        <Suspense fallback={null}>
+          <ChangelogModal onClose={() => setShowChangelog(false)} />
+        </Suspense>
+      )}
 
       {showLogoutConfirm && (
         <ModalOverlay onClose={() => setShowLogoutConfirm(false)} width="max-w-xs" panelClassName="overflow-hidden">

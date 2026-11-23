@@ -1399,7 +1399,8 @@
         "added": "Dodano",
         "changed": "Spremenjeno",
         "fixed": "Popravljeno",
-        "removed": "Odstranjeno"
+        "removed": "Odstranjeno",
+        "viewFull": "Poglej celoten dnevnik sprememb"
     },
     "about": {
         "title": "O programu",

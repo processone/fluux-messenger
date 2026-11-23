@@ -1393,7 +1393,8 @@
         "added": "추가됨",
         "changed": "변경됨",
         "fixed": "수정됨",
-        "removed": "제거됨"
+        "removed": "제거됨",
+        "viewFull": "전체 변경 내역 보기"
     },
     "about": {
         "title": "정보",

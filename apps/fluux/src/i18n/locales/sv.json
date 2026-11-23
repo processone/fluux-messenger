@@ -1393,7 +1393,8 @@
         "added": "Tillagt",
         "changed": "Ändrat",
         "fixed": "Fixat",
-        "removed": "Borttaget"
+        "removed": "Borttaget",
+        "viewFull": "Visa hela ändringsloggen"
     },
     "about": {
         "title": "Om",

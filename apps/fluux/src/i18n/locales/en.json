@@ -1393,7 +1393,8 @@
         "added": "Added",
         "changed": "Changed",
         "fixed": "Fixed",
-        "removed": "Removed"
+        "removed": "Removed",
+        "viewFull": "View full changelog"
     },
     "about": {
         "title": "About",

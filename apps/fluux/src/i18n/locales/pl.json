@@ -1399,7 +1399,8 @@
         "added": "Dodano",
         "changed": "Zmieniono",
         "fixed": "Naprawiono",
-        "removed": "Usunięto"
+        "removed": "Usunięto",
+        "viewFull": "Zobacz pełną listę zmian"
     },
     "about": {
         "title": "O programie",

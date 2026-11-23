@@ -1398,7 +1398,8 @@
         "added": "Pridané",
         "changed": "Zmenené",
         "fixed": "Opravené",
-        "removed": "Odstránené"
+        "removed": "Odstránené",
+        "viewFull": "Zobraziť úplný zoznam zmien"
     },
     "about": {
         "title": "O aplikácii",

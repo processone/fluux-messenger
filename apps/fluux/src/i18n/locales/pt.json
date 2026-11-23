@@ -1397,7 +1397,8 @@
         "added": "Adicionado",
         "changed": "Alterado",
         "fixed": "Corrigido",
-        "removed": "Removido"
+        "removed": "Removido",
+        "viewFull": "Ver o histórico completo de alterações"
     },
     "about": {
         "title": "Sobre",

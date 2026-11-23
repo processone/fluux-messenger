@@ -1395,7 +1395,8 @@
         "added": "נוסף",
         "changed": "שונה",
         "fixed": "תוקן",
-        "removed": "הוסר"
+        "removed": "הוסר",
+        "viewFull": "הצג את יומן השינויים המלא"
     },
     "about": {
         "title": "אודות",

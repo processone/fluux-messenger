@@ -1397,7 +1397,8 @@
         "added": "Afegit",
         "changed": "Canviat",
         "fixed": "Corregit",
-        "removed": "Eliminat"
+        "removed": "Eliminat",
+        "viewFull": "Veure el registre complet de canvis"
     },
     "about": {
         "title": "Quant a",

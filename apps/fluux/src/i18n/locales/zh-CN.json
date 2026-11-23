@@ -1393,7 +1393,8 @@
         "added": "新增",
         "changed": "变更",
         "fixed": "修复",
-        "removed": "移除"
+        "removed": "移除",
+        "viewFull": "查看完整更新日志"
     },
     "about": {
         "title": "关于",

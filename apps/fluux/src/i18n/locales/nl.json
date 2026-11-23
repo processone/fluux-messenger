@@ -1393,7 +1393,8 @@
         "added": "Toegevoegd",
         "changed": "Gewijzigd",
         "fixed": "Opgelost",
-        "removed": "Verwijderd"
+        "removed": "Verwijderd",
+        "viewFull": "Volledig wijzigingslogboek bekijken"
     },
     "about": {
         "title": "Over",

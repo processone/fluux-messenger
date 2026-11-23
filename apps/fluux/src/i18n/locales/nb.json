@@ -1393,7 +1393,8 @@
         "added": "Lagt til",
         "changed": "Endret",
         "fixed": "Fikset",
-        "removed": "Fjernet"
+        "removed": "Fjernet",
+        "viewFull": "Se hele endringsloggen"
     },
     "about": {
         "title": "Om",
