@@ -364,7 +364,9 @@ export const ConversationItem = memo(function ConversationItem({
           <AvatarUnreadBadge count={conversation.unreadCount} />
         </div>
         <div className="flex-1 min-w-0">
-          <p dir="auto" className={`truncate ${conversation.unreadCount > 0 ? 'font-semibold text-fluux-text' : 'font-medium'}`}>{conversation.name}</p>
+          <div className="flex items-center gap-2">
+            <p dir="auto" className={`truncate ${conversation.unreadCount > 0 ? 'font-semibold text-fluux-text' : 'font-medium'}`}>{conversation.name}</p>
+          </div>
           <div className="flex items-center gap-2">
             <div className="flex-1 min-w-0">
               {draft ? (

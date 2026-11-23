@@ -19,10 +19,10 @@ const rows = (page: Page, view: 'messages' | 'rooms') =>
   page.locator(view === 'messages' ? '[data-conv-id]' : '[data-room-jid]')
 
 async function geometry(row: Locator, nameMustFit: boolean) {
+  await expect(row).toBeVisible()
   const metrics = await row.evaluate(element => {
     const name = element.querySelector('p')!
-    const text = name.parentElement!.classList.contains('min-w-0')
-      ? name.parentElement! : name.parentElement!.parentElement!
+    const text = name.parentElement!.parentElement!
     const previewLine = text.lastElementChild!
     const time = previewLine.querySelector(':scope > span')
     const preview = previewLine.firstElementChild!
@@ -69,6 +69,28 @@ for (const mode of ['light', 'dark'] as const) {
       await test.info().attach(`${view}-${mode}-geometry`, { body: JSON.stringify(measured, null, 2), contentType: 'application/json' })
       await capture(page, `${view}-${mode}`)
     }
+    // A name's script direction must not move it away from the avatar.
+    await page.locator('[data-nav="messages"]').click()
+    const row = rows(page, 'messages').first()
+    const id = (await row.getAttribute('data-conv-id'))!
+    for (const [direction, name] of [['rtl', 'Emma Ward'], ['ltr', 'إيما وارد']] as const) {
+      await page.evaluate(({ direction, name, id }) => {
+        document.documentElement.dir = direction
+        const store = (window as unknown as DemoWindow).__chatStore
+        const conversations = new Map(store.getState().conversations)
+        conversations.set(id, { ...conversations.get(id)!, name })
+        store.setState({ conversations })
+      }, { direction, name, id })
+      await expect(row.locator('p').first()).toHaveText(name)
+      const offset = await row.locator('p').first().evaluate((element, direction) => {
+        const range = document.createRange()
+        range.selectNodeContents(element)
+        const letters = range.getBoundingClientRect()
+        const line = element.parentElement!.getBoundingClientRect()
+        return direction === 'rtl' ? line.right - letters.right : letters.left - line.left
+      }, direction)
+      expect(Math.abs(offset)).toBeLessThan(2)
+    }
   })
 
   test(`narrow localized rows preserve state lines in ${mode}`, async ({ page }) => {
@@ -113,6 +135,9 @@ for (const mode of ['light', 'dark'] as const) {
       expect(draftGeometry.clipped).toBe(true)
       await capture(page, `${view}-${mode}-minimum-draft`)
       await page.setViewportSize({ width: 320, height: 780 })
+      await page.getByRole('button', {
+        name: view === 'messages' ? 'Retour aux conversations' : 'Retour aux salons', exact: true,
+      }).click()
       await geometry(row, false)
       await page.evaluate(({ view, id }) => {
         const w = window as unknown as DemoWindow
@@ -131,7 +156,9 @@ for (const mode of ['light', 'dark'] as const) {
       await page.setViewportSize({ width: 1200, height: 780 })
       expect(await rows(page, view).evaluateAll(elements => elements.map(e => e.getAttribute('data-conv-id') ?? e.getAttribute('data-room-jid')))).toEqual(order)
       await row.click({ button: 'right' })
-      await expect(page.getByRole('button', { name: /Archive|Archiver|notification/i }).first()).toBeVisible()
+      await expect(page.getByRole('button', {
+        name: view === 'messages' ? 'Archiver' : 'Quitter le salon', exact: true,
+      })).toBeVisible()
       await page.keyboard.press('Escape')
     }
   })
