@@ -1757,6 +1757,10 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     onDraftRecovered: (text, references) => mentionRecovery.current.restore(text, references),
   })
 
+  // External writes (including Send clearing the box) end the typing session.
+  // Merely hiding a mismatched snapshot would revive it if recovery or editing
+  // later restored the same text.
+
   const { references, setReferences, handleEditorEdit, handleValueChange, insertMention, restoreReferences } = useMentionReferences(setText)
   mentionRecovery.current = { references, restore: restoreReferences }
   clearReferencesRef.current = () => setReferences([])
