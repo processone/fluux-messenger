@@ -6,6 +6,13 @@ import { LAUNCH_ROOM } from '../apps/fluux/src/demo/showcase/constants'
 
 type Perf = { reset(): void; counts(): Record<string, number>; tally(): Record<string, number>; resetTally(): void }
 type Scope = { __demoClient: DemoClient; __roomStore: typeof roomStore; __perf: Perf }
+type Box = { x: number; y: number; width: number; height: number }
+const clearOf = (a: Box, b: Box) => a.x >= b.x + b.width || a.y >= b.y + b.height
+  || a.x + a.width <= b.x || a.y + a.height <= b.y
+const paragraphs = [
+  { direction: 'ltr', body: 'The livestream and backup stream are ready. Please review the final launch checklist, confirm the stage backdrop, and keep the opening remarks within five minutes so the whole crew can follow the schedule.' },
+  { direction: 'rtl', body: 'أصبح البث المباشر والبث الاحتياطي جاهزين. يرجى مراجعة قائمة الاستعدادات النهائية، والتأكد من خلفية المنصة، وحصر الكلمة الافتتاحية في خمس دقائق كي يتمكن جميع أعضاء الفريق من متابعة البرنامج.' },
+] as const
 
 // Source: the approved app/render check. This is a real renderer with the demo
 // transport stand-in, not evidence of the real server's eligibility or identity.
@@ -14,61 +21,102 @@ test('room read badges cap avatars, name every reader and move without rendering
   await bootDemo(page, `/demo.html?perf=1&scene=showcase&tutorial=false#/rooms/${encodeURIComponent(LAUNCH_ROOM)}`)
   await page.waitForFunction(() => typeof (window as unknown as Scope).__perf?.reset === 'function')
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
-  const fixture = await page.evaluate(async roomJid => {
+  const fixture = await page.evaluate(async ({ roomJid, body }) => {
     const scope = window as unknown as Scope
     scope.__demoClient.stopAnimation()
     await scope.__roomStore.getState().activateRoom(roomJid)
     const room = scope.__roomStore.getState().getRoom(roomJid)!
     const readers = [...room.occupants.values()].filter(person => person.nick !== room.nickname).slice(0, 4)
     const rows = scope.__roomStore.getState().messages.get(roomJid)!.filter(row => !row.isPrivate && !row.securityContext && !row.encryptedPayload && !row.contentAvailability)
-    const old = rows.at(-3)!, next = rows.at(-2)!
-    if (!old.stanzaId || !next.stanzaId || readers.length !== 4) throw new Error('Showcase room lacks marker fixture identities')
-    await scope.__demoClient.messages.sendReaction(roomJid, old.stanzaId, ['👍'])
-    return { old: old.stanzaId, next: next.stanzaId, names: readers.map(reader => reader.nick), actors: readers.map(reader => reader.occupantId!), actor: readers[0].occupantId! }
-  }, LAUNCH_ROOM)
+    const prior = rows.at(-3)!, old = rows.at(-2)!, next = rows.at(-1)!
+    if (!prior.stanzaId || !old.stanzaId || !next.stanzaId || readers.length !== 4) throw new Error('Showcase room lacks marker fixture identities')
+    // A normal paragraph, rather than the showcase's short mention or poll.
+    await scope.__roomStore.getState().updateMessage(roomJid, old.id, {
+      body,
+      mentions: undefined, isMention: false, isEdited: false,
+    })
+    // Establish qualification before measuring: every row keeps the same corner
+    // space whether or not that row currently holds a badge.
+    await scope.__demoClient.simulateRoomDisplayed(roomJid, readers[0].occupantId!, prior.stanzaId)
+    return { prior: prior.stanzaId, id: old.id, old: old.stanzaId, next: next.stanzaId, names: readers.map(reader => reader.nick), actors: readers.map(reader => reader.occupantId!), actor: readers[0].occupantId! }
+  }, { roomJid: LAUNCH_ROOM, body: paragraphs[0].body })
   const oldRow = page.locator(`[data-message-row-id][data-stanza-id="${fixture.old}"]`)
-  const layouts = [
-    { direction: 'ltr', width: 1280 }, { direction: 'ltr', width: 390 },
-    { direction: 'rtl', width: 1280 }, { direction: 'rtl', width: 390 },
-  ] as const
-  const heights = new Map<string, number>()
-  for (const { direction, width } of layouts) {
-    await page.evaluate(direction => { document.documentElement.dir = direction }, direction)
+  const layouts = paragraphs.flatMap(message => ['ltr', 'rtl'].flatMap(direction => [1280, 390].map(width => ({ message, direction, width }))))
+  const applyLayout = async ({ message, direction, width }: typeof layouts[number]) => {
+    await page.evaluate(async ({ roomJid, id, body, direction }) => {
+      document.documentElement.dir = direction
+      await (window as unknown as Scope).__roomStore.getState().updateMessage(roomJid, id, { body, isEdited: false })
+    }, { roomJid: LAUNCH_ROOM, id: fixture.id, body: message.body, direction })
+    await expect(oldRow.locator('[data-msg-text]')).toHaveText(message.body)
+    await page.evaluate(() => document.fonts.ready.then(() => undefined))
     await page.setViewportSize({ width, height: 800 })
     await oldRow.scrollIntoViewIfNeeded()
-    await expect(oldRow.locator('[data-reaction-emoji="👍"]')).toBeVisible()
-    heights.set(`${direction}-${width}`, (await oldRow.boundingBox())!.height)
+  }
+  const geometryReadings: object[] = []
+  const priorRow = page.locator(`[data-message-row-id][data-stanza-id="${fixture.prior}"]`)
+  const priorBadge = page.locator(`[data-read-marker-row="${fixture.prior}"]`)
+  // The preceding showcase poll exercises structured content, not just prose.
+  for (const layout of layouts.filter(layout => layout.message.direction === 'ltr')) {
+    await applyLayout(layout)
+    await priorRow.scrollIntoViewIfNeeded()
+    await expect(priorBadge).toBeVisible()
+    const badge = (await priorBadge.boundingBox())!
+    const controls = await priorRow.locator('button').evaluateAll(buttons => buttons
+      .filter(button => !button.closest('[data-read-marker-row]'))
+      .map(button => { const rect = button.getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width, height: rect.height } })
+      .filter(rect => rect.width > 0 && rect.height > 0))
+    for (const control of controls) expect(clearOf(badge, control), 'the badge leaves structured-card controls unobscured').toBe(true)
+    geometryReadings.push({ state: 'structured-poll', direction: layout.direction, width: layout.width, badge, controls })
+  }
+  await oldRow.scrollIntoViewIfNeeded()
+  await expect(oldRow.locator('[data-read-marker-corner]')).toHaveCount(1)
+  const heights = new Map<string, number>()
+  for (const layout of layouts) {
+    await applyLayout(layout)
+    heights.set(`${layout.message.direction}-${layout.direction}-${layout.width}`, (await oldRow.boundingBox())!.height)
   }
   await page.evaluate(async ({ roomJid, actors, target }) => {
     for (const actor of actors) await (window as unknown as Scope).__demoClient.simulateRoomDisplayed(roomJid, actor, target)
   }, { roomJid: LAUNCH_ROOM, actors: fixture.actors, target: fixture.old })
   const oldBadge = page.locator(`[data-read-marker-row="${fixture.old}"]`)
-  await oldBadge.scrollIntoViewIfNeeded()
-  for (const { direction, width } of layouts) {
-    await page.evaluate(direction => { document.documentElement.dir = direction }, direction)
-    await page.setViewportSize({ width, height: 800 })
-    await oldRow.scrollIntoViewIfNeeded()
-    await expect(oldBadge).toBeVisible()
-    expect((await oldRow.boundingBox())!.height, 'the overlay adds no row height').toBe(heights.get(`${direction}-${width}`))
-    const badge = (await oldBadge.boundingBox())!
-    const reaction = (await oldRow.locator('[data-reaction-emoji="👍"]').boundingBox())!
-    expect(badge.x >= reaction.x + reaction.width || badge.y >= reaction.y + reaction.height
-      || badge.x + badge.width <= reaction.x || badge.y + badge.height <= reaction.y,
-    'the trailing-corner badge leaves the reaction control unobscured').toBe(true)
-    const body = oldRow.locator('[data-message-body]')
-    const textClear = await body.evaluate((element, badge) => {
-      const text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
-      for (let node = text.nextNode(); node; node = text.nextNode()) {
-        const range = document.createRange(); range.selectNodeContents(node)
-        if (![...range.getClientRects()].every(rect => !rect.width || !rect.height || badge.x >= rect.right || badge.y >= rect.bottom
-          || badge.x + badge.width <= rect.left || badge.y + badge.height <= rect.top)) return false
+  const checkGeometry = async (expected: Map<string, number> | undefined, reactions: boolean) => {
+    const measured = new Map<string, number>()
+    for (const layout of layouts) {
+      await applyLayout(layout)
+      const { message, direction, width } = layout
+      const key = `${message.direction}-${direction}-${width}`
+      await expect(oldBadge).toBeVisible()
+      const height = (await oldRow.boundingBox())!.height
+      measured.set(key, height)
+      if (expected) expect(height, 'a reader move does not resize a qualified row').toBe(expected.get(key))
+      const badge = (await oldBadge.boundingBox())!
+      if (reactions) {
+        const reaction = (await oldRow.locator('[data-reaction-emoji="👍"]').boundingBox())!
+        expect(clearOf(badge, reaction),
+        'the corner badge leaves the reaction control unobscured').toBe(true)
       }
-      return true
-    }, badge)
-    expect(textClear, 'the overlay leaves message text unobscured').toBe(true)
+      const textClear = await oldRow.locator('[data-msg-text]').first().evaluate((element, badge) => {
+        const text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+        for (let node = text.nextNode(); node; node = text.nextNode()) {
+          const range = document.createRange(); range.selectNodeContents(node)
+          if (![...range.getClientRects()].every(rect => !rect.width || !rect.height || badge.x >= rect.right || badge.y >= rect.bottom
+            || badge.x + badge.width <= rect.left || badge.y + badge.height <= rect.top)) return false
+        }
+        return true
+      }, badge)
+      expect(textClear, 'the long paragraph stays readable, including at phone width').toBe(true)
+      geometryReadings.push({ direction, textDirection: message.direction, width, rowHeight: height, badge, reactions, textClear })
+    }
+    await applyLayout({ message: paragraphs[0], direction: 'ltr', width: 1280 })
+    return measured
   }
-  await page.evaluate(() => { document.documentElement.dir = 'ltr' })
-  await page.setViewportSize({ width: 1280, height: 800 })
+  // Cover both the original text-only defect and the adjacent reaction controls.
+  await checkGeometry(heights, false)
+  await page.evaluate(async ({ roomJid, target }) => {
+    await (window as unknown as Scope).__demoClient.messages.sendReaction(roomJid, target, ['👍'])
+  }, { roomJid: LAUNCH_ROOM, target: fixture.old })
+  await expect(oldRow.locator('[data-reaction-emoji="👍"]')).toBeVisible()
+  const reactionHeights = await checkGeometry(undefined, true)
   const opener = oldBadge.getByRole('button', { name: `Read through this message: ${fixture.names.join(', ')}`, exact: true })
   await expect(opener).toBeVisible()
   await expect(opener.getByText('+1', { exact: true })).toBeVisible()
@@ -97,5 +145,7 @@ test('room read badges cap avatars, name every reader and move without rendering
   }
   await expect(page.locator(`[data-read-marker-row="${fixture.next}"]`).getByRole('button', { name: `Read through this message: ${fixture.names[0]}`, exact: true })).toBeVisible()
   await expect(oldBadge.getByText('+1', { exact: true })).toHaveCount(0)
+  await checkGeometry(reactionHeights, true)
+  await test.info().attach('room-marker-corner-geometry', { body: JSON.stringify(geometryReadings, null, 2), contentType: 'application/json' })
   await test.info().attach('room-marker-render-counts', { body: JSON.stringify(result, null, 2), contentType: 'application/json' })
 })

@@ -21,6 +21,21 @@ describe('room marker archive order', () => {
     expect(order.after('outside-resident-window', 'archive-old')).toBe(false)
   })
 
+  it('invalidates a remembered archive end for new singleton evidence, not duplicate observations', () => {
+    const order = new RoomMarkerOrder()
+    const before = order.revision
+    order.page(['archive-first'])
+    expect(order.revision).toBeGreaterThan(before)
+    const pageRevision = order.revision
+    order.page(['archive-first'])
+    expect(order.revision).toBe(pageRevision)
+    order.live('archive-new')
+    expect(order.revision).toBeGreaterThan(pageRevision)
+    const liveRevision = order.revision
+    order.live('archive-new')
+    expect(order.revision).toBe(liveRevision)
+  })
+
   it('ignores duplicate and previously ordered stream replay rather than creating a cycle', () => {
     const order = new RoomMarkerOrder()
     order.live('archive-first'); order.live('archive-second')

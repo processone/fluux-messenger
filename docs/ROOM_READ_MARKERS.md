@@ -27,12 +27,16 @@ the live roster must include this session and stable occupant identities, and th
 room's discovery count must match the full roster. Nineteen occupants, including
 yourself, may qualify; twenty do not. Presence and configuration updates invalidate
 previous discovery evidence. Fluux cannot react to a server change it has not been
-told about.
+told about. A failed room-information request is not negative room evidence:
+Fluux retains the last proven display and retries after a bounded delay while
+sending remains gated.
 
 ## Sending and receiving
 
 Only actual measured viewing of an incoming plaintext row in the focused window
-can request a marker. Local read events alone never do. Hydration, mark-all-read,
+can request a marker. Covered dialogs and the phone members pane are not viewing;
+closing them re-measures the exposed rows without requiring a scroll or refocus.
+Local read events alone never do. Hydration, mark-all-read,
 background catch-up, private XEP-0490 updates, previews and own outgoing rows are
 not viewing evidence. Encrypted and undecryptable rows are excluded.
 
@@ -54,8 +58,10 @@ targets never move to a different message. Position order comes from server-orde
 archive pages and undelayed room delivery, never from opaque IDs, nicknames or
 marker timestamps. When two positions have no known order, a read-only, bounded
 MAM probe can establish it without inserting rows or changing archive coverage.
-Completed unsuccessful probes are remembered until order evidence changes; a capped
-walk resumes at its last cursor. A positively purged send anchor is older than
+Walks are shared by their starting position, not repeated for each candidate.
+Completed probes are remembered until order evidence changes; a capped walk
+resumes at its last cursor. A single archived page does not start a new capped
+walk for every marker. A positively purged send anchor is older than
 retained history, matching private read-sync recovery. Failed or unknown lookups
 never establish order. If the server cannot prove order, Fluux leaves the existing
 position alone.
@@ -63,9 +69,10 @@ position alone.
 ## Display
 
 Each reader appears over the lower-right corner of their most recently displayed
-message (lower-left in right-to-left layouts), without adding row height or moving
-reactions, identified by
-the room's occupant ID. Nick changes preserve identity, departures hide the reader,
+message (lower-left for right-to-left message text), identified by the room's occupant
+ID. Qualifying messages reserve trailing space after their text and reactions so
+badges cannot cover them. Some last lines may wrap earlier; moving a reader does
+not resize a qualified row. Nick changes preserve identity, departures hide the reader,
 and reused nicknames do not inherit another person's position. Fluux hides your
 own marker. Each badge shows up to three avatars; its button opens a full named
 list with keyboard and touch support. Updates use per-row snapshots rather than

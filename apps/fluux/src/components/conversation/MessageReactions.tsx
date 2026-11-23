@@ -1,5 +1,5 @@
 import { iosHaptic } from '@/platform/ios/haptics'
-import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react'
+import { memo, useCallback, useMemo, useState, useRef, useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Tooltip } from '../Tooltip'
 import { ReactionBurst } from './ReactionBurst'
@@ -17,6 +17,8 @@ export interface MessageReactionsProps {
   onShowReactors?: (emoji: string) => void
   /** Whether the message is retracted (hides reactions) */
   isRetracted?: boolean
+  /** Keep the same trailing corner clear as the message text above. */
+  trailingContent?: ReactNode
 }
 
 export const MessageReactions = memo(function MessageReactions({
@@ -26,6 +28,7 @@ export const MessageReactions = memo(function MessageReactions({
   getReactorName,
   onShowReactors,
   isRetracted,
+  trailingContent,
 }: MessageReactionsProps) {
   const { t } = useTranslation()
   const MAX_INLINE = 9
@@ -74,6 +77,7 @@ export const MessageReactions = memo(function MessageReactions({
 
   return (
     <div
+      data-msg-reactions
       className="flex items-center gap-1 pt-1 flex-wrap select-none"
       onTouchStart={(event) => {
         event.stopPropagation()
@@ -160,6 +164,7 @@ export const MessageReactions = memo(function MessageReactions({
           </button>
         </Tooltip>
       )}
+      {trailingContent}
       {burst && <ReactionBurst x={burst.x} y={burst.y} onDone={clearBurst} />}
     </div>
   )

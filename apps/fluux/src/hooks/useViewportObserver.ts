@@ -16,10 +16,16 @@
  * - Refreshes intersections on focus recovery so hidden reports can be retried
  * - Cleanup on unmount or conversation switch
  */
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 
 /** Minimum interval (ms) between onMessageSeen calls. */
-const THROTTLE_MS = 300
+export const THROTTLE_MS = 300
+
+/** Shared cover rule for the observer's recovery and the publication boundary. */
+export function isViewportCovered(element: HTMLElement): boolean {
+  return !!document.querySelector('[data-modal="true"], [aria-modal="true"]')
+    || !!element.closest('[inert], [aria-hidden="true"]')
+}
 
 interface UseViewportObserverOptions {
   /** Ref to the scroll container element */
@@ -45,17 +51,20 @@ export function useViewportObserver({
   const lastReportedTimeRef = useRef(0)
   const throttleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingMessageIdRef = useRef<string | null>(null)
+  const afterReadRef = useRef<(() => void) | null>(null)
+  const watchesViews = !!onVisibleRows
 
   // Stable callback ref to avoid re-creating the observer when onMessageSeen changes
   const onMessageSeenRef = useRef(onMessageSeen)
   onMessageSeenRef.current = onMessageSeen
   const onVisibleRowsRef = useRef(onVisibleRows)
-  onVisibleRowsRef.current = onVisibleRows
+  useLayoutEffect(() => { onVisibleRowsRef.current = onVisibleRows }, [onVisibleRows])
 
   const resetReporting = useCallback(() => {
     lastReportedRef.current = null
     lastReportedTimeRef.current = 0
     pendingMessageIdRef.current = null
+    afterReadRef.current = null
     if (throttleTimerRef.current) {
       clearTimeout(throttleTimerRef.current)
       throttleTimerRef.current = null
@@ -82,12 +91,16 @@ export function useViewportObserver({
       if (!throttleTimerRef.current) {
         throttleTimerRef.current = setTimeout(() => {
           throttleTimerRef.current = null
-          if (pendingMessageIdRef.current && pendingMessageIdRef.current !== lastReportedRef.current) {
-            lastReportedRef.current = pendingMessageIdRef.current
-            lastReportedTimeRef.current = Date.now()
-            onMessageSeenRef.current?.(pendingMessageIdRef.current)
-          }
+          const pending = pendingMessageIdRef.current
           pendingMessageIdRef.current = null
+          if (pending && pending !== lastReportedRef.current) {
+            lastReportedRef.current = pending
+            lastReportedTimeRef.current = Date.now()
+            onMessageSeenRef.current?.(pending)
+          }
+          const afterRead = afterReadRef.current
+          afterReadRef.current = null
+          afterRead?.()
         }, THROTTLE_MS - elapsed)
       }
     }
@@ -153,28 +166,30 @@ export function useViewportObserver({
     const visibleEntries = new Map<Element, IntersectionObserverEntry>()
 
     let viewingTimer: ReturnType<typeof setTimeout> | undefined
+    const measureVisibleRows = () => {
+      // Re-measure at delivery, including after a deferred read write. Map
+      // insertion order is not screen order when scrolling up through rows.
+      const viewport = scrollContainer.getBoundingClientRect()
+      const rows = new Map<string, number>()
+      for (const entry of visibleEntries.values()) {
+        const element = (entry.target as HTMLElement).closest<HTMLElement>('[data-message-row-id]')
+        const rowId = element?.dataset.messageRowId
+        if (!rowId || !element?.isConnected || rows.has(rowId)) continue
+        const rect = element.getBoundingClientRect()
+        const overlap = Math.min(rect.bottom, viewport.bottom) - Math.max(rect.top, viewport.top)
+        if (rect.height > 0 && viewport.height > 0 && overlap >= Math.min(rect.height, viewport.height) / 2) rows.set(rowId, rect.bottom)
+      }
+      const bottom = findBottomMostVisible([...visibleEntries.values()])
+      if (bottom) reportMessageSeen(bottom)
+      if (pendingMessageIdRef.current && pendingMessageIdRef.current !== lastReportedRef.current) {
+        afterReadRef.current = measureVisibleRows
+        return
+      }
+      onVisibleRowsRef.current?.([...rows].sort((a, b) => a[1] - b[1]).map(([id]) => id))
+    }
     const reportVisibleRows = () => {
       if (!onVisibleRowsRef.current || viewingTimer !== undefined) return
-      viewingTimer = setTimeout(() => {
-        viewingTimer = undefined
-        // Measure CURRENT intersections at the throttled boundary, not the
-        // geometry of a row that was visible before a scroll or overlay.
-        const viewport = scrollContainer.getBoundingClientRect()
-        const rows = new Set<string>()
-        for (const entry of visibleEntries.values()) {
-          const element = entry.target as HTMLElement
-          const rowId = element.closest<HTMLElement>('[data-message-row-id]')?.dataset.messageRowId
-          if (!rowId || !element.isConnected) continue
-          const rect = element.getBoundingClientRect()
-          const overlap = Math.min(rect.bottom, viewport.bottom) - Math.max(rect.top, viewport.top)
-          if (rect.height > 0 && viewport.height > 0 && overlap >= Math.min(rect.height, viewport.height) / 2) rows.add(rowId)
-        }
-        // Run the existing read writer first when its throttle is due in this
-        // same turn; peer publication must never race ahead of that pointer.
-        const bottom = findBottomMostVisible([...visibleEntries.values()])
-        if (bottom) reportMessageSeen(bottom)
-        onVisibleRowsRef.current?.([...rows])
-      }, THROTTLE_MS)
+      viewingTimer = setTimeout(() => { viewingTimer = undefined; measureVisibleRows() }, THROTTLE_MS)
     }
 
     const observer = new IntersectionObserver(
@@ -210,8 +225,13 @@ export function useViewportObserver({
     // Track which rows the message list mounts/unmounts. With virtualization, only the
     // visible window + overscan is mounted: rows scroll in (added) and out (removed) as
     // the user scrolls, so the observer must follow the window, not assume rows persist.
+    let covered = isViewportCovered(scrollContainer)
     const mutationObserver = new MutationObserver((mutations) => {
+      const wasCovered = covered
+      covered = isViewportCovered(scrollContainer)
+      if (wasCovered && !covered) reportVisibleRows()
       for (const mutation of mutations) {
+        if (mutation.target !== scrollContainer && !scrollContainer.contains(mutation.target)) continue
         // Newly mounted rows start being observed; the IO fires automatically for any
         // that are already visible (e.g. when the user is pinned to the bottom).
         for (const node of mutation.addedNodes) {
@@ -242,6 +262,10 @@ export function useViewportObserver({
     mutationObserver.observe(scrollContainer, {
       childList: true,
       subtree: true,
+    })
+    if (watchesViews) mutationObserver.observe(document.body, {
+      childList: true, subtree: true, attributes: true,
+      attributeFilter: ['data-modal', 'aria-modal', 'inert', 'aria-hidden'],
     })
 
     // Re-evaluate bottom-most visible message on scroll.
@@ -286,5 +310,5 @@ export function useViewportObserver({
       visibleEntries.clear()
       resetReporting()
     }
-  }, [conversationId, enabled, scrollContainerRef, reportMessageSeen, resetReporting])
+  }, [conversationId, enabled, watchesViews, scrollContainerRef, reportMessageSeen, resetReporting])
 }

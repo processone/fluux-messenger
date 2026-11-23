@@ -2,7 +2,7 @@ import { Profiler } from 'react'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { MessageRowRef, RoomReadConsent, RoomReader } from '@fluux/sdk'
-import { RoomReadBadge, RoomReadSharing } from './RoomReadMarkers'
+import { RoomReadBadge, RoomReadCorner, RoomReadSharing } from './RoomReadMarkers'
 
 // Approved room read-marker UI: consent controls and badge snapshots only.
 // SDK protocol/order/persistence facts belong to RoomReadMarkers.test.ts.
@@ -100,4 +100,20 @@ describe('room read-marker controls', () => {
     expect(counts.second).toBe(before.second + 1)
     expect(counts.unchanged).toBe(before.unchanged)
   })
+
+  it('reserves a decorative corner only in qualifying rooms and keeps it unchanged when readers move', () => {
+    let eligible = false
+    const state = source()
+    const markers = { ...state, showsBadges: () => eligible }
+    const view = render(<RoomReadCorner markers={markers} roomJid={room} />)
+    expect(view.container.childElementCount).toBe(0)
+    eligible = true
+    act(() => markers.setReaders({ first: [people[0]] }))
+    const corner = view.container.querySelector('[data-read-marker-corner]')!
+    expect(corner).toHaveAttribute('aria-hidden', 'true')
+    act(() => markers.setReaders({ first: empty, second: [people[0]] }))
+    expect(view.container.querySelector('[data-read-marker-corner]')).toBe(corner)
+    expect(view.container.textContent).toBe('')
+  })
+
 })

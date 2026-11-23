@@ -2,7 +2,7 @@ import { iosHaptic } from '@/platform/ios/haptics'
 import { editableForward } from '../utils/forwardMessage'
 import { isSpamModerated } from '@/utils/spamModeration'
 import { SpamModerationOption } from './SpamModerationOption'
-import { RoomReadBadge } from './RoomReadMarkers'
+import { RoomReadBadge, RoomReadCorner } from './RoomReadMarkers'
 import type { GapInterval, MessageRowRef, RoomReadMarkers } from '@fluux/sdk'
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useId, useMemo, useSyncExternalStore, memo, type RefObject } from 'react'
 import { flushSync } from 'react-dom'
@@ -1071,14 +1071,6 @@ export const RoomMessageList = memo(function RoomMessageList({
       // between rooms. Restoration survives via scrollStateManager (keyed by room jid).
       key={room.jid}
       conversationId={room.jid}
-      onFocusedVisibleRows={peerReadMarkers && collectViews ? rows => {
-        // The viewport supplies actual visible rows. Never infer viewing from
-        // local-read/MDS events, account hydration, previews or mark-all-read.
-        const incoming = rows.filter(row => !row.isOutgoing && !row.isPrivate && !row.systemEvent
-          && !row.securityContext && !row.encryptedPayload && !row.unsupportedEncryption && !row.contentAvailability)
-        const last = incoming.at(-1)
-        if (last) void peerReadMarkers.viewed(room.jid, last).catch(() => {})
-      } : undefined}
       timeline={{
         messages,
         ingressVersion: messageIngressVersion,
@@ -1094,6 +1086,14 @@ export const RoomMessageList = memo(function RoomMessageList({
         gaps: { intervals: gaps, onCatchUp: onCatchUpHistory, isCatchingUp },
       }}
       readMarkers={{
+        onFocusedVisibleRows: peerReadMarkers && collectViews ? rows => {
+          // The shared observer orders these by their measured bottom edge.
+          // Local read/MDS events and hydration never create viewing evidence.
+          const incoming = rows.filter(row => !row.isOutgoing && !row.isPrivate && !row.systemEvent
+            && !row.securityContext && !row.encryptedPayload && !row.unsupportedEncryption && !row.contentAvailability)
+          const last = incoming.at(-1)
+          if (last) void peerReadMarkers.viewed(room.jid, last).catch(() => {})
+        } : undefined,
         firstNewRow: firstNewMessageRow,
         firstNewIsProvisional: firstNewMessageIsProvisional,
         firstNewCount: firstNewMessageCount,
@@ -1386,6 +1386,10 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   // Build nick extras (affiliation badge and XEP-0317 hats)
   // Note: individual tooltips removed - all info is now in the unified avatar/name tooltip
   // Show affiliation (owner/admin) rather than role, consistent with the member list
+  const readMarkerCorner = useMemo(() => peerReadMarkers && !message.isPrivate
+    ? <RoomReadCorner markers={peerReadMarkers} roomJid={roomJid} /> : undefined,
+  [peerReadMarkers, roomJid, message.isPrivate])
+
   const nickExtras = (
     <>
       {occupant && occupant.affiliation === 'owner' && (
@@ -1454,7 +1458,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 
   return (
     <>
-      <div className="relative">
+      <div className="relative room-read-marker-host">
       <MessageBubble
         message={message}
         showAvatar={showAvatar}
@@ -1482,6 +1486,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         senderAffiliation={senderAffiliation}
         senderOccupantJid={`${roomJid}/${message.nick}`}
         nickExtras={nickExtras}
+        readMarkerCorner={readMarkerCorner}
         myReactions={myReactions}
         onReaction={supportsReactions ? handleReaction : undefined}
         getReactorName={getReactorName}

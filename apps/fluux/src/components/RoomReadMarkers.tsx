@@ -29,6 +29,16 @@ export function RoomReadSharing({ markers, roomJid }: { markers: Pick<RoomReadMa
   )
 }
 
+/** Reserve the corner independently of whether this particular row has readers. */
+export function RoomReadCorner({ markers, roomJid }: {
+  markers: Pick<RoomReadMarkers, 'subscribe' | 'showsBadges'>; roomJid: string
+}) {
+  const snapshot = useCallback(() => markers.showsBadges(roomJid), [markers, roomJid])
+  const eligible = useSyncExternalStore(markers.subscribe, snapshot)
+  if (!eligible) return null
+  return <span aria-hidden="true" data-read-marker-corner className="inline-block h-7 w-32 shrink-0 align-bottom pointer-events-none" />
+}
+
 /** Subscribes below the memoized message row: only moved badges receive new snapshots. */
 export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row }: {
   markers: Pick<RoomReadMarkers, 'subscribe' | 'readers'>; roomJid: string; row: MessageRowRef

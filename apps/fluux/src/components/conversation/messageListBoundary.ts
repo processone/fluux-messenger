@@ -57,7 +57,7 @@ export interface ConversationTimeline<T extends BaseMessage> {
 }
 
 /** The reader's read state as the list shows it: divider, counts and the read pointer. */
-export interface ReadMarkers {
+export interface ReadMarkers<T extends BaseMessage = BaseMessage> {
   /** Row reference of the first unread message (the new-message divider). */
   firstNewRow?: MessageRowRef
   /** The divider was derived while a synced read position is unresolved — rendered muted. */
@@ -73,6 +73,8 @@ export interface ReadMarkers {
   unreadCount?: number
   /** Called when the bottom-most visible row changes; receives its row handle. */
   onSeen?: (rowId: string) => void
+  /** Independent focused viewport evidence; never a local read-state writer. */
+  onFocusedVisibleRows?: (rows: readonly T[]) => void
   /** Clear the first-new row marker (used by the viewport observer). */
   onClear?: () => void
   /**
@@ -135,9 +137,7 @@ export interface MessageListProps<T extends BaseMessage> {
   /** Unique identifier for this conversation/room. */
   conversationId: string
   timeline: ConversationTimeline<T>
-  /** Focused, measured viewport evidence only; static previews never call this. */
-  onFocusedVisibleRows?: (rows: readonly T[]) => void
-  readMarkers?: ReadMarkers
+  readMarkers?: ReadMarkers<T>
   target?: MessageTargetRequest
   /** Filled with the command handle while the list is mounted. */
   handleRef?: MessageListHandleRef

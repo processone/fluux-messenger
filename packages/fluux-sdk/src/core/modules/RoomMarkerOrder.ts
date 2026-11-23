@@ -21,25 +21,33 @@ export class RoomMarkerOrder {
     }
     return false
   }
+  private vertex(id: string) {
+    if (!id || this.edges.has(id)) return
+    if (this.edges.size >= 4096) { this.edges.clear(); this.liveLast = undefined }
+    this.edges.set(id, new Set())
+    this.revision++
+  }
   private link(earlier: string, later: string) {
     if (!earlier || !later || earlier === later || this.after(earlier, later)) return
+    this.vertex(earlier); this.vertex(later)
     const next = this.edges.get(earlier) ?? new Set<string>()
     if (next.has(later)) return
     next.add(later)
     this.edges.set(earlier, next)
     this.revision++
-    // Losing old order evidence is safe: the caller can probe it again. Keep
-    // long-lived room sessions from retaining an unbounded archive graph.
-    if (this.edges.size > 4096) { this.edges.clear(); this.liveLast = undefined }
   }
   page(ids: readonly string[], cursor?: { before?: string; after?: string }) {
+    // Even an unlinked new vertex invalidates a previously observed archive end.
+    for (const id of ids) this.vertex(id)
     for (let i = 1; i < ids.length; i++) this.link(ids[i - 1], ids[i])
     if (ids.length && cursor?.after) this.link(cursor.after, ids[0])
     if (ids.length && cursor?.before) this.link(ids[ids.length - 1], cursor.before)
   }
   live(id: string) {
     if (this.liveLast && (id === this.liveLast || this.after(this.liveLast, id))) return
-    if (this.liveLast) this.link(this.liveLast, id)
+    const previous = this.liveLast
+    this.vertex(id)
+    if (previous) this.link(previous, id)
     this.liveLast = id
   }
 }

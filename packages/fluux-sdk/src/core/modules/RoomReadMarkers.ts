@@ -15,6 +15,12 @@ export interface RoomReader { occupantId: string; nick: string; avatar?: string 
 interface Position { row: MessageRowRef; archiveId: string }
 interface DiscoveryProof { features: string[]; count: number; epoch: number; connection: ReturnType<ModuleDependencies['getXmpp']> }
 interface AccountState { consent: RoomReadConsent; sent: Record<string, Position> }
+interface DiscoveryRequest {
+  epoch: number; connection: DiscoveryProof['connection']; task: Promise<boolean>; isCurrent: () => boolean
+  retryAt?: number; retryTimer?: ReturnType<typeof setTimeout>
+}
+const REQUEST_RETRY_MS = 5_000
+export const ROOM_MARKER_ORDER_PAGE_LIMIT = 20
 export const ROOM_READ_MARKERS_STORAGE_KEY = 'fluux-room-read-markers'
 const STORAGE_PREFIX = ROOM_READ_MARKERS_STORAGE_KEY + ':'
 const storageKey = (account: string, kind: 'consent' | 'watermarks') => STORAGE_PREFIX + JSON.stringify([account, kind])
@@ -55,8 +61,9 @@ export class RoomReadMarkers extends BaseModule {
   private stateConnection: ReturnType<ModuleDependencies['getXmpp']> | undefined
   private orders = new Map<string, RoomMarkerOrder>()
   private proofs = new Map<string, DiscoveryProof>()
-  private discovery = new Map<string, { epoch: number; connection: DiscoveryProof['connection']; task: Promise<boolean> }>()
-  private probes = new Map<string, { revision: number; cursor: string; complete: boolean }>()
+  private discovery = new Map<string, DiscoveryRequest>()
+  private probes = new Map<string, { revision: number; cursor: string; complete: boolean; retryAt?: number }>()
+  private orderPending = new Map<string, { task: Promise<boolean>; isCurrent: () => boolean }>()
   private epochs = new Map<string, number>()
   private positions = new Map<string, Map<string, Position>>()
   private badgeRooms = new Set<string>()
@@ -75,12 +82,14 @@ export class RoomReadMarkers extends BaseModule {
   private capture() {
     const session = super.captureQuery()
     const lifecycle = this.lifecycle
-    return { isCurrent: () => session.isCurrent() && lifecycle === this.lifecycle }
+    const localDataRevision = storageRevision
+    return { isCurrent: () => session.isCurrent() && lifecycle === this.lifecycle && localDataRevision === storageRevision }
   }
   /** Cancel old asynchronous work on provider teardown or module replacement. */
   cancelPending() {
     this.lifecycle++
-    this.queued.clear(); this.pending.clear(); this.proofs.clear(); this.discovery.clear(); this.probes.clear()
+    for (const request of this.discovery.values()) clearTimeout(request.retryTimer)
+    this.queued.clear(); this.pending.clear(); this.proofs.clear(); this.discovery.clear(); this.probes.clear(); this.orderPending.clear()
     if (typeof window !== 'undefined') window.removeEventListener('storage', this.onStorage)
     const hadBadges = this.badgeRooms.size > 0
     this.badgeRooms.clear(); this.badges.clear()
@@ -204,11 +213,16 @@ export class RoomReadMarkers extends BaseModule {
     const proof = this.proofs.get(key)
     if (proof?.epoch === epoch && proof.connection === connection) return Promise.resolve(this.eligible(roomJid))
     const pending = this.discovery.get(key)
-    if (pending?.epoch === epoch && pending.connection === connection) return pending.task
-    const task = this.queryDiscovery(roomJid)
-    const entry = { epoch, connection, task }
+    if (pending?.epoch === epoch && pending.connection === connection && pending.isCurrent()
+      && (pending.retryAt === undefined || Date.now() < pending.retryAt)) return pending.task
+    clearTimeout(pending?.retryTimer)
+    const query = this.capture()
+    const task = Promise.resolve().then(() => this.queryDiscovery(roomJid))
+    const entry: DiscoveryRequest = { epoch, connection, task, isCurrent: query.isCurrent }
     this.discovery.set(key, entry)
-    void task.finally(() => { if (this.discovery.get(key) === entry) this.discovery.delete(key) }).catch(() => {})
+    void task.finally(() => {
+      if (this.discovery.get(key) === entry && entry.retryAt === undefined) this.discovery.delete(key)
+    }).catch(() => {})
     return task
   }
 
@@ -235,9 +249,24 @@ export class RoomReadMarkers extends BaseModule {
       this.roomChanged(roomJid)
       return this.eligible(roomJid)
     } catch {
-      if (query.isCurrent() && epoch === (this.epochs.get(key) ?? 0)) {
-        this.proofs.set(key, { features: [], count: NaN, epoch, connection: this.deps.getXmpp() })
-        this.roomChanged(roomJid)
+      const request = this.discovery.get(key)
+      if (query.isCurrent() && epoch === (this.epochs.get(key) ?? 0) && request?.epoch === epoch) {
+        // A transport failure is not negative room evidence. Retain the last
+        // proven display; the old epoch still forbids sending until rechecked.
+        request.retryAt = Date.now() + REQUEST_RETRY_MS
+        request.retryTimer = setTimeout(() => {
+          if (this.discovery.get(key) !== request) return
+          this.discovery.delete(key)
+          if (!query.isCurrent()) return
+          const held = this.queued.get(key)
+          if (held?.isCurrent() && held.epoch === (this.epochs.get(key) ?? 0)
+            && held.consent === this.consentRevision && this.focused() && this.isEnabledFor(roomJid)) {
+            void this.viewed(roomJid, held.row).catch(() => {})
+          } else {
+            if (held && this.queued.get(key) === held) this.queued.delete(key)
+            if (this.positions.has(key)) void this.discover(roomJid).catch(() => {})
+          }
+        }, REQUEST_RETRY_MS)
       }
       return false
     }
@@ -267,32 +296,56 @@ export class RoomReadMarkers extends BaseModule {
   recordArchiveOrder(roomJid: string, ids: readonly string[], cursor?: { before?: string; after?: string }) {
     this.order(roomJid).page(ids, cursor)
   }
-  private async forward(roomJid: string, previous: string, candidate: string, allowPurged = false): Promise<boolean> {
+  private async forward(roomJid: string, previous: string, candidate: string, allowPurged = false, resumeCapped = true): Promise<boolean> {
     const order = this.order(roomJid)
     if (previous === candidate || order.after(previous, candidate)) return false
     if (order.after(candidate, previous)) return true
+    const key = JSON.stringify([this.roomKey(roomJid), previous, allowPurged])
+    const pending = this.orderPending.get(key)
+    if (pending?.isCurrent()) {
+      await pending.task
+      return this.order(roomJid).after(candidate, previous)
+    }
+    const session = this.capture()
+    const roomKey = this.roomKey(roomJid)
+    const epoch = this.epochs.get(roomKey) ?? 0
+    const entry = {
+      task: this.probeForward(roomJid, previous, candidate, allowPurged, resumeCapped, key),
+      isCurrent: () => session.isCurrent() && epoch === (this.epochs.get(roomKey) ?? 0),
+    }
+    this.orderPending.set(key, entry)
+    try { return await entry.task }
+    finally { if (this.orderPending.get(key) === entry) this.orderPending.delete(key) }
+  }
+
+  private async probeForward(roomJid: string, previous: string, candidate: string, allowPurged: boolean, resumeCapped: boolean, probeKey: string): Promise<boolean> {
+    const order = this.order(roomJid)
     // A restart or a nonresident target can leave no common page. Read server
     // order without putting probe messages in the timeline or touching coverage.
     // Bound the read; an unproved relation stops sharing rather than guessing.
     const session = this.capture()
-    const probeKey = JSON.stringify([this.roomKey(roomJid), previous, candidate, allowPurged])
+    const roomKey = this.roomKey(roomJid)
+    const epoch = this.epochs.get(roomKey) ?? 0
+    const isCurrent = () => session.isCurrent() && epoch === (this.epochs.get(roomKey) ?? 0)
     const held = this.probes.get(probeKey)
-    if (held?.complete && held.revision === order.revision) return false
-    if (allowPurged && !held && this.deps.lookUpRoomArchiveAnchor) {
+    if (held?.retryAt && Date.now() < held.retryAt) return false
+    if (held && held.revision === order.revision && (held.complete || !resumeCapped)) return false
+    if (allowPurged && (!held || held.retryAt !== undefined) && this.deps.lookUpRoomArchiveAnchor) {
       const anchor = await this.deps.lookUpRoomArchiveAnchor(roomJid, previous)
-      if (!session.isCurrent()) return false
+      if (!isCurrent()) return false
       // The existing archive read-anchor contract treats a positively purged
       // anchor as older than retained history, never a failed/unknown lookup.
       if (anchor.kind === 'absent') { order.page([candidate], { after: previous }); return true }
     }
     if (!this.deps.registerMAMCollector) return false
-    let after = held && !held.complete ? held.cursor : previous
-    const remember = (complete: boolean) => {
+    let after = held?.cursor ?? previous
+    const remember = (complete: boolean, failed = false) => {
       if (this.probes.size >= 4096) this.probes.clear()
-      this.probes.set(probeKey, { revision: order.revision, cursor: after, complete })
+      this.probes.set(probeKey, { revision: order.revision, cursor: after, complete,
+        retryAt: failed ? Date.now() + REQUEST_RETRY_MS : undefined })
     }
-    for (let page = 0; page < 20; page++) {
-      if (!session.isCurrent()) return false;
+    for (let page = 0; page < ROOM_MARKER_ORDER_PAGE_LIMIT; page++) {
+      if (!isCurrent()) return false;
       const queryid = generateUUID()
       const ids: string[] = []
       const unregister = this.deps.registerMAMCollector(queryid, stanza => {
@@ -307,19 +360,23 @@ export class RoomReadMarkers extends BaseModule {
             xml('x', { xmlns: NS_DATA_FORMS, type: 'submit' }, xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM))),
             xml('set', { xmlns: NS_RSM }, xml('max', {}, '100'), xml('after', {}, after)))), 10_000)
         const fin = response.getChild('fin', NS_MAM)
-        if (!session.isCurrent() || response.attrs.from !== roomJid || !fin) return false
+        if (!isCurrent()) return false
+        if (response.attrs.from !== roomJid || !fin) { remember(false, true); return false }
         order.page(ids, { after })
+        const last = fin.getChild('set', NS_RSM)?.getChildText('last')
+        const canContinue = !!last && last !== after && ids.at(-1) === last
+        if (canContinue) after = last
+        remember(fin.attrs.complete === 'true', fin.attrs.complete !== 'true' && !canContinue)
         if (ids.includes(candidate)) {
           // A resumed RSM walk proves the whole interval even when the bounded
           // in-memory graph no longer retains its earliest individual edges.
           order.page([candidate], { after: previous })
+          remember(fin.attrs.complete === 'true', fin.attrs.complete !== 'true' && !canContinue)
           return true
         }
         if (order.after(candidate, previous)) return true
-        const last = fin.getChild('set', NS_RSM)?.getChildText('last')
-        if (fin.attrs.complete === 'true' || !last || last === after || ids.at(-1) !== last) { remember(true); return false }
-        after = last
-      } catch { if (session.isCurrent()) remember(true); return false } finally { unregister() }
+        if (fin.attrs.complete === 'true' || !canContinue) return false
+      } catch { if (isCurrent()) remember(false, true); return false } finally { unregister() }
     }
     remember(false)
     return false
@@ -385,7 +442,7 @@ export class RoomReadMarkers extends BaseModule {
     const position = { row: messageRowRef(row), archiveId: row.stanzaId! }
     const positions = this.positions.get(key) ?? new Map<string, Position>()
     const previous = positions.get(occupantId)
-    if (previous && !await this.forward(roomJid, previous.archiveId, position.archiveId)) return
+    if (previous && !await this.forward(roomJid, previous.archiveId, position.archiveId, false, !archived)) return
     if (!query.isCurrent() || epoch !== (this.epochs.get(key) ?? 0) || !this.eligible(roomJid)) return
     // Another live/archive resolver can finish during the order probe.
     const latest = positions.get(occupantId)
@@ -394,7 +451,7 @@ export class RoomReadMarkers extends BaseModule {
     this.positions.set(key, positions)
     if (occupantId === roomSelf(room).occupantId) {
       const sent = this.state().sent[roomJid]
-      const advances = !sent || await this.forward(roomJid, sent.archiveId, position.archiveId, true)
+      const advances = !sent || await this.forward(roomJid, sent.archiveId, position.archiveId, true, !archived)
       if (advances && query.isCurrent() && epoch === (this.epochs.get(key) ?? 0) && this.eligible(roomJid)) {
         this.rememberSent(roomJid, position)
       }
@@ -437,10 +494,15 @@ export class RoomReadMarkers extends BaseModule {
           continue
         }
         const candidate = this.queued.get(key)
-        this.queued.delete(key)
         if (!candidate) continue
-        const current = () => candidate.isCurrent() && candidate.epoch === (this.epochs.get(key) ?? 0)
-          && candidate.consent === this.consentRevision && this.focused() && this.isEnabledFor(roomJid) && this.eligible(roomJid)
+        const authorized = () => candidate.isCurrent() && candidate.epoch === (this.epochs.get(key) ?? 0)
+          && candidate.consent === this.consentRevision && this.focused() && this.isEnabledFor(roomJid)
+        if (!discovered && authorized()) {
+          if (candidate.epoch !== initial.epoch) continue
+          if (this.discovery.get(key)?.retryAt !== undefined) break
+        }
+        this.queued.delete(key)
+        const current = () => authorized() && this.eligible(roomJid)
         if (!discovered || !current()) continue
         const confirmed = await this.target(roomJid, candidate.row.stanzaId!, [])
         if (!confirmed || keyOf(messageRowRef(confirmed)) !== keyOf(messageRowRef(candidate.row)) || !current()) continue

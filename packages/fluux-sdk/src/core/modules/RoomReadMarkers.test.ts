@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
-import { RoomReadMarkers, clearRoomReadMarkersLocalData } from './RoomReadMarkers'
+import { RoomReadMarkers, clearRoomReadMarkersLocalData, ROOM_MARKER_ORDER_PAGE_LIMIT } from './RoomReadMarkers'
 import { MAM } from './MAM'
 import { parse } from 'ltx'
 import { parseMessageContent } from './messagingUtils'
@@ -69,7 +69,7 @@ describe('RoomReadMarkers', () => {
     markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
   })
 
-  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); setStorageScopeJid(null) })
+  afterEach(() => { markers.cancelPending(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); setStorageScopeJid(null) })
 
   it('starts with both consent gates off; enabling one room does not enable another', async () => {
     expect(markers.getConsent()).toEqual({ enabled: false, rooms: [] })
@@ -430,13 +430,16 @@ describe('RoomReadMarkers', () => {
     await markers.receive(roomJid, marker('archive-a'))
     const held = markers.readers(roomJid, rows[0])
     let answer!: (value: Element) => void
-    iq.mockImplementationOnce(() => new Promise(resolve => { answer = resolve }))
+    let started!: () => void
+    const ready = new Promise<void>(resolve => { started = resolve })
+    iq.mockImplementationOnce(() => new Promise(resolve => { answer = resolve; started() }))
     markers.observe(xml('presence', { from: `${roomJid}/Bob` }))
     markers.roomChanged(roomJid)
     expect(markers.eligible(roomJid)).toBe(false)
     expect(markers.showsBadges(roomJid)).toBe(true)
     expect(markers.readers(roomJid, rows[0])).toBe(held)
     const resolved = markers.receive(roomJid, marker('archive-b'))
+    await ready
     answer(disco())
     await resolved
     expect(markers.readers(roomJid, rows[0])).toHaveLength(0)
@@ -500,17 +503,17 @@ describe('RoomReadMarkers', () => {
       if (request.getChild('query', 'http://jabber.org/protocol/disco#info')) return disco()
       const query = request.getChild('query', 'urn:xmpp:mam:2')!
       cursors.push(query.getChild('set', 'http://jabber.org/protocol/rsm')!.getChildText('after')!)
-      const id = ++page > 20 ? rows[1].stanzaId! : `intermediate-${page}`
+      const id = ++page > ROOM_MARKER_ORDER_PAGE_LIMIT ? rows[1].stanzaId! : `intermediate-${page}`
       collectors.get(query.attrs.queryid)!(xml('message', { from: roomJid }, xml('result', { xmlns: 'urn:xmpp:mam:2', queryid: query.attrs.queryid, id },
         xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { type: 'groupchat', from: `${roomJid}/Bob` })))))
-      return xml('iq', { type: 'result', from: roomJid }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: page > 20 ? 'true' : 'false' },
+      return xml('iq', { type: 'result', from: roomJid }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: page > ROOM_MARKER_ORDER_PAGE_LIMIT ? 'true' : 'false' },
         xml('set', { xmlns: 'http://jabber.org/protocol/rsm' }, xml('last', {}, id))))
     })
     await markers.viewed(roomJid, rows[1])
     expect(send).toHaveBeenCalledTimes(1)
-    expect(page).toBe(20)
+    expect(page).toBe(ROOM_MARKER_ORDER_PAGE_LIMIT)
     await markers.viewed(roomJid, rows[1])
-    expect(cursors.at(-1)).toBe('intermediate-20')
+    expect(cursors.at(-1)).toBe(`intermediate-${ROOM_MARKER_ORDER_PAGE_LIMIT}`)
     expect(send).toHaveBeenCalledTimes(2)
   })
 
@@ -570,6 +573,153 @@ describe('RoomReadMarkers', () => {
     dependencies.getXmpp = () => connection
     await markers.viewed(roomJid, rows[0])
     expect(send).toHaveBeenCalledTimes(1)
+  })
+
+
+  it('reuses a completed walk for different candidates and resumes at its cursor when fresh order evidence arrives', async () => {
+    markers.setEnabled(true); markers.setRoomEnabled(roomJid, true)
+    await markers.viewed(roomJid, rows[1])
+    markers = new RoomReadMarkers(dependencies, () => focused)
+    const collectors = new Map<string, (stanza: Element) => void>()
+    dependencies.registerMAMCollector = (id, collector) => { collectors.set(id, collector); return () => { collectors.delete(id) } }
+    const cursors: string[] = []
+    const firstTail = 'archive-after-watermark'
+    iq.mockImplementation(async request => {
+      if (request.getChild('query', 'http://jabber.org/protocol/disco#info')) return disco()
+      const query = request.getChild('query', 'urn:xmpp:mam:2')!
+      cursors.push(query.getChild('set', 'http://jabber.org/protocol/rsm')!.getChildText('after')!)
+      const id = cursors.length === 1 ? firstTail : 'archive-new-tail'
+      collectors.get(query.attrs.queryid)!(xml('message', { from: roomJid }, xml('result', { xmlns: 'urn:xmpp:mam:2', queryid: query.attrs.queryid, id },
+        xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { type: 'groupchat', from: `${roomJid}/Bob` })))))
+      return xml('iq', { type: 'result', from: roomJid }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+        xml('set', { xmlns: 'http://jabber.org/protocol/rsm' }, xml('last', {}, id))))
+    })
+    await markers.viewed(roomJid, rows[0])
+    const older = message('archive-older', 500)
+    rows.push(older)
+    await markers.viewed(roomJid, older)
+    expect(cursors).toEqual([rows[1].stanzaId])
+    markers.recordArchiveOrder(roomJid, [rows[0].stanzaId!, older.stanzaId!])
+    await markers.viewed(roomJid, older)
+    expect(cursors).toEqual([rows[1].stanzaId, firstTail])
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it('retains proven badges and retries a failed discovery after bounded backoff without another presence', async () => {
+    vi.useFakeTimers()
+    await markers.receive(roomJid, marker('archive-a'))
+    const display = markers.readers(roomJid, rows[0])
+    markers.setEnabled(true); markers.setRoomEnabled(roomJid, true)
+    iq.mockRejectedValueOnce(new Error('Discovery timeout'))
+    markers.observe(xml('presence', { from: `${roomJid}/Bob` }))
+    await markers.viewed(roomJid, rows[1])
+    const beforeRetry = iq.mock.calls.length
+    expect(markers.eligible(roomJid)).toBe(false)
+    expect(markers.readers(roomJid, rows[0])).toBe(display)
+    expect(markers.showsBadges(roomJid)).toBe(true)
+    await markers.viewed(roomJid, rows[1])
+    expect(iq).toHaveBeenCalledTimes(beforeRetry)
+    let published!: () => void
+    const wire = new Promise<void>(resolve => { published = resolve })
+    send.mockImplementation(async () => { published() })
+    await vi.advanceTimersToNextTimerAsync()
+    await wire
+    expect(iq).toHaveBeenCalledTimes(beforeRetry + 1)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(markers.eligible(roomJid)).toBe(true)
+  })
+
+
+  it('shares an in-flight order walk across concurrent candidates from the same starting position', async () => {
+    markers = new RoomReadMarkers(dependencies, () => focused)
+    await markers.receive(roomJid, marker(rows[1].stanzaId!), [], true)
+    const older = message('archive-older', 500)
+    rows.push(older)
+    dependencies.registerMAMCollector = () => () => {}
+    let answer!: (value: Element) => void
+    let started!: () => void
+    const ready = new Promise<void>(resolve => { started = resolve })
+    let probes = 0
+    const end = () => xml('iq', { type: 'result', from: roomJid }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' }))
+    iq.mockImplementation(async request => {
+      if (request.getChild('query', 'http://jabber.org/protocol/disco#info')) return disco()
+      if (++probes === 1) return new Promise(resolve => { answer = resolve; started() })
+      return end()
+    })
+    const first = markers.receive(roomJid, marker(rows[0].stanzaId!), [], true)
+    await ready
+    const second = markers.receive(roomJid, marker(older.stanzaId!), [], true)
+    // Let this arrival batch reach its asynchronous lookups before answering
+    // the held archive request; no timed retry or arbitrary sleep is involved.
+    await new Promise<void>(resolve => setImmediate(resolve))
+    answer(end())
+    await Promise.all([first, second])
+    expect(probes).toBe(1)
+  })
+
+  it('does not spend a fresh capped walk on every marker in one archived page', async () => {
+    markers = new RoomReadMarkers(dependencies, () => focused)
+    const newest = rows[1]
+    await markers.receive(roomJid, marker(newest.stanzaId!), [], true)
+    const older = Array.from({ length: 51 }, (_, index) => message(`older-${index}`, 1000 - index))
+    rows = [...older, newest]
+    markers.recordArchiveOrder(roomJid, older.map(row => row.stanzaId!))
+    const collectors = new Map<string, (stanza: Element) => void>()
+    dependencies.registerMAMCollector = (id, collector) => { collectors.set(id, collector); return () => { collectors.delete(id) } }
+    let probes = 0
+    iq.mockImplementation(async request => {
+      if (request.getChild('query', 'http://jabber.org/protocol/disco#info')) return disco()
+      const query = request.getChild('query', 'urn:xmpp:mam:2')!
+      const id = `following-${++probes}`
+      collectors.get(query.attrs.queryid)!(xml('message', { from: roomJid }, xml('result', { xmlns: 'urn:xmpp:mam:2', queryid: query.attrs.queryid, id },
+        xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { type: 'groupchat', from: `${roomJid}/Bob` })))))
+      return xml('iq', { type: 'result', from: roomJid }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'false' },
+        xml('set', { xmlns: 'http://jabber.org/protocol/rsm' }, xml('last', {}, id))))
+    })
+    for (const row of older) await markers.receive(roomJid, marker(row.stanzaId!), [], true)
+    expect(probes).toBe(ROOM_MARKER_ORDER_PAGE_LIMIT)
+    expect(markers.readers(roomJid, newest)).toHaveLength(1)
+    expect(send).not.toHaveBeenCalled()
+  })
+
+
+  it('keeps the shared completed walk reusable after adding a direct forward shortcut', async () => {
+    room.occupants.set('Jules', { nick: 'Jules', occupantId: 'jules-id', role: 'participant', affiliation: 'member' })
+    iq.mockResolvedValue(disco(features, room.occupants.size))
+    const next = message('archive-newest', 3000)
+    rows.push(next)
+    markers = new RoomReadMarkers(dependencies, () => focused)
+    await markers.receive(roomJid, marker(rows[1].stanzaId!))
+    await markers.receive(roomJid, marker(rows[1].stanzaId!, 'jules-id', 'Jules'))
+    const collectors = new Map<string, (stanza: Element) => void>()
+    dependencies.registerMAMCollector = (id, collector) => { collectors.set(id, collector); return () => { collectors.delete(id) } }
+    const cursors: string[] = []
+    iq.mockImplementation(async request => {
+      const query = request.getChild('query', 'urn:xmpp:mam:2')!
+      const after = query.getChild('set', 'http://jabber.org/protocol/rsm')!.getChildText('after')!
+      cursors.push(after)
+      const page = after === rows[1].stanzaId ? ['archive-middle', next.stanzaId!] : []
+      for (const id of page) collectors.get(query.attrs.queryid)!(xml('message', { from: roomJid }, xml('result', { xmlns: 'urn:xmpp:mam:2', queryid: query.attrs.queryid, id },
+        xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, xml('message', { type: 'groupchat', from: `${roomJid}/Bob` })))))
+      return xml('iq', { type: 'result', from: roomJid }, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+        xml('set', { xmlns: 'http://jabber.org/protocol/rsm' }, xml('last', {}, page.at(-1) ?? ''))))
+    })
+    await markers.receive(roomJid, marker(next.stanzaId!))
+    await markers.receive(roomJid, marker(rows[0].stanzaId!, 'jules-id', 'Jules'))
+    expect(cursors).toEqual([rows[1].stanzaId])
+  })
+
+
+  it('does not reuse an old discovery backoff after local data is cleared and a fresh view opts in', async () => {
+    vi.useFakeTimers()
+    markers.setEnabled(true); markers.setRoomEnabled(roomJid, true)
+    iq.mockRejectedValueOnce(new Error('Discovery unavailable'))
+    await markers.viewed(roomJid, rows[1])
+    clearRoomReadMarkersLocalData(jid)
+    markers.setEnabled(true); markers.setRoomEnabled(roomJid, true)
+    await markers.viewed(roomJid, rows[1])
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
   })
 
 })

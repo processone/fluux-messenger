@@ -204,11 +204,9 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await master.click()
     await shot(alice.page, 'privacy')
     await openRoom(alice)
-    await roomConsent(alice, true)
-    // Real focus recovery produces measured viewport evidence, not a read-store event.
-    const blank = await alice.context.newPage(); await blank.goto('about:blank')
     mark(bob, 'reading-focus')
-    await alice.page.bringToFront(); await blank.close()
+    await roomConsent(alice, true)
+    // Closing the chooser exposes the timeline without an artificial refocus.
     await expect.poll(() => displayed(alice).length).toBe(1)
     await bob.page.bringToFront()
     const readerButton = bob.page.getByRole('button', { name: 'Read through this message: Alice', exact: true })
@@ -238,8 +236,6 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await noPublication(alice, modalHeld, 'open-dialog')
     await shot(alice.page, 'covered-dialog')
     await alice.page.keyboard.press('Escape')
-    const modalRecovery = await alice.context.newPage(); await modalRecovery.goto('about:blank')
-    await alice.page.bringToFront(); await modalRecovery.close()
     await expect.poll(() => displayed(alice).length).toBe(modalHeld + 1)
 
     // The phone members pane makes the conversation inert, not a modal.
@@ -254,10 +250,8 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await shot(alice.page, 'covered-phone-members')
     await alice.page.getByRole('heading', { name: 'Members', exact: true }).locator('..').getByRole('button').click()
     await expect.poll(() => alice.page.locator('.message-input[contenteditable="true"]').evaluate(element => !!element.closest('[inert]'))).toBe(false)
-    await alice.page.setViewportSize({ width: 1280, height: 800 })
-    const paneRecovery = await alice.context.newPage(); await paneRecovery.goto('about:blank')
-    await alice.page.bringToFront(); await paneRecovery.close()
     await expect.poll(() => displayed(alice).length).toBe(paneHeld + 1)
+    await alice.page.setViewportSize({ width: 1280, height: 800 })
 
     const hidden = await alice.context.newPage(); await hidden.goto('about:blank')
     await expect.poll(() => alice.page.evaluate(() => document.visibilityState)).toBe('hidden')

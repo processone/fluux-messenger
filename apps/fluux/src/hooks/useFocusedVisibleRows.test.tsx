@@ -18,9 +18,9 @@ let scroller: HTMLDivElement
 let message: HTMLDivElement
 let observe: ReturnType<typeof vi.fn>
 let disconnect: ReturnType<typeof vi.fn>
-function useViewing(seen: (rows: readonly RoomMessage[]) => void, enabled = true) {
+function useViewing(seen: (rows: readonly RoomMessage[]) => void, enabled = true, rows: readonly RoomMessage[] = [row]) {
   const ref = { current: scroller }
-  const viewed = useFocusedVisibleRows(ref, [row], seen, enabled)
+  const viewed = useFocusedVisibleRows(ref, rows, seen, enabled)
   useViewportObserver({ scrollContainerRef: ref, conversationId: row.roomJid, onVisibleRows: viewed, enabled })
 }
 beforeEach(() => {
@@ -31,7 +31,11 @@ beforeEach(() => {
   observe = vi.fn(); disconnect = vi.fn()
   vi.stubGlobal('IntersectionObserver', class {
     constructor(callback: IntersectionObserverCallback) {
-      deliver = () => callback([{ target: message, isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver)
+      deliver = () => callback([{
+        target: message, isIntersecting: true, boundingClientRect: message.getBoundingClientRect(),
+        intersectionRect: message.getBoundingClientRect(), rootBounds: scroller.getBoundingClientRect(),
+        intersectionRatio: 1, time: performance.now(),
+      }], this as unknown as IntersectionObserver)
       notify = () => act(() => { deliver(); vi.runOnlyPendingTimers() })
     }
     observe = observe
@@ -76,29 +80,29 @@ describe('focused visible room rows', () => {
     expect(seen).not.toHaveBeenCalled()
   })
 
-  it.each(['aria-modal', 'data-modal'])('does not report messages covered by %s dialogs', attribute => {
+  it.each(['aria-modal', 'data-modal'])('recovers after %s dialogs close without a scroll or refocus', async attribute => {
     const seen = vi.fn()
     const view = renderHook(() => useViewing(seen))
     const modal = document.createElement('div')
     modal.setAttribute(attribute, 'true')
-    document.body.append(modal)
+    await act(async () => { document.body.append(modal) })
     try {
       notify()
       expect(seen).not.toHaveBeenCalled()
-      modal.remove()
-      notify()
+      await act(async () => { modal.remove() })
+      act(() => vi.runOnlyPendingTimers())
       expect(seen).toHaveBeenCalledWith([row])
     } finally { modal.remove(); view.unmount() }
   })
 
-  it('does not share through the inert phone participants pane', () => {
+  it('recovers when the inert phone participants pane clears without a scroll or refocus', async () => {
     const seen = vi.fn()
     const view = renderHook(() => useViewing(seen))
-    scroller.setAttribute('inert', '')
+    await act(async () => { scroller.setAttribute('inert', '') })
     notify()
     expect(seen).not.toHaveBeenCalled()
-    scroller.removeAttribute('inert')
-    notify()
+    await act(async () => { scroller.removeAttribute('inert') })
+    act(() => vi.runOnlyPendingTimers())
     expect(seen).toHaveBeenCalledWith([row])
     view.unmount()
   })
@@ -119,6 +123,57 @@ describe('focused visible room rows', () => {
       vi.runOnlyPendingTimers()
     })
     expect(viewed).toHaveBeenCalledTimes(1)
+    view.unmount()
+  })
+
+  it('orders measured rows by their bottom edge when an upper row enters after a lower row', () => {
+    const earlier = { ...row, id: 'earlier-row', stanzaId: 'earlier-archive' }
+    const seen = vi.fn()
+    const view = renderHook(() => useViewing(seen, true, [row, earlier]))
+    act(() => {
+      deliver()
+      message = document.createElement('div')
+      message.dataset.messageRowId = messageRowId(earlier)
+      message.dataset.messageId = earlier.id
+      scroller.append(message)
+      vi.spyOn(message, 'getBoundingClientRect').mockReturnValue(rect(150, 100))
+      deliver()
+      vi.runOnlyPendingTimers()
+    })
+    expect(seen).toHaveBeenLastCalledWith([earlier, row])
+    view.unmount()
+  })
+
+  it('waits for the deferred read writer when its interval ends after the viewing report', () => {
+    let read = ''
+    const viewed = vi.fn((ids: readonly string[]) => expect(read).toBe(ids.at(-1)))
+    const view = renderHook(() => useViewportObserver({ scrollContainerRef: { current: scroller }, conversationId: row.roomJid,
+      onMessageSeen: id => { read = id }, onVisibleRows: viewed }))
+    act(() => {
+      const started = Date.now()
+      deliver()
+      vi.advanceTimersToNextTimer()
+      const gap = (Date.now() - started) / 3
+      viewed.mockClear()
+      deliver() // same row starts a viewing window without another read write
+      vi.advanceTimersByTime(gap)
+      const add = (id: string, top: number) => {
+        message = document.createElement('div')
+        message.dataset.messageRowId = id
+        message.dataset.messageId = id
+        scroller.append(message)
+        vi.spyOn(message, 'getBoundingClientRect').mockReturnValue(rect(top, 50))
+        deliver()
+      }
+      add('middle-row', 400)
+      vi.advanceTimersByTime(gap)
+      add('last-row', 450)
+      vi.advanceTimersToNextTimer() // viewing is due before the deferred write
+      expect(viewed).not.toHaveBeenCalled()
+      vi.advanceTimersToNextTimer()
+    })
+    expect(viewed).toHaveBeenCalledTimes(1)
+    expect(viewed.mock.calls[0][0].at(-1)).toBe('last-row')
     view.unmount()
   })
 

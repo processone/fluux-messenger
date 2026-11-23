@@ -107,7 +107,6 @@ function noteRealWidthBucket(conversationId: string, realWidthPx: number | undef
 export function MessageList<T extends BaseMessage>({
   conversationId,
   timeline,
-  onFocusedVisibleRows,
   readMarkers,
   target,
   handleRef,
@@ -147,6 +146,7 @@ export function MessageList<T extends BaseMessage>({
     readPointerRow,
     unreadCount,
     onSeen: onMessageSeen,
+    onFocusedVisibleRows,
     onClear: clearFirstNewMessageId,
     onLiveEdgeMeasured,
   } = readMarkers ?? {}

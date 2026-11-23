@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useViewportObserver } from './useViewportObserver'
+import { useViewportObserver, THROTTLE_MS } from './useViewportObserver'
 
 // ---------------------------------------------------------------------------
 // Controllable IntersectionObserver mock
@@ -29,11 +29,16 @@ let moCallback: MutationCallback
 let moInstances: MockMutationObserver[] = []
 
 class MockMutationObserver {
-  observe = vi.fn()
+  private root: Node | undefined
+  observe = vi.fn((target: Node) => { this.root ??= target })
   disconnect = vi.fn()
 
   constructor(callback: MutationCallback) {
-    moCallback = callback
+    // The native records always identify their mutation target. Existing list
+    // fixtures model changes at the first registered root (the scroller).
+    moCallback = (records, observer) => callback(records.map(record => ({
+      ...record, target: record.target ?? this.root!,
+    })), observer)
     moInstances.push(this)
   }
 }
@@ -116,7 +121,7 @@ describe('useViewportObserver', () => {
       expect(onMessageSeen).toHaveBeenCalledTimes(1)
       act(() => {
         ioCallback([makeEntry('reply', true, 200)], {} as IntersectionObserver)
-        vi.advanceTimersByTime(300)
+        vi.advanceTimersByTime(THROTTLE_MS)
       })
       expect(onMessageSeen).toHaveBeenCalledTimes(2)
       expect(onMessageSeen).toHaveBeenLastCalledWith('reply')
@@ -149,7 +154,7 @@ describe('useViewportObserver', () => {
       vi.mocked(document.hasFocus).mockReturnValue(true)
       act(() => {
         window.dispatchEvent(new Event('focus'))
-        vi.advanceTimersByTime(300)
+        vi.advanceTimersByTime(THROTTLE_MS)
       })
       expect(onMessageSeen).not.toHaveBeenCalled()
       act(() => ioCallback([makeEntry('history', true, 100)], {} as IntersectionObserver))
@@ -230,7 +235,7 @@ describe('useViewportObserver', () => {
     expect(onMessageSeen).toHaveBeenCalledTimes(1)
 
     // Advance past throttle window so a second report could fire
-    act(() => { vi.advanceTimersByTime(400) })
+    act(() => { vi.advanceTimersByTime(THROTTLE_MS * 4 / 3) })
 
     act(() => {
       ioCallback([makeEntry('msg-1', true, 100)], {} as IntersectionObserver)
@@ -347,7 +352,7 @@ describe('useViewportObserver', () => {
 
     // Second report comes quickly — should be throttled
     act(() => {
-      vi.advanceTimersByTime(50) // only 50ms later
+      vi.advanceTimersByTime(THROTTLE_MS / 6) // a sixth of the interval later
       ioCallback([makeEntry('msg-2', true, 200)], {} as IntersectionObserver)
     })
     // Still only 1 call — msg-2 is pending
@@ -355,14 +360,14 @@ describe('useViewportObserver', () => {
 
     // Third report comes while still throttled — replaces pending
     act(() => {
-      vi.advanceTimersByTime(50) // 100ms total
+      vi.advanceTimersByTime(THROTTLE_MS / 6) // a third of the interval total
       ioCallback([makeEntry('msg-3', true, 300)], {} as IntersectionObserver)
     })
     expect(onMessageSeen).toHaveBeenCalledTimes(1)
 
     // Throttle window expires — only msg-3 (latest pending) should fire
     act(() => {
-      vi.advanceTimersByTime(300)
+      vi.advanceTimersByTime(THROTTLE_MS)
     })
     expect(onMessageSeen).toHaveBeenCalledTimes(2)
     expect(onMessageSeen).toHaveBeenLastCalledWith('msg-3')
@@ -388,7 +393,7 @@ describe('useViewportObserver', () => {
     expect(onMessageSeen).toHaveBeenCalledTimes(1)
 
     // Wait for full throttle window
-    act(() => { vi.advanceTimersByTime(300) })
+    act(() => { vi.advanceTimersByTime(THROTTLE_MS) })
 
     // Next report should fire immediately
     act(() => {
@@ -457,7 +462,7 @@ describe('useViewportObserver', () => {
 
     // Quickly queue a throttled report
     act(() => {
-      vi.advanceTimersByTime(50)
+      vi.advanceTimersByTime(THROTTLE_MS / 6)
       ioCallback([makeEntry('msg-2', true, 200)], {} as IntersectionObserver)
     })
 
@@ -469,7 +474,7 @@ describe('useViewportObserver', () => {
     expect(onMessageSeen).toHaveBeenLastCalledWith('msg-2')
 
     // Advance past throttle — no additional calls
-    act(() => { vi.advanceTimersByTime(400) })
+    act(() => { vi.advanceTimersByTime(THROTTLE_MS * 4 / 3) })
     expect(onMessageSeen).toHaveBeenCalledTimes(2)
   })
 
@@ -502,7 +507,7 @@ describe('useViewportObserver', () => {
 
     // Quickly queue a throttled report
     act(() => {
-      vi.advanceTimersByTime(50)
+      vi.advanceTimersByTime(THROTTLE_MS / 6)
       ioCallback([makeEntry('msg-2', true, 200)], {} as IntersectionObserver)
     })
 
@@ -559,7 +564,7 @@ describe('useViewportObserver', () => {
       ioCallback([makeEntry('msg-1', true, 100)], {} as IntersectionObserver)
     })
     act(() => {
-      vi.advanceTimersByTime(50)
+      vi.advanceTimersByTime(THROTTLE_MS / 6)
       ioCallback([makeEntry('msg-2', true, 200)], {} as IntersectionObserver)
     })
 
@@ -570,7 +575,7 @@ describe('useViewportObserver', () => {
     expect(onMessageSeen).toHaveBeenLastCalledWith('msg-2')
 
     // Advance time — throttled callback should not fire again after unmount
-    act(() => { vi.advanceTimersByTime(400) })
+    act(() => { vi.advanceTimersByTime(THROTTLE_MS * 4 / 3) })
     expect(onMessageSeen).toHaveBeenCalledTimes(2)
   })
 
@@ -780,7 +785,7 @@ describe('useViewportObserver', () => {
     // Both visible; msg-2 (bottom 300) is bottom-most.
     act(() => { ioCallback([entryFor(el1, true, 100), entryFor(el2, true, 300)], {} as IntersectionObserver) })
     expect(onMessageSeen).toHaveBeenLastCalledWith('msg-2')
-    act(() => { vi.advanceTimersByTime(300) })
+    act(() => { vi.advanceTimersByTime(THROTTLE_MS) })
 
     // msg-2's row is unmounted (removed) WITHOUT an intervening IO "not intersecting".
     // Its stale entry must be pruned so a scroll-driven recompute reports the real
@@ -820,7 +825,7 @@ describe('useViewportObserver', () => {
     expect(onMessageSeen).toHaveBeenLastCalledWith('msg-2')
 
     // Wait for throttle
-    act(() => { vi.advanceTimersByTime(300) })
+    act(() => { vi.advanceTimersByTime(THROTTLE_MS) })
 
     // msg-2 leaves viewport, msg-3 enters — bottom-most should now be msg-3
     act(() => {
@@ -872,7 +877,7 @@ describe('useViewportObserver', () => {
     })
     expect(onMessageSeen).toHaveBeenLastCalledWith('msg-2')
 
-    act(() => { vi.advanceTimersByTime(300) })
+    act(() => { vi.advanceTimersByTime(THROTTLE_MS) })
 
     // msg-2 leaves viewport — msg-1 is now the only visible and bottom-most
     act(() => {
