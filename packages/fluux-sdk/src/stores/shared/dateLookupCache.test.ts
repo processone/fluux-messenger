@@ -98,7 +98,7 @@ describe('durable date-lookup page', () => {
     chatStore.setState({ conversationGaps: new Map() })
     await saveMessage('chat', recent)
     const read = cache.readMessages
-    vi.spyOn(cache, 'readMessages').mockImplementation((kind, id, options) =>
+    vi.spyOn(cache, 'readMessages').mockImplementation((...[kind, id, options]) =>
       options?.[direction] ? Promise.resolve({ status: 'unavailable' }) : read(kind, id, options))
 
     expect(await chatStore.getState().saveDateLookupPage(peer, [old], false)).toBe(false)

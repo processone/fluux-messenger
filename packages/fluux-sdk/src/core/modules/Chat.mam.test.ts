@@ -37,10 +37,12 @@ vi.mock('@xmpp/debug', () => ({
 // Import after mocking
 import { client as xmppClientFactory } from '@xmpp/client'
 
+const spyOnEmittedEvents = (client: XMPPClient) => vi.spyOn(client, 'emitSDK')
+
 describe('XMPPClient MAM', () => {
   let xmppClient: XMPPClient
   let mockStores: MockStoreBindings
-  let emitSDKSpy: ReturnType<typeof vi.spyOn>
+  let emitSDKSpy: ReturnType<typeof spyOnEmittedEvents>
 
   // Helper to wait for async operations
   const waitForAsyncOps = async () => {
@@ -85,7 +87,7 @@ describe('XMPPClient MAM', () => {
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
     bindStoresForTesting(xmppClient, mockStores)
-    emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
+    emitSDKSpy = spyOnEmittedEvents(xmppClient)
   })
 
   afterEach(() => {
@@ -147,7 +149,9 @@ describe('XMPPClient MAM', () => {
       let finishWrite!: (saved: boolean) => void
       const pendingWrite = new Promise<boolean>(resolve => { finishWrite = resolve })
       const writeStarted = new Promise<void>(resolve => {
-        vi.mocked(store.saveDateLookupPage!).mockImplementation(() => { resolve(); return pendingWrite })
+        const holdWrite = () => { resolve(); return pendingWrite }
+        if (kind === 'chat') vi.mocked(mockStores.chat.saveDateLookupPage!).mockImplementation(holdWrite)
+        else vi.mocked(mockStores.room.saveDateLookupPage!).mockImplementation(holdWrite)
       })
       const from = kind === 'chat' ? 'me@example.com' : roomJid
       const sender = kind === 'chat' ? `${peer}/phone` : `${roomJid}/Alice`
