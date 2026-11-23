@@ -21,7 +21,7 @@ export interface JumpToDateDialogProps {
   archiveAvailable?: boolean
   /** Whether the current resident window still reaches the live edge. */
   windowAtLiveEdge?: boolean
-  /** Replaces a parked resident window with the latest cached messages. */
+  /** Replaces a parked resident window with the latest cached messages and scrolls there. */
   onRecenterToLatest?: () => void
   /** Moves the list to the message, as opening a search result does. */
   onLand: (target: string | MessageRowRef) => void

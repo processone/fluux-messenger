@@ -642,6 +642,37 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
       }
     )
 
+    it('does not scroll a newly opened conversation when a parked-window recenter settles', async () => {
+      const active = kind.name === 'chat' ? h.chat! : h.room!
+      let finishRecenter!: (result: boolean) => void
+      active.windowAtLiveEdge = false
+      active.recenterToLatest = vi.fn(() => new Promise<boolean>(resolve => { finishRecenter = resolve }))
+      h.findFirstMessageOfDay.mockResolvedValue({ kind: 'none' })
+      const { rerender } = kind.mount()
+      const listHandleRef = (h.listProps as MessageListProps<Message>).handleRef as unknown as {
+        current: { scrollToBottom: () => void } | null
+      }
+      const originalScrollToBottom = vi.fn()
+      listHandleRef.current = { scrollToBottom: originalScrollToBottom }
+
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
+
+      kind.activate(secondId, kind.messages())
+      rerender(kind.name === 'chat' ? <ChatView /> : <RoomView />)
+      const nextScrollToBottom = vi.fn()
+      listHandleRef.current = { scrollToBottom: nextScrollToBottom }
+      await act(async () => {
+        finishRecenter(true)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(originalScrollToBottom).not.toHaveBeenCalled()
+      expect(nextScrollToBottom).not.toHaveBeenCalled()
+    })
+
     it('uses local history only when a chat server is known not to offer MAM', async () => {
       if (kind.name !== 'chat') return
       h.serverInfo = { features: [] }

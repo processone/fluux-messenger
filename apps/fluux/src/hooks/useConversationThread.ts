@@ -238,7 +238,10 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
   )
   const recenterAndScrollToLatest = useCallback(() => {
     if (!recenterToLatest) return
-    const scrollToBottom = () => listHandleRef.current?.scrollToBottom()
+    const handle = listHandleRef.current
+    const scrollToBottom = () => {
+      if (handle && listHandleRef.current === handle) handle.scrollToBottom()
+    }
     void Promise.resolve(recenterToLatest()).then(scrollToBottom).catch(scrollToBottom)
   }, [listHandleRef, recenterToLatest])
 
