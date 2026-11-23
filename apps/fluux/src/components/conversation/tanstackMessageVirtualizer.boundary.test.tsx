@@ -141,6 +141,14 @@ it.each([0, 1])('cancels the deferred entry buffer when unmounted after %i frame
   expect(frames.size).toBe(0)
 })
 
+it('restores saved row heights when history arrives after an empty virtualizer', () => {
+  const scope = fixture({ count: 0, initialMeasurements: new Map([['row-3', 72]]) })
+  scope.rerender({ items: Array.from({ length: 20 }, (_, index) => ({ key: `row-${index}` })) })
+
+  expect(scope.result.current.getVirtualItems().find(row => row.key === 'row-3')?.size).toBe(72)
+  expect(scope.result.current.getTotalSize()).toBe(20 * 20 + 52)
+})
+
 it('measures a seeded row at its rendered height, not the seed', () => {
   const scope = fixture({ initialMeasurements: new Map([['row-3', 72]]) })
   expect(scope.result.current.getTotalSize()).toBe(80 * 20 + 52)
@@ -149,6 +157,21 @@ it('measures a seeded row at its rendered height, not the seed', () => {
 
   expect(scope.result.current.getVirtualItems().find(row => row.key === 'row-3')?.size).toBe(68)
   expect(scope.result.current.getTotalSize()).toBe(80 * 20 + 48)
+})
+
+it('jumps to a measured row using measured offsets before and inside the target', () => {
+  const scope = fixture({ size: 100, height: 8000 })
+  scope.measure(3, 160)
+  scope.measure(10, 180)
+  const expected = scope.result.current.getOffsetForMessageId('row-60')!
+    - (scope.scroller.clientHeight - 100) / 2
+  const writer = vi.spyOn(scope.scroller, 'scrollTo')
+
+  act(() => scope.result.current.scrollToIndex(60, { align: 'center' }))
+
+  expect(writer).toHaveBeenCalledWith(expect.objectContaining({ top: expected }))
+  expect(scope.scroller.scrollTop).toBe(expected)
+  expect(scope.result.current.getVirtualItems().some(row => row.key === 'row-60')).toBe(true)
 })
 
 it('measures a re-rendered row at its new height, not the cached one', () => {
