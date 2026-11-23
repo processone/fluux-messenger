@@ -33,7 +33,7 @@ export interface ConversationThreadSource<M extends ThreadMessage> {
   historyGaps?: readonly GapInterval[]
   archiveAvailable?: boolean
   windowAtLiveEdge?: boolean
-  recenterToLatest?: () => void
+  recenterToLatest?: () => Promise<unknown> | void
   clearFirstNewMessageId: (id: string) => void
   advanceReadPointer: (id: string, row: MessageRowRef) => void
   /** Jumps the list to a message. Must keep one identity across renders. */
@@ -236,6 +236,11 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
     (animation: string, senderName: string) => { if (id) triggerAnimation(id, animation, senderName) },
     [id, triggerAnimation],
   )
+  const recenterAndScrollToLatest = useCallback(() => {
+    if (!recenterToLatest) return
+    const scrollToBottom = () => listHandleRef.current?.scrollToBottom()
+    void Promise.resolve(recenterToLatest()).then(scrollToBottom).catch(scrollToBottom)
+  }, [listHandleRef, recenterToLatest])
 
   return {
     id,
@@ -309,7 +314,7 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
       onSeeReaction: handleSeeReaction,
       onReplayEasterEgg: handleReplayEasterEgg,
       jumpToDate: dateDialog && dateDialog.conversationId === id
-        ? { kind, conversationId: id, initialDay: dateDialog.day, readLoaded: readAllMessages, gaps: historyGaps, archiveAvailable, windowAtLiveEdge, onRecenterToLatest: recenterToLatest, onLand: setTargetMessageId, onClose: closeJumpToDate }
+        ? { kind, conversationId: id, initialDay: dateDialog.day, readLoaded: readAllMessages, gaps: historyGaps, archiveAvailable, windowAtLiveEdge, onRecenterToLatest: recenterAndScrollToLatest, onLand: setTargetMessageId, onClose: closeJumpToDate }
         : null,
       activeAnimation,
       clearAnimation,

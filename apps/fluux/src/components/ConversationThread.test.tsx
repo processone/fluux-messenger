@@ -605,19 +605,42 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
       expect(screen.queryByLabelText('chat.jumpToDate.date')).toBeNull()
     })
 
-    it('recenters after an empty date lookup from a parked window', async () => {
-      const active = kind.name === 'chat' ? h.chat! : h.room!
-      const recenterToLatest = vi.fn()
-      active.windowAtLiveEdge = false
-      active.recenterToLatest = recenterToLatest
-      h.findFirstMessageOfDay.mockResolvedValue({ kind: 'none' })
-      kind.mount()
-      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
-      fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
-      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
-      expect(recenterToLatest).toHaveBeenCalledOnce()
-      expect(kind.storeSpies.setTargetMessageId).not.toHaveBeenCalled()
-    })
+    it.each(['success', 'cache read failure', 'rejection'] as const)(
+      'scrolls to the latest row after an empty date lookup from a parked window on %s', async (outcome) => {
+        const active = kind.name === 'chat' ? h.chat! : h.room!
+        let resolveRecenter!: (result: boolean) => void
+        let rejectRecenter!: (reason: Error) => void
+        const recenterToLatest = vi.fn(() => new Promise<boolean>((resolve, reject) => {
+          resolveRecenter = resolve
+          rejectRecenter = reject
+        }))
+        const scrollToBottom = vi.fn()
+        active.windowAtLiveEdge = false
+        active.recenterToLatest = recenterToLatest
+        h.findFirstMessageOfDay.mockResolvedValue({ kind: 'none' })
+        kind.mount()
+        const listHandleRef = (h.listProps as MessageListProps<Message>).handleRef as unknown as {
+          current: { scrollToBottom: () => void } | null
+        }
+        listHandleRef.current = { scrollToBottom }
+        act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+        fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
+
+        expect(recenterToLatest).toHaveBeenCalledOnce()
+        expect(scrollToBottom).not.toHaveBeenCalled()
+        expect(kind.storeSpies.setTargetMessageId).not.toHaveBeenCalled()
+
+        await act(async () => {
+          if (outcome === 'success') resolveRecenter(true)
+          else if (outcome === 'cache read failure') resolveRecenter(false)
+          else rejectRecenter(new Error('Cache read failed'))
+          await Promise.resolve()
+          await Promise.resolve()
+        })
+        expect(scrollToBottom).toHaveBeenCalledOnce()
+      }
+    )
 
     it('uses local history only when a chat server is known not to offer MAM', async () => {
       if (kind.name !== 'chat') return
