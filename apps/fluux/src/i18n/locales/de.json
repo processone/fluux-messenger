@@ -1052,7 +1052,6 @@
             "openLogs": "Protokollordner öffnen"
         },
         "encryption": {
-            "experimental": "Experimentell",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

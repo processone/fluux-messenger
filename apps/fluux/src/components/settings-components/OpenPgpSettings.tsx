@@ -104,8 +104,7 @@ type BackupProbeState = 'checking' | BackupProbeResult
  *
  * Surfaces the OpenPGP toggle and — when enabled — the account's
  * fingerprint. Purposely minimal: import, export, verification, and
- * rotation are later slices. Labelled "experimental" throughout so
- * users understand what they are opting into.
+ * rotation are later slices.
  */
 export function OpenPgpSettings() {
   const { t } = useTranslation()
@@ -1015,14 +1014,9 @@ export function OpenPgpSettings() {
             <div className="flex-1 min-w-0">
               <div className="flex items-start gap-2">
                 <Lock className="size-4 mt-0.5 text-fluux-muted flex-shrink-0" />
-                <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <label className="text-sm font-medium text-fluux-text">
+                <label className="min-w-0 text-sm font-medium text-fluux-text">
                     {t('settings.encryption.openpgpLabel')}
-                  </label>
-                  <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-fluux-yellow/15 text-fluux-yellow">
-                    {t('settings.encryption.experimental')}
-                  </span>
-                </div>
+                </label>
               </div>
               <p className="mt-1 text-xs text-fluux-muted leading-snug">
                 {t('settings.encryption.openpgpDescription')}

@@ -1050,7 +1050,6 @@
             "openLogs": "Logboekmap openen"
         },
         "encryption": {
-            "experimental": "Experimenteel",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

@@ -1050,7 +1050,6 @@
             "openLogs": "Öppna loggmappen"
         },
         "encryption": {
-            "experimental": "Experimentellt",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

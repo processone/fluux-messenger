@@ -1052,7 +1052,6 @@
             "openLogs": "Otvori mapu zapisa"
         },
         "encryption": {
-            "experimental": "Eksperimentalno",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

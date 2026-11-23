@@ -918,7 +918,6 @@
             "disable": "고급 모드 비활성화"
         },
         "encryption": {
-            "experimental": "실험적",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

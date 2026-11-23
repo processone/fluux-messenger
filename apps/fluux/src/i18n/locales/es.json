@@ -1054,7 +1054,6 @@
             "openLogs": "Abrir carpeta de registros"
         },
         "encryption": {
-            "experimental": "Experimental",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {
