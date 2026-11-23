@@ -1052,7 +1052,6 @@
             "openLogs": "Ava logikaust"
         },
         "encryption": {
-            "experimental": "Eksperimentaalne",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

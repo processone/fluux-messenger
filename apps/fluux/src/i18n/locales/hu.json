@@ -1050,7 +1050,6 @@
             "openLogs": "Naplómappa megnyitása"
         },
         "encryption": {
-            "experimental": "Kísérleti",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {
