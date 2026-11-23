@@ -140,7 +140,7 @@ export function PrivacySettings() {
   return (
     <section className="w-full">
       <SettingsSection>
-        {client.roomReadMarkers && <RoomReadSharing markers={client.roomReadMarkers} />}
+        {client.roomReadMarkers && <div className="-mx-4 mb-6"><RoomReadSharing markers={client.roomReadMarkers} /></div>}
         <ServerArchiveSetting />
         <div className="space-y-3">
         <label id="media-auto-download-label" className="type-section-title text-fluux-text">{t('settings.mediaAutoDownload')}</label>
