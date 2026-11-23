@@ -350,10 +350,12 @@ export function useTanstackMessageVirtualizer({
     [],
   )
 
-  // Build @tanstack's `initialMeasurementsCache` when keyed rows are available from the
-  // caller-supplied map. A conversation can mount empty while history loads; defer the one-time
-  // seed until then rather than permanently losing the saved heights at the empty first render.
-  // VirtualItem shape: { key, index, start, end, size, lane }; only size is used as the seed.
+  // Build @tanstack's `initialMeasurementsCache` once at mount from the caller-supplied map.
+  // VirtualItem shape: { key, index, start, end, size, lane }
+  // start/end/lane can be 0 — @tanstack recomputes layout offsets from scratch; size is all that
+  // matters for the seed. Only build if initialMeasurements is non-empty (additive; empty cache
+  // leaves behavior byte-identical to the pre-feature state).
+  // Use a ref so it is evaluated once (at mount) without needing eslint-disable on empty deps.
   const initialMeasurementsCacheRef = useRef<Array<{ key: string | number; index: number; start: number; end: number; size: number; lane: number }> | undefined>(undefined)
   if (initialMeasurementsCacheRef.current === undefined && initialMeasurements && initialMeasurements.size > 0) {
     const result: Array<{ key: string | number; index: number; start: number; end: number; size: number; lane: number }> = []
@@ -380,8 +382,6 @@ export function useTanstackMessageVirtualizer({
   const getItemKey = itemKeyRef.current.getItemKey
 
   const virtualizer = useVirtualizer<HTMLElement, Element>({
-    // Keep the library's seed guard reset while history is empty; the cache is ready when rows arrive.
-    enabled: items.length > 0,
     count: items.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: estimateFn,

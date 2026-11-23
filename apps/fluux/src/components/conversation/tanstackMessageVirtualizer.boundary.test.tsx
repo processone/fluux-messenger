@@ -141,14 +141,6 @@ it.each([0, 1])('cancels the deferred entry buffer when unmounted after %i frame
   expect(frames.size).toBe(0)
 })
 
-it('restores saved row heights when history arrives after an empty virtualizer', () => {
-  const scope = fixture({ count: 0, initialMeasurements: new Map([['row-3', 72]]) })
-  scope.rerender({ items: Array.from({ length: 20 }, (_, index) => ({ key: `row-${index}` })) })
-
-  expect(scope.result.current.getVirtualItems().find(row => row.key === 'row-3')?.size).toBe(72)
-  expect(scope.result.current.getTotalSize()).toBe(20 * 20 + 52)
-})
-
 it('measures a seeded row at its rendered height, not the seed', () => {
   const scope = fixture({ initialMeasurements: new Map([['row-3', 72]]) })
   expect(scope.result.current.getTotalSize()).toBe(80 * 20 + 52)
