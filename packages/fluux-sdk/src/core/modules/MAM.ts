@@ -1934,9 +1934,7 @@ export class MAM extends BaseModule {
     messages: Array<{ timestamp?: Date; stanzaId?: string }>,
     options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
   ): Promise<void> {
-    const session = this.captureQuery()
-    if (messages.length) await this.restorePeerMarkers(roomJid)
-    session.assertCurrent()
+    if (messages.length) void this.restorePeerMarkers(roomJid).catch(() => {})
     const endUpdate = this.deps.stores?.connection?.beginUpdate?.([`room:${roomJid}`, 'rooms'])
     await this.runCatchUpHistory(messages, options, {
       label: roomJid,
@@ -2439,7 +2437,7 @@ export class MAM extends BaseModule {
       const cached = await this.deps.stores?.room.loadPreviewFromCache(roomJid)
       session.assertCurrent()
       if (cached) {
-        await this.restorePeerMarkers(roomJid)
+        void this.restorePeerMarkers(roomJid).catch(() => {})
         return
       }
 
@@ -3312,12 +3310,9 @@ export class MAM extends BaseModule {
       const page = await this.queryOneArchivedEntry(roomJid, true, { before: '' }, MAM_CATCHUP_BACKWARD_MAX)
       session.assertCurrent()
       if (page.kind !== 'page') return
-      const me = roomSelf(this.deps.stores?.room.getRoom(roomJid))
-      const messages = page.entries.flatMap(entry => {
-        const message = this.parseRoomArchiveMessage(entry.forwarded, roomJid, me, entry.archiveId)
-        return message ? [message] : []
-      })
-      await this.resolvePeerMarkers(roomJid, page.entries, messages, { before: '' })
+      // Only resident/cache targets have passed through their normal content
+      // owners. Raw page rows have not been decrypted and are not candidates.
+      await this.resolvePeerMarkers(roomJid, page.entries, [], { before: '' })
     })
     this.peerMarkerReplays.set(roomJid, { isCurrent: session.isCurrent, task })
     await task

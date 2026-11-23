@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parse } from 'ltx'
 import type { Element } from '@xmpp/client'
 import { MAM } from './MAM'
-import { RoomReadMarkers } from './RoomReadMarkers'
+import { RoomReadMarkers, ROOM_MARKER_OCCUPANT_LIMIT } from './RoomReadMarkers'
 import fixture from './fixtures/roomReadReplay.json'
 import { createMockPresenceReader, createMockRoom, createMockStores } from '../test-utils'
 import type { ModuleDependencies } from './BaseModule'
@@ -10,6 +10,7 @@ import type { RoomMessage } from '../types'
 import { parseMessageContent } from './messagingUtils'
 import { makeReadPointer } from '../../stores/shared/readPointer'
 import { setStorageScopeJid } from '../../utils/storageScope'
+import { isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
 import { getResource } from '../jid'
 import { MAM_CATCHUP_BACKWARD_MAX } from '../../utils/mamCatchUpUtils'
 
@@ -26,7 +27,11 @@ const PEER_NICK = getResource(parse(fixture.marker).attrs.from)!
 // peer marker, then the newest cached row; forward catch-up misses the marker.
 // Only transport and store boundaries are stand-ins. The real resolver owns
 // the badge. Focused deterministic coverage runs with the archive checks.
-function harness() {
+function harness(block?: 'discovery' | 'archive') {
+  let release!: () => void
+  let entered!: () => void
+  const held = new Promise<void>(resolve => { release = resolve })
+  const waiting = new Promise<void>(resolve => { entered = resolve })
   const entries = fixture.archive.map(raw => parse(raw).getChild('result', MAM_NS)!)
   const rows: RoomMessage[] = entries.flatMap(entry => {
     const forwarded = entry.getChild('forwarded', FORWARD_NS)!
@@ -43,7 +48,9 @@ function harness() {
   const target = rows.find(row => row.stanzaId === targetId)!
   const newest = rows.find(row => row.stanzaId === parse(fixture.newest).getChild('stanza-id', SID_NS)!.attrs.id)!
   const actor = parse(fixture.marker).getChild('occupant-id', ACTOR_NS)!.attrs.id
-  const room = createMockRoom(fixture.room, { nickname: OWN_NICK, joined: true, isJoining: false,
+  const features = parse(fixture.disco).getChild('query', 'http://jabber.org/protocol/disco#info')!
+    .getChildren('feature').map(feature => feature.attrs.var)
+  const room = createMockRoom(fixture.room, { isPrivate: isPrivateRoom(features), isNonAnonymous: isNonAnonymousRoom(features), nickname: OWN_NICK, joined: true, isJoining: false,
     occupants: new Map([
       [OWN_NICK, { nick: OWN_NICK, occupantId: newest.occupantId!, role: 'participant', affiliation: 'member' }],
       [PEER_NICK, { nick: PEER_NICK, occupantId: actor, role: 'moderator', affiliation: 'owner' }],
@@ -56,9 +63,13 @@ function harness() {
   const collectors = new Map<string, (stanza: Element) => void>()
   let connection = {} as ReturnType<ModuleDependencies['getXmpp']>
   const sendIQ = vi.fn<ModuleDependencies['sendIQ']>(async iq => {
-    if (iq.getChild('query', 'http://jabber.org/protocol/disco#info')) return parse(fixture.disco)
+    if (iq.getChild('query', 'http://jabber.org/protocol/disco#info')) {
+      if (block === 'discovery') { entered(); await held }
+      return parse(fixture.disco)
+    }
     const query = iq.getChild('query', MAM_NS)!
     if (query.getChild('set', RSM_NS)!.getChild('after')) return parse(fixture.afterFin)
+    if (block === 'archive') { entered(); await held }
     for (const raw of fixture.archive) {
       const stanza = parse(raw)
       stanza.getChild('result', MAM_NS)!.attrs.queryid = query.attrs.queryid
@@ -73,7 +84,14 @@ function harness() {
   }
   const markers = new RoomReadMarkers(deps)
   deps.getRoomReadMarkers = () => markers
-  return { mam: new MAM(deps), markers, deps, room, rows, target, newest, stores, sendIQ,
+  const completions: Array<{ resolve: () => void; reject: (error: unknown) => void }> = []
+  const receive = markers.receive.bind(markers)
+  vi.spyOn(markers, 'receive').mockImplementation(async (...args) => {
+    try { await receive(...args); completions.shift()?.resolve() }
+    catch (error) { completions.shift()?.reject(error); throw error }
+  })
+  return { release, waiting, nextReplay: () => new Promise<void>((resolve, reject) => { completions.push({ resolve, reject }) }),
+    mam: new MAM(deps), markers, deps, room, rows, target, newest, stores, sendIQ,
     archiveRequests: () => sendIQ.mock.calls.map(([iq]) => iq).filter(iq => iq.getChild('query', MAM_NS)),
     freshSession: () => { connection = {} as typeof connection } }
 }
@@ -85,10 +103,13 @@ describe('room read positions after cached reconnect', () => {
   it('restores the marker before the cached edge once, outside the timeline and coverage', async () => {
     const h = harness()
     const pointer = h.room.readPointer
+    const replayed = h.nextReplay()
     await Promise.all([h.mam.fetchPreviewForRoom(fixture.room), h.mam.fetchPreviewForRoom(fixture.room)])
+    await replayed
     expect(h.markers.readers(fixture.room, h.target)).toMatchObject([{ nick: PEER_NICK }])
     expect(h.markers.readers(fixture.room, h.newest)).toEqual([])
     await h.mam.fetchPreviewForRoom(fixture.room)
+    await h.markers.ensureEligible(fixture.room)
     const requests = h.archiveRequests()
     expect(requests).toHaveLength(1)
     const set = requests[0].getChild('query', MAM_NS)!.getChild('set', RSM_NS)!
@@ -103,18 +124,25 @@ describe('room read positions after cached reconnect', () => {
 
   it('restores from cached catch-up too, and does not repeat that page for preview', async () => {
     const h = harness()
+    const replayed = h.nextReplay()
     await h.mam.catchUpRoomHistory(fixture.room, h.rows)
+    await replayed
     expect(h.markers.readers(fixture.room, h.target)).toMatchObject([{ nick: PEER_NICK }])
     await h.mam.fetchPreviewForRoom(fixture.room)
+    await h.markers.ensureEligible(fixture.room)
     expect(h.archiveRequests().filter(iq => iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChild('before'))).toHaveLength(1)
     h.markers.cancelPending()
   })
 
   it('allows one new page when the captured session changes', async () => {
     const h = harness()
+    const first = h.nextReplay()
     await h.mam.fetchPreviewForRoom(fixture.room)
+    await first
     h.freshSession()
+    const second = h.nextReplay()
     await h.mam.fetchPreviewForRoom(fixture.room)
+    await second
     expect(h.archiveRequests()).toHaveLength(2)
     h.markers.cancelPending()
   })
@@ -125,8 +153,53 @@ describe('room read positions after cached reconnect', () => {
     await h.mam.fetchPreviewForRoom(fixture.room)
     expect(h.sendIQ).not.toHaveBeenCalled()
     h.room.joined = true
+    const replayed = h.nextReplay()
     await h.mam.fetchPreviewForRoom(fixture.room)
+    await replayed
     expect(h.archiveRequests()).toHaveLength(1)
     h.markers.cancelPending()
   })
+
+  it.each(['discovery', 'archive'] as const)('does not hold cached preview or forward catch-up behind %s recovery', async phase => {
+    const h = harness(phase)
+    const replayed = h.nextReplay()
+    try {
+      const preview = h.mam.fetchPreviewForRoom(fixture.room)
+      const history = h.mam.catchUpRoomHistory(fixture.room, h.rows)
+      await h.waiting
+      await Promise.all([preview, history])
+      expect(h.archiveRequests().some(iq => iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('after') === h.newest.stanzaId)).toBe(true)
+    } finally { h.release() }
+    await replayed
+    h.markers.cancelPending()
+  })
+
+  it.each(['isPrivate', 'isNonAnonymous'] as const)('skips discovery when the join rules out %s', async flag => {
+    const h = harness()
+    h.room[flag] = false
+    await h.mam.fetchPreviewForRoom(fixture.room)
+    expect(h.sendIQ).not.toHaveBeenCalled()
+    h.markers.cancelPending()
+  })
+
+  it('skips discovery at the stored roster-count boundary', async () => {
+    const h = harness()
+    // A controlled store-boundary reading, not a server-discovery response.
+    vi.spyOn(h.room.occupants, 'size', 'get').mockReturnValue(ROOM_MARKER_OCCUPANT_LIMIT)
+    await h.mam.fetchPreviewForRoom(fixture.room)
+    expect(h.sendIQ).not.toHaveBeenCalled()
+    h.markers.cancelPending()
+  })
+
+  it('does not offer unvalidated page-only rows as marker targets', async () => {
+    const h = harness()
+    h.stores.room.getMessageByArchiveId.mockResolvedValue(null)
+    const replayed = h.nextReplay()
+    await h.mam.fetchPreviewForRoom(fixture.room)
+    await replayed
+    expect(h.markers.readers(fixture.room, h.target)).toEqual([])
+    expect(h.deps.emitSDK).not.toHaveBeenCalled()
+    h.markers.cancelPending()
+  })
+
 })

@@ -42,6 +42,7 @@ export function clearRoomReadMarkersLocalData(account: string | null, allAccount
     for (const key of keys) localStorage.removeItem(key)
   } catch { /* An unavailable storage cannot enable sharing. */ }
 }
+export const ROOM_MARKER_OCCUPANT_LIMIT = 20
 const NONE: readonly RoomReader[] = Object.freeze([])
 const REQUIRED = ['muc_membersonly', 'muc_hidden', 'muc_nonanonymous', NS_OCCUPANT_ID, NS_STANZA_ID]
 const CONTRADICTORY = ['muc_public', 'muc_open', 'muc_semianonymous', 'muc_anonymous']
@@ -289,6 +290,9 @@ export class RoomReadMarkers extends BaseModule {
 
   /** @internal Revalidate a read-only room proof without publishing a position. */
   async ensureEligible(roomJid: string): Promise<boolean> {
+    const room = this.getRoomWithOccupants(roomJid)
+    if (!room?.joined || room.isJoining || room.isPrivate === false || room.isNonAnonymous === false
+      || room.occupants.size >= ROOM_MARKER_OCCUPANT_LIMIT) return false
     return this.eligible(roomJid) || this.discover(roomJid)
   }
 
@@ -302,7 +306,7 @@ export class RoomReadMarkers extends BaseModule {
     // Non-anonymous rooms deliver the full live roster on join. Cross-check the
     // room's own discovery count, including this session, rather than guessing.
     const own = room.occupants.get(room.nickname)
-    return !!own?.occupantId && proof.count === room.occupants.size && proof.count > 0 && proof.count < 20
+    return !!own?.occupantId && proof.count === room.occupants.size && proof.count > 0 && proof.count < ROOM_MARKER_OCCUPANT_LIMIT
       && [...room.occupants.values()].every(occupant => !!occupant.occupantId)
   }
 
