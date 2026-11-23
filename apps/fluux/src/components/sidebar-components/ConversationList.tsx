@@ -366,7 +366,7 @@ export const ConversationItem = memo(function ConversationItem({
           )}
           <AvatarUnreadBadge count={conversation.unreadCount} />
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="sidebar-row-content flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p dir="auto" className={`truncate ${compactTimestampOnly ? 'leading-5' : ''} ${conversation.unreadCount > 0 ? 'font-semibold text-fluux-text' : 'font-medium'}`}>{conversation.name}</p>
           </div>
@@ -387,7 +387,7 @@ export const ConversationItem = memo(function ConversationItem({
               )}
             </div>
             {conversation.lastMessage && (
-              <span className={`text-xs text-fluux-muted flex-shrink-0 whitespace-nowrap ${compactTimestampOnly ? 'leading-3' : ''}`}>
+              <span className={`sidebar-row-time text-xs text-fluux-muted flex-shrink-0 whitespace-nowrap ${compactTimestampOnly ? 'leading-3' : ''}`}>
                 {formatConversationTime(conversation.lastMessage.timestamp, t, currentLang, timeFormat)}
               </span>
             )}

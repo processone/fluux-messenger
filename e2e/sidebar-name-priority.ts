@@ -11,7 +11,7 @@ type DemoWindow = Window & {
   __demoClient: DemoClient
   __chatStore: typeof chatStore
   __roomStore: typeof roomStore
-  __settingsStore: { getState: () => { setThemeMode: (mode: 'light' | 'dark') => void } }
+  __settingsStore: { getState: () => { setThemeMode: (mode: 'light' | 'dark') => void; setTimeFormat: (format: '12h' | '24h') => void } }
   __themeStore: { getState: () => { setActiveTheme: (id: string) => void } }
   __i18n: { changeLanguage: (language: string) => Promise<unknown> }
 }
@@ -24,30 +24,75 @@ async function geometry(row: Locator, nameMustFit: boolean) {
     const name = element.querySelector('p')!
     const text = name.parentElement!.parentElement!
     const previewLine = text.lastElementChild!
-    const time = previewLine.querySelector(':scope > span')
-    const preview = previewLine.firstElementChild!
+    const candidate = previewLine.querySelector(':scope > span')
+    const time = candidate && candidate.getClientRects().length > 0 ? candidate : null
+    const wrapper = previewLine.firstElementChild!
+    const content = wrapper.firstElementChild
+    const label = content?.querySelector('span[dir="auto"]')
     const n = name.getBoundingClientRect()
-    const p = preview.getBoundingClientRect()
     const t = time?.getBoundingClientRect()
+    const p = content?.getBoundingClientRect()
     return {
       name: name.textContent, clipped: name.scrollWidth > name.clientWidth,
-      nameBottom: n.bottom, previewTop: p.top,
-      previewEnd: p.right, timeStart: t?.left, timeTop: t?.top,
-      timeBottom: t?.bottom, timeEnd: t?.right, textEnd: text.getBoundingClientRect().right,
-      time: time?.textContent, timeClipped: time ? time.scrollWidth > time.clientWidth : false,
+      nameBottom: n.bottom, contentText: content?.textContent,
+      contentStart: p?.left, contentEnd: p?.right, contentWidth: p?.width,
+      contentFontSize: content ? parseFloat(getComputedStyle(content).fontSize) : undefined,
+      typingLabelWidth: label?.getBoundingClientRect().width,
+      typingDots: Array.from(content?.querySelectorAll('.typing-dot') ?? []).map(dot => {
+        const r = dot.getBoundingClientRect()
+        return { start: r.left, end: r.right }
+      }),
+      timeVisible: !!time, timeLabel: candidate?.textContent,
+      timeStart: t?.left, timeTop: t?.top, timeEnd: t?.right,
+      textEnd: text.getBoundingClientRect().right,
+      timeClipped: time ? time.scrollWidth > time.clientWidth : false,
       avatarEnd: element.querySelector(':scope > .relative')!.getBoundingClientRect().right,
       rowHeight: element.getBoundingClientRect().height,
     }
   })
   if (nameMustFit) expect(metrics.clipped, `${metrics.name} must fit`).toBe(false)
-  if (metrics.timeStart !== undefined) {
+  const previewEdge = metrics.timeStart ?? metrics.textEnd
+  if (metrics.contentText?.trim()) {
+    expect(metrics.contentWidth).toBeGreaterThanOrEqual(metrics.contentFontSize!)
+    expect(metrics.contentEnd).toBeLessThanOrEqual(previewEdge)
+  }
+  if (metrics.typingLabelWidth !== undefined) {
+    expect(metrics.typingLabelWidth).toBeGreaterThanOrEqual(metrics.contentFontSize!)
+  }
+  for (const dot of metrics.typingDots) {
+    expect(dot.start).toBeGreaterThanOrEqual(metrics.contentStart!)
+    expect(dot.end).toBeLessThanOrEqual(metrics.contentEnd!)
+    expect(dot.end).toBeLessThanOrEqual(previewEdge)
+  }
+  if (metrics.timeVisible) {
     expect(metrics.timeTop).toBeGreaterThanOrEqual(metrics.nameBottom)
-    expect(metrics.previewEnd).toBeLessThanOrEqual(metrics.timeStart)
     expect(metrics.timeEnd).toBeLessThanOrEqual(metrics.textEnd)
     expect(metrics.timeClipped).toBe(false)
     expect(metrics.timeStart).toBeGreaterThanOrEqual(metrics.avatarEnd)
   }
   return metrics
+}
+
+async function showTyping(page: Page, view: 'messages' | 'rooms', id: string) {
+  await page.evaluate(({ view, id }) => {
+    const w = window as unknown as DemoWindow
+    if (view === 'rooms') {
+      w.__roomStore.getState().setDraft(id, '')
+      w.__roomStore.getState().updateRoom(id, { unreadCount: 0, mentionsCount: 0 })
+      w.__roomStore.getState().setTyping(id, 'Emma', true)
+    } else {
+      w.__chatStore.getState().setDraft(id, '')
+      w.__chatStore.getState().setTyping(id, id, true)
+    }
+  }, { view, id })
+}
+
+async function setTimeFormat(page: Page, view: 'messages' | 'rooms', format: '12h' | '24h') {
+  await page.evaluate(format => (window as unknown as DemoWindow).__settingsStore.getState().setTimeFormat(format), format)
+  // The first showcase row is same-day; wait for its actual label to change.
+  await expect(rows(page, view).first().locator('.sidebar-row-time')).toHaveText(
+    format === '12h' ? /\b(?:AM|PM)\b/ : /^\d{2}:\d{2}$/,
+  )
 }
 
 async function capture(page: Page, name: string) {
@@ -71,7 +116,11 @@ for (const mode of ['light', 'dark'] as const) {
       await page.locator(`[data-nav="${view}"]`).click()
       await expect(rows(page, view)).toHaveCount(view === 'messages' ? 6 : 3)
       const measured = []
-      for (const row of await rows(page, view).all()) measured.push(await geometry(row, true))
+      for (const row of await rows(page, view).all()) {
+        const reading = await geometry(row, true)
+        expect(reading.timeVisible).toBe(true)
+        measured.push(reading)
+      }
       await test.info().attach(`${view}-${mode}-geometry`, { body: JSON.stringify(measured, null, 2), contentType: 'application/json' })
       await capture(page, `${view}-${mode}`)
     }
@@ -142,12 +191,14 @@ for (const mode of ['light', 'dark'] as const) {
       await expect(time).toHaveText(expectedTime)
       const timestampOnly = await geometry(row, false)
       expect(timestampOnly.rowHeight).toBe(emptyHeight)
+      expect(timestampOnly.timeVisible).toBe(true)
       await capture(page, `timestamp-only-${mode}-${density}`)
       await page.evaluate(({ id, body }) => (window as unknown as DemoWindow).__chatStore.getState().setDraft(id, body), { id, body: original.lastMessage.body })
       await expect(row.locator('p.italic')).toContainText(original.lastMessage.body)
       await expect(time).toHaveText(expectedTime)
       const draft = await geometry(row, false)
       expect(draft.rowHeight).toBe(normalHeight)
+      expect(draft.timeVisible).toBe(true)
       await test.info().attach(`${mode}-${density}-empty-and-draft`, { body: JSON.stringify({ emptyHeight, timestampOnly, draft }, null, 2), contentType: 'application/json' })
       await page.evaluate(id => (window as unknown as DemoWindow).__chatStore.getState().setDraft(id, ''), id)
       await expect(row.locator('p.italic')).toHaveCount(0)
@@ -180,9 +231,16 @@ for (const mode of ['light', 'dark'] as const) {
         const id = (await row.getAttribute(view === 'messages' ? 'data-conv-id' : 'data-room-jid'))!
         const order = await rows(page, view).evaluateAll(elements => elements.map(e => e.getAttribute('data-conv-id') ?? e.getAttribute('data-room-jid')))
         const minimumReadings = []
-        for (const item of await rows(page, view).all()) minimumReadings.push(await geometry(item, false))
+        for (const format of ['12h', '24h'] as const) {
+          await setTimeFormat(page, view, format)
+          for (const item of await rows(page, view).all()) {
+            const reading = await geometry(item, false)
+            expect(reading.timeVisible).toBe(false)
+            minimumReadings.push({ format, ...reading })
+          }
+        }
         await test.info().attach(`${view}-${mode}-${density}-french-minimum`, { body: JSON.stringify(minimumReadings, null, 2), contentType: 'application/json' })
-        const originalTime = await row.locator('span.text-xs.text-fluux-muted').innerText()
+        const originalTime = (await row.locator('span.text-xs.text-fluux-muted').textContent())!
         await page.evaluate(({ view, id }) => {
           const w = window as unknown as DemoWindow
           if (view === 'messages') {
@@ -200,28 +258,42 @@ for (const mode of ['light', 'dark'] as const) {
         await expect(row.locator('span.text-xs.text-fluux-muted')).toHaveText(originalTime)
         const draftGeometry = await geometry(row, false)
         expect(draftGeometry.clipped).toBe(true)
-        await capture(page, `${view}-${mode}-minimum-draft`)
+        expect(draftGeometry.timeVisible).toBe(false)
+        await test.info().attach(`${view}-${mode}-${density}-minimum-draft`, { body: JSON.stringify(draftGeometry, null, 2), contentType: 'application/json' })
+        await capture(page, `${view}-${mode}-${density}-minimum-draft`)
+        const minimumTyping = []
+        for (const format of ['12h', '24h'] as const) {
+          await setTimeFormat(page, view, format)
+          await showTyping(page, view, id)
+          await expect(row.locator('.typing-dot').first()).toBeVisible()
+          const reading = await geometry(row, false)
+          expect(reading.timeVisible).toBe(false)
+          if (view === 'rooms') expect(reading.typingLabelWidth).toBeGreaterThan(0)
+          minimumTyping.push({ format, ...reading })
+        }
+        await test.info().attach(`${view}-${mode}-${density}-minimum-typing`, { body: JSON.stringify(minimumTyping, null, 2), contentType: 'application/json' })
+        await capture(page, `${view}-${mode}-${density}-minimum-typing`)
         await page.setViewportSize({ width: 320, height: 780 })
         await page.getByRole('button', {
           name: view === 'messages' ? 'Retour aux conversations' : 'Retour aux salons', exact: true,
         }).click()
         const phoneReadings = []
-        for (const item of await rows(page, view).all()) phoneReadings.push(await geometry(item, false))
-        await test.info().attach(`${view}-${mode}-${density}-french-phone`, { body: JSON.stringify(phoneReadings, null, 2), contentType: 'application/json' })
-        await page.evaluate(({ view, id }) => {
-          const w = window as unknown as DemoWindow
-          if (view === 'rooms') {
-            w.__roomStore.getState().setDraft(id, '')
-            w.__roomStore.getState().updateRoom(id, { unreadCount: 0, mentionsCount: 0 })
-            w.__roomStore.getState().setTyping(id, 'Emma', true)
-          } else {
-            w.__chatStore.getState().setDraft(id, '')
-            w.__chatStore.getState().setTyping(id, id, true)
+        for (const format of ['12h', '24h'] as const) {
+          await setTimeFormat(page, view, format)
+          for (const item of await rows(page, view).all()) {
+            const reading = await geometry(item, false)
+            expect(reading.timeVisible).toBe(true)
+            phoneReadings.push({ format, ...reading })
           }
-        }, { view, id })
-        await expect(row.locator('.typing-dot')).toHaveCount(3)
-        await geometry(row, false)
-        await capture(page, `${view}-${mode}-phone-typing`)
+        }
+        await test.info().attach(`${view}-${mode}-${density}-french-phone`, { body: JSON.stringify(phoneReadings, null, 2), contentType: 'application/json' })
+        await showTyping(page, view, id)
+        await expect(row.locator('.typing-dot').first()).toBeVisible()
+        const phoneTyping = await geometry(row, false)
+        expect(phoneTyping.timeVisible).toBe(true)
+        if (view === 'rooms') expect(phoneTyping.typingLabelWidth).toBeGreaterThan(0)
+        await test.info().attach(`${view}-${mode}-${density}-phone-typing`, { body: JSON.stringify(phoneTyping, null, 2), contentType: 'application/json' })
+        await capture(page, `${view}-${mode}-${density}-phone-typing`)
         await page.setViewportSize({ width: 1200, height: 780 })
         expect(await rows(page, view).evaluateAll(elements => elements.map(e => e.getAttribute('data-conv-id') ?? e.getAttribute('data-room-jid')))).toEqual(order)
         await row.click({ button: 'right' })
