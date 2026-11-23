@@ -1877,6 +1877,14 @@
         "sent": "Messaggio inviato. Puoi eliminare questo elemento importato."
     },
     "search": {
+        "quick": {
+            "label": "Filtri rapidi",
+            "image": "Immagini",
+            "link": "Link",
+            "file": "File",
+            "from": "Da…",
+            "date": "Data…"
+        },
         "filtersBuilding": "Fluux sta ancora preparando la cronologia su questo dispositivo per from:, is: e has:. I risultati appariranno al termine.",
         "needsWords": "Aggiungi una parola, o un filtro come from: o has:, per cercare in queste date",
         "values": {

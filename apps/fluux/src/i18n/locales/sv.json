@@ -1873,6 +1873,14 @@
         "sent": "Meddelandet har skickats. Du kan ta bort det importerade objektet."
     },
     "search": {
+        "quick": {
+            "label": "Snabbfilter",
+            "image": "Bilder",
+            "link": "Länkar",
+            "file": "Filer",
+            "from": "Från…",
+            "date": "Datum…"
+        },
         "filtersBuilding": "Fluux förbereder fortfarande historiken på den här enheten för from:, is: och has:. Resultaten visas när det är klart.",
         "needsWords": "Lägg till ett ord, eller ett filter som from: eller has:, för att söka inom de här datumen",
         "values": {

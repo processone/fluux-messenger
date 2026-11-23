@@ -1879,6 +1879,14 @@
         "sent": "Sporočilo je poslano. Ta uvoženi element lahko odstranite."
     },
     "search": {
+        "quick": {
+            "label": "Hitri filtri",
+            "image": "Slike",
+            "link": "Povezave",
+            "file": "Datoteke",
+            "from": "Od…",
+            "date": "Datum…"
+        },
         "filtersBuilding": "Fluux še pripravlja zgodovino na tej napravi za from:, is: in has:. Rezultati se bodo prikazali, ko bo končano.",
         "needsWords": "Dodajte besedo ali filter, kot je from: ali has:, za iskanje v teh datumih",
         "values": {

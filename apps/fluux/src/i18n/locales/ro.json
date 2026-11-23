@@ -1877,6 +1877,14 @@
         "sent": "Mesaj trimis. Puteți șterge acest element importat."
     },
     "search": {
+        "quick": {
+            "label": "Filtre rapide",
+            "image": "Imagini",
+            "link": "Linkuri",
+            "file": "Fișiere",
+            "from": "De la…",
+            "date": "Dată…"
+        },
         "filtersBuilding": "Fluux încă pregătește istoricul de pe acest dispozitiv pentru from:, is: și has:. Rezultatele vor apărea când se termină.",
         "needsWords": "Adăugați un cuvânt sau un filtru precum from: sau has: pentru a căuta în aceste date",
         "values": {

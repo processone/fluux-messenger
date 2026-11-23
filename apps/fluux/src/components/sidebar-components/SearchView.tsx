@@ -17,7 +17,7 @@ import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 import { useSidebarZone } from './types'
 import { Search, SearchX, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash, CalendarDays, AlertTriangle, Filter, User, Link, Image, Paperclip, BarChart3 } from 'lucide-react'
-import { applySuggestion, filterChipLabel, operatorSuggestions, SEARCH_OPERATOR_NAMES, type SenderOption } from './searchOperators'
+import { applySuggestion, filterChipLabel, operatorSuggestions, quickFilterActive, toggleQuickFilter, QUICK_FILTERS, SEARCH_OPERATOR_NAMES, type QuickFilter, type SenderOption } from './searchOperators'
 import { TextInput } from '../ui/TextInput'
 import { ListEmpty } from '../ui/ListEmpty'
 
@@ -30,6 +30,7 @@ const SEARCH_ERROR_KEYS = new Map([
 ])
 
 const CHIP_ICONS = { link: Link, image: Image, file: Paperclip, poll: BarChart3 } as const
+const QUICK_ICONS: Record<QuickFilter, typeof Link> = { image: Image, link: Link, file: Paperclip, from: User, date: CalendarDays }
 
 /** The icon of a chip: who for from: and is:, what for has:, a calendar for dates. */
 function chipIcon(filter: SearchFilterToken) {
@@ -342,6 +343,32 @@ export function SearchView() {
             )
           })}
         </ul>
+      )}
+
+      {/* Quick filters: the common operators as toggle buttons, styled like the type pills below */}
+      {!isInPrefixActive && (
+        <div role="group" aria-label={t('search.quick.label')} className="flex flex-wrap items-center gap-1 px-3 pb-1">
+          {QUICK_FILTERS.map((quick) => {
+            const Icon = QUICK_ICONS[quick]
+            const active = quickFilterActive(quick, parsedInput.filters)
+            return (
+              <button
+                type="button"
+                key={quick}
+                aria-pressed={active}
+                onClick={() => replaceQuery(toggleQuickFilter(query, quick, parsedInput.filters))}
+                className={`text-xs rounded-full px-2.5 py-0.5 transition-colors flex items-center gap-1 ${
+                  active
+                    ? 'bg-fluux-brand text-fluux-text-on-accent'
+                    : 'bg-fluux-hover text-fluux-muted hover:text-fluux-text'
+                }`}
+              >
+                <Icon className="size-3" aria-hidden />
+                {t(`search.quick.${quick}`)}
+              </button>
+            )
+          })}
+        </div>
       )}
 
       {/* Type filter pills */}

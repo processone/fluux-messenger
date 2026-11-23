@@ -1875,6 +1875,14 @@
         "sent": "Poruka je poslana. Ovu uvezenu stavku možete ukloniti."
     },
     "search": {
+        "quick": {
+            "label": "Brzi filtri",
+            "image": "Slike",
+            "link": "Poveznice",
+            "file": "Datoteke",
+            "from": "Od…",
+            "date": "Datum…"
+        },
         "filtersBuilding": "Fluux još priprema povijest na ovom uređaju za from:, is: i has:. Rezultati će se pojaviti kada završi.",
         "needsWords": "Dodajte riječ ili filtar poput from: ili has: za pretraživanje unutar ovih datuma",
         "values": {

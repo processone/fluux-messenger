@@ -118,4 +118,21 @@ describe('SearchView filters', () => {
     expect(screen.getByText('search.needsWords')).toBeTruthy()
     expect(screen.queryByText('search.searchServer')).toBeNull()
   })
+
+  it('applies and removes a filter from the quick buttons, showing which are on', () => {
+    search.query = 'report'
+    render(<SearchView />)
+    const images = screen.getByRole('button', { name: 'search.quick.image' })
+    expect(images.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(images)
+    expect(search.calls.at(-1)).toBe('report has:image ')
+    expect(screen.getByRole('button', { name: 'search.quick.image' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'search.quick.image' }))
+    expect(search.calls.at(-1)).toBe('report')
+
+    // Date… leaves on: open, so the date suggestions show
+    fireEvent.click(screen.getByRole('button', { name: 'search.quick.date' }))
+    expect(search.calls.at(-1)).toBe('report on:')
+    expect(screen.getAllByRole('option')).toHaveLength(4)
+  })
 })

@@ -1881,6 +1881,14 @@
         "sent": "Messaġġ mibgħut. Tista’ tħassar dan l-oġġett importat."
     },
     "search": {
+        "quick": {
+            "label": "Filtri malajr",
+            "image": "Stampi",
+            "link": "Links",
+            "file": "Fajls",
+            "from": "Minn…",
+            "date": "Data…"
+        },
         "filtersBuilding": "Fluux għadu qed jipprepara l-istorja fuq dan l-apparat għal from:, is: u has:. Ir-riżultati jidhru meta jlesti.",
         "needsWords": "Żid kelma, jew filtru bħal from: jew has:, biex tfittex f'dawn id-dati",
         "values": {

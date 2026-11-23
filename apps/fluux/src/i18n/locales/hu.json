@@ -1873,6 +1873,14 @@
         "sent": "Üzenet elküldve. Ezt az importált elemet törölheti."
     },
     "search": {
+        "quick": {
+            "label": "Gyorsszűrők",
+            "image": "Képek",
+            "link": "Hivatkozások",
+            "file": "Fájlok",
+            "from": "Feladó…",
+            "date": "Dátum…"
+        },
         "filtersBuilding": "A Fluux még előkészíti az eszközön lévő előzményeket a from:, is: és has: szűrőkhöz. Az eredmények a befejezés után jelennek meg.",
         "needsWords": "Adjon meg egy szót vagy egy szűrőt, például from: vagy has:, hogy ezeken a dátumokon belül keressen",
         "values": {

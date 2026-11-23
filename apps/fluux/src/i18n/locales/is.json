@@ -1873,6 +1873,14 @@
         "sent": "Skilaboð send. Þú getur fjarlægt þetta innflutta atriði."
     },
     "search": {
+        "quick": {
+            "label": "Flýtisíur",
+            "image": "Myndir",
+            "link": "Tenglar",
+            "file": "Skrár",
+            "from": "Frá…",
+            "date": "Dagsetning…"
+        },
         "filtersBuilding": "Fluux er enn að undirbúa ferilinn á þessu tæki fyrir from:, is: og has:. Niðurstöður birtast þegar því er lokið.",
         "needsWords": "Bættu við orði, eða síu eins og from: eða has:, til að leita innan þessara dagsetninga",
         "values": {

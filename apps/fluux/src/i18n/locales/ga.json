@@ -1879,6 +1879,14 @@
         "sent": "Teachtaireacht seolta. Is féidir an mhír iompórtáilte seo a bhaint."
     },
     "search": {
+        "quick": {
+            "label": "Scagairí tapa",
+            "image": "Íomhánna",
+            "link": "Naisc",
+            "file": "Comhaid",
+            "from": "Ó…",
+            "date": "Dáta…"
+        },
         "filtersBuilding": "Tá Fluux fós ag ullmhú na staire ar an ngléas seo do from:, is: agus has:. Beidh na torthaí le feiceáil nuair a bheidh sé críochnaithe.",
         "needsWords": "Cuir focal leis, nó scagaire ar nós from: nó has:, chun cuardach a dhéanamh laistigh de na dátaí seo",
         "values": {

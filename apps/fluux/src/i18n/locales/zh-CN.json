@@ -1873,6 +1873,14 @@
         "sent": "消息已发送。可以删除此导入项。"
     },
     "search": {
+        "quick": {
+            "label": "快速筛选",
+            "image": "图片",
+            "link": "链接",
+            "file": "文件",
+            "from": "发送者…",
+            "date": "日期…"
+        },
         "filtersBuilding": "Fluux 仍在为 from:、is: 和 has: 准备此设备上的历史记录。完成后将显示结果。",
         "needsWords": "添加一个词，或 from:、has: 等筛选条件，以在这些日期内搜索",
         "values": {

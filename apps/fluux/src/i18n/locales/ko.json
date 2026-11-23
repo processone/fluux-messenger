@@ -1873,6 +1873,14 @@
         "sent": "메시지를 보냈습니다. 가져온 항목을 삭제할 수 있습니다."
     },
     "search": {
+        "quick": {
+            "label": "빠른 필터",
+            "image": "이미지",
+            "link": "링크",
+            "file": "파일",
+            "from": "보낸 사람…",
+            "date": "날짜…"
+        },
         "filtersBuilding": "Fluux가 from:, is:, has:를 위해 이 기기의 기록을 아직 준비하고 있습니다. 완료되면 결과가 표시됩니다.",
         "needsWords": "이 기간 안에서 검색하려면 단어 또는 from:, has: 같은 필터를 추가하세요",
         "values": {

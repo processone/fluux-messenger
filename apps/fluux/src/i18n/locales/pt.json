@@ -1877,6 +1877,14 @@
         "sent": "Mensagem enviada. Pode eliminar este item importado."
     },
     "search": {
+        "quick": {
+            "label": "Filtros rápidos",
+            "image": "Imagens",
+            "link": "Ligações",
+            "file": "Ficheiros",
+            "from": "De…",
+            "date": "Data…"
+        },
         "filtersBuilding": "O Fluux ainda está a preparar o histórico neste dispositivo para from:, is: e has:. Os resultados aparecerão quando terminar.",
         "needsWords": "Adicione uma palavra, ou um filtro como from: ou has:, para pesquisar nestas datas",
         "values": {

@@ -1873,6 +1873,14 @@
         "sent": "Bericht verzonden. Je kunt dit geïmporteerde item verwijderen."
     },
     "search": {
+        "quick": {
+            "label": "Snelfilters",
+            "image": "Afbeeldingen",
+            "link": "Links",
+            "file": "Bestanden",
+            "from": "Van…",
+            "date": "Datum…"
+        },
         "filtersBuilding": "Fluux is de geschiedenis op dit apparaat nog aan het voorbereiden voor from:, is: en has:. De resultaten verschijnen zodra dit klaar is.",
         "needsWords": "Voeg een woord toe, of een filter zoals from: of has:, om binnen deze datums te zoeken",
         "values": {

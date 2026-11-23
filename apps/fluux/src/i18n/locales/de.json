@@ -1875,6 +1875,14 @@
         "sent": "Nachricht gesendet. Du kannst diesen importierten Inhalt entfernen."
     },
     "search": {
+        "quick": {
+            "label": "Schnellfilter",
+            "image": "Bilder",
+            "link": "Links",
+            "file": "Dateien",
+            "from": "Von…",
+            "date": "Datum…"
+        },
         "filtersBuilding": "Fluux bereitet den Verlauf auf diesem Gerät noch für from:, is: und has: vor. Die Ergebnisse erscheinen, sobald dies abgeschlossen ist.",
         "needsWords": "Fügen Sie ein Wort oder einen Filter wie from: oder has: hinzu, um in diesem Zeitraum zu suchen",
         "values": {

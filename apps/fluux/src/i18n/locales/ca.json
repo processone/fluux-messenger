@@ -1877,6 +1877,14 @@
         "sent": "Missatge enviat. Podeu suprimir aquest element importat."
     },
     "search": {
+        "quick": {
+            "label": "Filtres ràpids",
+            "image": "Imatges",
+            "link": "Enllaços",
+            "file": "Fitxers",
+            "from": "De…",
+            "date": "Data…"
+        },
         "filtersBuilding": "Fluux encara està preparant l'historial d'aquest dispositiu per a from:, is: i has:. Els resultats apareixeran quan acabi.",
         "needsWords": "Afegiu una paraula, o un filtre com from: o has:, per cercar dins d'aquestes dates",
         "values": {

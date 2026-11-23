@@ -1879,6 +1879,14 @@
         "sent": "Wiadomość wysłana. Możesz usunąć ten zaimportowany element."
     },
     "search": {
+        "quick": {
+            "label": "Szybkie filtry",
+            "image": "Obrazy",
+            "link": "Linki",
+            "file": "Pliki",
+            "from": "Od…",
+            "date": "Data…"
+        },
         "filtersBuilding": "Fluux wciąż przygotowuje historię na tym urządzeniu dla from:, is: i has:. Wyniki pojawią się po zakończeniu.",
         "needsWords": "Dodaj słowo lub filtr, taki jak from: lub has:, aby szukać w tym zakresie dat",
         "values": {

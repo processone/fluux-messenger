@@ -1876,6 +1876,14 @@
         "sent": "Ziņojums nosūtīts. Varat dzēst šo importēto vienumu."
     },
     "search": {
+        "quick": {
+            "label": "Ātrie filtri",
+            "image": "Attēli",
+            "link": "Saites",
+            "file": "Faili",
+            "from": "No…",
+            "date": "Datums…"
+        },
         "filtersBuilding": "Fluux vēl sagatavo šīs ierīces vēsturi filtriem from:, is: un has:. Rezultāti parādīsies, kad tas būs pabeigts.",
         "needsWords": "Pievienojiet vārdu vai filtru, piemēram, from: vai has:, lai meklētu šajos datumos",
         "values": {

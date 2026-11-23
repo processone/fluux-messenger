@@ -1873,6 +1873,14 @@
         "sent": "Message sent. You can remove this imported item."
     },
     "search": {
+        "quick": {
+            "label": "Quick filters",
+            "image": "Images",
+            "link": "Links",
+            "file": "Files",
+            "from": "From…",
+            "date": "Date…"
+        },
         "filtersBuilding": "Fluux is still preparing the history on this device for from:, is: and has:. Results will appear once it is done.",
         "needsWords": "Add a word, or a filter such as from: or has:, to search within these dates",
         "values": {

@@ -1879,6 +1879,14 @@
         "sent": "Zpráva odeslána. Tuto importovanou položku můžete odstranit."
     },
     "search": {
+        "quick": {
+            "label": "Rychlé filtry",
+            "image": "Obrázky",
+            "link": "Odkazy",
+            "file": "Soubory",
+            "from": "Od…",
+            "date": "Datum…"
+        },
         "filtersBuilding": "Fluux stále připravuje historii na tomto zařízení pro from:, is: a has:. Výsledky se zobrazí po dokončení.",
         "needsWords": "Přidejte slovo nebo filtr, například from: nebo has:, pro hledání v těchto datech",
         "values": {

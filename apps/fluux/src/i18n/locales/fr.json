@@ -1876,6 +1876,14 @@
         "sent": "Message envoyé. Vous pouvez supprimer cet élément importé."
     },
     "search": {
+        "quick": {
+            "label": "Filtres rapides",
+            "image": "Images",
+            "link": "Liens",
+            "file": "Fichiers",
+            "from": "De…",
+            "date": "Date…"
+        },
         "filtersBuilding": "Fluux prépare encore l'historique de cet appareil pour from:, is: et has:. Les résultats apparaîtront une fois terminé.",
         "needsWords": "Ajoutez un mot, ou un filtre comme from: ou has:, pour chercher dans ces dates",
         "values": {

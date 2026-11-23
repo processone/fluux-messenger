@@ -1877,6 +1877,14 @@
         "sent": "Žinutė išsiųsta. Galite pašalinti šį importuotą elementą."
     },
     "search": {
+        "quick": {
+            "label": "Greitieji filtrai",
+            "image": "Paveikslėliai",
+            "link": "Nuorodos",
+            "file": "Failai",
+            "from": "Nuo…",
+            "date": "Data…"
+        },
         "filtersBuilding": "Fluux vis dar ruošia šio įrenginio istoriją filtrams from:, is: ir has:. Rezultatai pasirodys, kai tai bus baigta.",
         "needsWords": "Pridėkite žodį arba filtrą, pvz., from: ar has:, kad ieškotumėte šiose datose",
         "values": {

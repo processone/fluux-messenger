@@ -1873,6 +1873,14 @@
         "sent": "Viesti lähetetty. Voit poistaa tämän tuodun kohteen."
     },
     "search": {
+        "quick": {
+            "label": "Pikasuodattimet",
+            "image": "Kuvat",
+            "link": "Linkit",
+            "file": "Tiedostot",
+            "from": "Lähettäjä…",
+            "date": "Päivämäärä…"
+        },
         "filtersBuilding": "Fluux valmistelee vielä tämän laitteen historiaa suodattimille from:, is: ja has:. Tulokset näkyvät, kun se on valmis.",
         "needsWords": "Lisää sana tai suodatin, kuten from: tai has:, hakeaksesi näiltä päiviltä",
         "values": {

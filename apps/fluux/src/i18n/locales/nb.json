@@ -1873,6 +1873,14 @@
         "sent": "Meldingen er sendt. Du kan fjerne dette importerte elementet."
     },
     "search": {
+        "quick": {
+            "label": "Hurtigfiltre",
+            "image": "Bilder",
+            "link": "Lenker",
+            "file": "Filer",
+            "from": "Fra…",
+            "date": "Dato…"
+        },
         "filtersBuilding": "Fluux forbereder fortsatt historikken på denne enheten for from:, is: og has:. Resultatene vises når det er ferdig.",
         "needsWords": "Legg til et ord, eller et filter som from: eller has:, for å søke innenfor disse datoene",
         "values": {

@@ -1875,6 +1875,14 @@
         "sent": "Sõnum saadetud. Võid selle imporditud üksuse eemaldada."
     },
     "search": {
+        "quick": {
+            "label": "Kiirfiltrid",
+            "image": "Pildid",
+            "link": "Lingid",
+            "file": "Failid",
+            "from": "Saatja…",
+            "date": "Kuupäev…"
+        },
         "filtersBuilding": "Fluux valmistab selle seadme ajalugu ette filtrite from:, is: ja has: jaoks. Tulemused ilmuvad, kui see on valmis.",
         "needsWords": "Lisage sõna või filter, näiteks from: või has:, et otsida nende kuupäevade piires",
         "values": {
