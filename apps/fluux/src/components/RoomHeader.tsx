@@ -37,6 +37,7 @@ import {
   UserPlus,
   Search,
   Bookmark,
+  CalendarDays,
 } from 'lucide-react'
 
 export interface RoomHeaderProps {
@@ -53,6 +54,8 @@ export interface RoomHeaderProps {
   setSubject: (roomJid: string, subject: string) => Promise<void>
   destroyRoom: (roomJid: string, reason?: string) => Promise<void>
   onSearchInConversation?: () => void
+  /** Open the jump-to-date dialog. */
+  onJumpToDate?: () => void
   /** Open the Saved tab narrowed to this room. The button shows only where something is saved. */
   onShowSavedInConversation?: () => void
   onBulkModeration?: () => void
@@ -71,6 +74,7 @@ export function RoomHeader({
   setSubject,
   destroyRoom,
   onSearchInConversation,
+  onJumpToDate,
   onShowSavedInConversation,
   onBulkModeration,
 }: RoomHeaderProps) {
@@ -208,6 +212,9 @@ export function RoomHeader({
                 : []),
               ...(onSearchInConversation
                 ? [{ kind: 'action', key: 'search', label: t('chat.searchInConversation', 'Search in conversation'), icon: Search, onSelect: onSearchInConversation, kebabClassName: kebabClass('search') } as OverflowEntry]
+                : []),
+              ...(onJumpToDate
+                ? [{ kind: 'action', key: 'jumpToDate', label: t('chat.jumpToDate.title'), icon: CalendarDays, onSelect: onJumpToDate } as OverflowEntry]
                 : []),
               { kind: 'action', key: 'invite', label: t('rooms.inviteMember'), icon: UserPlus, onSelect: openInvite },
               { kind: 'submenu', key: 'notify', label: t('rooms.notificationSettings'), icon: NotifyIcon, group: notifyGroup, kebabClassName: notifyChanged ? kebabClass('search') : undefined },

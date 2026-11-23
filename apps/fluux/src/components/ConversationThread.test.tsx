@@ -35,6 +35,7 @@ const h = vi.hoisted(() => ({
   reportViewport: undefined as undefined | ((...args: unknown[]) => void),
   triggerAnimation: undefined as unknown as (...args: unknown[]) => void,
   setTargetMessageId: undefined as unknown as (...args: unknown[]) => void,
+  findFirstMessageOfDay: vi.fn(),
   emptySet: new Set<string>(),
   emptyMap: new Map<string, number>(),
   blocked: new Set<string>(),
@@ -53,6 +54,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     useReferencedMessage: () => undefined,
     useRoomMessageSnapshots: (_jid: string, messages: unknown) => messages,
     useXMPPContext: () => ({ client: { e2ee: null } }),
+    findFirstMessageOfDay: h.findFirstMessageOfDay,
     useXMPP: () => ({ client: { profile: { fetchProfileDetails: vi.fn().mockResolvedValue(null) } }, sendRawXml: vi.fn(), onStanza: vi.fn(() => vi.fn()), on: vi.fn(() => vi.fn()), setPresence: vi.fn(), xml: vi.fn(), isConnected: () => false, getJid: () => null }),
     useRosterActions: () => ({ addContact: vi.fn(), removeContact: vi.fn(), renameContact: vi.fn() }),
     useBlocking: () => ({ blockJid: vi.fn(), unblockJid: vi.fn() }),
@@ -584,6 +586,26 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
       kind.mount({ onShowSavedInConversation: onSaved })
       ;(h.headerProps!.onShowSavedInConversation as () => void)()
       expect(onSaved).toHaveBeenCalledWith(firstId)
+    })
+
+    it('jumps to the first message of a chosen day in this conversation', async () => {
+      const landing = kind.messages()[0]
+      h.findFirstMessageOfDay.mockResolvedValue({ kind: 'found', message: { ...landing, timestamp: new Date(2024, 2, 10, 9) }, source: 'cache' })
+      kind.mount()
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
+      expect(h.findFirstMessageOfDay).toHaveBeenCalledWith(undefined, kind.viewportKind, firstId, new Date(2024, 2, 10), new Date(2024, 2, 11),
+        expect.arrayContaining([expect.objectContaining({ id: landing.id })]))
+      expect(kind.storeSpies.setTargetMessageId).toHaveBeenCalledWith(
+        kind.name === 'room' ? expect.objectContaining({ id: landing.id }) : landing.id)
+      expect(screen.queryByLabelText('chat.jumpToDate.date')).toBeNull()
+    })
+
+    it('opens jump to date on the day of a date bubble', () => {
+      kind.mount()
+      act(() => { listProps().timeline.window!.onJumpToDate!('2024-03-10') })
+      expect((screen.getByLabelText('chat.jumpToDate.date') as HTMLInputElement).value).toBe('2024-03-10')
     })
 
     it('offers neither when the parent gives no handler', () => {

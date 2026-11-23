@@ -57,7 +57,7 @@ interface ChatViewProps {
 
 
 // Stable identities: the thread reads them in effects keyed on the conversation
-const setChatTargetMessageId = (messageId: string) => chatStore.getState().setTargetMessageId(messageId)
+const setChatTargetMessageId = (target: string | MessageRowRef) => chatStore.getState().setTargetMessageId(target)
 const triggerChatAnimation = (id: string, animation: string, senderName: string) => chatStore.getState().triggerAnimation(id, animation, senderName)
 
 export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, onShowSavedInConversation, onShowProfile, mainContentRef, composerRef, findOnPageRef }: ChatViewProps) {
@@ -247,6 +247,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           jid={activeConversation.id}
           onBack={onBack}
           onSearchInConversation={thread.handleSearchInConversation}
+          onJumpToDate={thread.handleJumpToDate}
           onShowSavedInConversation={thread.handleShowSaved}
           encryptionState={encryptionState}
           onEncryptionClick={canDecideTrust ? handleEncryptionClick : undefined}
@@ -425,6 +426,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   highlightTerms,
   currentMatchId,
   lastSentMessageId,
+  onJumpToDate,
   gaps,
   onCatchUpHistory,
   isCatchingUp,
@@ -478,6 +480,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   highlightTerms?: string[]
   currentMatchId?: string
   lastSentMessageId?: string | null
+  onJumpToDate?: (date: string) => void
   gaps?: readonly GapInterval[]
   onCatchUpHistory?: (gapStart: number) => void
   isCatchingUp?: boolean
@@ -574,7 +577,7 @@ export const ChatMessageList = memo(function ChatMessageList({
           unavailable: historyUnavailable,
           onLoadAround,
         },
-        window: { atLiveEdge: windowAtLiveEdge, onLoadNewer, onJumpToLatest },
+        window: { atLiveEdge: windowAtLiveEdge, onLoadNewer, onJumpToLatest, onJumpToDate },
         gaps: { intervals: gaps, onCatchUp: onCatchUpHistory, isCatchingUp },
       }}
       readMarkers={{

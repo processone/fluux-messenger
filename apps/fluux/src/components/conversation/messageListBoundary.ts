@@ -45,6 +45,8 @@ export interface ConversationTimeline<T extends BaseMessage> {
     isLoadingNewer?: boolean
     /** Reset the window to the newest slice; the scroll-to-bottom button calls it when slid up. */
     onJumpToLatest?: () => Promise<unknown> | void
+    /** Opens jump to date at a day (`yyyy-MM-dd`); makes the date pills buttons. */
+    onJumpToDate?: (date: string) => void
   }
   /** Recorded history gaps, oldest first, and the action that fills one. */
   gaps?: {

@@ -8,6 +8,7 @@ import { FindOnPageBar } from './FindOnPageBar'
 import { ReactionMentions } from './ReactionMentions'
 import { EasterEggMentions } from './EasterEggMentions'
 import { EasterEggAnimation } from '../easter-eggs/EasterEggAnimation'
+import { JumpToDateDialog } from './JumpToDateDialog'
 
 interface ConversationThreadProps {
   /** `layout` from useConversationThread. */
@@ -108,6 +109,7 @@ export function ConversationThread({
       {thread.activeAnimation && (
         <EasterEggAnimation animation={thread.activeAnimation.animation} onComplete={thread.clearAnimation} senderName={thread.activeAnimation.senderName} />
       )}
+      {thread.jumpToDate && <JumpToDateDialog {...thread.jumpToDate} />}
       {overlays}
     </div>
   )
