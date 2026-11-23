@@ -13,6 +13,7 @@ const ROOT_INFO = new TextEncoder().encode('OMEMO Root Chain')
 const MSG_INFO = new TextEncoder().encode('OMEMO Message Key Material')
 const ZERO32 = new Uint8Array(32)
 const MAX_SKIP = 1000
+export const MAX_RETIRED_CHAINS = 1000
 
 interface Header {
   dhPub: Uint8Array
@@ -33,9 +34,10 @@ export interface RatchetState {
   pn: number
   /**
    * dhPubHex -> final receive counter. Retain one public marker per retired
-   * receiving chain, not message keys or plaintext. Like the current-chain nr
-   * check, this recognizes consumed indices, not fresh authentication of replays.
-   * Older serialized sessions cannot reconstruct chains they already discarded.
+   * receiving chain, not message keys or plaintext, for the newest 1,000 chains.
+   * Like the current-chain nr check, this recognizes consumed indices, not fresh
+   * authentication of replays. Evicted, replaced-session and already-discarded
+   * pre-upgrade chains cannot be recognized through these markers.
    */
   retiredChains: Map<string, number>
   skipped: Map<string, Uint8Array> // `${dhPubHex}:${n}` -> messageKey
@@ -180,7 +182,12 @@ export function ratchetDecrypt(
   const isNewRemote = !s.dhRemote || !bytesEqual(s.dhRemote, header.dhPub)
   if (isNewRemote) {
     s = skipMessageKeys(s, header.pn)
-    if (s.dhRemote) s.retiredChains.set(chainId(s.dhRemote), s.nr)
+    if (s.dhRemote) {
+      s.retiredChains.set(chainId(s.dhRemote), s.nr)
+      if (s.retiredChains.size > MAX_RETIRED_CHAINS) {
+        s.retiredChains.delete(s.retiredChains.keys().next().value!)
+      }
+    }
     s = dhRatchet(s, header.dhPub)
   }
   s = skipMessageKeys(s, header.n)

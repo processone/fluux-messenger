@@ -7,7 +7,7 @@ import { concatBytes } from '../primitives/bytes'
 import { decodeOmemoMessage, encodeOmemoMessage } from '../omemo2/wire'
 import {
   initRatchetInitiator, initRatchetResponder, ratchetEncrypt, ratchetDecrypt,
-  serializeRatchet, deserializeRatchet,
+  serializeRatchet, deserializeRatchet, MAX_RETIRED_CHAINS,
 } from './ratchet'
 
 const rng = (n: number) => crypto.getRandomValues(new Uint8Array(n))
@@ -84,6 +84,33 @@ describe('consumed earlier-chain replay', () => {
     expect(() => ratchetDecrypt(bob, unrelated.delivered.authMessage, ad)).toThrowError(expect.objectContaining({ code: 'malformed' }))
     expect(serializeRatchet(bob)).toEqual(before)
   })
+
+  it('keeps only the newest retired chains without losing delayed keys or live continuity', () => {
+    const initial = traffic()
+    let { alice, bob } = initial
+    const { ad, delivered, current, delayed } = initial
+    for (let turn = 0; turn < MAX_RETIRED_CHAINS; turn++) {
+      const reply = ratchetEncrypt(bob, enc(`reply ${turn}`), ad)
+      alice = ratchetDecrypt(alice, reply.authMessage, ad).state
+      const next = ratchetEncrypt(alice, enc(`next chain ${turn}`), ad)
+      alice = next.state
+      bob = ratchetDecrypt(reply.state, next.authMessage, ad).state
+    }
+    expect(bob.retiredChains.size).toBe(MAX_RETIRED_CHAINS)
+    bob = deserializeRatchet(serializeRatchet(bob))
+    bob.rng = rng
+    expect(bob.retiredChains.size).toBe(MAX_RETIRED_CHAINS)
+    const before = serializeRatchet(bob)
+    // The initial retired chain was evicted, but its successor is still retained.
+    expect(() => ratchetDecrypt(bob, delivered.authMessage, ad)).toThrowError(expect.objectContaining({ code: 'malformed' }))
+    expect(() => ratchetDecrypt(bob, current.authMessage, ad)).toThrowError(expect.objectContaining({ code: 'duplicate' }))
+    expect(serializeRatchet(bob)).toEqual(before)
+    // Skipped message keys are independent of the bounded public markers.
+    const received = ratchetDecrypt(bob, delayed.authMessage, ad)
+    expect(received.plaintext).toEqual(enc('delayed first message'))
+    const live = ratchetEncrypt(alice, enc('live after eviction'), ad)
+    expect(ratchetDecrypt(received.state, live.authMessage, ad).plaintext).toEqual(enc('live after eviction'))
+  }, 30_000)
 
   it('loads the previous storage shape and starts tracking on the next authenticated turn', () => {
     const { alice, bob, ad, current } = traffic()
