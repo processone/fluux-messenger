@@ -3,7 +3,7 @@ import type { DemoClient } from '@fluux/sdk/demo'
 import type { chatStore, roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
 
-// Approved design intent: give names the first line without widening the sidebar.
+// Sidebar hierarchy: give names the first line without widening the sidebar.
 // Real showcase rows own the name-fit measurement; component tests own preview
 // semantics, badge counts and typing priority. Browser geometry catches the old
 // name/time collision that DOM-only component tests cannot see.
@@ -124,7 +124,7 @@ for (const mode of ['light', 'dark'] as const) {
       await test.info().attach(`${view}-${mode}-geometry`, { body: JSON.stringify(measured, null, 2), contentType: 'application/json' })
       await capture(page, `${view}-${mode}`)
     }
-    // The captain's narrow-only exception must not hide default-width times
+    // The narrow-only exception must not hide default-width times
     // when the existing text-size setting is increased.
     const baseFont = await page.locator('html').evaluate(element => parseFloat(getComputedStyle(element).fontSize))
     const largerTextReadings = []
@@ -134,6 +134,7 @@ for (const mode of ['light', 'dark'] as const) {
       for (const view of ['messages', 'rooms'] as const) {
         await page.locator(`[data-nav="${view}"]`).click()
         await expect(page.locator('aside')).toHaveCSS('width', '288px')
+        await expect(rows(page, view)).toHaveCount(view === 'messages' ? 6 : 3)
         for (const row of await rows(page, view).all()) {
           const reading = await geometry(row, false)
           expect(reading.timeVisible).toBe(true)
@@ -168,7 +169,7 @@ for (const mode of ['light', 'dark'] as const) {
     }
   })
 
-  // Review gap: a bodiless signal still carries a time, and must not expand
+  // A bodiless signal still carries a time, and must not expand
   // compact rows. A no-message row supplies the existing single-line height.
   test(`timestamp-only rows and drafts retain their time and density in ${mode}`, async ({ page }) => {
     await page.setViewportSize({ width: 1200, height: 780 })
@@ -247,6 +248,7 @@ for (const mode of ['light', 'dark'] as const) {
 
       for (const view of ['messages', 'rooms'] as const) {
         await page.locator(`[data-nav="${view}"]`).click()
+        await expect(rows(page, view)).toHaveCount(view === 'messages' ? 6 : 3)
         const row = rows(page, view).nth(1)
         const id = (await row.getAttribute(view === 'messages' ? 'data-conv-id' : 'data-room-jid'))!
         const order = await rows(page, view).evaluateAll(elements => elements.map(e => e.getAttribute('data-conv-id') ?? e.getAttribute('data-room-jid')))
@@ -297,6 +299,7 @@ for (const mode of ['light', 'dark'] as const) {
         await page.getByRole('button', {
           name: view === 'messages' ? 'Retour aux conversations' : 'Retour aux salons', exact: true,
         }).click()
+        await expect(rows(page, view)).toHaveCount(view === 'messages' ? 6 : 3)
         const phoneReadings = []
         for (const format of ['12h', '24h'] as const) {
           await setTimeFormat(page, view, format)
