@@ -46,7 +46,7 @@ describe('JumpToDateDialog', () => {
     h.find.mockResolvedValue({ kind: 'found', message: message(new Date(2024, 2, 10, 8)), source: 'archive' })
     const { onLand, onClose } = open()
     await go('2024-03-10')
-    expect(h.find).toHaveBeenCalledWith(h.messages, 'chat', PEER, new Date(2024, 2, 10), new Date(2024, 2, 11), [])
+    expect(h.find).toHaveBeenCalledWith(h.messages, 'chat', PEER, new Date(2024, 2, 10), new Date(2024, 2, 11), [], undefined)
     expect(onLand).toHaveBeenCalledWith('m1')
     expect(onClose).toHaveBeenCalled()
     expect(useToastStore.getState().toasts).toEqual([])

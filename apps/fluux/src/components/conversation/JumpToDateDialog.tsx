@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { findFirstMessageOfDay, messageRowRef, useXMPPContext, type Message, type MessageRowRef, type RoomMessage } from '@fluux/sdk'
+import { findFirstMessageOfDay, messageRowRef, useXMPPContext, type GapInterval, type Message, type MessageRowRef, type RoomMessage } from '@fluux/sdk'
 import { useModalInput } from '@/hooks'
 import { useToastStore } from '@/stores/toastStore'
 import { formatLocalizedDate } from '@/utils/dateFormat'
@@ -14,6 +14,8 @@ export interface JumpToDateDialogProps {
   initialDay?: string
   /** The messages loaded on screen, oldest first: checked before the cache and the archive. */
   readLoaded?: () => readonly (Message | RoomMessage)[]
+  /** Recorded archive holes surrounding the resident and cached messages. */
+  gaps?: readonly GapInterval[]
   /** Moves the list to the message, as opening a search result does. */
   onLand: (target: string | MessageRowRef) => void
   onClose: () => void
@@ -46,7 +48,7 @@ const PRESETS = [
  * behaves as after opening a search result: highlighted landing row, older and newer
  * history on scroll, and the button back to the latest messages.
  */
-export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded, onLand, onClose }: JumpToDateDialogProps) {
+export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded, gaps, onLand, onClose }: JumpToDateDialogProps) {
   const { t, i18n } = useTranslation()
   const { client } = useXMPPContext()
   const addToast = useToastStore((s) => s.addToast)
@@ -55,8 +57,12 @@ export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded,
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useModalInput<HTMLInputElement>()
-  // A close while the lookup runs must not move the list afterwards
+  // A close or unmount while the lookup runs must not move the list afterwards.
   const closed = useRef(false)
+  useLayoutEffect(() => {
+    closed.current = false
+    return () => { closed.current = true }
+  }, [])
   const close = () => { closed.current = true; onClose() }
 
   const jump = async (day: string) => {
@@ -66,7 +72,7 @@ export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded,
     setBusy(true)
     setError(null)
     const loaded = readLoaded?.() ?? []
-    const result = await findFirstMessageOfDay(client.messages, kind, conversationId, bounds.start, bounds.end, loaded)
+    const result = await findFirstMessageOfDay(client.messages, kind, conversationId, bounds.start, bounds.end, loaded, gaps)
     if (closed.current) return
     setBusy(false)
     const land = (message: Message | RoomMessage) => onLand(kind === 'room' ? messageRowRef(message) : message.id)

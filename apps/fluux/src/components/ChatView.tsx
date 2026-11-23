@@ -100,6 +100,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     readAllMessages: readActiveMessages,
     fetchOlderHistory,
     isLoadingOlder: activeHistoryState?.isLoading,
+    historyGaps: activeHistoryState?.gaps,
     isHistoryComplete: activeHistoryState?.isHistoryComplete,
     clearFirstNewMessageId,
     advanceReadPointer,

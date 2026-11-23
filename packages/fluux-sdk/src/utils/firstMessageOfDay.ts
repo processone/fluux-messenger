@@ -2,7 +2,7 @@ import * as messageCache from './messageCache'
 import { logInfo } from '../core/logger'
 import type { Message } from '../core/types/chat'
 import type { RoomMessage } from '../core/types/room'
-import type { HistoryQueryOptions, HistoryResult, RoomHistoryQueryOptions, RoomHistoryResult } from '../core/types/pagination'
+import type { GapInterval, HistoryQueryOptions, HistoryResult, RoomHistoryQueryOptions, RoomHistoryResult } from '../core/types/pagination'
 
 /** The archive queries the lookup needs; `client.messages` provides them. */
 export interface DayArchive {
@@ -33,13 +33,10 @@ function firstFrom(messages: readonly AnyMessage[], start: number): { first?: An
  * `start` and `end` are the bounds of the day the reader picked, in their own time
  * zone; the archive receives them as UTC instants.
  *
- * Three sources, cheapest first. The messages loaded on screen (`resident`, in
- * chronological order) and then the cache answer alone when they hold a message of
- * that day and one before it, so the day's beginning is known. Otherwise the archive
- * is asked for the page that starts at `start`; what it returns lands in the cache,
- * so the list can then load the window around the message. The earliest message any
- * source found wins. When the day is empty the first later message is returned, and
- * the caller can tell from its timestamp.
+ * Check the resident window, then the cache. A recorded gap before a candidate
+ * means the local history cannot establish that it comes first. If needed, ask
+ * the archive for the selected day before looking further: the page limit alone
+ * does not bound the server's count. The earliest confirmed candidate wins.
  */
 export async function findFirstMessageOfDay(
   archive: DayArchive,
@@ -48,15 +45,18 @@ export async function findFirstMessageOfDay(
   start: Date,
   end: Date,
   resident: readonly AnyMessage[] = [],
+  gaps: readonly GapInterval[] = [],
 ): Promise<FirstMessageOfDay> {
   const from = start.getTime()
-  const inDay = (message: AnyMessage | undefined) => !!message && message.timestamp.getTime() < end.getTime()
+  const inDay = (message: AnyMessage | undefined) => !!message && message.timestamp < end
+  const hasGapBefore = (message: AnyMessage) => gaps.some((gap) =>
+    gap.start < message.timestamp.getTime() && (gap.end ?? Infinity) > from)
   const log = (outcome: string) => logInfo(`Jump to date: ${kind} ${start.toISOString()} → ${outcome}`)
 
   const loaded = firstFrom(resident, from)
-  if (loaded.covered && inDay(loaded.first)) {
+  if (loaded.covered && loaded.first && inDay(loaded.first) && !hasGapBefore(loaded.first)) {
     log('loaded window')
-    return { kind: 'found', message: loaded.first!, source: 'resident' }
+    return { kind: 'found', message: loaded.first, source: 'resident' }
   }
 
   // `after` is exclusive; one millisecond earlier keeps a message sent exactly at midnight
@@ -66,25 +66,39 @@ export async function findFirstMessageOfDay(
   ])
   const cached = fromStart.status === 'ok' ? fromStart.value[0] as AnyMessage | undefined : undefined
   const covered = beforeStart.status === 'ok' && beforeStart.value.length > 0
-  if (cached && covered && inDay(cached)) {
+  if (covered && cached && inDay(cached) && !hasGapBefore(cached)) {
     log('cache')
     return { kind: 'found', message: cached, source: 'cache' }
   }
 
+  const readArchive = (start: Date, end?: Date) => {
+    const options = {
+      start: start.toISOString(), ...(end ? { end: end.toISOString() } : {}),
+      max: ARCHIVE_PAGE, maxAutoPages: 1, preserveGapMarker: true,
+    }
+    return kind === 'room'
+      ? archive.queryRoomMAM({ roomJid: conversationId, ...options })
+      : archive.queryMAM({ with: conversationId, ...options })
+  }
   let archived: AnyMessage | undefined
+  let dayComplete = false
   let complete = false
-  let failed = false
   try {
-    const at = start.toISOString()
-    // maxAutoPages makes a 1:1 query page forward from `start`; without it the page is the newest one
-    const result = kind === 'room'
-      ? await archive.queryRoomMAM({ roomJid: conversationId, start: at, max: ARCHIVE_PAGE, maxAutoPages: 1, preserveGapMarker: true })
-      : await archive.queryMAM({ with: conversationId, start: at, max: ARCHIVE_PAGE, maxAutoPages: 1, preserveGapMarker: true })
-    archived = (result.messages as AnyMessage[]).find((message) => message.timestamp.getTime() >= from)
-    complete = result.complete
-    log(`archive page of ${result.messages.length}, complete=${complete}`)
+    // MAM time bounds are inclusive. A result exactly at the next midnight
+    // is already the earliest later message; the caller labels it as later.
+    const day = await readArchive(start, end)
+    archived = day.messages.find((message) => message.timestamp >= start && message.timestamp <= end)
+    dayComplete = day.complete
+    log(`archive day page of ${day.messages.length}, complete=${dayComplete}`)
+    if (!archived && dayComplete && !inDay(loaded.first) && !inDay(cached)) {
+      // A complete day is not the live edge. Only an empty day needs a second
+      // query for the next message, so busy archives don't count years of rows.
+      const later = await readArchive(end)
+      archived = later.messages.find((message) => message.timestamp >= end)
+      complete = later.complete
+      log(`later archive page of ${later.messages.length}, complete=${complete}`)
+    }
   } catch (error) {
-    failed = true
     log(`archive failed: ${error instanceof Error ? error.message : String(error)}`)
   }
 
@@ -92,8 +106,10 @@ export async function findFirstMessageOfDay(
   const candidates: Array<[AnyMessage | undefined, 'resident' | 'cache' | 'archive']> = [[loaded.first, 'resident'], [cached, 'cache'], [archived, 'archive']]
   let best: [AnyMessage, 'resident' | 'cache' | 'archive'] | undefined
   for (const [message, source] of candidates) {
-    if (message && (!best || message.timestamp.getTime() < best[0].timestamp.getTime())) best = [message, source]
+    if (!message) continue
+    if (!archived && !complete && !(dayComplete && inDay(message)) && hasGapBefore(message)) continue
+    if (!best || message.timestamp < best[0].timestamp) best = [message, source]
   }
   if (best) return { kind: 'found', message: best[0], source: best[1] }
-  return complete && !failed ? { kind: 'none' } : { kind: 'unknown' }
+  return complete ? { kind: 'none' } : { kind: 'unknown' }
 }

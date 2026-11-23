@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, type RefObject } from 'react'
-import type { Message, MessageRowRef, RoomMessage, ViewportEvidenceKey } from '@fluux/sdk'
+import type { GapInterval, Message, MessageRowRef, RoomMessage, ViewportEvidenceKey } from '@fluux/sdk'
 import { currentViewportGeneration, getStorageScopeJid, reportViewport } from '@fluux/sdk'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMode, useMessageSelection, useDragAndDrop } from '@/hooks'
 import { useConnectionStore } from '@fluux/sdk/react'
@@ -30,6 +30,7 @@ export interface ConversationThreadSource<M extends ThreadMessage> {
   fetchOlderHistory?: () => void
   isLoadingOlder?: boolean
   isHistoryComplete?: boolean
+  historyGaps?: readonly GapInterval[]
   clearFirstNewMessageId: (id: string) => void
   advanceReadPointer: (id: string, row: MessageRowRef) => void
   /** Jumps the list to a message. Must keep one identity across renders. */
@@ -56,7 +57,7 @@ const VIEWPORT_LIST_KIND = { chat: 'conversation', room: 'room' } as const
  */
 export function useConversationThread<M extends ThreadMessage>(source: ConversationThreadSource<M>) {
   const {
-    kind, id, displayMessages, allMessages, readAllMessages, fetchOlderHistory, isLoadingOlder, isHistoryComplete,
+    kind, id, displayMessages, allMessages, readAllMessages, fetchOlderHistory, isLoadingOlder, isHistoryComplete, historyGaps,
     clearFirstNewMessageId, advanceReadPointer, setTargetMessageId, triggerAnimation, activeAnimation, clearAnimation,
     onSearchInConversation, onShowSavedInConversation, findOnPageRef,
   } = source
@@ -84,11 +85,13 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
 
   const handleSearchInConversation = id && onSearchInConversation ? () => onSearchInConversation(id) : undefined
   const handleShowSaved = id && onShowSavedInConversation ? () => onShowSavedInConversation(id) : undefined
-  // The day the jump-to-date dialog opens on (`yyyy-MM-dd`), '' for today; null while closed
-  const [jumpToDateDay, setJumpToDateDay] = useState<string | null>(null)
-  const handleJumpToDate = id ? () => setJumpToDateDay('') : undefined
-  const openJumpToDateAt = useCallback((day: string) => setJumpToDateDay(day), [])
-  const closeJumpToDate = useCallback(() => setJumpToDateDay(null), [])
+  // Bind an open lookup to the conversation that started it, not the next render's id.
+  const [dateDialog, setDateDialog] = useState<{ conversationId: string; day?: string } | null>(null)
+  const openJumpToDateAt = useCallback((day?: string) => {
+    if (id) setDateDialog({ conversationId: id, day })
+  }, [id])
+  const handleJumpToDate = id ? () => openJumpToDateAt() : undefined
+  const closeJumpToDate = useCallback(() => setDateDialog(null), [])
 
   // Stable identities below: they reach memoized rows and the memoized composer
   const handleEditLastMessage = useCallback(() => {
@@ -179,7 +182,7 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
   useEffect(() => {
     setReplyingTo(null)
     setEditingMessage(null)
-    setJumpToDateDay(null)
+    setDateDialog(null)
     // Releases the preview URL and any photo preparation of the previous conversation
     clearPendingAttachment()
     clearSelection()
@@ -302,8 +305,8 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
       onMouseLeave: handleMouseLeave,
       onSeeReaction: handleSeeReaction,
       onReplayEasterEgg: handleReplayEasterEgg,
-      jumpToDate: id && jumpToDateDay !== null
-        ? { kind, conversationId: id, initialDay: jumpToDateDay || undefined, readLoaded: readAllMessages, onLand: setTargetMessageId, onClose: closeJumpToDate }
+      jumpToDate: dateDialog && dateDialog.conversationId === id
+        ? { kind, conversationId: id, initialDay: dateDialog.day, readLoaded: readAllMessages, gaps: historyGaps, onLand: setTargetMessageId, onClose: closeJumpToDate }
         : null,
       activeAnimation,
       clearAnimation,

@@ -824,7 +824,7 @@ export class MAM extends BaseModule {
 
       // Surface unresolved gaps for diagnosis (parity with rooms): a forward
       // catch-up that ends without reaching live means a hole remains.
-      if (isForwardPaginate && !isComplete) {
+      if (isForwardPaginate && end === undefined && !isComplete) {
         this.deps.emitSDK('console:event', {
           message: `Conversation catch-up incomplete for ${conversationId} — gap remains after ${allMessages.length} msg(s)`,
           category: 'sm',
@@ -865,7 +865,8 @@ export class MAM extends BaseModule {
   async queryRoomArchive(options: RoomHistoryQueryOptions): Promise<RoomHistoryResult> {
     const session = this.captureQuery()
     const requestId = generateUUID()
-    const { roomJid, max = 50, before, after, start, preserveGapMarker, maxAutoPages: maxAutoPagesOpt, walkOriginTs, healGapsOnly } = options
+    const { roomJid, max = 50, before, after, start, end, maxAutoPages: maxAutoPagesOpt, walkOriginTs, healGapsOnly } = options
+    const preserveGapMarker = end === undefined ? options.preserveGapMarker : true
     const roomMamStart = Date.now()
     // `after` alone (the XEP-0490 pointer-seed catch-up) selects forward mode
     // exactly like `start` does — it is itself an archive-id cursor to page
@@ -897,7 +898,7 @@ export class MAM extends BaseModule {
       : undefined
     // Only a fetch-latest walk may jump DOWN to the floor; a mid-archive
     // scroll-up cursor sits below the record and must never jump UP to it.
-    const canJumpToFloor = !before
+    const canJumpToFloor = !before && end === undefined
     let jumpedToFloor = false
     // The cursor the walk would have used had it not jumped — the recovery
     // resume point when the jumped-to floor turns out purged.
@@ -933,9 +934,11 @@ export class MAM extends BaseModule {
           xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
         ]
 
-        // Add time filter if specified
         if (start) {
           formFields.push(xml('field', { var: 'start' }, xml('value', {}, start)))
+        }
+        if (end) {
+          formFields.push(xml('field', { var: 'end' }, xml('value', {}, end)))
         }
 
         // Send IQ to room JID (not user's archive)
@@ -1064,8 +1067,7 @@ export class MAM extends BaseModule {
               initialAfter: after,
               walkOldestId: walkExtentBottomId(allMessages),
               walkCarriedModifications: forwardWalkCarriedModifications,
-              walkOriginTs,
-              healGapsOnly,
+              ...(end === undefined ? { walkOriginTs, healGapsOnly } : {}),
             })
           } else {
             allMessages.push(...collectedMessages)
@@ -1155,7 +1157,7 @@ export class MAM extends BaseModule {
           complete: isComplete,
           direction: 'backward',
           preserveGapMarker,
-          isFetchLatest: !before,
+          isFetchLatest: !before && end === undefined,
           initialBefore: before ?? '',
           fetchLatestTopId,
           sawCoverageTop,
@@ -1178,7 +1180,7 @@ export class MAM extends BaseModule {
       // Surface unresolved gaps for diagnosis: a forward catch-up that ends without
       // reaching live (complete=false) means a hole remains. Visible in the in-app
       // console so we can measure gap prevalence before investing in range tracking.
-      if (isForward && !isComplete) {
+      if (isForward && end === undefined && !isComplete) {
         this.deps.emitSDK('console:event', {
           message: `Room catch-up incomplete for ${roomJid} — gap remains after ${allMessages.length} msg(s)`,
           category: 'sm',

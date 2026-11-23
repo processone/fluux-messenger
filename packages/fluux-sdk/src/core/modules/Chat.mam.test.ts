@@ -3992,6 +3992,27 @@ describe('XMPPClient MAM', () => {
       })
     })
 
+    it('sends both date bounds to the room and does not treat a complete range as live coverage', async () => {
+      await connectClient()
+      const request = vi.fn().mockResolvedValue(createMockElement('iq', { type: 'result' }, [
+        { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' } },
+      ]))
+      mockXmppClientInstance.iqCaller.request = request
+      const start = '2026-01-21T00:00:00.000Z'
+      const end = '2026-01-22T00:00:00.000Z'
+      await xmppClient.messages.queryRoomMAM({ roomJid, start, end, walkOriginTs: Date.parse(start), maxAutoPages: 1 })
+      expect(request).toHaveBeenCalledTimes(1)
+      const sent = JSON.stringify(request.mock.lastCall?.[0])
+      expect(sent).toContain(`"var":"start"},"children":[{"name":"value","attrs":{},"children":["${start}"]`)
+      expect(sent).toContain(`"var":"end"},"children":[{"name":"value","attrs":{},"children":["${end}"]`)
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
+        roomJid, complete: true, direction: 'forward', preserveGapMarker: true,
+      }))
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
+        walkOriginTs: expect.any(Number),
+      }))
+    })
+
     it('should mark as complete when using before filter (backward query)', async () => {
       // Verify backward pagination correctly marks as complete
       await connectClient()

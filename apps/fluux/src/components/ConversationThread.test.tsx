@@ -596,10 +596,24 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
       fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
       expect(h.findFirstMessageOfDay).toHaveBeenCalledWith(undefined, kind.viewportKind, firstId, new Date(2024, 2, 10), new Date(2024, 2, 11),
-        expect.arrayContaining([expect.objectContaining({ id: landing.id })]))
+        expect.arrayContaining([expect.objectContaining({ id: landing.id })]), undefined)
       expect(kind.storeSpies.setTargetMessageId).toHaveBeenCalledWith(
         kind.name === 'room' ? expect.objectContaining({ id: landing.id }) : landing.id)
       expect(screen.queryByLabelText('chat.jumpToDate.date')).toBeNull()
+    })
+
+    it('does not land a pending date lookup after switching conversations', async () => {
+      let resolve!: (result: unknown) => void
+      h.findFirstMessageOfDay.mockReturnValueOnce(new Promise((done) => { resolve = done }))
+      kind.mount()
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
+      fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' }))
+      expect(h.findFirstMessageOfDay).toHaveBeenCalled()
+      act(() => kind.activate(secondId, kind.messages()))
+      expect(screen.queryByLabelText('chat.jumpToDate.date')).toBeNull()
+      await act(async () => resolve({ kind: 'found', message: kind.messages()[0], source: 'archive' }))
+      expect(kind.storeSpies.setTargetMessageId).not.toHaveBeenCalled()
     })
 
     it('opens jump to date on the day of a date bubble', () => {

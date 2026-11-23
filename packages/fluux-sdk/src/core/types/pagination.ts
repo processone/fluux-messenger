@@ -134,6 +134,8 @@ export interface RoomHistoryQueryOptions {
   after?: string
   /** Filter messages after this timestamp (ISO 8601 format) */
   start?: string
+  /** Filter messages through this timestamp (ISO 8601 format). A bounded query is not live-edge coverage. */
+  end?: string
   /**
    * When true, the resulting merge leaves the recorded history gaps untouched.
    * Used by windowed context queries, whose completion says nothing about
