@@ -1054,7 +1054,6 @@
             "openLogs": "Відкрити теку журналів"
         },
         "encryption": {
-            "experimental": "Експериментально",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

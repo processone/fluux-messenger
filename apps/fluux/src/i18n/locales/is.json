@@ -1050,7 +1050,6 @@
             "openLogs": "Opna annálamöppu"
         },
         "encryption": {
-            "experimental": "Tilrauna",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {

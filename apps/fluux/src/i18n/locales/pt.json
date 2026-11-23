@@ -1054,7 +1054,6 @@
             "openLogs": "Abrir pasta de registos"
         },
         "encryption": {
-            "experimental": "Experimental",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {
