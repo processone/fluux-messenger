@@ -18,7 +18,7 @@ const paragraphs = [
 // transport stand-in, not evidence of the real server's eligibility or identity.
 test('room read badges cap avatars, name every reader and move without rendering the timeline', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
-  await bootDemo(page, `/demo.html?perf=1&scene=showcase&tutorial=false#/rooms/${encodeURIComponent(LAUNCH_ROOM)}`)
+  await bootDemo(page, `/demo.html?perf=scan&scene=showcase&tutorial=false#/rooms/${encodeURIComponent(LAUNCH_ROOM)}`)
   await page.waitForFunction(() => typeof (window as unknown as Scope).__perf?.reset === 'function')
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
   const fixture = await page.evaluate(async ({ roomJid, body }) => {
