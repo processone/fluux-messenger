@@ -115,7 +115,7 @@ async function setDraft(input: Locator, value: string): Promise<void> {
     if (lines[i]) {
       await page.keyboard.insertText(lines[i])
       typed += lines[i]
-      // Observe each input before the next key can replace a pending edit.
+      // Observe each draft transition before issuing the next setup key.
       await expect.poll(readValue).toBe(typed)
     }
     if (i < lines.length - 1) {
