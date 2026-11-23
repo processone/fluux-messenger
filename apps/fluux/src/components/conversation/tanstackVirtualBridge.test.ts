@@ -20,7 +20,7 @@ import {
 // The version lock (apps/fluux/package.json holds react-virtual at exactly this version, which
 // fixes virtual-core) and the private names in tanstackVirtualBridge.ts are one contract: a library
 // update is a deliberate change to both this file and the bridge, never a silent drift.
-const LOCKED = { reactVirtual: '3.14.26', virtualCore: '3.19.11' } as const
+const LOCKED = { reactVirtual: '3.14.28', virtualCore: '3.19.13' } as const
 
 function liveVirtualizer() {
   const scroller = document.createElement('div')
