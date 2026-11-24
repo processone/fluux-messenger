@@ -37,6 +37,8 @@ interface ModalOverlayProps {
   /** Focus target restored when the OS window refocuses; defaults to the panel.
    *  See useRestoreFocus for the rationale. */
   focusRef?: RefObject<HTMLElement | null>
+  /** Picker-specific restoration when its opener may have left the visible timeline. */
+  restoreFocus?: (opener: HTMLElement | null) => void
   /** Where focus lands when the modal opens (ignored when `focusRef` is set):
    *  - `'auto'` (default): the first focusable child, so form modals focus their
    *    input. Read-only modals whose first focusable is a content control (a
@@ -96,6 +98,7 @@ export function ModalOverlay({
   panelClassName,
   panelInClass,
   focusRef,
+  restoreFocus,
   initialFocus = 'auto',
   panelProps,
   onPanelKeyDown,
@@ -121,6 +124,7 @@ export function ModalOverlay({
   // display-only modal never rings a content control on open.
   useFocusTrap(panelRef, {
     initialFocusRef: focusRef ?? (initialFocus === 'panel' ? panelRef : undefined),
+    restoreFocus,
   })
   // Keep keyboard focus inside the modal across OS window blur/refocus.
   useRestoreFocus(panelRef, focusRef)

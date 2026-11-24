@@ -20,7 +20,8 @@ function Host({ getTopDate, suppressed, onSelect }: { getTopDate: () => string |
     ;(window as unknown as Record<string, unknown>).__scroller = ref.current
   }, [])
   return (
-    <div style={{ position: 'relative' }}>
+    <div data-conversation-thread="chat" style={{ position: 'relative' }}>
+      <button type="button" data-header-overflow-trigger>Conversation actions</button>
       <div ref={ref} data-scroller style={{ overflow: 'auto' }} />
       <FloatingDateHeader scrollerRef={ref} getTopDate={getTopDate} suppressed={suppressed} onSelect={onSelect} />
     </div>
@@ -132,6 +133,26 @@ describe('FloatingDateHeader', () => {
     })
 
     expect(container.querySelector('[data-floating-date-pill]')).toHaveTextContent('Yesterday')
+  })
+
+  // Approved day-pill accessibility plan: a disappearing focused pill leaves usable focus.
+  it.each(['live edge', 'unread overlay', 'top separator'] as const)('returns focus to actions when hidden by %s', (reason) => {
+    let date: string | null = '2026-06-28'
+    const getTopDate = () => date
+    const { container, rerender } = render(<Host getTopDate={getTopDate} onSelect={() => {}} />)
+    scroll(container)
+    const pill = container.querySelector('[data-floating-date-pill] button') as HTMLButtonElement
+    act(() => { pill.focus() })
+    expect(pill).toHaveFocus()
+    if (reason === 'unread overlay') rerender(<Host getTopDate={getTopDate} onSelect={() => {}} suppressed />)
+    else {
+      if (reason === 'top separator') date = null
+      scroll(container, reason === 'live edge' ? 0 : 500)
+    }
+    expect(container.querySelector('[data-header-overflow-trigger]')).toHaveFocus()
+    expect(overlayOf(container)).toHaveAttribute('inert')
+    expect(overlayOf(container)).toHaveAttribute('aria-hidden', 'true')
+    expect(pill.tabIndex).toBe(-1)
   })
 
   it('opens jump to date at its day when clicked, and leaves the tab order while hidden', () => {

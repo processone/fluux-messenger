@@ -130,6 +130,21 @@ describe('JumpToDateDialog', () => {
     expect(useToastStore.getState().toasts).toEqual([expect.objectContaining({ type: 'info', message: 'chat.jumpToDate.showingLatest' })])
   })
 
+  // Approved day-pill plan: one named modal owns focus and announces lookup failures.
+  it('names the dialog, focuses the date and keeps forward/backward Tab inside', () => {
+    open()
+    const dialog = screen.getByRole('dialog', { name: 'chat.jumpToDate.title' })
+    const input = screen.getByLabelText('chat.jumpToDate.date')
+    expect(input).toHaveFocus()
+    const last = screen.getByRole('button', { name: 'chat.jumpToDate.yearAgo' })
+    fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })
+    expect(last).toHaveFocus()
+    fireEvent.keyDown(last, { key: 'Tab' })
+    expect(input).toHaveFocus()
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(h.find).not.toHaveBeenCalled()
+  })
+
   it('opens on the day of the date bubble it came from', () => {
     open([], '2024-03-10')
     expect((screen.getByLabelText('chat.jumpToDate.date') as HTMLInputElement).value).toBe('2024-03-10')

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatDateHeader } from '@/utils/dateFormat'
 import { useDayChange } from '@/hooks/useDayChange'
 import { DATE_PILL_CLASSES, DatePill } from './DateSeparator'
+import { focusConversationActions } from './datePillFocus'
 
 /** Within this many px of the bottom the reader is at the newest messages, where the pill hides. */
 export const FLOATING_DATE_LIVE_EDGE_PX = 64
@@ -40,6 +41,8 @@ export function FloatingDateHeader({ scrollerRef, getTopDate, suppressed = false
   const [date, setDate] = useState<string | null>(null)
   const [away, setAway] = useState(false)
   const rafRef = useRef<number | null>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
+  const heldFocus = useRef(false)
 
   useEffect(() => {
     const scroller = scrollerRef.current
@@ -75,10 +78,20 @@ export function FloatingDateHeader({ scrollerRef, getTopDate, suppressed = false
   }, [scrollerRef, getTopDate])
 
   const visible = away && !suppressed
+  useLayoutEffect(() => {
+    if (!visible && heldFocus.current) {
+      focusConversationActions(overlayRef.current)
+      heldFocus.current = false
+    }
+  }, [visible])
 
   return (
     <div
+      ref={overlayRef}
       data-floating-date
+      inert={!visible || undefined}
+      onFocusCapture={() => { heldFocus.current = true }}
+      onBlurCapture={() => { heldFocus.current = false }}
       className={`absolute top-3 inset-x-0 z-30 flex justify-center pointer-events-none transition-opacity duration-200 ${
         visible ? 'opacity-100' : 'opacity-0'
       }`}

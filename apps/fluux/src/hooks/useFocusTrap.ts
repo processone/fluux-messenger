@@ -1,4 +1,4 @@
-import { useLayoutEffect, type RefObject } from 'react'
+import { useLayoutEffect, useRef, type RefObject } from 'react'
 import { getFocusableElements } from './focusable'
 import {
   focusNextTabStop,
@@ -11,6 +11,8 @@ interface FocusTrapOptions {
   /** Preferred element to focus on open; falls back to the first focusable
    *  element, then the container itself. */
   initialFocusRef?: RefObject<HTMLElement | null>
+  /** Override restoration when the opener can disappear or an action changes the focus destination. */
+  restoreFocus?: (opener: HTMLElement | null) => void
   /** Gate the trap (e.g. an overlay's `open`/`isOpen` flag). Default true. */
   active?: boolean
   /** For menus hosting web components: pick the opening focus through open shadow
@@ -35,8 +37,9 @@ interface FocusTrapOptions {
  */
 export function useFocusTrap<T extends HTMLElement>(
   containerRef: RefObject<T | null>,
-  { initialFocusRef, active = true, includeShadowRoots = false }: FocusTrapOptions = {},
+  { initialFocusRef, restoreFocus, active = true, includeShadowRoots = false }: FocusTrapOptions = {},
 ) {
+  const openerRef = useRef<HTMLElement | null>(null)
   useLayoutEffect(() => {
     if (!active) return
     const container = containerRef.current
@@ -50,6 +53,9 @@ export function useFocusTrap<T extends HTMLElement>(
       !container.contains(document.activeElement)
         ? document.activeElement
         : null
+    // A custom restorer can defer focus until explicit close. StrictMode's probe
+    // then leaves focus inside the panel, so retain the first captured opener.
+    if (previouslyFocused) openerRef.current = previouslyFocused
 
     // Let the container hold focus itself when it has no focusable children, so
     // focus can never fall through to the page beneath.
@@ -82,7 +88,8 @@ export function useFocusTrap<T extends HTMLElement>(
 
     return () => {
       container.removeEventListener('keydown', handleKeyDown, capture)
-      if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true })
+      if (restoreFocus) restoreFocus(openerRef.current)
+      else if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true })
     }
-  }, [containerRef, initialFocusRef, active, includeShadowRoots])
+  }, [containerRef, initialFocusRef, restoreFocus, active, includeShadowRoots])
 }

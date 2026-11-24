@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, cleanup, fireEvent } from '@testing-library/react'
-import { useRef } from 'react'
+import { StrictMode, useRef } from 'react'
 import { useFocusTrap } from './useFocusTrap'
 import { getTabStops } from './composedFocus'
 
 afterEach(cleanup)
 
-function Trap({ active = true }: { active?: boolean }) {
+function Trap({ active = true, restoreFocus }: { active?: boolean; restoreFocus?: (opener: HTMLElement | null) => void }) {
   const ref = useRef<HTMLDivElement>(null)
-  useFocusTrap(ref, { active })
+  useFocusTrap(ref, { active, restoreFocus })
   return (
     <div ref={ref}>
       <button type="button">first</button>
@@ -59,6 +59,20 @@ describe('useFocusTrap', () => {
     expect(document.activeElement).not.toBe(opener)
     unmount()
     expect(document.activeElement).toBe(opener)
+    opener.remove()
+  })
+
+  // The date picker defers restoration until explicit close, including under StrictMode.
+  it('keeps the original opener across a StrictMode probe with custom restoration', () => {
+    const opener = document.createElement('button')
+    opener.textContent = 'Yesterday. Jump to date'
+    document.body.appendChild(opener)
+    opener.focus()
+    const restoreFocus = vi.fn()
+    const { unmount } = render(<StrictMode><Trap restoreFocus={restoreFocus} /></StrictMode>)
+    restoreFocus.mockClear()
+    unmount()
+    expect(restoreFocus).toHaveBeenCalledWith(opener)
     opener.remove()
   })
 

@@ -1315,6 +1315,12 @@ html, body {
 /* (coarse pointer / no hover) does the minimum box grow and the icon centre. */
 /* Apply to small icon buttons (modal close, header actions, menu rows, etc.). */
 @media (hover: none), (pointer: coarse) {
+  /* The 44px date hit target still fits the existing 48px estimated date row. */
+  .date-separator:has([data-date-pill]) {
+    padding-top: 0.125rem;
+    padding-bottom: 0.125rem;
+  }
+
   .tap-target {
     display: inline-flex;
     align-items: center;

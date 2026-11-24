@@ -101,6 +101,7 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
   const trigger = (
     <button
       ref={menu.triggerRef}
+      data-header-overflow-trigger
       type="button"
       onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setIsOpen((v) => !v) }}
       aria-label={ariaLabel}

@@ -129,6 +129,8 @@ vi.mock('./OccupantPanel', () => ({ OccupantPanel: () => <div data-testid="occup
 // The list boundary: records its props and draws every row through the view's own renderMessage.
 vi.mock('./conversation/MessageList', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./conversation/MessageList')>()
+  const { DateSeparator } = await import('./conversation/DateSeparator')
+  const { localDayValue } = await import('./conversation/JumpToDateDialog')
   return {
     ...actual,
     MessageList: (props: MessageListProps<Message>) => {
@@ -136,6 +138,7 @@ vi.mock('./conversation/MessageList', async (importOriginal) => {
       const rows = props.timeline.messages
       return (
         <div data-testid="list">
+          {rows[0] && <DateSeparator date={localDayValue(rows[0].timestamp)} onSelect={props.timeline.window?.onJumpToDate} />}
           {rows.map((m, i) => (
             <div key={messageRowId(m)} data-message-row-id={messageRowId(m)} data-message-id={messageRowId(m)}>
               {props.renderMessage(m, i, rows, false, () => {})}
@@ -167,10 +170,10 @@ vi.mock('./MessageComposer', async (importOriginal) => {
 
 // The header boundary: the thread hands it the search and saved handlers.
 vi.mock('./ChatHeader', () => ({
-  ChatHeader: (props: Record<string, unknown>) => { h.headerProps = props; return <div data-testid="header" /> },
+  ChatHeader: (props: Record<string, unknown>) => { h.headerProps = props; return <div data-testid="header"><button type="button" data-header-overflow-trigger>Conversation actions</button></div> },
 }))
 vi.mock('./RoomHeader', () => ({
-  RoomHeader: (props: Record<string, unknown>) => { h.headerProps = props; return <div data-testid="header" /> },
+  RoomHeader: (props: Record<string, unknown>) => { h.headerProps = props; return <div data-testid="header"><button type="button" data-header-overflow-trigger>Conversation actions</button></div> },
 }))
 
 const ME = 'me@example.com'
@@ -706,6 +709,55 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
       expect(screen.queryByLabelText('chat.jumpToDate.date')).toBeNull()
       await act(async () => resolve({ kind: 'found', message: kind.messages()[0], source: 'archive' }))
       expect(kind.storeSpies.setTargetMessageId).not.toHaveBeenCalled()
+    })
+
+    // Approved day-pill plan: cancel restores a visible opener, not a stale or hidden row.
+    it.each(['visible', 'outside viewport', 'removed'] as const)('restores usable focus when the date opener is %s', (state) => {
+      document.documentElement.setAttribute('data-motion', 'reduced')
+      try {
+        kind.mount()
+        const pill = document.querySelector<HTMLElement>('[data-date-pill]')!
+        const rect = { x: 100, y: 100, top: 100, left: 100, right: 200, bottom: 126, width: 100, height: 26, toJSON() {} }
+        vi.spyOn(pill, 'getBoundingClientRect').mockImplementation(() => rect)
+        fireEvent.click(pill)
+        expect(screen.getByRole('dialog', { name: 'chat.jumpToDate.title' })).toBeInTheDocument()
+        expect(screen.getByLabelText('chat.jumpToDate.date')).toHaveFocus()
+        expect(h.findFirstMessageOfDay).not.toHaveBeenCalled()
+        if (state === 'outside viewport') { rect.top = -100; rect.bottom = -74 }
+        if (state === 'removed') pill.remove()
+        fireEvent.keyDown(document, { key: 'Escape' })
+        expect(state === 'visible' ? pill : screen.getByRole('button', { name: 'Conversation actions' })).toHaveFocus()
+        expect(kind.storeSpies.setTargetMessageId).not.toHaveBeenCalled()
+      } finally { document.documentElement.removeAttribute('data-motion') }
+    })
+
+    it('returns menu cancellation to actions and a completed jump to the message area', async () => {
+      document.documentElement.setAttribute('data-motion', 'reduced')
+      try {
+        h.findFirstMessageOfDay.mockResolvedValue({ kind: 'found', message: kind.messages()[0], source: 'cache' })
+        kind.mount()
+        const actions = screen.getByRole('button', { name: 'Conversation actions' })
+        actions.focus()
+        act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+        fireEvent.keyDown(document, { key: 'Escape' })
+        expect(actions).toHaveFocus()
+        act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
+        expect(document.querySelector('[data-date-focus-target]')).toHaveFocus()
+      } finally { document.documentElement.removeAttribute('data-motion') }
+    })
+
+    it('does not restore old-dialog focus after a conversation switch', () => {
+      const { rerender } = kind.mount()
+      const actions = screen.getByRole('button', { name: 'Conversation actions' })
+      actions.focus()
+      const focus = vi.spyOn(actions, 'focus')
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      focus.mockClear()
+      kind.activate(secondId, kind.messages())
+      rerender(kind.name === 'chat' ? <ChatView /> : <RoomView />)
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(focus).not.toHaveBeenCalled()
     })
 
     it('opens jump to date on the day of a date bubble', () => {

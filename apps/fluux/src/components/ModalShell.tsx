@@ -18,6 +18,8 @@ interface ModalShellProps {
    *  read-only modal; defaults to `'auto'` (first focusable child). See
    *  {@link ModalOverlay}. */
   initialFocus?: 'auto' | 'panel'
+  /** Override the default return to the opener for a picker with a disappearing opener. */
+  restoreFocus?: (opener: HTMLElement | null) => void
   children: React.ReactNode
 }
 
@@ -36,12 +38,13 @@ export function ModalShell({
   width = 'max-w-sm',
   panelClassName,
   initialFocus,
+  restoreFocus,
   children,
 }: ModalShellProps) {
   const { t } = useTranslation()
 
   return (
-    <ModalOverlay align={align} onClose={onClose} dismissable={dismissable} onEscape={dismissable ? undefined : () => {}} width={width} panelClassName={panelClassName} initialFocus={initialFocus} panelProps={dialogLabel ? { role: 'dialog', 'aria-modal': true, 'aria-label': dialogLabel } : undefined}>
+    <ModalOverlay align={align} onClose={onClose} dismissable={dismissable} onEscape={dismissable ? undefined : () => {}} width={width} panelClassName={panelClassName} initialFocus={initialFocus} restoreFocus={restoreFocus} panelProps={dialogLabel ? { role: 'dialog', 'aria-modal': true, 'aria-label': dialogLabel } : undefined}>
       {({ close }) => (
         <>
           {/* Header */}
