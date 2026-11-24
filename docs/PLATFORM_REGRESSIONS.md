@@ -52,6 +52,15 @@ versions; browser failures retain traces through the existing Playwright policy.
 The new checks must be selected in repository branch protection if they are to
 prevent merges; a workflow definition alone does not configure that policy.
 
+## Native Linux GUI smoke
+
+The opt-in [native Linux GUI harness](../scripts/native-tests/linux-gui/README.md)
+controls an unsigned Dev executable through external Tauri/WebKit drivers. It
+checks isolated login input, keyboard focus, one read-only native command and
+process/profile cleanup, retaining screenshots and protocol evidence outside the
+working copy. It requires real Linux drivers and display tools; missing tools
+fail rather than skip. This smoke is not packaged-app or release qualification.
+
 ## Shared application scenarios
 
 Use isolated test accounts on a controlled XMPP server, an isolated application
