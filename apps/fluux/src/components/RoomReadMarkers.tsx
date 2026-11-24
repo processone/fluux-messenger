@@ -31,12 +31,27 @@ export function RoomReadSharing({ markers, roomJid }: { markers: Pick<RoomReadMa
 }
 
 /** Per-row subscriptions keep peer advances out of the message-body render path. */
-export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row }: {
+export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row, onBeforeLayoutChange }: {
   markers: Pick<RoomReadMarkers, 'subscribe' | 'readers'>; roomJid: string; row: MessageRowRef
+  onBeforeLayoutChange?: () => void
 }) {
   const { t, i18n } = useTranslation()
   const read = useCallback(() => markers.readers(roomJid, row), [markers, roomJid, row])
-  const snapshot = useSyncExternalStore(markers.subscribe, read)
+  const subscribe = useCallback((notify: () => void) => {
+    if (!onBeforeLayoutChange) return markers.subscribe(notify)
+    let previous = read()
+    return markers.subscribe(() => {
+      const next = read()
+      if (next !== previous) {
+        previous = next
+        // Paired moves can leave total height unchanged. The layout owner must
+        // capture the reading anchor before React changes either message row.
+        onBeforeLayoutChange()
+      }
+      notify()
+    })
+  }, [markers, read, onBeforeLayoutChange])
+  const snapshot = useSyncExternalStore(subscribe, read)
   const readers = useMemo(() => [...snapshot].sort((a, b) => (a.occupantId < b.occupantId ? -1 : a.occupantId > b.occupantId ? 1 : 0)), [snapshot])
   const [openReaders, setOpenReaders] = useState<readonly RoomReader[] | null>(null)
   const container = useRef<HTMLDivElement>(null)

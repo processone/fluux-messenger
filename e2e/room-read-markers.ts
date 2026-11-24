@@ -196,14 +196,22 @@ for (const virtualized of [false, true]) {
     expect(shield.points).toBeGreaterThan(0)
     await page.keyboard.press('Escape')
     await expect(opener).toBeFocused()
-    const result = await page.evaluate(async ({ roomJid, actor, target }) => {
+    // Finish the dialog's pointer-hover changes before attributing renders to markers.
+    await page.mouse.move(0, 0)
+    await settle(page)
+    const sameMessages = await page.evaluate(async ({ roomJid, actor, target }) => {
       const scope = window as unknown as Scope
       scope.__perf.reset(); scope.__perf.resetTally()
       const messages = scope.__roomStore.getState().messages.get(roomJid)
       await scope.__demoClient.simulateRoomDisplayed(roomJid, actor, target)
-      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
-      return { counts: scope.__perf.counts(), tally: scope.__perf.tally(), sameMessages: messages === scope.__roomStore.getState().messages.get(roomJid) }
+      return messages === scope.__roomStore.getState().messages.get(roomJid)
     }, { roomJid: LAUNCH_ROOM, actor: fixture.actor, target: fixture.next })
+    // Include the existing layout owner's deferred correction in render isolation.
+    await settle(page)
+    const result = await page.evaluate(sameMessages => {
+      const scope = window as unknown as Scope
+      return { counts: scope.__perf.counts(), tally: scope.__perf.tally(), sameMessages }
+    }, sameMessages)
     await test.info().attach('room-marker-movement-renders', { body: JSON.stringify(result, null, 2), contentType: 'application/json' })
     expect(result.sameMessages).toBe(true)
     expect(result.counts.RoomReadBadge ?? 0).toBeGreaterThan(0)

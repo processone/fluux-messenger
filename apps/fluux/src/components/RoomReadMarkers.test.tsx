@@ -1,4 +1,5 @@
 import { Profiler } from 'react'
+import { flushSync } from 'react-dom'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { MessageRowRef, RoomReadConsent, RoomReader } from '@fluux/sdk'
@@ -142,6 +143,27 @@ describe('room read-marker controls', () => {
     expect(counts.first).toBe(before.first + 1)
     expect(counts.second).toBe(before.second + 1)
     expect(counts.unchanged).toBe(before.unchanged)
+  })
+
+  it('notifies the layout owner before a changed row commits and ignores unrelated positions', () => {
+    const markers = source()
+    markers.setReaders({ first: people.slice(0, 2) })
+    const observed: string[] = []
+    const beforeLayout = () => {
+      // Flush already-published work so reversing notification order cannot
+      // pass this DOM reading merely because React batched the row update.
+      flushSync(() => {})
+      observed.push(view.container.querySelector('[data-read-marker-names]')?.textContent ?? '')
+    }
+    const view = render(<RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first' }} onBeforeLayoutChange={beforeLayout} />)
+    act(() => markers.setReaders({ second: [people[2]] }))
+    expect(observed).toEqual([])
+    act(() => markers.setReaders({ first: empty }))
+    expect(observed).toEqual(['Jules and Maya'])
+    expect(view.container).toBeEmptyDOMElement()
+    act(() => markers.setReaders({ first: [people[0]] }))
+    expect(observed).toEqual(['Jules and Maya', ''])
+    expect(view.container.querySelector('[data-read-marker-names]')).toHaveTextContent('Jules')
   })
 
   it('renders short groups as text without controls and leaves no corner reservation', () => {

@@ -1,3 +1,4 @@
+import { isFeatureEnabled } from '@/utils/featureFlags'
 import { iosHaptic } from '@/platform/ios/haptics'
 import { editableForward } from '../utils/forwardMessage'
 import { isSpamModerated } from '@/utils/spamModeration'
@@ -821,6 +822,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   onCatchUpHistory?: (gapStart: number) => void
   isCatchingUp?: boolean
 }) {
+  const virtualized = isFeatureEnabled('enableMessageVirtualization')
   const loadedMessageCount = suppliedLoadedMessageCount === undefined ? messages.length : suppliedLoadedMessageCount
   const sharingSnapshot = useCallback(() => peerReadMarkers?.isEnabledFor(room.jid) ?? false, [peerReadMarkers, room.jid])
   const collectViews = useSyncExternalStore(peerReadMarkers?.subscribe ?? noPeerMarkerSubscription, sharingSnapshot)
@@ -1001,6 +1003,7 @@ export const RoomMessageList = memo(function RoomMessageList({
     return (
       <RoomMessageBubbleWrapper
         peerReadMarkers={collectViews ? peerReadMarkers : undefined}
+        onBeforeReadMarkerLayoutChange={virtualized ? undefined : onMediaLoad}
         message={msg}
         rowId={rowId}
         showAvatar={shouldShowAvatar(groupMessages, idx)}
@@ -1118,6 +1121,7 @@ export const RoomMessageList = memo(function RoomMessageList({
 
 interface RoomMessageBubbleWrapperProps {
   peerReadMarkers?: RoomReadMarkers
+  onBeforeReadMarkerLayoutChange?: () => void
   message: RoomMessage
   rowId: string
   showAvatar: boolean
@@ -1202,6 +1206,7 @@ interface RoomMessageBubbleWrapperProps {
 
 const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   peerReadMarkers,
+  onBeforeReadMarkerLayoutChange,
   message,
   rowId,
   showAvatar,
@@ -1387,8 +1392,8 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   // Note: individual tooltips removed - all info is now in the unified avatar/name tooltip
   // Show affiliation (owner/admin) rather than role, consistent with the member list
   const readMarkerBadge = useMemo(() => peerReadMarkers && !message.isPrivate
-    ? <RoomReadBadge markers={peerReadMarkers} roomJid={roomJid} row={{ id: message.id, occupantId: message.occupantId, stanzaId: message.stanzaId }} /> : undefined,
-  [peerReadMarkers, roomJid, message.id, message.occupantId, message.stanzaId, message.isPrivate])
+    ? <RoomReadBadge markers={peerReadMarkers} roomJid={roomJid} onBeforeLayoutChange={onBeforeReadMarkerLayoutChange} row={{ id: message.id, occupantId: message.occupantId, stanzaId: message.stanzaId }} /> : undefined,
+  [peerReadMarkers, roomJid, onBeforeReadMarkerLayoutChange, message.id, message.occupantId, message.stanzaId, message.isPrivate])
 
   const nickExtras = (
     <>
