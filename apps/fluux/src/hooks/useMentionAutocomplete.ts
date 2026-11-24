@@ -47,11 +47,12 @@ export interface MentionAutocompleteState {
  */
 export function useMentionAutocomplete(
   text: string,
-  cursorPosition: number,
+  cursorPosition: number | null,
   occupants: Map<string, RoomOccupant>,
   ownNickname: string,
   roomJid: string,
-  messageNicks?: Set<string>
+  messageNicks?: Set<string>,
+  references: readonly MentionReference[] = []
 ): {
   state: MentionAutocompleteState
   selectMatch: (index: number) => { newText: string; newCursorPosition: number; reference: MentionReference }
@@ -66,6 +67,11 @@ export function useMentionAutocomplete(
 
   // Detect @ trigger and extract query
   const detectTrigger = (): { isActive: boolean; query: string; triggerIndex: number } => {
+    // A null caret means there is no current typing query (for example after
+    // moving the caret or restoring a draft). Text alone must not reopen it.
+    if (cursorPosition === null) {
+      return { isActive: false, query: '', triggerIndex: -1 }
+    }
     if (dismissed) {
       return { isActive: false, query: '', triggerIndex: currentTriggerRef.current }
     }
@@ -90,7 +96,8 @@ export function useMentionAutocomplete(
       }
     }
 
-    if (atIndex === -1) {
+    // Editing the separator after a completed token is still not a new query.
+    if (atIndex === -1 || references.some(ref => atIndex >= ref.begin && atIndex < ref.end)) {
       return { isActive: false, query: '', triggerIndex: -1 }
     }
 
@@ -164,7 +171,7 @@ export function useMentionAutocomplete(
 
   const selectMatch = (index: number): { newText: string; newCursorPosition: number; reference: MentionReference } => {
     const match = matches[index]
-    if (!match) {
+    if (!match || cursorPosition === null) {
       throw new Error('Invalid match index')
     }
 
