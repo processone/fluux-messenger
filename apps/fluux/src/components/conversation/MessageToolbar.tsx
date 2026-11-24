@@ -31,6 +31,8 @@ export interface MessageToolbarProps {
   /** Save the message to, or remove it from, the saved messages. Undefined when it cannot be saved. */
   onToggleSaved?: () => void
   isSaved?: boolean
+  /** Keep the floating toolbar clear of the row's separate bookmark target. */
+  hasTrailingAction?: boolean
   /** Shares only the room message link with a chosen chat. */
   onForward?: () => void
   /** Emojis the current user has already reacted with */
@@ -76,6 +78,7 @@ export const MessageToolbar = memo(function MessageToolbar({
   onCopyMessageLink,
   onToggleSaved,
   isSaved = false,
+  hasTrailingAction = false,
   onForward,
   myReactions,
   canReply,
@@ -209,7 +212,7 @@ export const MessageToolbar = memo(function MessageToolbar({
       onBlurCapture={event => {
         if (!event.currentTarget.contains(event.relatedTarget)) setActionFocused(false)
       }}
-      className={`hidden can-hover:block absolute -top-12 end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out ${visibilityClass}`}
+      className={`hidden can-hover:block absolute -top-12 ${hasTrailingAction ? 'end-10' : 'end-2'} p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out ${visibilityClass}`}
     >
       {/* Visible toolbar. The p-0.5 inset keeps each control's square hover/active
           fill (hover:bg-fluux-hover, reacted fluux-accent-tint) clear of the

@@ -583,7 +583,17 @@ export const MessageBubble = memo(function MessageBubble({
 
   const { canReply, canEdit, canDelete } = actions
   const messageLink = roomMessageLinkFor(message, supportsMAM)
-  const { isSaved, onToggleSaved } = useSavedMessageAction(message)
+  const { isSaved, onToggleSaved, onRemoveSaved } = useSavedMessageAction(message)
+  const hasSavedAction = isSaved && !message.isRetracted && !readOnlyActions
+  const savedButtonRef = useCallback((button: HTMLButtonElement | null) => {
+    if (!button) return
+    // React detaches the ref before removing the focused control, including remote removals.
+    return () => {
+      if (document.activeElement === button) {
+        button.closest<HTMLElement>('.focus-zone')?.focus({ preventScroll: true })
+      }
+    }
+  }, [])
   const onCopyMessageLink = messageLink ? () => { void copyToClipboard(messageLink) } : undefined
   // A source that cannot be read, such as an undecryptable one, is forwarded as a link only.
   const readable = !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
@@ -708,7 +718,7 @@ export const MessageBubble = memo(function MessageBubble({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {isSaved && !message.isRetracted && (
+      {isSaved && !message.isRetracted && readOnlyActions && (
         <span data-testid="saved-marker" role="img" aria-label={t('saved.marker')} title={t('saved.marker')} className="absolute end-2 top-0.5 text-fluux-muted pointer-events-none">
           <Bookmark className="size-3 fill-current" />
         </span>
@@ -772,6 +782,7 @@ export const MessageBubble = memo(function MessageBubble({
           onCopyMessageLink={onCopyMessageLink}
           onToggleSaved={onToggleSaved}
           isSaved={isSaved}
+          hasTrailingAction={hasSavedAction}
           onForward={onForward}
           myReactions={reactionsEnabled ? myReactions : []}
           canReply={canReply}
@@ -1015,6 +1026,22 @@ export const MessageBubble = memo(function MessageBubble({
       </div>
       {readMarkerBadge}
       </div>
+
+      {hasSavedAction && (
+        <button
+          ref={savedButtonRef}
+          type="button"
+          data-testid="saved-marker"
+          aria-label={t('chat.removeFromSaved')}
+          title={t('chat.removeFromSaved')}
+          className="tap-target size-6 shrink-0 self-start inline-flex items-center justify-center rounded text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-fluux-brand"
+          onClick={(event) => { event.stopPropagation(); onRemoveSaved() }}
+          onKeyDown={(event) => { event.stopPropagation() }}
+          onKeyUp={(event) => { event.stopPropagation() }}
+        >
+          <Bookmark className="size-3 fill-current" />
+        </button>
+      )}
 
       {/* Avatar lightbox overlay */}
       {showAvatarLightbox && (
