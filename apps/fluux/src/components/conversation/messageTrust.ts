@@ -54,8 +54,8 @@ export function resolveDisplayTrust(
   if (!securityContext) return undefined
   if (isOwn) return securityContext.trust
   // The live check below is OpenPGP's: the decisions are about OpenPGP keys and
-  // the message's signing fingerprint is an OpenPGP one. Another protocol's
-  // message (OMEMO carries no fingerprint) keeps the trust its plugin baked.
+  // the message's signing fingerprint is an OpenPGP one. Trust for another
+  // protocol's device must not depend on these OpenPGP decisions.
   if (securityContext.protocolId !== OPENPGP_PROTOCOL_ID) return securityContext.trust
   const baked = securityContext.trust
   if (baked === 'tofu' || baked === 'verified') {

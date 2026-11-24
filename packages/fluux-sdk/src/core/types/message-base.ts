@@ -250,6 +250,8 @@ export interface MessageSecurityContext {
    * rotated or server-substituted key must not inherit a stale verification.
    */
   fingerprint?: string
+  /** The original device identity that authenticated the stored content, if known. */
+  authenticatedDevice?: { jid: string; deviceId: string; fingerprint: string }
 }
 
 /**
