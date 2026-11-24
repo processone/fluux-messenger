@@ -936,8 +936,9 @@ export class E2EEManager {
   /**
    * Display trust for stored content, without decrypting it again. For an
    * authenticated device, only a current decision about the original device
-   * and fingerprint can confer trust. Re-read on conversation-security changes
-   * for that device's JID. Other messages keep their decrypt-time assessment.
+   * and fingerprint can confer trust. Re-read when {@link onConversationSecurityChanged}
+   * reports that device's JID or `null` (all conversations, including plugin registration).
+   * Other messages keep their decrypt-time assessment.
    */
   async getMessageTrust(context: SecurityContext): Promise<SecurityContext['trust']> {
     const device = context.authenticatedDevice
