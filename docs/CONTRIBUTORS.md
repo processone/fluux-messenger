@@ -1,0 +1,1 @@
+- Server archive search (XEP-0431) and date navigation (PR #2122; merged in batch PR #2130): Metalhearf.
