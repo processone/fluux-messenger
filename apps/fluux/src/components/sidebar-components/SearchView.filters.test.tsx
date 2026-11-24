@@ -154,7 +154,7 @@ describe('SearchView filters', () => {
     expect(search.picked).toEqual(['from:"room:team%40conference.example.test:bob-id:Bob"'])
     search.rooms = new Map()
     fireEvent.click(screen.getByRole('button', { name: 'search.panel.title' }))
-    expect(screen.getByRole('option', { name: 'Bob', exact: true })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Bob' })).toBeTruthy()
   })
 
   it('keeps a localized typed date unchanged when opening the panel', () => {
