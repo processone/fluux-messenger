@@ -10,6 +10,7 @@ import {
   hasPendingFling,
   heldOffset,
   iosGesture,
+  isMeasuringResizeBatch,
   libraryCommand,
   retargetLibraryWrite,
   trackCommitUpdate,
@@ -282,6 +283,7 @@ export function useTanstackMessageVirtualizer({
   const scrollActivityRef = useRef<ScrollActivity>({ active: false })
   // Set while virtual-core runs its commit-time update. See the tracking after useVirtualizer.
   const committingRef = useRef(false)
+  const resizeGrowthPendingRef = useRef(false)
   // Reports the element's position as motion while a scroll is in progress. With keepDirection it
   // is the read-back of our own write: a correction moves the content, not the reader, so the
   // reader's direction is kept rather than taken from the correction's sign. Inside React's commit
@@ -498,6 +500,10 @@ export function useTanstackMessageVirtualizer({
       // reader, a re-measurement only once the whole row is.
       const known = instance as unknown as { itemSizeCache?: Map<unknown, number> }
       const cached = instance.measurementsCache?.[index]
+      const previousSize = known.itemSizeCache?.get(key) ?? cached?.size
+      if (entry && previousSize !== undefined && size > previousSize && isMeasuringResizeBatch(instance)) {
+        resizeGrowthPendingRef.current = true
+      }
       const first = known.itemSizeCache ? !known.itemSizeCache.has(key) : true
       const start = cached?.start ?? Infinity
       correctionRef.current = index >= 0
@@ -521,6 +527,16 @@ export function useTanstackMessageVirtualizer({
     observeElementOffset: observeOffset,
     ...(initialMeasurementsCacheRef.current !== undefined ? { initialMeasurementsCache: initialMeasurementsCacheRef.current } : {}),
   })
+
+  // ResizeObserver runs before paint, but virtual-core asks React for an async update if
+  // growth didn't adjust scrollTop. A late reply quote can then paint outside its old slot.
+  // Flush once after the whole resize batch, not during its interim scroll reports or refs.
+  const onChange = virtualizer.options.onChange
+  if (onChange) virtualizer.options.onChange = (instance, sync) => {
+    const flushGrowth = resizeGrowthPendingRef.current && !committingRef.current && !isMeasuringResizeBatch(instance)
+    if (flushGrowth) resizeGrowthPendingRef.current = false
+    onChange(instance, sync || flushGrowth)
+  }
 
   // Install the stable policy before initial row measurements. It reads live refs, so changing
   // suppression or the held anchor needs no reassignment and no render to take effect.
