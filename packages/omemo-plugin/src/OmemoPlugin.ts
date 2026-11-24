@@ -718,7 +718,14 @@ export class OmemoPlugin implements E2EEPlugin {
 
     const plaintext = new TextEncoder().encode(serializePayloadEnvelope(env.content))
     const authoredAt = env.timeIso ? new Date(env.timeIso) : undefined
-    return { plaintext, status: 'ok', senderDevice, securityContext, ...(authoredAt ? { authoredAt } : {}) }
+    return {
+      plaintext, status: 'ok', senderDevice,
+      securityContext: {
+        ...securityContext,
+        authenticatedDevice: { ...senderDevice, fingerprint: hex(fingerprint(senderIdentityKey)) },
+      },
+      ...(authoredAt ? { authoredAt } : {}),
+    }
   }
 
   async repairSession(_handle: ConversationHandle, peer: BareJID): Promise<void> {

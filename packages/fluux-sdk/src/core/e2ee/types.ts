@@ -173,6 +173,12 @@ export interface SecurityContext {
    * a stale out-of-band verification.
    */
   fingerprint?: string
+  /**
+   * Device identity that authenticated the recovered content, independent of
+   * whether the user trusts that identity. Set only on authenticated plaintext;
+   * never infer it from a ciphertext header, a duplicate or a failed decrypt.
+   */
+  authenticatedDevice?: DeviceIdentifier & { fingerprint: string }
 }
 
 /**

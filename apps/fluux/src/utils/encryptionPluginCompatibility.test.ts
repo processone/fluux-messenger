@@ -9,7 +9,9 @@
  * Lives in the app suite so the branch and batch gates both run it. Only the
  * XMPP transport is simulated; neither the SDK host nor crypto is mocked.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import 'fake-indexeddb/auto'
+import { IDBFactory } from 'fake-indexeddb'
 import {
   E2EEEncryptionRequiredError,
   InMemoryStorageBackend,
@@ -19,6 +21,7 @@ import {
   type ConversationTarget,
   type DecryptResult,
   type E2EEPlugin,
+  type Message,
   type XMLElementData,
 } from '@fluux/sdk'
 import { xml } from '@fluux/sdk/xmpp'
@@ -29,6 +32,15 @@ import { normalizeFingerprint } from '@fluux/openpgp-plugin/fingerprintCompare'
 // declaration, rather than mixing source-private fields with built declarations.
 import { E2EEManager } from '../../../../packages/fluux-sdk/src/core/e2ee/E2EEManager'
 import { decryptStanzaInPlace } from '../../../../packages/fluux-sdk/src/core/e2ee/stanzaDecrypt'
+import { DeferredDecryptEngine } from '../../../../packages/fluux-sdk/src/core/e2ee/deferredDecrypt'
+import { createDefaultStoreBindings } from '../../../../packages/fluux-sdk/src/core/defaultStoreBindings'
+import { Chat } from '../../../../packages/fluux-sdk/src/core/modules/Chat'
+import { MAM } from '../../../../packages/fluux-sdk/src/core/modules/MAM'
+import type { ModuleDependencies } from '../../../../packages/fluux-sdk/src/core/modules/BaseModule'
+import { createPresenceReader } from '../../../../packages/fluux-sdk/src/core/presenceReader'
+import { chatStore } from '../../../../packages/fluux-sdk/src/stores/chatStore'
+import * as cache from '../../../../packages/fluux-sdk/src/utils/messageCache'
+import { _resetStorageScopeForTesting, setStorageScopeJid } from '../../../../packages/fluux-sdk/src/utils/storageScope'
 import { dataToElement } from '../../../../packages/omemo-plugin/src/stanzaData'
 import { OmemoPlugin } from '../../../../packages/omemo-plugin/src/OmemoPlugin'
 import { PluginStorageOmemoStore } from '../../../../packages/omemo-plugin/src/store'
@@ -311,3 +323,174 @@ it('isolates both protocols on one host and restores independent decisions after
   expect(await identity(restored.host, openpgp)).toMatchObject({ trust: 'untrusted', usedForEncryption: false })
   expect(await identity(restored.host, omemo)).toMatchObject({ trust: 'verified', usedForEncryption: true })
 }, 30_000)
+
+// FLM-655: a decision about an authenticated OMEMO sender needs no message key;
+// OpenPGP still needs its ciphertext when the signature has not been verified.
+describe('stored messages awaiting trust', () => {
+  beforeEach(() => {
+    vi.stubGlobal('indexedDB', new IDBFactory())
+    cache._resetDBForTesting()
+    setStorageScopeJid(bobJid)
+  })
+
+  afterEach(() => {
+    chatStore.getState().reset()
+    cache._resetDBForTesting()
+    _resetStorageScopeForTesting()
+    vi.unstubAllGlobals()
+  })
+
+  async function deliver(receiver: E2EEManager, ciphertext: XMLElementData, id: string) {
+    const stanza = xml('message', { id, from: `${aliceJid}/test`, to: bobJid, type: 'chat' },
+      dataToElement(ciphertext), xml('body', {}, '[Encrypted message]'))
+    const originalXml = stanza.toString()
+    // Chat emits the parsed message; the fixture writes it to the real SDK cache
+    // without a resident conversation, so the durable retry pass owns the row.
+    const message = await new Promise<Message>((resolve) => {
+      const deps: ModuleDependencies = {
+        stores: null, presence: createPresenceReader(), sendStanza: async () => {},
+        sendIQ: async () => xml('iq', {}), getCurrentJid: () => bobJid, getXmpp: () => null,
+        getE2EEManager: () => receiver, emit: () => {}, emitSDK: (event, payload) => {
+          if (event === 'chat:message') resolve((payload as { message: Message }).message)
+        },
+      }
+      new Chat(deps, new MAM(deps)).handle(stanza)
+    })
+    return { message, originalXml }
+  }
+
+  function retryEngine(manager: E2EEManager) {
+    const stores = createDefaultStoreBindings()
+    return new DeferredDecryptEngine({
+      getManager: () => manager, getStores: () => stores, getOwnBareJid: () => bobJid,
+      cache, updateSearchIndex: async () => {},
+    })
+  }
+
+  async function omemoPeers() {
+    const net = newMockNetwork()
+    const siblingPlugin = new OmemoPlugin()
+    const sibling = await ready(aliceJid, net, [siblingPlugin])
+    const bob = await ready(bobJid, net, [new OmemoPlugin()])
+    const protocolId = siblingPlugin.descriptor.id
+    const verifiedSibling = await identity(bob.host, protocolId, aliceJid)
+    await bob.host.setIdentityTrust(protocolId, aliceJid, verifiedSibling.id, 'verified')
+    const senderPlugin = new OmemoPlugin()
+    const sender = await ready(aliceJid, net, [senderPlugin])
+    const device = (await senderPlugin.ensureIdentity()).devices![0]
+    expect(device.deviceId).not.toBe(verifiedSibling.id)
+    const storeFor = (storage: InMemoryStorageBackend) =>
+      new PluginStorageOmemoStore(createPluginStorage(storage, `e2ee/${protocolId}`))
+    return { bob, sender, device, protocolId, store: storeFor(bob.storage), siblingStore: storeFor(sibling.storage) }
+  }
+
+  it('settles consumed OMEMO rows on both chains, but decrypts an unopened row', async () => {
+    const { bob, sender, device, store, protocolId } = await omemoPeers()
+    const earlierText = 'Private text before the sending chain changed'
+    const currentText = 'Private text after the sending chain changed'
+    const earlier = await deliver(bob.host, await send(sender.host, toBob, earlierText), 'earlier')
+    // Bob cannot send to the waiting device. Approve it to turn the ratchet,
+    // then refuse it before the next inbound message so that text is untrusted too.
+    await bob.host.setIdentityTrust(protocolId, aliceJid, device.deviceId, 'tofu')
+    const reply = await send(bob.host, toAlice, 'Private reply advancing the ratchet')
+    expectBody(await sender.host.decryptInbound(reply, toBob), 'Private reply advancing the ratchet', protocolId)
+    await bob.host.setIdentityTrust(protocolId, aliceJid, device.deviceId, 'untrusted')
+    const current = await deliver(bob.host, await send(sender.host, toBob, currentText), 'current')
+    for (const row of [earlier, current]) {
+      expect(row.message.securityContext?.trust).toBe('untrusted')
+      expect(row.message.contentAvailability).toEqual({ state: 'ready' })
+      expect(row.message.encryptedPayload).toBeUndefined()
+    }
+    // Recreate the old persisted shape. Only the current row is still loaded.
+    const legacyRows: Message[] = [earlier, current].map(({ message, originalXml }) => ({
+      ...message, contentAvailability: { state: 'verification' }, encryptedPayload: originalXml,
+      securityContext: { protocolId, trust: 'untrusted' },
+    }))
+    await cache.saveMessages('chat', legacyRows)
+    chatStore.setState({ messages: new Map([[aliceJid, [legacyRows[1]]]]) })
+    const session = () => store.loadSession(aliceJid, Number(device.deviceId))
+    const before = await session()
+    expect(before).not.toBeNull()
+    const archive = vi.spyOn(bob.host, 'decryptArchive')
+    const engine = retryEngine(bob.host)
+    expect(await cache.getMessagesWithEncryptedPayload()).toHaveLength(2)
+    expect(await engine.retryPending()).toBe(0)
+    const resident = chatStore.getState().messages.get(aliceJid)?.[0]
+    expect(resident).toMatchObject({ body: currentText, contentAvailability: { state: 'ready' } })
+    expect(resident?.encryptedPayload).toBeUndefined()
+    await vi.waitFor(async () => expect(await cache.getMessagesWithEncryptedPayload()).toEqual([]))
+    expect(await engine.retryPending()).toBe(0)
+    expect(archive).not.toHaveBeenCalled()
+    expect(await session()).toEqual(before)
+    for (const [id, text] of [['earlier', earlierText], ['current', currentText]]) {
+      const row = (await cache.getMessages('chat', aliceJid)).find(m => m.id === id)
+      expect(row).toMatchObject({ body: text, contentAvailability: { state: 'ready' } })
+      expect(row?.securityContext).toEqual({ protocolId: 'omemo:2', trust: 'untrusted' })
+    }
+
+    const waitingText = 'Private text not yet delivered live'
+    const unopened = await send(sender.host, toBob, waitingText)
+    await cache.saveMessage('chat', {
+      ...current.message, id: 'waiting', body: '[Encrypted message]', securityContext: undefined,
+      contentAvailability: { state: 'waiting' }, encryptedPayload: dataToElement(unopened).toString(),
+    })
+    expect(await engine.retryPending()).toBe(1)
+    expect(archive).toHaveBeenCalledTimes(1)
+    expect((await cache.getMessages('chat', aliceJid)).find(m => m.id === 'waiting')).toMatchObject({
+      body: waitingText, contentAvailability: { state: 'ready' }, securityContext: {
+        trust: 'untrusted', authenticatedDevice: { jid: aliceJid, deviceId: device.deviceId },
+      },
+    })
+    expect(await cache.getMessagesWithEncryptedPayload()).toEqual([])
+    expect(await session()).toEqual(before)
+  })
+
+  it('reflects decisions about the original OMEMO device and not a replacement key', async () => {
+    const { bob, sender, device, protocolId, store, siblingStore } = await omemoPeers()
+    const text = 'Private text from a device awaiting a decision'
+    const received = await deliver(bob.host, await send(sender.host, toBob, text), 'decision')
+    await cache.saveMessage('chat', received.message)
+    const [stored] = await cache.getMessages('chat', aliceJid)
+    const context = stored.securityContext!
+    const fingerprint = await sender.host.getOwnFingerprint(protocolId)
+    expect(fingerprint).toBeTruthy()
+    expect(context.authenticatedDevice).toEqual({ jid: aliceJid, deviceId: device.deviceId, fingerprint })
+    expect(stored.encryptedPayload).toBeUndefined()
+    const archive = vi.spyOn(bob.host, 'decryptArchive')
+    const trust = () => bob.host.getMessageTrust(context)
+    expect(await trust()).toBe('untrusted') // A sibling device is already verified.
+    for (const decision of ['verified', 'untrusted', 'tofu'] as const) {
+      await bob.host.setIdentityTrust(protocolId, aliceJid, device.deviceId, decision)
+      expect(await trust()).toBe(decision)
+    }
+    expect(await bob.host.getMessageTrust({ protocolId, trust: 'untrusted' })).toBe('untrusted')
+    const replacement = (await siblingStore.loadIdentity())!.edPub
+    await store.saveTrust(aliceJid, Number(device.deviceId), { state: 'undecided', identityKey: replacement })
+    await bob.host.setIdentityTrust(protocolId, aliceJid, device.deviceId, 'verified')
+    expect((await bob.host.listPeerIdentities(aliceJid))[0].identities.find(i => i.id === device.deviceId)).toMatchObject({ trust: 'verified' })
+    expect(await trust()).toBe('untrusted')
+    expect(await cache.getMessagesWithEncryptedPayload()).toEqual([])
+    expect(await cache.getMessages('chat', aliceJid)).toEqual([stored])
+    expect(stored.body).toBe(text)
+    expect(archive).not.toHaveBeenCalled()
+  })
+
+  it('keeps an OpenPGP message queued until its original signature can be verified', async () => {
+    const net = newMockNetwork()
+    const alice = await ready(aliceJid, net, [new WebOpenPGPPlugin()])
+    const receiver = new WebOpenPGPPlugin()
+    const bob = await ready(bobJid, net, [receiver])
+    const text = 'Private text from a sender whose key is not cached yet'
+    const { message } = await deliver(bob.host, await send(alice.host, toBob, text), 'openpgp')
+    expect(message).toMatchObject({ body: text, contentAvailability: { state: 'verification' }, securityContext: { trust: 'untrusted' } })
+    expect(message.encryptedPayload).toBeDefined()
+    await cache.saveMessage('chat', message)
+    expect(await cache.getMessagesWithEncryptedPayload()).toHaveLength(1)
+    expect((await receiver.probePeer(aliceJid)).supported).toBe(true)
+    expect(await retryEngine(bob.host).retryPending()).toBe(1)
+    expect(await cache.getMessages('chat', aliceJid)).toMatchObject([
+      { body: text, contentAvailability: { state: 'ready' }, securityContext: { protocolId: 'openpgp', trust: 'tofu' } },
+    ])
+    expect(await cache.getMessagesWithEncryptedPayload()).toEqual([])
+  })
+})

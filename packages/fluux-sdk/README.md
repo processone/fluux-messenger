@@ -74,6 +74,19 @@ The SDK performs many operations automatically without app intervention:
 
 Your app just renders what's in the stores—no orchestration needed.
 
+### Displaying device trust for stored encrypted messages
+
+OMEMO can authenticate a message before the user has decided whether to trust
+its sender's device. The SDK stores the recovered content and its
+`securityContext.authenticatedDevice`, not a copy of the ciphertext to retry.
+`E2EEManager.getMessageTrust(securityContext)` resolves the current display trust
+for that original device and fingerprint. Refresh it on
+`onConversationSecurityChanged` for the device's address. This lookup does not
+re-decrypt the message or rewrite its stored context. A different device or key
+cannot confer trust; old rows without the original identity keep their stored
+assessment. OpenPGP messages that still need a signature check continue to use
+deferred decryption.
+
 ## Architecture
 
 The SDK is designed with a layered architecture:
