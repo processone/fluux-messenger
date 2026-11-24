@@ -1022,6 +1022,7 @@ for (const kind of ['chat', 'room'] as const) {
   })
 
   test(`${kind}: focused drafting ignores invisible action hover while composing`, async ({ page }) => {
+    await page.clock.install()
     const { row, list } = await setupInteraction(page, kind)
     await arrive(page, kind, ['hidden-toolbar-tail'])
     await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
@@ -1031,13 +1032,45 @@ for (const kind of ['chat', 'room'] as const) {
     const box = (await action.boundingBox())!
     const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
     await input.focus()
+    // Pause before typing so runner latency cannot end composing during the real pointer move.
+    await page.clock.pauseAt(new Date(Date.now() + 10_000))
     await input.pressSequentially('Draft')
     await expect(page.locator('.composer-active')).toHaveCount(1)
     await expect(row.locator('[data-message-toolbar]')).toHaveCSS('opacity', '0')
     const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    type ToolbarHit = { toolbarTarget: boolean; composing: boolean; opacity: string | null }
+    type ProbeWindow = Window & { __draftingToolbarProbe?: { hits: ToolbarHit[]; stop: () => void } }
+    await page.evaluate(() => {
+      const scope = window as ProbeWindow
+      const hits: ToolbarHit[] = []
+      const onMove = (event: MouseEvent) => {
+        const toolbar = event.target instanceof Element ? event.target.closest('[data-message-toolbar]') : null
+        hits.push({
+          toolbarTarget: !!toolbar,
+          composing: !!toolbar?.closest('.composer-active'),
+          opacity: toolbar ? getComputedStyle(toolbar).opacity : null,
+        })
+      }
+      document.addEventListener('mousemove', onMove, true)
+      scope.__draftingToolbarProbe = {
+        hits, stop: () => document.removeEventListener('mousemove', onMove, true),
+      }
+    })
     await page.mouse.move(point.x, point.y, { steps: 2 })
+    const mouseHit = await page.evaluate(() => {
+      const scope = window as ProbeWindow
+      const probe = scope.__draftingToolbarProbe!
+      probe.stop()
+      delete scope.__draftingToolbarProbe
+      return probe.hits.at(-1) ?? null
+    })
+    await keepJson('drafting-hidden-toolbar-mouse', mouseHit)
+    expect(mouseHit, 'the actual mouse event hits the still-hidden composing toolbar').toEqual({
+      toolbarTarget: true, composing: true, opacity: '0',
+    })
     const hit = await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest('[data-message-toolbar]'), point)
     expect(hit, 'fixture reaches an invisible pointer-interactive toolbar descendant').toBe(true)
+    await page.clock.resume()
     await expect(list).not.toHaveAttribute('data-message-interaction')
     await draftingPeerTyping(page, kind)
     await arrive(page, kind, ['hidden-toolbar-arrival'])

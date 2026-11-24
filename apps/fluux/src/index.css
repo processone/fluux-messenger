@@ -1659,6 +1659,13 @@ input[type="range"]::-moz-range-thumb {
   scrollbar-gutter: stable;
 }
 
+/* macOS WKWebView can omit an empty room editor's native caret when the
+   editor has no background paint. A transparent image keeps that paint without
+   adding another color layer over the composer's translucent theme surface. */
+.message-input[contenteditable="true"] {
+  background-image: linear-gradient(transparent, transparent);
+}
+
 /* Tauri window title bar integration */
 /* Enable drag region for elements with data-tauri-drag-region attribute */
 [data-tauri-drag-region] {
