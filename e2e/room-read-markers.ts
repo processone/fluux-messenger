@@ -115,6 +115,8 @@ async function checkRoomLineGeometry(page: Page, width: number) {
         await expect(marker).toBeVisible()
         const link = marker.getByRole('button')
         await expect(link).toBeVisible()
+        // Font remeasurement can reposition the virtual row between browser
+        // turns. Compare one coherent snapshot, not rectangles from different frames.
         const reading = await marker.evaluate(element => {
           const rect = (node: Element) => { const { x, y, width, height } = node.getBoundingClientRect(); return { x, y, width, height } }
           const column = element.closest('[data-msg-column]')!
@@ -122,7 +124,10 @@ async function checkRoomLineGeometry(page: Page, width: number) {
           const button = element.querySelector('button')!
           const style = getComputedStyle(element)
           const buttonStyle = getComputedStyle(button)
-          return { row: rect(element), column: rect(column), link: rect(button), text: names?.textContent ?? '',
+          return { row: rect(element), column: rect(column), link: rect(button),
+            message: rect(column.querySelector('[data-msg-text]')!),
+            reaction: rect(column.querySelector('[data-reaction-emoji="👍"]')!),
+            accessibleName: button.getAttribute('aria-label'), text: names?.textContent ?? '',
             linkText: button.textContent!, fontSize: style.fontSize, color: style.color,
             italic: getComputedStyle(element.querySelector('.italic')!).fontStyle,
             namesStyle: names ? getComputedStyle(names).fontStyle : null,
@@ -137,16 +142,13 @@ async function checkRoomLineGeometry(page: Page, width: number) {
         expect(reading.italic).toBe('italic')
         if (shown.length) expect(reading.namesStyle).toBe('normal')
         expect(reading.underline).toContain('underline')
-        const accessibleName = await link.getAttribute('aria-label')
-        expect(accessibleName?.startsWith(reading.linkText)).toBe(true)
+        expect(reading.accessibleName?.startsWith(reading.linkText)).toBe(true)
         expect(reading.background).toBe('rgba(0, 0, 0, 0)')
         expect(reading.link.height).toBeGreaterThanOrEqual(28)
         expect(reading.scrollWidth).toBeLessThanOrEqual(reading.clientWidth + 1)
-        const text = (await oldRow.locator('[data-msg-text]').boundingBox())!
-        const reaction = (await oldRow.locator('[data-reaction-emoji="👍"]').boundingBox())!
-        expect(reading.row.y).toBeGreaterThanOrEqual(text.y + text.height)
-        expect(reading.row.y).toBeGreaterThanOrEqual(reaction.y + reaction.height)
-        expect(clearOf(reading.link, reaction)).toBe(true)
+        expect(reading.row.y).toBeGreaterThanOrEqual(reading.message.y + reading.message.height)
+        expect(reading.row.y).toBeGreaterThanOrEqual(reading.reaction.y + reading.reaction.height)
+        expect(clearOf(reading.link, reading.reaction)).toBe(true)
         expect(reading.link.x).toBeGreaterThanOrEqual(reading.column.x)
         expect(reading.link.x + reading.link.width).toBeLessThanOrEqual(reading.column.x + reading.column.width + 1)
         await expect(oldRow.locator('[data-read-marker-corner], [data-read-marker-avatar]')).toHaveCount(0)
