@@ -1,9 +1,9 @@
 import { Profiler } from 'react'
-import { flushSync } from 'react-dom'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { MessageRowRef, RoomReadConsent, RoomReader } from '@fluux/sdk'
 import { RoomReadBadge, RoomReadSharing } from './RoomReadMarkers'
+import { RowLayoutContext } from './conversation/rowLayoutContext'
 
 // Source: the accepted short-line plan. Protocol and identity facts remain
 // owned by the SDK tests; this source supplies row subscription transitions.
@@ -145,25 +145,28 @@ describe('room read-marker controls', () => {
     expect(counts.unchanged).toBe(before.unchanged)
   })
 
-  it('notifies the layout owner before a changed row commits and ignores unrelated positions', () => {
+  it('notifies the timeline after row commits and ignores unrelated positions', async () => {
     const markers = source()
-    markers.setReaders({ first: people.slice(0, 2) })
     const observed: string[] = []
-    const beforeLayout = () => {
-      // Flush already-published work so reversing notification order cannot
-      // pass this DOM reading merely because React batched the row update.
-      flushSync(() => {})
-      observed.push(view.container.querySelector('[data-read-marker-names]')?.textContent ?? '')
+    const reconcile = () => {
+      observed.push(document.querySelector('[data-read-marker-names]')?.textContent ?? '')
     }
-    const view = render(<RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first' }} onBeforeLayoutChange={beforeLayout} />)
-    act(() => markers.setReaders({ second: [people[2]] }))
+    const view = render(<RowLayoutContext.Provider value={reconcile}>
+      <RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first' }} />
+    </RowLayoutContext.Provider>)
     expect(observed).toEqual([])
-    act(() => markers.setReaders({ first: empty }))
+    act(() => markers.setReaders({ first: people.slice(0, 2) }))
     expect(observed).toEqual(['Jules and Maya'])
+    act(() => markers.setReaders({ second: [people[2]] }))
+    expect(observed).toEqual(['Jules and Maya'])
+    act(() => markers.setReaders({ first: empty }))
+    expect(observed).toEqual(['Jules and Maya', ''])
     expect(view.container).toBeEmptyDOMElement()
     act(() => markers.setReaders({ first: [people[0]] }))
-    expect(observed).toEqual(['Jules and Maya', ''])
-    expect(view.container.querySelector('[data-read-marker-names]')).toHaveTextContent('Jules')
+    expect(observed).toEqual(['Jules and Maya', '', 'Jules'])
+    view.unmount()
+    await Promise.resolve()
+    expect(observed).toEqual(['Jules and Maya', '', 'Jules', ''])
   })
 
   it('renders short groups as text without controls and leaves no corner reservation', () => {

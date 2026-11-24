@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import type { MessageRowRef, RoomReader, RoomReadMarkers } from '@fluux/sdk'
@@ -6,6 +6,7 @@ import { Avatar } from './Avatar'
 import { ModalShell } from './ModalShell'
 import { SettingsRow } from './ui/SettingsRow'
 import { Toggle } from './ui/Toggle'
+import { RowLayoutContext } from './conversation/rowLayoutContext'
 
 /** Same persisted account-scoped choice in Privacy and in each room's details. */
 export function RoomReadSharing({ markers, roomJid }: { markers: Pick<RoomReadMarkers, 'subscribe' | 'getConsent' | 'setEnabled' | 'setRoomEnabled'>; roomJid?: string }) {
@@ -31,27 +32,23 @@ export function RoomReadSharing({ markers, roomJid }: { markers: Pick<RoomReadMa
 }
 
 /** Per-row subscriptions keep peer advances out of the message-body render path. */
-export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row, onBeforeLayoutChange }: {
+export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row }: {
   markers: Pick<RoomReadMarkers, 'subscribe' | 'readers'>; roomJid: string; row: MessageRowRef
-  onBeforeLayoutChange?: () => void
 }) {
   const { t, i18n } = useTranslation()
   const read = useCallback(() => markers.readers(roomJid, row), [markers, roomJid, row])
-  const subscribe = useCallback((notify: () => void) => {
-    if (!onBeforeLayoutChange) return markers.subscribe(notify)
-    let previous = read()
-    return markers.subscribe(() => {
-      const next = read()
-      if (next !== previous) {
-        previous = next
-        // Paired moves can leave total height unchanged. The layout owner must
-        // capture the reading anchor before React changes either message row.
-        onBeforeLayoutChange()
-      }
-      notify()
-    })
-  }, [markers, read, onBeforeLayoutChange])
-  const snapshot = useSyncExternalStore(subscribe, read)
+  const reconcileRowLayout = useContext(RowLayoutContext)
+  const snapshot = useSyncExternalStore(markers.subscribe, read)
+  const hadLine = useRef(false)
+  useLayoutEffect(() => {
+    if (snapshot.length || hadLine.current) reconcileRowLayout?.()
+    hadLine.current = snapshot.length > 0
+  })
+  useLayoutEffect(() => () => {
+    // A removed marker has no post-commit effect. This microtask runs after
+    // removal and ref attachment, but before paint, against its own timeline.
+    if (hadLine.current && reconcileRowLayout) queueMicrotask(reconcileRowLayout)
+  }, [reconcileRowLayout])
   const readers = useMemo(() => [...snapshot].sort((a, b) => (a.occupantId < b.occupantId ? -1 : a.occupantId > b.occupantId ? 1 : 0)), [snapshot])
   const [openReaders, setOpenReaders] = useState<readonly RoomReader[] | null>(null)
   const container = useRef<HTMLDivElement>(null)
@@ -82,12 +79,15 @@ export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row
       }
       setFitting(previous => previous === fit ? previous : fit)
     }
-    const observer = new ResizeObserver(measure)
+    const observer = new ResizeObserver(() => {
+      measure()
+      reconcileRowLayout?.()
+    })
     observer.observe(element)
     observer.observe(measurement)
     measure()
     return () => observer.disconnect()
-  }, [snapshot, measuring, language, label])
+  }, [snapshot, measuring, language, label, reconcileRowLayout])
 
   useEffect(() => {
     if (!openReaders) return

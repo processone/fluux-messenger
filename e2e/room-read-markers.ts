@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
-import { settle, scrollToBottom, getMessageOffsetFromTop, sampleScrollTop, wheelUntil } from './harness/scrollHarness'
+import { settle, scrollToBottom, getMessageOffsetFromTop, sampleScrollTop, wheelUntil, FRAME_SAMPLE_MS } from './harness/scrollHarness'
 import { LAUNCH_ROOM } from '../apps/fluux/src/demo/showcase/constants'
 
 type Perf = { reset(): void; counts(): Record<string, number>; tally(): Record<string, number>; resetTally(): void }
@@ -55,6 +55,34 @@ function showReaders(page: Page, actors: string[], target: string) {
   return page.evaluate(async ({ roomJid, actors, target }) => {
     for (const actor of actors) await (window as unknown as Scope).__demoClient.simulateRoomDisplayed(roomJid, actor, target)
   }, { roomJid: LAUNCH_ROOM, actors, target })
+}
+
+async function moveReadersWithFrames(page: Page, actors: string[], target: string, anchorId?: string) {
+  return page.evaluate(async ({ roomJid, actors, target, anchorId, durationMs }) => {
+    const scope = window as unknown as Scope
+    const list = document.querySelector<HTMLElement>('[data-message-list]')!
+    const read = () => {
+      const anchor = anchorId ? list.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(anchorId)}"]`) : null
+      if (anchorId && !anchor) throw new Error('The reading row disappeared during frame sampling')
+      return {
+        bottomDistance: list.scrollHeight - list.scrollTop - list.clientHeight,
+        anchorOffset: anchor ? anchor.getBoundingClientRect().top - list.getBoundingClientRect().top : null,
+      }
+    }
+    const frames = [read()]
+    const sampled = new Promise<void>((resolve, reject) => {
+      const until = performance.now() + durationMs
+      const tick = () => {
+        try { frames.push(read()) } catch (error) { reject(error); return }
+        if (performance.now() >= until) resolve()
+        else requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    })
+    for (const actor of actors) await scope.__demoClient.simulateRoomDisplayed(roomJid, actor, target)
+    await sampled
+    return frames
+  }, { roomJid: LAUNCH_ROOM, actors, target, anchorId, durationMs: FRAME_SAMPLE_MS })
 }
 
 function addReaction(page: Page, target: string) {
@@ -253,7 +281,10 @@ for (const virtualized of [false, true]) {
     expect(fixture.history.length).toBeGreaterThan(5)
     await scrollToBottom(page)
     await settle(page)
-    await showReaders(page, [fixture.actors[1]], early.stanzaId)
+    const liveFrames = await moveReadersWithFrames(page, [fixture.actors[1]], early.stanzaId)
+    await test.info().attach('room-marker-live-edge-frames', { body: JSON.stringify({ virtualized, liveFrames }), contentType: 'application/json' })
+    expect(liveFrames.length).toBeGreaterThan(1)
+    expect(Math.max(...liveFrames.map(frame => frame.bottomDistance)), 'every frame keeps the live edge pinned').toBeLessThanOrEqual(2)
     await settle(page)
     const bottomDistance = await page.locator('[data-message-list]').evaluate(list => list.scrollHeight - list.scrollTop - list.clientHeight)
     expect(bottomDistance, 'adding a read line keeps the live edge pinned').toBeLessThanOrEqual(2)
@@ -277,7 +308,10 @@ for (const virtualized of [false, true]) {
     await test.info().attach('room-marker-scroll-setup', { body: JSON.stringify({ virtualized, parked, away, viewport, earlyMarker }), contentType: 'application/json' })
     expect(earlyMarker, 'the changed marker is mounted and measured').not.toBeNull()
     expect(earlyMarker!.y + earlyMarker!.height, 'the entire changing marker is above the reading viewport').toBeLessThanOrEqual(viewport.y)
-    await showReaders(page, [fixture.actors[1]], fixture.next)
+    const readingFrames = await moveReadersWithFrames(page, [fixture.actors[1]], fixture.next, anchor.id)
+    await test.info().attach('room-marker-reading-frames', { body: JSON.stringify({ virtualized, parked, readingFrames }), contentType: 'application/json' })
+    expect(readingFrames.length).toBeGreaterThan(1)
+    expect(Math.max(...readingFrames.map(frame => Math.abs(frame.anchorOffset! - parked!))), 'every frame preserves the reading point').toBeLessThanOrEqual(2)
     await settle(page)
     const after = await getMessageOffsetFromTop(page, anchor.id)
     expect(after).not.toBeNull()
@@ -285,6 +319,6 @@ for (const virtualized of [false, true]) {
     const frames = await sampleScrollTop(page, 500)
     expect(frames.length).toBeGreaterThan(1)
     expect(Math.max(...frames) - Math.min(...frames), 'the settled reading view does not drift').toBeLessThanOrEqual(2)
-    await test.info().attach('room-marker-scroll', { body: JSON.stringify({ virtualized, bottomDistance, away, parked, after, frames }), contentType: 'application/json' })
+    await test.info().attach('room-marker-scroll', { body: JSON.stringify({ virtualized, bottomDistance, away, parked, after, frames, liveFrames, readingFrames }), contentType: 'application/json' })
   })
 }

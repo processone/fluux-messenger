@@ -42,6 +42,7 @@ import { LiveEdgeGrowthContext, type RunKeepingLiveEdge } from './liveEdgeGrowth
 import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
 import { formatUnreadCount } from '@/utils/formatUnreadCount'
 import { MessageWidthProvider } from './messageWidthContext'
+import { RowLayoutContext } from './rowLayoutContext'
 import { isFeatureEnabled } from '@/utils/featureFlags'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { buildMessageListItems, type RenderItem } from './messageListItems'
@@ -545,6 +546,7 @@ export function MessageList<T extends BaseMessage>({
     handleWheel,
     handleLoadEarlier,
     handleMediaLoad,
+    handleRowLayoutChange,
     handleVirtualRowMeasuredGrowth,
     scrollToBottom,
     holdLiveEdgePin,
@@ -870,6 +872,7 @@ export function MessageList<T extends BaseMessage>({
   return (
     <ForwardMessageProvider conversationId={conversationId}>
     <LiveEdgeGrowthContext.Provider value={runKeepingLiveEdge}>
+    <RowLayoutContext.Provider value={virtualized || staticMode ? undefined : handleRowLayoutChange}>
     <MessageInteractionContext.Provider value={interaction.context}>
     <MessageTargetProvider value={requestMessageTarget}>
     <MessageWidthProvider containerRef={scrollContainerRef}>
@@ -1090,6 +1093,7 @@ export function MessageList<T extends BaseMessage>({
     </MessageWidthProvider>
     </MessageTargetProvider>
     </MessageInteractionContext.Provider>
+    </RowLayoutContext.Provider>
     </LiveEdgeGrowthContext.Provider>
     </ForwardMessageProvider>
   )
