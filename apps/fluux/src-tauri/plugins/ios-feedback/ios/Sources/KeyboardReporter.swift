@@ -38,14 +38,9 @@ final class KeyboardReporter {
         guard let webView else { return }
         var docked = false
         if let window = webView.window, let frame {
-            let keyboard = window.convert(frame, from: window.screen.coordinateSpace)
-            let bounds = window.bounds
-            let overlap = keyboard.intersection(bounds)
             // WKWebView can pan by exactly the keyboard height, leaving its visual bottom unchanged.
-            // A floating keyboard must not remove space for the still-uncovered home indicator.
-            docked = !overlap.isNull && overlap.height > 0
-                && keyboard.minX <= bounds.minX + 1 && keyboard.maxX >= bounds.maxX - 1
-                && keyboard.maxY >= bounds.maxY - 1
+            let keyboard = window.convert(frame, from: window.screen.coordinateSpace)
+            docked = isDockedKeyboard(keyboard, in: window.bounds)
         }
         guard force || docked != applied else { return }
         applied = docked

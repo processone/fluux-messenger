@@ -120,6 +120,7 @@ script `scripts/test-affected.sh` uses this same implementation, not another rul
 | `nse-openpgp` | Its own locked manifest, application consumer and notification contracts |
 | `PhotoPreparation.swift`, `ShareInboxPlugin.swift`, photo fixture | `test:ios-photos` and platform contracts |
 | `HingeLayout.swift`, hinge layout fixture | `test:ios-hinge` and platform contracts |
+| `KeyboardLayout.swift`, keyboard geometry fixture and reporter/wiring | `node --test scripts/ios-keyboard-layout.test.mjs` and platform contracts; reporter/wiring retain native generation/build coverage |
 | `ShareViewController.swift`, share integration fixtures/schemes | `test:ios-extensions`, `test:ios-share`, `macos-share.test.mjs` and platform contracts |
 | iOS widget, `UnreadList.swift`, `NotificationService.swift`, push extension sources, widget lab files | `test:ios-widgets` (simulator widget lab) beside the checks below |
 | Push/NotificationAvatars/NotificationPreviews, notification fixtures | `test:ios-notifications` and platform contracts; diagnostic integration fixtures also run `test:ios-diagnostic` |

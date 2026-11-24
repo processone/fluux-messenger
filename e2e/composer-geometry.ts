@@ -1204,8 +1204,9 @@ test.describe('native docked-keyboard composer spacing', () => {
       await setDraft(editor, 'Short draft')
       const card = page.locator('.composer-card')
       const form = page.locator('[data-conversation-tail] .composer-form')
-      // Browser engines expose no device safe area here. Supply the iPhone demo's recorded
-      // 34px inset only; native keyboard delivery is checked in the installed demos.
+      // Browser engines expose no device safe area here. Reuse the iPhone's recorded 34px
+      // inset for both classes: the emulator's zero inset cannot exercise padding removal.
+      // Native keyboard delivery is checked in the installed demos.
       const insetStyle = await page.addStyleTag({ content: '.composer-form {}' })
       await page.evaluate(() => {
         const outside = document.createElement('form')
@@ -1239,7 +1240,7 @@ test.describe('native docked-keyboard composer spacing', () => {
         for (const fontSize of [16, 19]) {
           await page.evaluate(size => { document.documentElement.style.fontSize = `${size}px` }, fontSize)
           for (const safeClass of ['pb-safe', 'pb-safe-2']) {
-            const inset = safeClass === 'pb-safe-2' ? 34 : 0
+            const inset = 34
             const baseRem = (safeClass === 'pb-safe-2' ? 0.5 : 1) / (width < 420 ? 2 : 1)
             const baseGap = baseRem * fontSize
             await form.evaluate((element, safeClass) => {

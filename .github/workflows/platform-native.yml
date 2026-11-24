@@ -59,6 +59,8 @@ jobs:
         run: node --test scripts/macos-communication.test.mjs
       - name: Test the iPhone hinge layout
         run: npm run test:ios-hinge
+      - name: Test the iPhone keyboard docking rule
+        run: node --test scripts/ios-keyboard-layout.test.mjs
       - name: Test both TLS builds
         working-directory: apps/fluux/src-tauri
         run: |
