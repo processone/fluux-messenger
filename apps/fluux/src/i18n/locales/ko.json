@@ -1873,14 +1873,6 @@
         "sent": "메시지를 보냈습니다. 가져온 항목을 삭제할 수 있습니다."
     },
     "search": {
-        "quick": {
-            "label": "빠른 필터",
-            "image": "이미지",
-            "link": "링크",
-            "file": "파일",
-            "from": "보낸 사람…",
-            "date": "날짜…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1899,8 +1891,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1936,15 +1928,7 @@
             "thisYear": "올해"
         },
         "operators": {
-            "from": "특정 사람의 메시지, 또는 from:me",
-            "is": "is:mine으로 내 메시지 검색",
-            "has": "링크, 이미지, 파일 또는 투표가 있는 메시지",
-            "label": "필터",
-            "in": "대화 또는 대화방 하나에서 검색",
-            "after": "특정 날짜 이후의 메시지",
-            "before": "특정 날짜 이전의 메시지",
-            "on": "특정 일, 월 또는 연도의 메시지",
-            "during": "on:과 같음, 예: during:2024-03"
+            "label": "필터"
         },
         "filter": {
             "all": "전체",

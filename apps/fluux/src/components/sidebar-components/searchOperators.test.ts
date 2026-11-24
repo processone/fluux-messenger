@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseSearchFilters } from '@fluux/sdk'
-import { applySuggestion, describeSpan, lastWord, operatorSuggestions, quickFilterActive, toggleQuickFilter } from './searchOperators'
+import { applySuggestion, describeSpan, lastWord, operatorSuggestions } from './searchOperators'
 
 const NOW = new Date(2026, 10, 23, 15, 0)
 
@@ -42,27 +42,5 @@ describe('search operator suggestions', () => {
     expect(operatorSuggestions('from:', NOW, senders).map(s => s.insert)).toEqual(['from:me', 'from:alice@example.com', 'from:"Bob Smith"'])
     expect(operatorSuggestions('from:b', NOW, senders).map(s => [s.insert, s.label])).toEqual([['from:"Bob Smith"', 'Bob Smith']])
     expect(operatorSuggestions('fr', NOW).map(s => s.insert)).toEqual([])
-  })
-})
-
-describe('quick filter buttons', () => {
-  const press = (query: string, quick: Parameters<typeof toggleQuickFilter>[1]) =>
-    toggleQuickFilter(query, quick, parseSearchFilters(query, 'en').filters)
-
-  it('adds a has: filter, and removes it on a second press', () => {
-    expect(press('', 'image')).toBe('has:image ')
-    expect(press('report', 'link')).toBe('report has:link ')
-    expect(press('report has:link after:2024', 'link')).toBe('report after:2024')
-    expect(quickFilterActive('link', parseSearchFilters('x has:link', 'en').filters)).toBe(true)
-    expect(quickFilterActive('link', parseSearchFilters('x has:nope', 'en').filters)).toBe(false)
-  })
-
-  it('opens from: and on: for the suggestions, and clears every date filter when active', () => {
-    expect(press('report', 'from')).toBe('report from:')
-    expect(press('report', 'date')).toBe('report on:')
-    // An unfinished operator is replaced, not doubled
-    expect(press('report on:', 'date')).toBe('report on:')
-    expect(press('a from:alice', 'from')).toBe('a')
-    expect(press('a after:2024 before:2025', 'date')).toBe('a')
   })
 })

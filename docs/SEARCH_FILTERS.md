@@ -1,8 +1,10 @@
 # Message search filters
 
-Open Search and type words, or open **Filters** to narrow the messages without learning search syntax. The filter dialog offers From (including Me), Date (presets or an inclusive custom day range), and Contains (Images, Links, Files and Polls). Choices stay in the dialog until Apply. Escape discards unapplied choices and returns to the search field. Clear filters clears the dialog's choices; Apply commits that change.
+Open Search and type words, or open **Filters** to narrow the messages without learning search syntax. The filter dialog offers From (including Me), Date (presets or an inclusive custom day range), and Contains (Images, Links, Files and Polls). A custom range may leave either end open. Choices stay in the dialog until Apply. Escape discards unapplied choices and returns to the search field. Clear filters clears the dialog's choices; Apply commits that change.
 
 Applied choices appear as removable chips, not text inserted into the search field. All / Chats / Rooms independently selects the kind of conversation. A selected person in a room is tied to that room's stable occupant identity when available; an old row without an occupant identity may match the selected nickname, but a conflicting known occupant never does.
+
+Typed conditions that a dialog section cannot represent remain unchanged until that section is edited. Picked conditions are parsed separately from typed text, so an unfinished phrase cannot swallow them.
 
 Typed operators remain available:
 
@@ -24,7 +26,7 @@ Word and date search remain available while facets are preparing. Sender/content
 
 ## Server archive
 
-Search server archive is explicit. A capable server receives words and date bounds; Fluux applies the same sender/content conditions to returned canonical messages. A scoped one-to-one search can instead page the archive without full-text support, including filter-only queries. Each page keeps the same bounds and moves toward older entries. Load more remains available after an empty filtered page when its cursor advanced. Completion, cancellation, missing cursors and stalled cursors stop paging. Detached archive searches do not claim timeline coverage or change gaps.
+Search server archive is explicit. A capable server receives words and date bounds; Fluux applies the same sender/content conditions to returned canonical messages. A scoped one-to-one search can instead page the archive without full-text support, including filter-only queries. Each request reads up to 100 archive entries, keeps the same bounds and moves toward older entries. The public paging helper paces successive requests and resumes partially consumed pages at the last consumed archive ID. Load more remains available after an empty filtered page when its cursor advanced. Completion, cancellation, missing cursors and stalled cursors stop paging. Detached archive searches do not claim timeline coverage or change gaps.
 
 Local history is not the complete server archive. Filter-only server searches remain limited to supported one-to-one paging; room archive search requires words and server full-text support.
 

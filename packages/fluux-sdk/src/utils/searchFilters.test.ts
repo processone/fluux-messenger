@@ -128,3 +128,14 @@ describe('local days across daylight-saving changes', () => {
     } finally { vi.unstubAllEnvs() }
   })
 })
+
+describe('separately picked conditions', () => {
+  it.each(['"unfinished phrase', 'notes\\'])('does not let %s swallow picked conditions', query => {
+    const input = parseSearchFilters(query, 'en', ['has:image', 'from:me', 'on:2024-03'])
+    expect(input.text).toBe(query)
+    expect(input.has).toEqual(['image'])
+    expect(input.mine).toBe(true)
+    expect(input.after).toBe(day(2024, 3, 1))
+    expect(input.before).toBe(day(2024, 4, 1))
+  })
+})

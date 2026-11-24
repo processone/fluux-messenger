@@ -1877,14 +1877,6 @@
         "sent": "Messaggio inviato. Puoi eliminare questo elemento importato."
     },
     "search": {
-        "quick": {
-            "label": "Filtri rapidi",
-            "image": "Immagini",
-            "link": "Link",
-            "file": "File",
-            "from": "Da…",
-            "date": "Data…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1903,8 +1895,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1940,15 +1932,7 @@
             "thisYear": "Quest'anno"
         },
         "operators": {
-            "from": "Messaggi di una persona, o from:me",
-            "is": "is:mine per i tuoi messaggi",
-            "has": "Messaggi con un link, un'immagine, un file o un sondaggio",
-            "label": "Filtri",
-            "in": "Cerca in una conversazione o stanza",
-            "after": "Messaggi dopo una data",
-            "before": "Messaggi prima di una data",
-            "on": "Messaggi di un giorno, un mese o un anno",
-            "during": "Come on:, per esempio during:2024-03"
+            "label": "Filtri"
         },
         "filter": {
             "all": "Tutto",

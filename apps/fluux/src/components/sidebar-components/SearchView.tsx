@@ -151,10 +151,10 @@ export function SearchView() {
 
   // Read in the same locale the store gets from the effect above
   const parsedInput = useMemo(() => parseSearchFilters(query, i18n.language), [query, i18n.language])
-  const pickedChips = useMemo(() => parseSearchFilters(pickedFilters.join(' '), i18n.language).filters, [pickedFilters, i18n.language])
+  const pickedChips = useMemo(() => parseSearchFilters('', i18n.language, pickedFilters).filters, [pickedFilters, i18n.language])
   const chips = [...parsedInput.filters, ...pickedChips]
   const hasQuery = !!query.trim() || pickedFilters.length > 0
-  const combinedInput = parseSearchFilters([query, ...pickedFilters].join(' '), i18n.language)
+  const combinedInput = parseSearchFilters(query, i18n.language, pickedFilters)
   const invalidFilters = chips.some(filter => !filter.valid) ||
     (combinedInput.after !== undefined && combinedInput.before !== undefined && combinedInput.after >= combinedInput.before)
   const operatorOptions = useMemo(
@@ -164,6 +164,7 @@ export function SearchView() {
   )
   // Dates only narrow a search: alone they leave nothing to look for
   const needsWords = hasQuery && !isInPrefixActive && !combinedInput.text && !hasTokenFilters(combinedInput)
+  const archiveNeedsWords = hasQuery && !combinedInput.text && (!searchScope || roomStore.getState().rooms.has(searchScope))
   const suggestionCount = isInPrefixActive ? inPrefixSuggestions.length : operatorOptions.length
   const suggestionsOpen = suggestionCount > 0 && dismissedFor !== query && !filtersOpen
 
@@ -453,8 +454,10 @@ export function SearchView() {
           </div>
         )}
 
+        {!isSearching && !invalidFilters && !needsWords && archiveNeedsWords && <p className="mx-2 my-3 text-xs text-fluux-muted">{t('search.errors.serverNeedsWords')}</p>}
+
         {/* MAM search button */}
-        {!isSearching && !isInPrefixActive && !needsWords && !invalidFilters && hasQuery && !isSearchingMAM && !hasMoreMAMResults && mamResults.length === 0 && (
+        {!isSearching && !isInPrefixActive && !needsWords && !invalidFilters && !archiveNeedsWords && hasQuery && !isSearchingMAM && !hasMoreMAMResults && mamResults.length === 0 && (
           <div className="px-2 py-3">
             <button
               type="button"

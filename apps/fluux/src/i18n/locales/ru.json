@@ -1877,14 +1877,6 @@
         "sent": "Сообщение отправлено. Этот импортированный элемент можно удалить."
     },
     "search": {
-        "quick": {
-            "label": "Быстрые фильтры",
-            "image": "Изображения",
-            "link": "Ссылки",
-            "file": "Файлы",
-            "from": "От…",
-            "date": "Дата…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1903,8 +1895,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1940,15 +1932,7 @@
             "thisYear": "Этот год"
         },
         "operators": {
-            "from": "Сообщения от человека, или from:me",
-            "is": "is:mine для ваших собственных сообщений",
-            "has": "Сообщения со ссылкой, изображением, файлом или опросом",
-            "label": "Фильтры",
-            "in": "Искать в одной беседе или комнате",
-            "after": "Сообщения после даты",
-            "before": "Сообщения до даты",
-            "on": "Сообщения за день, месяц или год",
-            "during": "То же, что on:, например during:2024-03"
+            "label": "Фильтры"
         },
         "filter": {
             "all": "Все",

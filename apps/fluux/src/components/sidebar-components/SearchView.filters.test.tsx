@@ -17,7 +17,7 @@ vi.mock('@/stores/settingsStore', () => ({
 }))
 vi.mock('@fluux/sdk/react', () => ({ useRoomStore: () => undefined, useRosterStore: () => undefined }))
 
-const search = vi.hoisted(() => ({ language: 'en', query: '', calls: [] as string[], picked: [] as string[], none: [] as never[], filtersBuilding: false,
+const search = vi.hoisted(() => ({ language: 'en', query: '', scope: null as string | null, calls: [] as string[], picked: [] as string[], none: [] as never[], filtersBuilding: false,
   rooms: new Map<string, { jid: string; name: string; nickname: string; occupants: Map<string, { nick: string; occupantId: string }> }>() }))
 vi.mock('@fluux/sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@fluux/sdk')>()
@@ -31,7 +31,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
       return {
         pickedFilters, setPickedFilters: (next: string[]) => { search.picked = next; setPickedFilters(next) }, filtersIncomplete: false, filtersUnavailable: null, retryFilters: vi.fn(),
         query, results: search.none, isSearching: false, error: null, previewResult: null, setPreviewResult: vi.fn(),
-        isSearchingMAM: false, mamSearched: false, mamResults: search.none, hasMoreMAMResults: false, mamError: null, searchScope: null,
+        isSearchingMAM: false, mamSearched: false, mamResults: search.none, hasMoreMAMResults: false, mamError: null, searchScope: search.scope,
         searchMAM: vi.fn(), loadMoreMAMResults: vi.fn(), setSearchScope: vi.fn(), resultContext: new Map(),
         searchFilter: 'all', setSearchFilter: vi.fn(), inPrefixSuggestions: search.none, isInPrefixActive: false,
         selectInPrefixSuggestion: vi.fn(), filtersBuilding: search.filtersBuilding, clearSearch: () => setQuery(''),
@@ -47,6 +47,7 @@ describe('SearchView filters', () => {
   beforeEach(() => {
     search.language = 'en'
     search.query = ''
+    search.scope = null
     search.calls = []
     search.picked = []
     search.rooms = new Map()
@@ -120,7 +121,7 @@ describe('SearchView filters', () => {
     search.filtersBuilding = true
     const { unmount } = render(<SearchView />)
     expect(screen.getByRole('status').textContent).toContain('search.filtersBuilding')
-    expect(screen.queryByText('search.noResults')).toBeNull()
+    expect(screen.queryByText('search.panel.localEmpty')).toBeNull()
     unmount()
 
     search.query = 'after:2024-03-01'
@@ -164,6 +165,45 @@ describe('SearchView filters', () => {
     fireEvent.click(screen.getByRole('button', { name: 'search.panel.title' }))
     expect((screen.getByLabelText('search.panel.start') as HTMLInputElement).value).toBe('2024-03-05')
     expect((screen.getByLabelText('search.panel.end') as HTMLInputElement).value).toBe('2024-03-05')
+  })
+
+  it.each(['after:2024-03-01', 'before:2024-04-01'])('keeps an untouched open date %s while editing content', async filter => {
+    search.query = `notes ${filter} from:alice from:bob is:mine`
+    render(<SearchView />)
+    fireEvent.click(screen.getByRole('button', { name: 'search.panel.title' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'search.panel.image' }))
+    fireEvent.click(screen.getByRole('button', { name: 'search.panel.apply' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(search.picked).toEqual(['from:alice', 'from:bob', 'is:mine', 'has:image', filter])
+    expect((input() as HTMLInputElement).value).toBe('notes')
+  })
+
+  it('allows an edited custom date range with its last day left open', async () => {
+    render(<SearchView />)
+    fireEvent.click(screen.getByRole('button', { name: 'search.panel.title' }))
+    fireEvent.change(screen.getByLabelText('search.panel.date'), { target: { value: 'custom' } })
+    fireEvent.change(screen.getByLabelText('search.panel.start'), { target: { value: '2024-03-05' } })
+    fireEvent.click(screen.getByRole('button', { name: 'search.panel.apply' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(search.picked).toEqual(['after:2024-03-04'])
+  })
+
+  it.each([null, 'team@conference.example.test'])('explains the unavailable filter-only archive action in scope %s', scope => {
+    search.scope = scope
+    if (scope) search.rooms = new Map([[scope, { jid: scope, name: 'Team', nickname: 'Me', occupants: new Map() }]])
+    search.query = 'has:image'
+    render(<SearchView />)
+    expect(screen.queryByRole('button', { name: 'search.searchServer' })).toBeNull()
+    expect(screen.getByText('search.errors.serverNeedsWords')).toBeTruthy()
+  })
+
+  it('keeps filter-only archive search available within a direct chat', () => {
+    search.scope = 'alice@example.test'
+    search.query = 'has:image'
+    render(<SearchView />)
+    expect(screen.getByRole('button', { name: 'search.searchServer' })).toBeTruthy()
+    expect(screen.queryByText('search.errors.serverNeedsWords')).toBeNull()
   })
 
 })

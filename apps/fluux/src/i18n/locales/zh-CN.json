@@ -1873,14 +1873,6 @@
         "sent": "消息已发送。可以删除此导入项。"
     },
     "search": {
-        "quick": {
-            "label": "快速筛选",
-            "image": "图片",
-            "link": "链接",
-            "file": "文件",
-            "from": "发送者…",
-            "date": "日期…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1899,8 +1891,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1936,15 +1928,7 @@
             "thisYear": "今年"
         },
         "operators": {
-            "from": "某人发送的消息，或 from:me",
-            "is": "is:mine 表示你自己的消息",
-            "has": "包含链接、图片、文件或投票的消息",
-            "label": "筛选",
-            "in": "在某个对话或房间中搜索",
-            "after": "某日期之后的消息",
-            "before": "某日期之前的消息",
-            "on": "某天、某月或某年的消息",
-            "during": "与 on: 相同，例如 during:2024-03"
+            "label": "筛选"
         },
         "filter": {
             "all": "全部",

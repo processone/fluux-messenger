@@ -1873,14 +1873,6 @@
         "sent": "Meddelandet har skickats. Du kan ta bort det importerade objektet."
     },
     "search": {
-        "quick": {
-            "label": "Snabbfilter",
-            "image": "Bilder",
-            "link": "Länkar",
-            "file": "Filer",
-            "from": "Från…",
-            "date": "Datum…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1899,8 +1891,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1936,15 +1928,7 @@
             "thisYear": "I år"
         },
         "operators": {
-            "from": "Meddelanden från en person, eller from:me",
-            "is": "is:mine för dina egna meddelanden",
-            "has": "Meddelanden med en länk, en bild, en fil eller en omröstning",
-            "label": "Filter",
-            "in": "Sök i en konversation eller ett rum",
-            "after": "Meddelanden efter ett datum",
-            "before": "Meddelanden före ett datum",
-            "on": "Meddelanden från en dag, en månad eller ett år",
-            "during": "Samma som on:, till exempel during:2024-03"
+            "label": "Filter"
         },
         "filter": {
             "all": "Alla",

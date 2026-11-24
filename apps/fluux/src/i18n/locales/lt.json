@@ -1877,14 +1877,6 @@
         "sent": "Žinutė išsiųsta. Galite pašalinti šį importuotą elementą."
     },
     "search": {
-        "quick": {
-            "label": "Greitieji filtrai",
-            "image": "Paveikslėliai",
-            "link": "Nuorodos",
-            "file": "Failai",
-            "from": "Nuo…",
-            "date": "Data…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1903,8 +1895,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1940,15 +1932,7 @@
             "thisYear": "Šie metai"
         },
         "operators": {
-            "from": "Asmens žinutės, arba from:me",
-            "is": "is:mine jūsų pačių žinutėms",
-            "has": "Žinutės su nuoroda, paveikslėliu, failu ar apklausa",
-            "label": "Filtrai",
-            "in": "Ieškoti viename pokalbyje ar kambaryje",
-            "after": "Žinutės po datos",
-            "before": "Žinutės iki datos",
-            "on": "Dienos, mėnesio ar metų žinutės",
-            "during": "Tas pats kaip on:, pavyzdžiui, during:2024-03"
+            "label": "Filtrai"
         },
         "filter": {
             "all": "Viskas",

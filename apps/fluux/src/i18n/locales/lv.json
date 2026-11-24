@@ -1876,14 +1876,6 @@
         "sent": "Ziņojums nosūtīts. Varat dzēst šo importēto vienumu."
     },
     "search": {
-        "quick": {
-            "label": "Ātrie filtri",
-            "image": "Attēli",
-            "link": "Saites",
-            "file": "Faili",
-            "from": "No…",
-            "date": "Datums…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1902,8 +1894,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1939,15 +1931,7 @@
             "thisYear": "Šis gads"
         },
         "operators": {
-            "from": "Personas ziņas, vai from:me",
-            "is": "is:mine jūsu pašu ziņām",
-            "has": "Ziņas ar saiti, attēlu, failu vai aptauju",
-            "label": "Filtri",
-            "in": "Meklēt vienā sarunā vai istabā",
-            "after": "Ziņas pēc datuma",
-            "before": "Ziņas pirms datuma",
-            "on": "Dienas, mēneša vai gada ziņas",
-            "during": "Tas pats, kas on:, piemēram, during:2024-03"
+            "label": "Filtri"
         },
         "filter": {
             "all": "Viss",

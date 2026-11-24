@@ -1877,14 +1877,6 @@
         "sent": "Mesaj trimis. Puteți șterge acest element importat."
     },
     "search": {
-        "quick": {
-            "label": "Filtre rapide",
-            "image": "Imagini",
-            "link": "Linkuri",
-            "file": "Fișiere",
-            "from": "De la…",
-            "date": "Dată…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1903,8 +1895,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1940,15 +1932,7 @@
             "thisYear": "Anul acesta"
         },
         "operators": {
-            "from": "Mesaje de la o persoană, sau from:me",
-            "is": "is:mine pentru propriile mesaje",
-            "has": "Mesaje cu un link, o imagine, un fișier sau un sondaj",
-            "label": "Filtre",
-            "in": "Caută într-o conversație sau cameră",
-            "after": "Mesaje după o dată",
-            "before": "Mesaje înainte de o dată",
-            "on": "Mesaje dintr-o zi, o lună sau un an",
-            "during": "La fel ca on:, de exemplu during:2024-03"
+            "label": "Filtre"
         },
         "filter": {
             "all": "Toate",

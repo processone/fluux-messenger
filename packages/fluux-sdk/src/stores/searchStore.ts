@@ -232,7 +232,7 @@ export function setSearchLocale(locale: string | undefined): void {
 
 /** The query split into its words and its operators, in the reader's locale. */
 export function parseSearchInput(query: string, picked: readonly string[] = []): ParsedSearchInput {
-  return parseSearchFilters([query, ...picked].join(' '), searchLocale)
+  return parseSearchFilters(query, searchLocale, picked)
 }
 
 function invalidInput(input: ParsedSearchInput): boolean {
@@ -730,7 +730,7 @@ async function executeSearch(rawQuery: string): Promise<void> {
   try {
     const readiness = filterGroups.length ? await searchIndex.getFilterIndexState() : undefined
     if (!isCurrent()) return
-    searchStore.setState({ filtersIncomplete: readiness?.status === 'incomplete',
+    searchStore.setState({ filtersIncomplete: input.has.length > 0 && readiness?.status === 'incomplete',
       filtersUnavailable: readiness?.status === 'unavailable' ? readiness.reason ?? 'Search filter index unavailable' : null })
     if (readiness?.status === 'preparing' || readiness?.status === 'unavailable') {
       if (isCurrent() && searchStore.getState().query.trim() === query) {
@@ -1177,8 +1177,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
     mamSearchGeneration++
     mamRsmCursor = undefined
 
-    // If there's remaining query text, trigger search
-    if (restQuery.trim()) {
+    if (restQuery.trim() || state.pickedFilters.length) {
       set({ isSearching: true })
       void executeSearch(restQuery.trim())
     }

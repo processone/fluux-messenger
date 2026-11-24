@@ -216,6 +216,23 @@ describe('search tab translation', () => {
     })
   })
 
+  it('keeps preparation wording plain for picked filters in both authored languages', async () => {
+    Object.assign(searchState, { pickedFilters: ['has:image'], filtersBuilding: true })
+    renderTranslated(<SearchView />)
+    expect(screen.getByRole('status')).toHaveTextContent('sender and content filters')
+    expect(screen.getByRole('status')).not.toHaveTextContent('from:')
+    await changeLanguage('fr')
+    expect(screen.getByRole('status')).toHaveTextContent('filtres de personne et de contenu')
+    expect(screen.getByRole('status')).not.toHaveTextContent('has:')
+  })
+
+  it('does not deny the local matches when the archive adds none', () => {
+    Object.assign(searchState, { query: 'bonjour', results: [result], mamResults: [], mamSearched: true })
+    renderTranslated(<SearchView />)
+    expect(screen.getByRole('status')).toHaveTextContent('No other matches in the server archive.')
+    expect(screen.getAllByText('Bonjour', { selector: 'mark' })).toHaveLength(1)
+  })
+
   it('updates the preview header, loading state and navigation action', async () => {
     searchState.previewResult = result
     let finishLoading!: (messages: Awaited<ReturnType<typeof getMessages>>) => void

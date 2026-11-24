@@ -249,7 +249,7 @@ export interface HistoryPagingSearchOptions {
    * With a filter the query may be empty: the filter alone picks the messages.
    */
   filter?: (message: Message) => boolean
-  /** Maximum pages to scan (default 20, each page ~100 messages) */
+  /** Maximum requests to scan (default 20, at most 100 archive entries per request). */
   maxPages?: number
   /** Maximum matching results to collect (default 50) */
   maxResults?: number

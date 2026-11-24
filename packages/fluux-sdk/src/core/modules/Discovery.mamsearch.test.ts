@@ -221,4 +221,29 @@ describe('Discovery MAM Search Capability', () => {
     expect(mockXmppClientInstance.iqCaller.request.mock.calls.length - before).toBe(1)
   })
 
+  it('keeps sparse pages at 100 entries, paces requests, and resumes a partial page at its own archive id', async () => {
+    await connect()
+    const mam = getInternalSurfaceForTesting(xmppClient).mam
+    const message = (id: string, body: string) => ({ type: 'chat' as const, id, originId: undefined,
+      stanzaId: `sender-${id}`, ownArchiveId: `archive-${id}`, from: 'alice@example.com',
+      conversationId: 'alice@example.com', isOutgoing: false, timestamp: new Date('2024-03-05T12:00:00Z'), body })
+    const read = vi.spyOn(mam, 'searchArchive')
+      .mockResolvedValueOnce({ messages: [message('irrelevant', 'status')], complete: false, page: { first: 'older-page' } })
+      .mockResolvedValueOnce({ messages: [message('old', 'design'), message('middle', 'design'), message('new', 'design')], complete: true, page: { first: 'archive-old', firstIndex: 100 } })
+    const pending = mam.searchConversationByPaging({ query: 'design', with: 'alice@example.com', maxResults: 1 })
+    await vi.advanceTimersByTimeAsync(99)
+    expect(read).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+    const result = await pending
+    expect(read.mock.calls.map(([options]) => options.max)).toEqual([100, 100])
+    expect(result.messages.map(row => row.id)).toEqual(['new'])
+    expect(result).toMatchObject({ complete: false, page: { first: 'archive-new' } })
+    expect(result.page.firstIndex).toBeUndefined()
+    read.mockResolvedValueOnce({ messages: [message('old', 'design'), message('middle', 'design')], complete: true, page: { first: 'archive-old' } })
+    const next = await mam.searchConversationByPaging({ query: 'design', with: 'alice@example.com', maxResults: 1, before: result.page.first })
+    expect(read.mock.calls[2][0]).toMatchObject({ before: 'archive-new', max: 100 })
+    expect(next.messages.map(row => row.id)).toEqual(['middle'])
+    expect(next.page.first).toBe('archive-middle')
+  })
+
 })

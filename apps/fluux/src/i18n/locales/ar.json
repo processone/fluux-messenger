@@ -1881,14 +1881,6 @@
         "sent": "تم إرسال الرسالة. يمكنك حذف هذا العنصر المستورد."
     },
     "search": {
-        "quick": {
-            "label": "عوامل تصفية سريعة",
-            "image": "صور",
-            "link": "روابط",
-            "file": "ملفات",
-            "from": "من…",
-            "date": "التاريخ…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1907,8 +1899,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1944,15 +1936,7 @@
             "thisYear": "هذه السنة"
         },
         "operators": {
-            "from": "رسائل من شخص، أو from:me",
-            "is": "is:mine لرسائلك الخاصة",
-            "has": "رسائل تحتوي على رابط أو صورة أو ملف أو استطلاع",
-            "label": "عوامل التصفية",
-            "in": "البحث في محادثة أو غرفة واحدة",
-            "after": "الرسائل بعد تاريخ",
-            "before": "الرسائل قبل تاريخ",
-            "on": "رسائل يوم أو شهر أو سنة",
-            "during": "مثل on:، على سبيل المثال during:2024-03"
+            "label": "عوامل التصفية"
         },
         "filter": {
             "all": "الكل",

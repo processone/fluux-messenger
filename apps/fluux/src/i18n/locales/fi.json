@@ -1873,14 +1873,6 @@
         "sent": "Viesti lähetetty. Voit poistaa tämän tuodun kohteen."
     },
     "search": {
-        "quick": {
-            "label": "Pikasuodattimet",
-            "image": "Kuvat",
-            "link": "Linkit",
-            "file": "Tiedostot",
-            "from": "Lähettäjä…",
-            "date": "Päivämäärä…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1899,8 +1891,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1936,15 +1928,7 @@
             "thisYear": "Tänä vuonna"
         },
         "operators": {
-            "from": "Henkilön viestit, tai from:me",
-            "is": "is:mine omille viesteillesi",
-            "has": "Viestit, joissa on linkki, kuva, tiedosto tai äänestys",
-            "label": "Suodattimet",
-            "in": "Hae yhdestä keskustelusta tai huoneesta",
-            "after": "Viestit päivämäärän jälkeen",
-            "before": "Viestit ennen päivämäärää",
-            "on": "Päivän, kuukauden tai vuoden viestit",
-            "during": "Sama kuin on:, esimerkiksi during:2024-03"
+            "label": "Suodattimet"
         },
         "filter": {
             "all": "Kaikki",

@@ -1875,14 +1875,6 @@
         "sent": "Sõnum saadetud. Võid selle imporditud üksuse eemaldada."
     },
     "search": {
-        "quick": {
-            "label": "Kiirfiltrid",
-            "image": "Pildid",
-            "link": "Lingid",
-            "file": "Failid",
-            "from": "Saatja…",
-            "date": "Kuupäev…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1901,8 +1893,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1938,15 +1930,7 @@
             "thisYear": "See aasta"
         },
         "operators": {
-            "from": "Inimese sõnumid, või from:me",
-            "is": "is:mine teie enda sõnumite jaoks",
-            "has": "Sõnumid, milles on link, pilt, fail või küsitlus",
-            "label": "Filtrid",
-            "in": "Otsi ühest vestlusest või ruumist",
-            "after": "Sõnumid pärast kuupäeva",
-            "before": "Sõnumid enne kuupäeva",
-            "on": "Päeva, kuu või aasta sõnumid",
-            "during": "Sama mis on:, näiteks during:2024-03"
+            "label": "Filtrid"
         },
         "filter": {
             "all": "Kõik",

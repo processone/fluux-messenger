@@ -27,7 +27,15 @@ function waitForState(predicate: () => boolean): Promise<void> {
 }
 
 describe('filter store with the persisted index', () => {
+  let writes: Promise<void>[]
   beforeEach(() => {
+    writes = []
+    const write = index.indexMessages
+    vi.spyOn(index, 'indexMessages').mockImplementation((...args) => {
+      const pending = write(...args)
+      writes.push(pending)
+      return pending
+    })
     globalThis.indexedDB = new IDBFactory()
     index._resetDBForTesting()
     cache._resetDBForTesting()
@@ -40,6 +48,7 @@ describe('filter store with the persisted index', () => {
   afterEach(async () => {
     searchStore.getState().clearSearch()
     setSearchClient(null)
+    for (const pending of writes) await pending
     await index.closeSearchIndex()
     vi.useRealTimers()
     vi.restoreAllMocks()
@@ -150,6 +159,38 @@ describe('filter store with the persisted index', () => {
     searchStore.setState({ query: 'design', searchScope: photo.conversationId, pickedFilters: ['has:image'] })
     connectionStore.getState().setJid('next@example.test')
     expect(searchStore.getState()).toMatchObject({ query: '', searchScope: null, pickedFilters: [], results: [], mamResults: [] })
+  })
+
+  it('warns about unknown content only when content conditions are used', async () => {
+    await seedVersion5SearchHistory(scope, [photo])
+    vi.useRealTimers()
+    await index.migrateSearchFilters()
+    expect(await index.getFilterIndexState()).toEqual({ status: 'incomplete' })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    searchStore.getState().search(`from:${photo.from}`)
+    await vi.advanceTimersByTimeAsync(300)
+    await waitForState(() => !searchStore.getState().isSearching)
+    expect(searchStore.getState().results.map(row => row.messageId)).toEqual(['photo'])
+    expect(searchStore.getState().filtersIncomplete).toBe(false)
+    searchStore.getState().search('has:image')
+    await vi.advanceTimersByTimeAsync(300)
+    await waitForState(() => !searchStore.getState().isSearching)
+    expect(searchStore.getState().filtersIncomplete).toBe(true)
+  })
+
+  it('keeps picked conditions active when a typed scope is selected', async () => {
+    await index.initSearchIndex(scope)
+    await index.indexMessages([photo])
+    chatStore.setState({ conversationEntities: new Map([[photo.conversationId, { id: photo.conversationId, name: 'Alice', type: 'chat' as const }]]) })
+    searchStore.getState().setPickedFilters(['has:image'])
+    searchStore.getState().search('in:alice')
+    const suggestion = searchStore.getState().inPrefixSuggestions[0]
+    expect(suggestion.id).toBe(photo.conversationId)
+    searchStore.getState().selectInPrefixSuggestion(suggestion)
+    await waitForState(() => !searchStore.getState().isSearching)
+    expect(searchStore.getState().query).toBe('')
+    expect(searchStore.getState().pickedFilters).toEqual(['has:image'])
+    expect(searchStore.getState().results.map(row => row.messageId)).toEqual(['photo'])
   })
 
 })

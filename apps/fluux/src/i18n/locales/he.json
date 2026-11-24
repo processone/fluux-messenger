@@ -1875,14 +1875,6 @@
         "sent": "ההודעה נשלחה. ניתן למחוק את הפריט שיובא."
     },
     "search": {
-        "quick": {
-            "label": "מסננים מהירים",
-            "image": "תמונות",
-            "link": "קישורים",
-            "file": "קבצים",
-            "from": "מאת…",
-            "date": "תאריך…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1901,8 +1893,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1938,15 +1930,7 @@
             "thisYear": "השנה"
         },
         "operators": {
-            "from": "הודעות מאדם מסוים, או from:me",
-            "is": "is:mine להודעות שלכם",
-            "has": "הודעות עם קישור, תמונה, קובץ או סקר",
-            "label": "מסננים",
-            "in": "חיפוש בשיחה או בחדר אחד",
-            "after": "הודעות אחרי תאריך",
-            "before": "הודעות לפני תאריך",
-            "on": "הודעות של יום, חודש או שנה",
-            "during": "כמו on:, לדוגמה during:2024-03"
+            "label": "מסננים"
         },
         "filter": {
             "all": "הכול",

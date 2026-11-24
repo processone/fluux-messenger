@@ -1879,14 +1879,6 @@
         "sent": "Zpráva odeslána. Tuto importovanou položku můžete odstranit."
     },
     "search": {
-        "quick": {
-            "label": "Rychlé filtry",
-            "image": "Obrázky",
-            "link": "Odkazy",
-            "file": "Soubory",
-            "from": "Od…",
-            "date": "Datum…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1905,8 +1897,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1942,15 +1934,7 @@
             "thisYear": "Tento rok"
         },
         "operators": {
-            "from": "Zprávy od osoby, nebo from:me",
-            "is": "is:mine pro vaše vlastní zprávy",
-            "has": "Zprávy s odkazem, obrázkem, souborem nebo anketou",
-            "label": "Filtry",
-            "in": "Hledat v jedné konverzaci nebo místnosti",
-            "after": "Zprávy po datu",
-            "before": "Zprávy před datem",
-            "on": "Zprávy ze dne, měsíce nebo roku",
-            "during": "Totéž co on:, například during:2024-03"
+            "label": "Filtry"
         },
         "filter": {
             "all": "Vše",

@@ -1873,14 +1873,6 @@
         "sent": "Съобщението е изпратено. Можете да изтриете този импортиран елемент."
     },
     "search": {
-        "quick": {
-            "label": "Бързи филтри",
-            "image": "Изображения",
-            "link": "Връзки",
-            "file": "Файлове",
-            "from": "От…",
-            "date": "Дата…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1899,8 +1891,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1936,15 +1928,7 @@
             "thisYear": "Тази година"
         },
         "operators": {
-            "from": "Съобщения от човек, или from:me",
-            "is": "is:mine за вашите собствени съобщения",
-            "has": "Съобщения с връзка, изображение, файл или анкета",
-            "label": "Филтри",
-            "in": "Търсене в един разговор или стая",
-            "after": "Съобщения след дата",
-            "before": "Съобщения преди дата",
-            "on": "Съобщения за ден, месец или година",
-            "during": "Същото като on:, например during:2024-03"
+            "label": "Филтри"
         },
         "filter": {
             "all": "Всички",

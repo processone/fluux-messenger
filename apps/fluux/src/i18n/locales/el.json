@@ -1874,14 +1874,6 @@
         "sent": "Το μήνυμα στάλθηκε. Μπορείτε να διαγράψετε αυτό το εισηγμένο στοιχείο."
     },
     "search": {
-        "quick": {
-            "label": "Γρήγορα φίλτρα",
-            "image": "Εικόνες",
-            "link": "Σύνδεσμοι",
-            "file": "Αρχεία",
-            "from": "Από…",
-            "date": "Ημερομηνία…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1900,8 +1892,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1937,15 +1929,7 @@
             "thisYear": "Φέτος"
         },
         "operators": {
-            "from": "Μηνύματα από ένα άτομο, ή from:me",
-            "is": "is:mine για τα δικά σας μηνύματα",
-            "has": "Μηνύματα με σύνδεσμο, εικόνα, αρχείο ή ψηφοφορία",
-            "label": "Φίλτρα",
-            "in": "Αναζήτηση σε μία συνομιλία ή δωμάτιο",
-            "after": "Μηνύματα μετά από μια ημερομηνία",
-            "before": "Μηνύματα πριν από μια ημερομηνία",
-            "on": "Μηνύματα μιας ημέρας, ενός μήνα ή ενός έτους",
-            "during": "Ίδιο με το on:, για παράδειγμα during:2024-03"
+            "label": "Φίλτρα"
         },
         "filter": {
             "all": "Όλα",

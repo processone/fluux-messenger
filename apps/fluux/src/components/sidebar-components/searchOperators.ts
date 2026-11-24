@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next'
 import { format } from 'date-fns'
-import { DATE_OPERATORS, HAS_VALUES, searchInputTokens, parseRoomSender, TOKEN_OPERATORS, localDayValue, removeSearchFilter, type SearchFilterToken } from '@fluux/sdk'
+import { DATE_OPERATORS, HAS_VALUES, searchInputTokens, parseRoomSender, localDayValue, type SearchFilterToken } from '@fluux/sdk'
 import { getDateLocale } from '@/utils/dateFormat'
 
 /** One line of the operator autocomplete under the search field. */
@@ -18,8 +18,6 @@ export interface OperatorSuggestion {
 
 /** Someone `from:` can name: the value typed and the name shown. */
 export interface SenderOption { value: string; label: string }
-
-export const SEARCH_OPERATOR_NAMES = ['in', ...TOKEN_OPERATORS, ...DATE_OPERATORS] as const
 
 /** The word the caret is in, when it is the last one of the query. */
 export function lastWord(query: string): string {
@@ -105,26 +103,4 @@ export function filterChipLabel(filter: SearchFilterToken, t: TFunction, lang: s
   if (!filter.range) return filter.raw
   const date = describeSpan(filter.range, lang)
   return t(`search.chip.${filter.op === 'during' ? 'on' : filter.op}`, { date })
-}
-
-export const QUICK_FILTERS = ['image', 'link', 'file', 'from', 'date'] as const
-export type QuickFilter = typeof QUICK_FILTERS[number]
-
-function belongsTo(quick: QuickFilter, filter: SearchFilterToken): boolean {
-  if (quick === 'from') return filter.op === 'from'
-  if (quick === 'date') return (DATE_OPERATORS as readonly string[]).includes(filter.op)
-  return filter.op === 'has' && filter.value.toLowerCase() === quick
-}
-
-export function quickFilterActive(quick: QuickFilter, filters: readonly SearchFilterToken[]): boolean {
-  return filters.some((filter) => !!filter.value && belongsTo(quick, filter))
-}
-
-export function toggleQuickFilter(query: string, quick: QuickFilter, filters: readonly SearchFilterToken[]): string {
-  const own = filters.filter((filter) => belongsTo(quick, filter))
-  const without = own.reduce((rest, filter) => removeSearchFilter(rest, filter), query)
-  if (quickFilterActive(quick, filters)) return without
-  const insert = quick === 'from' ? 'from:' : quick === 'date' ? 'on:' : `has:${quick}`
-  const base = without.trimEnd()
-  return `${base ? `${base} ` : ''}${insert}${insert.endsWith(':') ? '' : ' '}`
 }

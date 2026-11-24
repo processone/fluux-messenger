@@ -1877,14 +1877,6 @@
         "sent": "Missatge enviat. Podeu suprimir aquest element importat."
     },
     "search": {
-        "quick": {
-            "label": "Filtres ràpids",
-            "image": "Imatges",
-            "link": "Enllaços",
-            "file": "Fitxers",
-            "from": "De…",
-            "date": "Data…"
-        },
         "panel": {
             "title": "Filters",
             "from": "From",
@@ -1903,8 +1895,8 @@
             "clear": "Clear filters",
             "apply": "Apply",
             "localEmpty": "No matches in history on this device.",
-            "archiveEmpty": "No matches in the server archive.",
-            "pageEmpty": "No matches on this page. Load more to check older messages.",
+            "archiveEmpty": "No other matches in the server archive.",
+            "pageEmpty": "No other matches on this page. Load more to check older messages.",
             "invalidRange": "Choose a first day no later than the last day.",
             "invalidFilters": "Complete or correct the filters before searching.",
             "incomplete": "Some older matches may be missing because their content details are unavailable on this device.",
@@ -1940,15 +1932,7 @@
             "thisYear": "Aquest any"
         },
         "operators": {
-            "from": "Missatges d'una persona, o from:me",
-            "is": "is:mine per als vostres propis missatges",
-            "has": "Missatges amb un enllaç, una imatge, un fitxer o una enquesta",
-            "label": "Filtres",
-            "in": "Cerca en una conversa o sala",
-            "after": "Missatges després d'una data",
-            "before": "Missatges abans d'una data",
-            "on": "Missatges d'un dia, un mes o un any",
-            "during": "Igual que on:, per exemple during:2024-03"
+            "label": "Filtres"
         },
         "filter": {
             "all": "Tot",

@@ -1458,7 +1458,7 @@ export class MAM extends BaseModule {
       const result = await this.searchArchive({
         query: '',
         with: withJid,
-        max: Math.min(100, maxResults - matches.length),
+        max: 100,
         before: beforeCursor ?? '',
         // Every page repeats the span: RSM pages through one fixed result set.
         ...(start ? { start } : {}),
@@ -1470,20 +1470,31 @@ export class MAM extends BaseModule {
       isComplete = result.complete
       lastPage = result.page
 
-      // Match messages client-side
-      for (const msg of result.messages) {
+      // Backward MAM pages arrive oldest first; consume newest first so a partial page can resume before its last read row.
+      const newestFirst = [...result.messages].reverse()
+      let partial = false
+      for (const [index, msg] of newestFirst.entries()) {
         if (!msg.isRetracted && (msg.body || wordless) && (wordless || this.matchesQuery(msg.body ?? '', allTokens, parsed.phrases)) &&
           (!filter || filter(msg))) {
           matches.push(msg)
         }
+        if (matches.length >= maxResults && index < newestFirst.length - 1) {
+          lastPage = { ...result.page, first: msg.ownArchiveId ?? msg.stanzaId, firstIndex: undefined }
+          isComplete = false
+          partial = true
+          break
+        }
       }
+      if (partial) break
 
       if (isComplete || !result.page.first || result.page.first === beforeCursor) {
         isComplete = true
         break
       }
       beforeCursor = result.page.first
-
+      if (page + 1 < maxPages && matches.length < maxResults && !signal?.aborted) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
       session.assertCurrent()
     }
 

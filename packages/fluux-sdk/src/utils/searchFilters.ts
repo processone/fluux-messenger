@@ -33,7 +33,7 @@ export interface SearchFilterToken {
   value: string
   /** The operator exactly as typed, so it can be taken out of the query again. */
   raw: string
-  /** UTF-16 offsets in the unmodified query; end is exclusive. */
+  /** UTF-16 offsets in the unmodified source string; end is exclusive. */
   start: number
   end: number
   /** The instants a date operator covers: `start` included, `end` excluded. */
@@ -132,7 +132,7 @@ export function parseDateSpan(value: string, locale?: string): { start: number; 
  * `during:` keep the span itself. Several date operators keep what all of them
  * keep. An operator whose value is not understood is reported but narrows nothing.
  */
-export function parseSearchFilters(query: string, locale?: string): ParsedSearchInput {
+function parseSingleSearchInput(query: string, locale?: string): ParsedSearchInput {
   const filters: SearchFilterToken[] = []
   let after: number | undefined
   let before: number | undefined
@@ -178,6 +178,23 @@ export function parseSearchFilters(query: string, locale?: string): ParsedSearch
   return {
     text, filters, has: [...has], from,
     ...(after !== undefined ? { after } : {}), ...(before !== undefined ? { before } : {}), ...(mine ? { mine } : {}),
+  }
+}
+
+/** Picked conditions must remain independent of unfinished literals in the typed text. */
+export function parseSearchFilters(query: string, locale?: string, picked: readonly string[] = []): ParsedSearchInput {
+  const typed = parseSingleSearchInput(query, locale)
+  const inputs = [typed, ...picked.map(filter => parseSingleSearchInput(filter, locale))]
+  const starts = inputs.flatMap(input => input.after === undefined ? [] : [input.after])
+  const ends = inputs.flatMap(input => input.before === undefined ? [] : [input.before])
+  return {
+    text: typed.text,
+    filters: inputs.flatMap(input => input.filters),
+    has: [...new Set(inputs.flatMap(input => input.has))],
+    from: inputs.flatMap(input => input.from),
+    ...(inputs.some(input => input.mine) ? { mine: true } : {}),
+    ...(starts.length ? { after: Math.max(...starts) } : {}),
+    ...(ends.length ? { before: Math.min(...ends) } : {}),
   }
 }
 
