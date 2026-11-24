@@ -24,11 +24,9 @@ async function openRoom(page: Page, width: number, scan = false, virtualized = f
     await page.addInitScript({ path: createRequire(import.meta.url).resolve('react-scan/dist/install-hook.global.js') })
   }
   await bootDemo(page, `/demo.html?scene=showcase&tutorial=false&virt=${virtualized ? 1 : 0}${scan ? '&perf=scan' : ''}#/rooms/${encodeURIComponent(LAUNCH_ROOM)}`)
-  if (virtualized) await expect(page.locator('[data-virtualizer-spacer]')).toHaveCount(1)
-  else await expect(page.locator('[data-virtualizer-spacer]')).toHaveCount(0)
   if (scan) await page.waitForFunction(() => typeof (window as unknown as Scope).__perf?.reset === 'function')
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
-  return page.evaluate(async ({ roomJid, body }) => {
+  const fixture = await page.evaluate(async ({ roomJid, body }) => {
     const scope = window as unknown as Scope
     scope.__demoClient.stopAnimation()
     await scope.__roomStore.getState().activateRoom(roomJid)
@@ -48,6 +46,9 @@ async function openRoom(page: Page, width: number, scan = false, virtualized = f
     await scope.__demoClient.simulateRoomDisplayed(roomJid, readers[0].occupantId!, prior.stanzaId)
     return { shortBody, prior: prior.stanzaId, id: old.id, old: old.stanzaId, next: next.stanzaId, history: rows.map(row => ({ id: row.id, stanzaId: row.stanzaId! })), self: room.occupants.get(room.nickname)!.occupantId!, names: readers.map(reader => reader.nick), actors: readers.map(reader => reader.occupantId!), actor: readers[0].occupantId! }
   }, { roomJid: LAUNCH_ROOM, body: paragraphs[0].body })
+  await expect(page.locator(`[data-message-list] [data-message-row-id][data-stanza-id="${fixture.old}"]`)).toBeVisible()
+  await expect(page.locator('[data-virtualizer-spacer]')).toHaveCount(virtualized ? 1 : 0)
+  return fixture
 }
 
 function showReaders(page: Page, actors: string[], target: string) {
@@ -65,7 +66,7 @@ function addReaction(page: Page, target: string) {
 // Source: the accepted short-line layout, overflow and accessibility plan.
 // All measurements come from the built renderer, not substituted layout values.
 async function checkRoomLineGeometry(page: Page, width: number) {
-  const fixture = await openRoom(page, width)
+  const fixture = await openRoom(page, width, false, true)
   const oldRow = page.locator(`[data-message-row-id][data-stanza-id="${fixture.old}"]`)
   const marker = page.locator(`[data-read-marker-row="${fixture.old}"]`)
   await showReaders(page, fixture.actors, fixture.old)
