@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
-import { settle, scrollToBottom, getMessageOffsetFromTop, sampleScrollTop } from './harness/scrollHarness'
+import { settle, scrollToBottom, getMessageOffsetFromTop, sampleScrollTop, wheelUntil } from './harness/scrollHarness'
 import { LAUNCH_ROOM } from '../apps/fluux/src/demo/showcase/constants'
 
 type Perf = { reset(): void; counts(): Record<string, number>; tally(): Record<string, number>; resetTally(): void }
@@ -250,13 +250,24 @@ for (const virtualized of [false, true]) {
     expect(bottomDistance, 'adding a read line keeps the live edge pinned').toBeLessThanOrEqual(2)
     const anchorRow = page.locator(`[data-message-row-id][data-stanza-id="${anchor.stanzaId}"]`)
     await anchorRow.scrollIntoViewIfNeeded()
-    await page.locator('[data-message-list]').hover()
-    await page.mouse.wheel(0, -350)
+    // Following content must reflow when a visible line disappears. Keep the
+    // mutation wholly above the viewport to measure reading preservation.
+    await wheelUntil(page, 32, async () => {
+      const offset = await getMessageOffsetFromTop(page, anchor.id)
+      if (offset === null) throw new Error('The reading row disappeared while positioning it')
+      return offset
+    }, offset => offset <= 0)
     await settle(page)
     const parked = await getMessageOffsetFromTop(page, anchor.id)
     expect(parked).not.toBeNull()
     const away = await page.locator('[data-message-list]').evaluate(list => list.scrollHeight - list.scrollTop - list.clientHeight)
     expect(away, 'the history check is not following the live edge').toBeGreaterThan(100)
+    await expect(anchorRow).toBeInViewport()
+    const viewport = (await page.locator('[data-message-list]').boundingBox())!
+    const earlyMarker = await page.locator(`[data-read-marker-row="${early.stanzaId}"]`).boundingBox()
+    await test.info().attach('room-marker-scroll-setup', { body: JSON.stringify({ virtualized, parked, away, viewport, earlyMarker }), contentType: 'application/json' })
+    expect(earlyMarker, 'the changed marker is mounted and measured').not.toBeNull()
+    expect(earlyMarker!.y + earlyMarker!.height, 'the entire changing marker is above the reading viewport').toBeLessThanOrEqual(viewport.y)
     await showReaders(page, [fixture.actors[1]], fixture.next)
     await settle(page)
     const after = await getMessageOffsetFromTop(page, anchor.id)
