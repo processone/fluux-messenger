@@ -57,6 +57,7 @@ export const changelog: ChangelogEntry[] = [
     }, {
       type: 'fixed',
       items: [
+        'iOS and Android: chat and room composers keep only their normal gap above a docked keyboard, with a slimmer expanded card and unchanged message fields and buttons',
         'Search on server now works with servers that advertise archive full-text search, such as ejabberd with a MySQL archive',
         'Reconnecting is more reliable: messages sent as the connection drops are resent once or marked not delivered with Retry, and long sessions no longer get cut off by strict servers',
         'Fluux no longer silently falls back to plain text for a contact whose key you refused or have not decided on',

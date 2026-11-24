@@ -1561,6 +1561,15 @@ html, body {
   }
 }
 
+/* The native keyboard covers the gesture edge even when the safe-area value stays non-zero.
+ * Other bottom bars still need their ordinary inset. */
+[data-keyboard-docked="true"] [data-conversation-tail] .composer-form.pb-safe {
+  padding-bottom: 1rem;
+}
+[data-keyboard-docked="true"] [data-conversation-tail] .composer-form.pb-safe-2 {
+  padding-bottom: 0.5rem;
+}
+
 /* Compact touch composer: preserve the controls' 44px hit areas while trimming
  * surrounding spacing. The form sits outside the card's query container, so
  * its spacing follows viewport width; input/send spacing follows card width. */
@@ -1580,10 +1589,19 @@ html, body {
         padding-bottom: calc(0.25rem + env(safe-area-inset-bottom));
       }
     }
+    [data-keyboard-docked="true"] [data-conversation-tail] .composer-form.pb-safe {
+      padding-bottom: 0.5rem;
+    }
+    [data-keyboard-docked="true"] [data-conversation-tail] .composer-form.pb-safe-2 {
+      padding-bottom: 0.25rem;
+    }
   }
   @container (max-width: 419.98px) {
     .composer-input-frame {
       padding-block: 0.5rem;
+    }
+    [data-keyboard-docked="true"] [data-conversation-tail] .composer-card:focus-within .composer-send {
+      margin-bottom: 0;
     }
   }
 }

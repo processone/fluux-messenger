@@ -7,9 +7,11 @@ private struct Appearance: Decodable { let style: String? }
 class IOSFeedbackPlugin: Plugin {
     private var privacy: PrivacyCover?
     private var hinge: AnyObject?
+    private var keyboard: KeyboardReporter?
     override func load(webview: WKWebView) {
         let start = {
             self.privacy = PrivacyCover()
+            self.keyboard = KeyboardReporter(webView: webview)
             #if canImport(UIKit, _version: 9127.0.85)
             if #available(iOS 27.1, *) { self.hinge = HingeReporter(webView: webview) }
             #endif
