@@ -241,7 +241,6 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await expect.poll(() => displayed(alice).length).toBe(1)
     await bob.page.bringToFront()
     const readerNames = bob.page.locator('[data-read-marker-names]').filter({ hasText: /^Alice$/ })
-    await expect(readerNames).toHaveCount(0)
     await privacy(bob)
     await bob.page.getByRole('switch', { name: 'Share room read positions', exact: true }).click()
     await openRoom(bob)
@@ -249,7 +248,11 @@ test('two real clients share only opted-in focused reading, keep identity and re
     // A short list is now plain text. The demo browser suite owns overflow
     // activation and dialog focus; this journey owns actual-service visibility.
     await expect(readerNames).toBeVisible()
-    await expect(bob.page.getByRole('button', { name: 'Read through this message: Alice', exact: true })).toHaveCount(0)
+    await expect(readerNames.locator('..').getByRole('button')).toHaveCount(0)
+    await roomConsent(bob, false)
+    await expect(readerNames).toHaveCount(0)
+    await roomConsent(bob, true)
+    await expect(readerNames).toBeVisible()
     await shot(bob.page, 'timeline')
     await bob.page.setViewportSize({ width: 390, height: 800 })
     await shot(bob.page, 'phone-timeline')

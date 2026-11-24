@@ -32,12 +32,10 @@ export function RoomReadSharing({ markers, roomJid }: { markers: Pick<RoomReadMa
 
 /** Per-row subscriptions keep peer advances out of the message-body render path. */
 export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row }: {
-  markers: Pick<RoomReadMarkers, 'subscribe' | 'readers' | 'isEnabledFor'>; roomJid: string; row: MessageRowRef
+  markers: Pick<RoomReadMarkers, 'subscribe' | 'readers'>; roomJid: string; row: MessageRowRef
 }) {
   const { t, i18n } = useTranslation()
   const read = useCallback(() => markers.readers(roomJid, row), [markers, roomJid, row])
-  const shared = useCallback(() => markers.isEnabledFor(roomJid), [markers, roomJid])
-  const sharing = useSyncExternalStore(markers.subscribe, shared)
   const snapshot = useSyncExternalStore(markers.subscribe, read)
   const readers = useMemo(() => [...snapshot].sort((a, b) => (a.occupantId < b.occupantId ? -1 : a.occupantId > b.occupantId ? 1 : 0)), [snapshot])
   const [openReaders, setOpenReaders] = useState<readonly RoomReader[] | null>(null)
@@ -50,13 +48,9 @@ export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row
   const title = t('readMarkers.readThrough')
   const limit = Math.min(3, readers.length)
   const count = Math.min(limit, fitting)
-  const measuring = sharing && readers.length > 0
+  const measuring = readers.length > 0
   const list = (n: number) => names.format(readers.slice(0, n).map(reader => reader.nick))
   const overflow = (n: number) => t(n ? 'readMarkers.others' : 'readMarkers.readerCount', { count: readers.length - n })
-
-  useLayoutEffect(() => {
-    if (!sharing) setOpenReaders(null)
-  }, [sharing])
 
   useLayoutEffect(() => {
     if (!measuring) return
@@ -93,7 +87,7 @@ export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row
     })
   }, [openReaders])
 
-  if (!sharing || (!readers.length && !openReaders)) return null
+  if (!readers.length && !openReaders) return null
   return (
     <>
       <div ref={container} className="relative min-w-0 text-xs text-fluux-muted" dir={i18n.dir(language)}>
@@ -103,7 +97,7 @@ export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row
           {count > 0 && <span data-read-marker-names className="break-words min-w-0">{list(count)}</span>}
           {count < readers.length && <button type="button"
             onClick={event => { event.currentTarget.focus({ preventScroll: true }); setOpenReaders(readers) }}
-            aria-label={t('readMarkers.readers', { names: readers.map(reader => reader.nick).join(', ') })}
+            aria-label={`${overflow(count)}: ${t('readMarkers.readers', { names: readers.map(reader => reader.nick).join(', ') })}`}
             className="focus-ring-inset inline-flex min-h-7 min-w-0 items-center rounded-sm underline underline-offset-2 break-words text-start hover:text-fluux-text">
             {overflow(count)}
           </button>}

@@ -46,8 +46,8 @@ Un marqueur identifie votre occupant dans le salon et le message jusqu'auquel
 vous avez lu. Le salon et ses occupants peuvent voir ces métadonnées, et ses
 archives peuvent les conserver. Désactiver le partage arrête les nouvelles mises
 à jour sans effacer les marqueurs déjà conservés par le serveur ou les autres
-participants. Les marqueurs entrants valides peuvent rester visibles lorsque
-votre propre partage est désactivé. Cette fonction est distincte de la
+participants. Fluux masque les marqueurs des autres personnes lorsque votre
+propre partage est désactivé dans ce salon. Cette fonction est distincte de la
 synchronisation privée de lecture entre vos propres appareils. Voir les
 [détails sur les positions de lecture](ROOM_READ_MARKERS.md) (en anglais).
 

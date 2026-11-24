@@ -106,6 +106,8 @@ async function checkRoomLineGeometry(page: Page, width: number) {
         expect(reading.italic).toBe('italic')
         if (shown.length) expect(reading.namesStyle).toBe('normal')
         expect(reading.underline).toContain('underline')
+        const accessibleName = await link.getAttribute('aria-label')
+        expect(accessibleName?.startsWith(reading.linkText)).toBe(true)
         expect(reading.background).toBe('rgba(0, 0, 0, 0)')
         expect(reading.link.height).toBeGreaterThanOrEqual(28)
         expect(reading.scrollWidth).toBeLessThanOrEqual(reading.clientWidth + 1)
@@ -117,6 +119,14 @@ async function checkRoomLineGeometry(page: Page, width: number) {
         expect(reading.link.x).toBeGreaterThanOrEqual(reading.column.x)
         expect(reading.link.x + reading.link.width).toBeLessThanOrEqual(reading.column.x + reading.column.width + 1)
         await expect(oldRow.locator('[data-read-marker-corner], [data-read-marker-avatar]')).toHaveCount(0)
+        if (width === 320 && language === 'en' && size === 100) {
+          await link.tap()
+          const dialog = page.getByRole('dialog', { name: 'Read through this message' })
+          for (const name of fixture.names) await expect(dialog.getByText(name, { exact: true })).toBeVisible()
+          await page.keyboard.press('Escape')
+          await expect(dialog).toHaveCount(0)
+          await expect(link).toBeFocused()
+        }
         readings.push({ theme, language, size, width, ...reading })
       }
     }
@@ -125,7 +135,10 @@ async function checkRoomLineGeometry(page: Page, width: number) {
 }
 
 for (const width of [1280, 320]) {
-  test(`room read lines fit whole names and remain below content at ${width}px`, ({ page }) => checkRoomLineGeometry(page, width))
+  test.describe(`read line viewport ${width}px`, () => {
+    test.use({ hasTouch: width === 320 })
+    test(`room read lines fit whole names and remain below content at ${width}px`, ({ page }) => checkRoomLineGeometry(page, width))
+  })
 }
 
 for (const virtualized of [false, true]) {
@@ -139,7 +152,7 @@ for (const virtualized of [false, true]) {
     await showReaders(page, [fixture.self], fixture.old)
     await expect(oldMarker.locator('[data-read-marker-names]')).toHaveText(`${fixture.names[0]} and ${fixture.names[1]}`)
     await showReaders(page, fixture.actors.slice(2), fixture.old)
-    const opener = oldMarker.getByRole('button', { name: `Read through this message: ${fixture.names.join(', ')}`, exact: true })
+    const opener = oldMarker.getByRole('button', { name: `+2 others: Read through this message: ${fixture.names.join(', ')}`, exact: true })
     await expect(opener).toHaveText('+2 others')
     await opener.scrollIntoViewIfNeeded()
     await page.keyboard.press('Tab')

@@ -1000,7 +1000,7 @@ export const RoomMessageList = memo(function RoomMessageList({
 
     return (
       <RoomMessageBubbleWrapper
-        peerReadMarkers={peerReadMarkers}
+        peerReadMarkers={collectViews ? peerReadMarkers : undefined}
         message={msg}
         rowId={rowId}
         showAvatar={shouldShowAvatar(groupMessages, idx)}

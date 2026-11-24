@@ -20,7 +20,6 @@ function source(sharing = true) {
     setRoomEnabled: (jid: string, enabled: boolean) => {
       consent = { ...consent, rooms: [...consent.rooms.filter(value => value !== jid), ...(enabled ? [jid] : [])] }; notify(); return true
     },
-    isEnabledFor: (jid: string) => consent.enabled && consent.rooms.includes(jid),
     readers: (_room: string, row: MessageRowRef) => badges.get(row.id) ?? empty,
     setReaders: (rows: Record<string, readonly RoomReader[]>) => { for (const [row, readers] of Object.entries(rows)) badges.set(row, readers); notify() },
   }
@@ -74,7 +73,7 @@ describe('room read-marker controls', () => {
     const markers = source()
     markers.setReaders({ first: people })
     const view = render(<RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first', stanzaId: 'archive-first' }} />)
-    const opener = screen.getByRole('button', { name: 'Read through this message: Jules, Maya, Noor, Sam' })
+    const opener = screen.getByRole('button', { name: '+1 other: Read through this message: Jules, Maya, Noor, Sam' })
     expect(view.container.querySelector('[data-read-marker-names]')).toHaveTextContent('Jules, Maya, and Noor')
     expect(view.container.querySelector('[data-read-marker-avatar]')).toBeNull()
     expect(opener).toHaveClass('underline', 'min-h-7')
@@ -95,7 +94,7 @@ describe('room read-marker controls', () => {
     markers.setReaders({ first: people })
     render(<><input aria-label="Message composer" /><RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first' }} /></>)
     const composer = screen.getByRole('textbox', { name: 'Message composer' })
-    const opener = screen.getByRole('button', { name: 'Read through this message: Jules, Maya, Noor, Sam' })
+    const opener = screen.getByRole('button', { name: '+1 other: Read through this message: Jules, Maya, Noor, Sam' })
     composer.focus()
     expect(composer).toHaveFocus()
     // WebKit does not automatically focus a pointer-activated button. The event
@@ -111,7 +110,7 @@ describe('room read-marker controls', () => {
     const markers = source()
     markers.setReaders({ first: people })
     render(<><input aria-label="Message composer" /><RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first' }} /></>)
-    fireEvent.click(screen.getByRole('button', { name: 'Read through this message: Jules, Maya, Noor, Sam' }))
+    fireEvent.click(screen.getByRole('button', { name: '+1 other: Read through this message: Jules, Maya, Noor, Sam' }))
     const dialog = screen.getByRole('dialog', { name: 'Read through this message' })
     act(() => markers.setReaders({ first: empty }))
     expect(screen.getByRole('dialog', { name: 'Read through this message' })).toBe(dialog)
@@ -159,21 +158,18 @@ describe('room read-marker controls', () => {
     expect(view.container).toBeEmptyDOMElement()
   })
 
-  it('hides peers and an open list while either sharing choice is off and never reopens it', async () => {
+  it('closes an open list when the parent unmounts the marker and does not reopen on remount', () => {
     const markers = source()
     markers.setReaders({ first: people })
-    const view = render(<RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first' }} />)
+    const badge = <RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first' }} />
+    const view = render(badge)
     fireEvent.click(screen.getByRole('button'))
     expect(screen.getByRole('dialog')).toBeVisible()
-    act(() => markers.setRoomEnabled(room, false))
+    view.rerender(<></>)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(view.container).toBeEmptyDOMElement()
-    act(() => markers.setRoomEnabled(room, true))
+    view.rerender(badge)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByRole('button')).toHaveTextContent('+1 other')
-    act(() => markers.setEnabled(false))
-    expect(view.container).toBeEmptyDOMElement()
-    act(() => markers.setEnabled(true))
     expect(screen.getByRole('button')).toHaveTextContent('+1 other')
   })
 })
