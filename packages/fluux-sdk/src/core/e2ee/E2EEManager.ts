@@ -20,6 +20,7 @@ import type {
   PeerIdentity,
   PeerIdentityGroup,
   PluginContext,
+  SecurityContext,
   SecurityContextUpdate,
   TrustState,
   XMLElementData,
@@ -930,6 +931,28 @@ export class E2EEManager {
 
   private sortedPlugins(): E2EEPlugin[] {
     return [...this.plugins.values()].sort((a, b) => b.descriptor.securityLevel - a.descriptor.securityLevel)
+  }
+
+  /**
+   * Display trust for stored content, without decrypting it again. For an
+   * authenticated device, only a current decision about the original device
+   * and fingerprint can confer trust. Re-read when {@link onConversationSecurityChanged}
+   * reports that device's JID or `null` (all conversations, including plugin registration).
+   * Other messages keep their decrypt-time assessment.
+   */
+  async getMessageTrust(context: SecurityContext): Promise<SecurityContext['trust']> {
+    const device = context.authenticatedDevice
+    if (!device || context.trust === 'rejected') return context.trust
+    const plugin = this.plugins.get(context.protocolId)
+    if (!plugin?.getStoredDeviceTrust) return 'untrusted'
+    try {
+      const trust = await plugin.getStoredDeviceTrust(device)
+      if (this.plugins.get(context.protocolId) !== plugin || trust === 'unknown') return 'untrusted'
+      return trust
+    } catch (err) {
+      this.logger.warn(`E2EE plugin ${context.protocolId} could not read stored device trust`, err)
+      return 'untrusted'
+    }
   }
 
   /** Record a trust decision for one identity of `protocolId`'s plugin. */

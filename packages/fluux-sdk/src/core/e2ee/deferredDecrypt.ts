@@ -787,6 +787,7 @@ export class DeferredDecryptEngine {
           trust: result.securityContext.trust,
           ...(result.securityContext.notes && { notes: result.securityContext.notes }),
           ...(result.securityContext.fingerprint && { fingerprint: result.securityContext.fingerprint }),
+          ...(result.securityContext.authenticatedDevice && { authenticatedDevice: result.securityContext.authenticatedDevice }),
         }
       }
 
