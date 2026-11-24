@@ -512,9 +512,9 @@ test('compact RTL bookmark has its own 24 px slot, visible keyboard focus, and n
   await page.mouse.move(box!.x + 100, box!.y, { steps: 5 })
   await page.mouse.up()
   await expect(marker).toBeVisible()
-  await marker.focus()
+  // Tab cycles app focus zones rather than the controls inside each zone.
   await page.keyboard.press('Tab')
-  await page.keyboard.press('Shift+Tab')
+  await marker.focus()
   await expect(marker).toBeFocused()
   expect(await marker.evaluate(el => getComputedStyle(el).outlineStyle)).not.toBe('none')
   const top = await row.evaluate(el => el.getBoundingClientRect().top)
@@ -538,6 +538,13 @@ test('removing the last timeline bookmark removes the header count without delet
 
 test('Search keeps the saved bookmark passive', async ({ page }) => {
   const { id } = await seedMarker(page, 'room')
+  // Live demo rows are not an awaited search-index fixture; persist/index the actual target first.
+  expect(await page.evaluate(async ({ room, id }) => {
+    const state = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
+    const target = state.messages.get(room)?.find(message => message.id === id)
+    if (!target) throw new Error('Search fixture target is missing')
+    return state.saveMessageLinkContext(room, [target])
+  }, { room: ROOM, id })).toBe(true)
   await page.getByRole('button', { name: 'Search in conversation', exact: true }).click()
   await page.getByPlaceholder('Search messages…').fill('remaining review tasks')
   await page.getByText("I'll go through the remaining review tasks this afternoon", { exact: false }).first().click()
