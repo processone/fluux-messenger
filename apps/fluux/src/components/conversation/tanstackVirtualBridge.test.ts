@@ -45,7 +45,7 @@ describe('tanstack virtual bridge contract', () => {
   })
 
   it('finds every private name the adapter relies on on a live virtualizer', () => {
-    expect(Object.keys(LIBRARY_PRIVATE_NAMES)).toHaveLength(10)
+    expect(Object.keys(LIBRARY_PRIVATE_NAMES)).toHaveLength(11)
     expect(missingLibraryNames(liveVirtualizer())).toEqual([])
   })
 

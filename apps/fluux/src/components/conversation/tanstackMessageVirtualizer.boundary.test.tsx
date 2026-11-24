@@ -9,6 +9,7 @@ import { getScrollShadowSnapshot, resetScrollShadowDiagnostics } from './scrollP
 
 let frames: Map<number, FrameRequestCallback>
 let nextFrame: number
+let resizeCallbacks: Map<Element, ResizeObserverCallback>
 beforeEach(() => {
   resetScrollShadowDiagnostics()
   frames = new Map()
@@ -25,10 +26,14 @@ beforeEach(() => {
     return id
   })
   vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(id => { frames.delete(id) })
+  resizeCallbacks = new Map()
   vi.stubGlobal('ResizeObserver', class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
+    constructor(private readonly deliver: ResizeObserverCallback) {}
+    observe(target: Element) { resizeCallbacks.set(target, this.deliver) }
+    unobserve(target: Element) { resizeCallbacks.delete(target) }
+    disconnect() {
+      for (const [target, deliver] of resizeCallbacks) if (deliver === this.deliver) this.unobserve(target)
+    }
   })
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.replaceChildren() })
@@ -63,11 +68,14 @@ function fixture({
   }
   const items = Array.from({ length: count }, (_, index) => ({ key: `row-${index}` }))
   const measured = vi.fn()
+  let renderedItems: ReturnType<ReturnType<typeof useTanstackMessageVirtualizer>['getVirtualItems']> = []
   const hook = renderHook(({ items }) => {
     const indexById = new Map(items.map((item, index) => [item.key, index]))
-    return useTanstackMessageVirtualizer({
+    const virtualizer = useTanstackMessageVirtualizer({
       items, indexById, scrollRef: { current: scroller }, estimateSize: size, onMeasured: measured, initialMeasurements,
     })
+    renderedItems = virtualizer.getVirtualItems()
+    return virtualizer
   }, { initialProps: { items } })
   const measure = (index: number, height: number) => {
     const row = scroller.appendChild(document.createElement('div'))
@@ -75,10 +83,12 @@ function fixture({
     Object.defineProperty(row, 'offsetHeight', { value: height })
     row.getBoundingClientRect = () => new DOMRect(0, 0, 800, height)
     act(() => hook.result.current.measureElement(row))
+    return row
   }
   return {
     ...hook,
     items,
+    paintedStart: (index: number) => renderedItems.find(item => item.index === index)?.start,
     scroller,
     measure,
     measured,
@@ -94,6 +104,25 @@ function paintFrame() {
     }
   })
 }
+
+it('commits the next visible row position in the same resize batch as a late reply quote', () => {
+  const scope = fixture({ count: 3, size: 106 })
+  const reply = scope.measure(0, 106)
+  const next = scope.measure(1, 115)
+  expect(scope.paintedStart(1)).toBe(106)
+  const deliver = resizeCallbacks.get(reply)!
+  expect(resizeCallbacks.get(next)).toBe(deliver)
+  const entries = [
+    { target: reply, borderBoxSize: [{ blockSize: 180 }] },
+    { target: next, borderBoxSize: [{ blockSize: 115 }] },
+  ] as ResizeObserverEntry[]
+  act(() => {
+    deliver(entries, {} as ResizeObserver)
+    // Read the rendered offsets before act can flush an ordinary async render.
+    expect(scope.paintedStart(1)).toBe(180)
+  })
+  expect(scope.scroller.scrollTop).toBe(0)
+})
 
 it('renders visible rows immediately and fills the offscreen buffer after a paint', () => {
   const scope = fixture({ count: 60, size: 100, client: 600, height: 6000 })
