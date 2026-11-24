@@ -8,7 +8,7 @@
  * @module SearchIndex
  */
 
-import { openDB, type IDBPDatabase, type IDBPObjectStore, type IDBPTransaction, type DBSchema } from 'idb'
+import { openDB, type IDBPDatabase, type IDBPTransaction, type DBSchema } from 'idb'
 import { openGuarded } from './idbConnection'
 import type { Message, RoomMessage } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
@@ -56,6 +56,26 @@ const POSTINGS_CURSOR_KEY = 'postings-cursor'
 /** Meta keys of the filter tokens copy (version 6): every document carries `filterTokens` once ready. */
 const FILTERS_READY_KEY = 'filters-ready'
 const FILTERS_CURSOR_KEY = 'filters-cursor'
+const FILTERS_BUILD_KEY = 'filters-build'
+const FILTERS_BUILD = '2'
+const FILTERS_UNKNOWN_KEY = 'filters-unknown'
+const filterErrors = new Map<string | null, string>()
+const filterListeners = new Set<() => void>()
+const filterChannel = typeof window !== 'undefined' && typeof window.BroadcastChannel === 'function'
+  ? new window.BroadcastChannel('fluux-search-filters') : null
+if (filterChannel) filterChannel.onmessage = event => {
+  if (event.data === getStorageScopeJid()) notifyFilterIndex(false)
+}
+
+export function subscribeFilterIndex(listener: () => void): () => void {
+  filterListeners.add(listener)
+  return () => { filterListeners.delete(listener) }
+}
+
+function notifyFilterIndex(broadcast = true): void {
+  for (const listener of filterListeners) listener()
+  if (broadcast) filterChannel?.postMessage(getStorageScopeJid())
+}
 const pendingMutations = new Map<string | null, Promise<void>>()
 const pendingMaintenance = new Map<string | null, Promise<unknown>>()
 
@@ -123,6 +143,8 @@ interface DocEntry {
    * Absent on a document the version 6 copy has not reached yet.
    */
   filterTokens?: string[]
+  filterBuild?: string
+  filterContentUnknown?: boolean
   /**
    * Short unique number naming this document in {@link POSTINGS_STORE} rows.
    * Absent until the background copy or a write numbers the document.
@@ -278,6 +300,7 @@ function getDB(
       if (oldVersion === 0) {
         void tx.objectStore(META_STORE).put({ key: POSTINGS_READY_KEY, value: '1' })
         void tx.objectStore(META_STORE).put({ key: FILTERS_READY_KEY, value: '1' })
+        void tx.objectStore(META_STORE).put({ key: FILTERS_BUILD_KEY, value: FILTERS_BUILD })
       }
       // Guarded: a later version bump re-runs this callback on a store that
       // already has the index, and re-creating it throws ConstraintError,
@@ -608,6 +631,7 @@ function createDocEntry(
     doc.identityKeys = roomDocumentIdentityKeys(doc)
   }
   doc.filterTokens = messageFilterTokens(message)
+  doc.filterBuild = FILTERS_BUILD
   return doc
 }
 
@@ -652,11 +676,20 @@ function createDocumentWriter(tx: SearchWriteTx) {
   const rows = tx.objectStore(POSTINGS_STORE)
   const meta = tx.objectStore(META_STORE)
   let next: number | undefined
+  let repaired = false
+  const changeUnknown = async (previous: boolean | undefined, current: boolean | undefined) => {
+    const delta = Number(!!current) - Number(!!previous)
+    if (previous && !current) repaired = true
+    if (!delta) return
+    const count = Number((await meta.get(FILTERS_UNKNOWN_KEY))?.value ?? 0)
+    await meta.put({ key: FILTERS_UNKNOWN_KEY, value: String(Math.max(0, count + delta)) })
+  }
   const allocate = async (): Promise<number> => {
     if (next === undefined) next = Number((await meta.get(NEXT_DOC_NO_KEY))?.value ?? 1)
     return next++
   }
   return {
+    get repaired() { return repaired },
     /** Store a document, numbering it if needed and replacing the rows of the one it overwrites. */
     async put(doc: DocEntry): Promise<void> {
       const previous = await docs.get(doc.indexId)
@@ -666,11 +699,13 @@ function createDocumentWriter(tx: SearchWriteTx) {
         const kept = new Set(keys.map(postingKeyId))
         for (const key of postingKeys(previous)) if (!kept.has(postingKeyId(key))) await rows.delete(key)
       }
+      await changeUnknown(previous?.filterContentUnknown, numbered.filterContentUnknown)
       await docs.put(numbered)
       for (const key of keys) await rows.put(1, key)
     },
     /** Delete a stored document and its rows. */
     async delete(doc: DocEntry): Promise<void> {
+      await changeUnknown(doc.filterContentUnknown, false)
       await docs.delete(doc.indexId)
       for (const key of postingKeys(doc)) await rows.delete(key)
     },
@@ -936,7 +971,14 @@ async function writeIndexBatch(
         if (cached || removal) await remove(message, removal?.identityClosure, messages[i], doc)
         if (!doc) continue
         const existing = await docsStore.get(indexId)
-        if (existing) continue
+        if (existing) {
+          const sameOwner = message.type === 'groupchat' ? docBelongsToRoom(existing, message) : docBelongsToChat(existing, message)
+          if (sameOwner && existing.body === doc.body &&
+            (existing.filterContentUnknown || existing.filterBuild !== FILTERS_BUILD)) {
+            await writer.put({ ...existing, filterTokens: doc.filterTokens, filterBuild: FILTERS_BUILD, filterContentUnknown: false })
+          }
+          continue
+        }
         await writer.put(doc)
         for (const token of doc.tokens) (await getPostings(token)).add(indexId)
       }
@@ -947,6 +989,7 @@ async function writeIndexBatch(
       }
       await writer.flush()
       await tx.done
+      if (writer.repaired && getStorageScopeJid() === scopeJid) notifyFilterIndex()
     } catch (error) {
       try { tx.abort() } catch {
         // An already completed or aborted transaction cannot be aborted again.
@@ -1363,21 +1406,6 @@ function postingRange(token: string, after?: SearchPosition, span: SearchOptions
   return IDBKeyRange.bound([token, span.before === undefined ? -Infinity : -span.before, Infinity], top)
 }
 
-/** Every distinct token starting with the prefix, by jumping past each one's rows. */
-async function expandPrefix(
-  rows: IDBPObjectStore<SearchIndexSchema, ['search-docs', 'search-postings'], 'search-postings', 'readonly'>,
-  prefix: string,
-): Promise<string[]> {
-  const tokens: string[] = []
-  let cursor = await rows.openKeyCursor(IDBKeyRange.bound([prefix], [prefix + '\uffff']))
-  while (cursor) {
-    const token = cursor.key[0]
-    tokens.push(token)
-    cursor = await cursor.continue([token + '\u0000', -Infinity, -Infinity])
-  }
-  return tokens
-}
-
 async function searchTimeSorted(
   db: IDBPDatabase<SearchIndexSchema>,
   parsed: ParsedQuery,
@@ -1389,7 +1417,7 @@ async function searchTimeSorted(
   const prefixToken = parsed.lastTermPrefix ? parsed.terms[parsed.terms.length - 1] : null
   const exactTokens = prefixToken ? uniqueAllTokens.filter((t) => t !== prefixToken) : uniqueAllTokens
   const phrases = parsed.phrases.map((phrase) => phrase.toLowerCase())
-  const filterGroups = options?.filterGroups ?? []
+  const filterGroups = (options?.filterGroups ?? []).map(group => [...new Set(group)])
   const keeps = (doc: DocEntry): boolean => {
     if (options?.conversationId && doc.conversationId !== options.conversationId) return false
     if (options?.isRoom !== undefined && doc.isRoom !== options.isRoom) return false
@@ -1429,7 +1457,7 @@ async function searchTimeSorted(
     // Documents already taken, so a correction that moves one past the cursor cannot repeat it.
     const seen = new Set<string>()
     while (limited.length < limit) {
-      const tx = db.transaction([DOCS_STORE, POSTINGS_STORE], 'readonly')
+      const tx = db.transaction([DOCS_STORE, POSTINGS_STORE, TOKENS_STORE], 'readonly')
       void tx.done.catch(() => {})
       const rows = tx.objectStore(POSTINGS_STORE)
       const docs = tx.objectStore(DOCS_STORE)
@@ -1437,7 +1465,17 @@ async function searchTimeSorted(
       // The driving side is the one with the fewest rows; the rest are lookups.
       // Worked out once: later pages reuse it.
       if (!plan) {
-        const prefixTokens = prefixToken ? await expandPrefix(rows, prefixToken) : []
+        const prefixTokens = prefixToken
+          ? await tx.objectStore(TOKENS_STORE).getAllKeys(IDBKeyRange.bound(prefixToken, prefixToken + '\uffff')) : []
+        // Row-only indexes remain readable after their legacy word lists are retired.
+        if (prefixToken && prefixTokens.length === 0) {
+          let cursor = await rows.openKeyCursor(IDBKeyRange.bound([prefixToken], [prefixToken + '\uffff']))
+          while (cursor) {
+            const token = cursor.key[0]
+            prefixTokens.push(token)
+            cursor = await cursor.continue([token + '\u0000', -Infinity, -Infinity])
+          }
+        }
         const sides: SearchSide[] = []
         for (const token of exactTokens) sides.push({ tokens: [token], prefix: false, count: await rows.count(postingRange(token, undefined, options)) })
         if (prefixToken) {
@@ -1734,89 +1772,113 @@ const FILTERS_COPY_BATCH_SIZE = 100
  * document written meanwhile already carries its tokens and is left alone, as
  * is one deleted meanwhile. Resolves to how many documents it read.
  */
-async function copyFiltersBatch(scopeJid: string | null): Promise<number> {
+async function copyFiltersBatch(scopeJid: string | null, assertCurrent: () => void): Promise<number> {
   const db = await getDB(scopeJid)
-  if (await db.get(META_STORE, FILTERS_READY_KEY)) return 0
-  const cursor = (await db.get(META_STORE, FILTERS_CURSOR_KEY))?.value
+  const build = (await db.get(META_STORE, FILTERS_BUILD_KEY))?.value
+  if (build === FILTERS_BUILD && await db.get(META_STORE, FILTERS_READY_KEY)) return 0
+  const cursor = build === FILTERS_BUILD ? (await db.get(META_STORE, FILTERS_CURSOR_KEY))?.value : undefined
   const batch = await db.getAll(DOCS_STORE,
     cursor === undefined ? undefined : IDBKeyRange.lowerBound(cursor, true), FILTERS_COPY_BATCH_SIZE)
-  if (batch.length === 0) return 0
-  const pending = batch.filter((doc) => doc.filterTokens === undefined)
+  const pending = batch.filter(doc => doc.filterBuild !== FILTERS_BUILD)
   const cached = pending.length ? await messageCache.resolveMessagesForIndex(pending.map(docToMessage), scopeJid) : []
-  const sources = new Map(pending.map((doc, i) => [doc.indexId, cached[i]?.message]))
-
+  const sources = new Map(pending.map((doc, i) => [doc.indexId, cached[i]?.cached ? cached[i]?.message : undefined]))
+  assertCurrent()
   const tx = db.transaction([TOKENS_STORE, DOCS_STORE, POSTINGS_STORE, META_STORE], 'readwrite')
   void tx.done.catch(() => {})
   try {
+    const meta = tx.objectStore(META_STORE)
+    const currentBuild = (await meta.get(FILTERS_BUILD_KEY))?.value
+    const currentCursor = currentBuild === FILTERS_BUILD ? (await meta.get(FILTERS_CURSOR_KEY))?.value : undefined
+    // Another tab may have committed this batch while the cache was being read.
+    if (currentCursor !== cursor || (currentBuild === FILTERS_BUILD && await meta.get(FILTERS_READY_KEY))) {
+      await tx.done
+      return 1
+    }
+    if (currentBuild !== FILTERS_BUILD) {
+      await meta.put({ key: FILTERS_BUILD_KEY, value: FILTERS_BUILD })
+      await meta.delete(FILTERS_READY_KEY)
+      await meta.delete(FILTERS_CURSOR_KEY)
+    }
     const docs = tx.objectStore(DOCS_STORE)
     const writer = createDocumentWriter(tx)
-    for (const { indexId } of pending) {
-      const current = await docs.get(indexId)
-      if (!current || current.filterTokens !== undefined) continue
-      const source = sources.get(indexId)
-      // The document's own body decides has:link; the cache row adds what the document lacks
-      const filterTokens = messageFilterTokens({ ...docToMessage(current), attachment: source?.attachment, poll: source?.poll })
-      await writer.put({ ...current, filterTokens })
+    for (const snapshot of pending) {
+      assertCurrent()
+      const current = await docs.get(snapshot.indexId)
+      if (!current || current.filterBuild === FILTERS_BUILD) continue
+      const source = sameIndexDocument(current, snapshot) ? sources.get(current.indexId) : undefined
+      if (source && (source.isRetracted || isNoLocalStore(source))) {
+        await writer.delete(current)
+        for (const token of current.tokens) {
+          const entry = await tx.objectStore(TOKENS_STORE).get(token)
+          const postings = entry?.postings.filter(id => id !== current.indexId) ?? []
+          if (postings.length) await tx.objectStore(TOKENS_STORE).put({ token, postings })
+          else await tx.objectStore(TOKENS_STORE).delete(token)
+        }
+        continue
+      }
+      const filterTokens = source ? messageFilterTokens(source)
+        : messageFilterTokens({ ...docToMessage(current), body: '' })
+      await writer.put({ ...current, filterTokens, filterBuild: FILTERS_BUILD, filterContentUnknown: !source })
     }
     await writer.flush()
-    await tx.objectStore(META_STORE).put({ key: FILTERS_CURSOR_KEY, value: batch[batch.length - 1].indexId })
+    if (batch.length) await meta.put({ key: FILTERS_CURSOR_KEY, value: batch[batch.length - 1].indexId })
+    else await meta.put({ key: FILTERS_READY_KEY, value: '1' })
     await tx.done
     return batch.length
   } catch (error) {
-    try { tx.abort() } catch { /* Already finished. */ }
+    try { tx.abort() } catch { /* A failed request may already have aborted the transaction. */ }
     await tx.done.catch(() => {})
     throw error
   }
 }
 
-/** Set the filters ready marker once no document is left after the cursor. */
-async function markFiltersReady(scopeJid: string | null): Promise<void> {
-  const db = await getDB(scopeJid)
-  const tx = db.transaction([DOCS_STORE, META_STORE], 'readwrite')
-  void tx.done.catch(() => {})
-  const meta = tx.objectStore(META_STORE)
-  const cursor = (await meta.get(FILTERS_CURSOR_KEY))?.value
-  const rest = await tx.objectStore(DOCS_STORE).getAll(
-    cursor === undefined ? undefined : IDBKeyRange.lowerBound(cursor, true), 1)
-  if (rest.length === 0) await meta.put({ key: FILTERS_READY_KEY, value: '1' })
-  await tx.done
+export type FilterIndexState = { status: 'preparing' | 'usable' | 'incomplete' | 'unavailable'; reason?: string }
+
+export async function getFilterIndexState(scopeJid: string | null = getStorageScopeJid()): Promise<FilterIndexState> {
+  const reason = filterErrors.get(scopeJid)
+  if (reason) return { status: 'unavailable', reason }
+  if (!isIndexedDBAvailable()) return { status: 'unavailable', reason: 'IndexedDB not available' }
+  try {
+    const db = await getDB(scopeJid)
+    const tx = db.transaction(META_STORE)
+    const [build, ready, unknown] = await Promise.all([
+      tx.store.get(FILTERS_BUILD_KEY), tx.store.get(FILTERS_READY_KEY), tx.store.get(FILTERS_UNKNOWN_KEY),
+    ])
+    await tx.done
+    if (build?.value !== FILTERS_BUILD || !ready) return { status: 'preparing' }
+    return { status: Number(unknown?.value ?? 0) > 0 ? 'incomplete' : 'usable' }
+  } catch (error) {
+    return { status: 'unavailable', reason: error instanceof Error ? error.message : String(error) }
+  }
 }
 
-/**
- * Give every stored document its filter tokens (`from:`, `is:mine`, `has:`), in
- * the background, the way {@link migrateSearchPostings} copies the rows: a
- * resumable cursor in the database, small batches with a pause between them, an
- * account switch ending the loop and a full disk ending it quietly until the next
- * login. A search with such a filter answers nothing until the ready marker is
- * written, and the interface says the index is still being built.
- */
 export async function migrateSearchFilters(): Promise<void> {
   if (!isIndexedDBAvailable()) return
   const scope = captureStorageScope()
+  filterErrors.delete(scope.jid)
+  notifyFilterIndex()
   await maintainIndex(scope.jid, async () => {
     try {
       for (;;) {
         scope.assertCurrent()
-        if (await copyFiltersBatch(scope.jid) > 0) {
-          await new Promise(resolve => setTimeout(resolve, POSTINGS_COPY_PAUSE_MS))
-          continue
-        }
+        const copied = await copyFiltersBatch(scope.jid, scope.assertCurrent)
         scope.assertCurrent()
-        await markFiltersReady(scope.jid)
-        if (await isFilterIndexReady(scope.jid)) return
+        if (!copied) break
+        await new Promise(resolve => setTimeout(resolve, POSTINGS_COPY_PAUSE_MS))
       }
     } catch (error) {
-      if (!isStorageFull(error)) throw error
-      console.warn('[searchIndex] Not enough storage to add search filters; retrying at next login')
+      if (scope.isCurrent()) {
+        filterErrors.set(scope.jid, error instanceof Error ? error.message : String(error))
+      }
+    } finally {
+      if (scope.isCurrent()) notifyFilterIndex()
     }
   })
 }
 
-/** Whether every document carries its filter tokens, so `from:`, `is:` and `has:` can be answered. */
 export async function isFilterIndexReady(scopeJid: string | null = getStorageScopeJid()): Promise<boolean> {
-  if (!isIndexedDBAvailable()) return false
-  const db = await getDB(scopeJid)
-  return (await db.get(META_STORE, FILTERS_READY_KEY)) !== undefined
+  const state = await getFilterIndexState(scopeJid)
+  return state.status === 'usable' || state.status === 'incomplete'
 }
 
 /**
@@ -1907,6 +1969,7 @@ async function clearIndexData(scopeJid: string | null): Promise<void> {
     // An empty index has nothing to copy: whatever is written next numbers itself.
     await tx.objectStore(META_STORE).put({ key: POSTINGS_READY_KEY, value: '1' })
     await tx.objectStore(META_STORE).put({ key: FILTERS_READY_KEY, value: '1' })
+    await tx.objectStore(META_STORE).put({ key: FILTERS_BUILD_KEY, value: FILTERS_BUILD })
     await tx.done
   })
 }
@@ -1933,6 +1996,7 @@ export async function closeSearchIndex(): Promise<void> {
  * @internal
  */
 export function _resetDBForTesting(): void {
+  filterErrors.clear()
   dbPromise = null
   dbNameForPromise = null
 }

@@ -33,6 +33,8 @@ export interface SearchFilterToken {
   value: string
   /** The operator exactly as typed, so it can be taken out of the query again. */
   raw: string
+  start: number
+  end: number
   /** The instants a date operator covers: `start` included, `end` excluded. */
   range?: { start: number; end: number }
   /** Whether the value was understood; an operator that was not narrows nothing. */
@@ -56,7 +58,24 @@ export interface ParsedSearchInput {
   from: string[]
 }
 
-const OPERATOR_PATTERN = new RegExp(`(^|\\s)(${[...DATE_OPERATORS, ...TOKEN_OPERATORS].join('|')}):("[^"]*"?|\\S*)`, 'gi')
+/** Offsets stay in the original query so removing a chip never removes a literal lookalike. */
+export function searchInputTokens(query: string): Array<{ raw: string; start: number; end: number }> {
+  const tokens: Array<{ raw: string; start: number; end: number }> = []
+  let start = 0
+  while (start < query.length) {
+    if (/\s/.test(query[start])) { start++; continue }
+    let end = start
+    let quoted = false
+    for (; end < query.length; end++) {
+      if (query[end] === '\\' && end + 1 < query.length) { end++; continue }
+      if (query[end] === '"') quoted = !quoted
+      if (!quoted && /\s/.test(query[end])) break
+    }
+    tokens.push({ raw: query.slice(start, end), start, end })
+    start = end
+  }
+  return tokens
+}
 
 /** Whether the locale writes the day before the month in numeric dates (`05/03` for 5 March). */
 function dayFirst(locale?: string): boolean {
@@ -119,30 +138,42 @@ export function parseSearchFilters(query: string, locale?: string): ParsedSearch
   let mine = false
   const has = new Set<HasValue>()
   const from: string[] = []
-  const text = query.replace(OPERATOR_PATTERN, (raw, lead: string, op: string, rawValue: string) => {
-    const value = rawValue.replace(/^"|"$/g, '')
+  const words: string[] = []
+  for (const token of searchInputTokens(query)) {
+    const match = /^([a-z]+):(.*)$/i.exec(token.raw)
+    if (!match || ![...DATE_OPERATORS, ...TOKEN_OPERATORS].includes(match[1].toLowerCase() as SearchOperator)) {
+      words.push(token.raw)
+      continue
+    }
+    const [, op, rawValue] = match
+    const position = { raw: token.raw, start: token.start, end: token.end }
+    let closed = !rawValue.startsWith('"') || (rawValue.length > 1 && rawValue.endsWith('"'))
+    let value = rawValue
+    if (rawValue.startsWith('"')) {
+      try { value = JSON.parse(rawValue) as string } catch { closed = false; value = rawValue.slice(1) }
+    }
     const operator = op.toLowerCase() as SearchOperator
     if ((TOKEN_OPERATORS as readonly string[]).includes(operator)) {
       const lower = value.toLowerCase()
       const isMine = (operator === 'is' && lower === 'mine') || (operator === 'from' && lower === 'me')
-      const valid = isMine || (operator === 'has' && (HAS_VALUES as readonly string[]).includes(lower)) ||
-        (operator === 'from' && value.trim().length > 0)
-      filters.push({ op: operator, value, raw: raw.slice(lead.length), valid })
-      if (isMine) mine = true
+      const valid = closed && (isMine || (operator === 'has' && (HAS_VALUES as readonly string[]).includes(lower)) ||
+        (operator === 'from' && value.trim().length > 0))
+      filters.push({ op: operator, value, ...position, valid })
+      if (valid && isMine) mine = true
       else if (valid && operator === 'has') has.add(lower as HasValue)
       else if (valid && operator === 'from') from.push(value.trim())
-      return lead
+      continue
     }
-    const range = value ? parseDateSpan(value, locale) ?? undefined : undefined
-    filters.push({ op: operator, value, raw: raw.slice(lead.length), ...(range ? { range } : {}), valid: !!range })
+    const range = value && closed ? parseDateSpan(value, locale) ?? undefined : undefined
+    filters.push({ op: operator, value, ...position, ...(range ? { range } : {}), valid: !!range })
     if (range) {
       const low = operator === 'after' ? range.end : operator === 'before' ? undefined : range.start
       const high = operator === 'before' ? range.start : operator === 'after' ? undefined : range.end
       if (low !== undefined) after = after === undefined ? low : Math.max(after, low)
       if (high !== undefined) before = before === undefined ? high : Math.min(before, high)
     }
-    return lead
-  }).replace(/\s+/g, ' ').trim()
+  }
+  const text = words.join(' ')
   return {
     text, filters, has: [...has], from,
     ...(after !== undefined ? { after } : {}), ...(before !== undefined ? { before } : {}), ...(mine ? { mine } : {}),
@@ -170,15 +201,15 @@ export const filterToken = {
   has: (value: HasValue) => `${MARK}has:${value}`,
   /** The bare JID of a one-to-one sender. */
   from: (bareJid: string) => `${MARK}from:${bareJid.toLowerCase()}`,
-  /** A room nick, kept so `from:<nick>` finds a sender without an occupant id. */
-  nick: (nick: string) => `${MARK}nick:${nick.toLowerCase()}`,
-  /** A room occupant id (XEP-0421), which outlives nick changes. */
-  occupant: (occupantId: string) => `${MARK}occ:${occupantId}`,
+  /** A room-scoped nick is only a fallback for messages without a stable occupant id. */
+  nick: (nick: string, room: string) => `${MARK}nick:${room.toLowerCase()}\0${nick.toLowerCase()}`,
+  /** Occupant ids are only unique within their room (XEP-0421). */
+  occupant: (occupantId: string, room: string) => `${MARK}occ:${room.toLowerCase()}\0${occupantId}`,
 }
 
 /** The parts of a message its filter tokens read. */
-export type FilterTokenSource = Pick<Message | RoomMessage, 'type' | 'from' | 'isOutgoing' | 'body' | 'attachment' | 'poll'> &
-  { nick?: string; occupantId?: string }
+type FilterFields = 'type' | 'from' | 'isOutgoing' | 'body' | 'attachment' | 'poll'
+export type FilterTokenSource = Pick<Message, FilterFields> | Pick<RoomMessage, FilterFields | 'nick' | 'occupantId' | 'roomJid'>
 
 const LINK_PATTERN = /(?:\bhttps?:\/\/|\bwww\.)\S/i
 const IMAGE_EXTENSION = /\.(?:avif|bmp|gif|heic|jpe?g|png|svg|webp)(?:[?#]|$)/i
@@ -196,8 +227,8 @@ export function messageFilterTokens(message: FilterTokenSource): string[] {
   const tokens: string[] = []
   if (message.isOutgoing) tokens.push(filterToken.mine)
   if (message.type === 'groupchat') {
-    if (message.nick) tokens.push(filterToken.nick(message.nick))
-    if (message.occupantId) tokens.push(filterToken.occupant(message.occupantId))
+    if (message.nick && !message.occupantId) tokens.push(filterToken.nick(message.nick, message.roomJid))
+    if (message.occupantId) tokens.push(filterToken.occupant(message.occupantId, message.roomJid))
   } else if (!message.isOutgoing && message.from) {
     tokens.push(filterToken.from(message.from.split('/')[0]))
   }
@@ -222,8 +253,23 @@ export function matchesFilterTokens(message: FilterTokenSource, groups: readonly
 }
 
 /** The query without one of its operators, as typed. */
-export function removeSearchFilter(query: string, filter: Pick<SearchFilterToken, 'raw'>): string {
-  const index = query.indexOf(filter.raw)
-  if (index === -1) return query
-  return `${query.slice(0, index)}${query.slice(index + filter.raw.length)}`.replace(/\s+/g, ' ').trim()
+export function removeSearchFilter(query: string, filter: Pick<SearchFilterToken, 'raw'> & Partial<Pick<SearchFilterToken, 'start' | 'end'>>): string {
+  const token = filter.start !== undefined && filter.end !== undefined && query.slice(filter.start, filter.end) === filter.raw
+    ? { start: filter.start, end: filter.end }
+    : parseSearchFilters(query).filters.find(candidate => candidate.raw === filter.raw)
+  if (!token) return query
+  return `${query.slice(0, token.start).trimEnd()} ${query.slice(token.end).trimStart()}`.trim()
+}
+
+export function roomSenderValue(room: string, occupant: string, nick: string): string {
+  return `room:${[room, occupant, nick].map(encodeURIComponent).join(':')}`
+}
+
+export function parseRoomSender(value: string): { room: string; occupant: string; nick: string } | null {
+  const parts = value.split(':')
+  if (parts.length !== 4 || parts[0] !== 'room') return null
+  try {
+    const [room, occupant, nick] = parts.slice(1).map(decodeURIComponent)
+    return room && nick ? { room, occupant, nick } : null
+  } catch { return null }
 }

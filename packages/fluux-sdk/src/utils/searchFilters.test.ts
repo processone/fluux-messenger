@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { filterToken, matchesFilterTokens, messageFilterTokens, parseDateSpan, parseSearchFilters, removeSearchFilter } from './searchFilters'
 
 const day = (y: number, m: number, d: number) => new Date(y, m - 1, d).getTime()
@@ -44,8 +44,8 @@ describe('search date operators', () => {
     const parsed = parseSearchFilters('hello after:soon on:', 'en')
     expect(parsed.text).toBe('hello')
     expect(parsed.filters).toEqual([
-      { op: 'after', value: 'soon', raw: 'after:soon', valid: false },
-      { op: 'on', value: '', raw: 'on:', valid: false },
+      { op: 'after', value: 'soon', raw: 'after:soon', start: 6, end: 16, valid: false },
+      { op: 'on', value: '', raw: 'on:', start: 17, end: 20, valid: false },
     ])
     expect(parsed.after).toBeUndefined()
   })
@@ -80,9 +80,9 @@ describe('message filter tokens', () => {
     expect(messageFilterTokens({ ...chat, isOutgoing: true })).toEqual([filterToken.mine])
   })
 
-  it('names a room sender by nick and occupant id', () => {
-    expect(messageFilterTokens({ type: 'groupchat', from: 'r@muc/Al', nick: 'Al', occupantId: 'occ-1', isOutgoing: false, body: '' }))
-      .toEqual([filterToken.nick('al'), filterToken.occupant('occ-1')])
+  it('keys known room senders by scoped occupant identity, never a reusable nickname', () => {
+    expect(messageFilterTokens({ type: 'groupchat', from: 'r@muc/Al', roomJid: 'r@muc', nick: 'Al', occupantId: 'occ-1', isOutgoing: false, body: '' }))
+      .toEqual([filterToken.occupant('occ-1', 'r@muc')])
   })
 
   it('finds links, files, images and polls, but not a file URL as a link', () => {
@@ -99,5 +99,32 @@ describe('message filter tokens', () => {
     const groups = [[filterToken.has('link')], [filterToken.from('bob@example.com'), filterToken.from('alice@example.com')]]
     expect(matchesFilterTokens({ ...chat, body: 'https://x.y' }, groups)).toBe(true)
     expect(matchesFilterTokens({ ...chat, body: 'no link' }, groups)).toBe(false)
+  })
+})
+
+describe('literal operator lookalikes', () => {
+  it('keeps operators inside quoted phrases literal', () => {
+    const input = parseSearchFilters('"notes from:alice" has:image')
+    expect(input.text).toBe('"notes from:alice"')
+    expect(input.from).toEqual([])
+    expect(input.has).toEqual(['image'])
+  })
+  it('removes the actual filter span, not an earlier suffix or quoted occurrence', () => {
+    const query = 'labelhas:image "has:image" has:image has:image'
+    const input = parseSearchFilters(query)
+    expect(removeSearchFilter(query, input.filters[1])).toBe('labelhas:image "has:image" has:image')
+    expect(removeSearchFilter(query, { raw: 'has:image' })).toBe('labelhas:image "has:image" has:image')
+  })
+})
+
+describe('local days across daylight-saving changes', () => {
+  it.each([
+    ['2024-03-31', '2024-03-30T23:00:00.000Z', '2024-03-31T22:00:00.000Z'],
+    ['2024-10-27', '2024-10-26T22:00:00.000Z', '2024-10-27T23:00:00.000Z'],
+  ])('keeps both local midnights for %s', (date, start, end) => {
+    vi.stubEnv('TZ', 'Europe/Paris')
+    try {
+      expect(parseDateSpan(date)).toEqual({ start: Date.parse(start), end: Date.parse(end) })
+    } finally { vi.unstubAllEnvs() }
   })
 })

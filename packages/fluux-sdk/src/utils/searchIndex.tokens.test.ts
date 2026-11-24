@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
-import { openDB } from 'idb'
+import { openDB, deleteDB } from 'idb'
+import { seedVersion5SearchHistory } from './fixtures/searchHistory'
 import type { Message, RoomMessage } from '../core/types'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
 import * as messageCache from './messageCache'
 import {
   _resetDBForTesting, closeSearchIndex, indexMessages, initSearchIndex, isFilterIndexReady,
-  migrateSearchFilters, search,
+  migrateSearchFilters, getFilterIndexState, search,
 } from './searchIndex'
 import { filterToken } from './searchFilters'
 
@@ -79,10 +80,10 @@ describe('filter tokens on the search index', () => {
     ], {}, SCOPE)
     expect(await ids('', { filterGroups: [[filterToken.from('alice@example.test')]] })).toEqual(['c1'])
     // `from:bob` stands for the nick and the occupant ids that nick has now
-    const bob = [[filterToken.nick('bob'), filterToken.occupant('occ-bob')]]
+    const bob = [[filterToken.nick('bob', ROOM), filterToken.occupant('occ-bob', ROOM)]]
     expect(await ids('hello', { filterGroups: bob, conversationId: ROOM })).toEqual(['r6', 'r4', 'r3'])
     expect(await ids('hello', { filterGroups: bob })).toEqual(['r6', 'r4', 'r3'])
-    expect(await ids('hello', { filterGroups: [[filterToken.nick('carol')]] })).toEqual(['r5'])
+    expect(await ids('hello', { filterGroups: [[filterToken.occupant('occ-carol', ROOM)]] })).toEqual(['r5'])
   })
 
   it('keeps filter tokens out of the old token lists', async () => {
@@ -94,20 +95,20 @@ describe('filter tokens on the search index', () => {
   })
 
   describe('upgrading a version 5 database', () => {
-    /** A database as version 5 left it: rows for words only, no filter tokens and no ready marker. */
     async function downgradeToV5() {
       const db = await openDB(DB_NAME)
-      const tx = db.transaction(['search-docs', 'search-postings', 'search-meta'], 'readwrite')
-      for (const doc of await tx.objectStore('search-docs').getAll()) {
-        delete doc.filterTokens
-        await tx.objectStore('search-docs').put(doc)
-      }
-      for (const key of await tx.objectStore('search-postings').getAllKeys()) {
-        if (String((key as unknown[])[0]).startsWith('\u0001')) await tx.objectStore('search-postings').delete(key)
-      }
-      await tx.objectStore('search-meta').delete('filters-ready')
-      await tx.done
+      const docs = await db.getAll('search-docs')
       db.close()
+      await closeSearchIndex()
+      await deleteDB(DB_NAME)
+      const messages = docs.map((doc): Message | RoomMessage => {
+        const common = { id: doc.messageId, from: doc.from, body: doc.body, timestamp: new Date(doc.timestamp),
+          isOutgoing: doc.isOutgoing === true, isDelayed: doc.isDelayed,
+          stanzaId: doc.stanzaId, originId: doc.originId }
+        return doc.isRoom ? { ...common, type: 'groupchat', roomJid: doc.conversationId, nick: doc.nick ?? '', occupantId: doc.occupantId }
+          : { ...common, type: 'chat', conversationId: doc.conversationId }
+      })
+      await seedVersion5SearchHistory(SCOPE, messages)
       _resetDBForTesting()
     }
 
@@ -118,7 +119,7 @@ describe('filter tokens on the search index', () => {
       await initSearchIndex(SCOPE)
       await indexMessages(messages, { fromCache: true }, SCOPE)
       const image = [[filterToken.has('image')]]
-      const bob = [[filterToken.occupant('occ-bob')]]
+      const bob = [[filterToken.occupant('occ-bob', ROOM)]]
       const fresh = [await ids('', { filterGroups: image }), await ids('holiday', { filterGroups: bob })]
 
       await downgradeToV5()
@@ -137,7 +138,9 @@ describe('filter tokens on the search index', () => {
 
     it('resumes from its cursor after an interruption', async () => {
       await initSearchIndex(SCOPE)
-      await indexMessages(Array.from({ length: 250 }, (_, i) => chat(i, `note ${i} https://x.example/${i}`)), {}, SCOPE)
+      const messages = Array.from({ length: 250 }, (_, i) => chat(i, `note ${i} https://x.example/${i}`))
+      await messageCache.saveMessages('chat', messages)
+      await indexMessages(messages, {}, SCOPE)
       await downgradeToV5()
       await initSearchIndex(SCOPE)
       const original = messageCache.resolveMessagesForIndex
@@ -145,7 +148,8 @@ describe('filter tokens on the search index', () => {
       const resolve = vi.spyOn(messageCache, 'resolveMessagesForIndex')
         .mockImplementationOnce(original)
         .mockRejectedValueOnce(new Error('quit'))
-      await expect(migrateSearchFilters()).rejects.toThrow('quit')
+      await migrateSearchFilters()
+      expect(await getFilterIndexState()).toEqual({ status: 'unavailable', reason: 'quit' })
       const db = await openDB(DB_NAME)
       expect((await db.get('search-meta', 'filters-cursor'))?.value).toBeDefined()
       expect((await db.getAll('search-docs')).filter(doc => doc.filterTokens).length).toBe(100)

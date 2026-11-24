@@ -49,8 +49,12 @@ describe('date spans on the search index', () => {
     const results = await search('status update', { after: T0 + 100 * HOUR, before: T0 + 110 * HOUR, limit: 100 })
     expect(results.map(r => r.messageId)).toEqual(Array.from({ length: 10 }, (_, k) => `m${109 - k}`))
     // One page of the driving word, bounded by the span rather than the whole history
-    expect(pages.mock.calls).toHaveLength(1)
-    const range = pages.mock.calls[0][0] as IDBKeyRange
+    const postingCalls = pages.mock.calls.filter((_, index) => {
+      const store = pages.mock.contexts[index]
+      return store instanceof IDBObjectStore && store.name === 'search-postings'
+    })
+    expect(postingCalls).toHaveLength(1)
+    const range = postingCalls[0][0] as IDBKeyRange
     expect(range.lower[1]).toBe(-(T0 + 110 * HOUR))
     expect(range.upper[1]).toBe(-(T0 + 100 * HOUR))
   })
