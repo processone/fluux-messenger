@@ -73,6 +73,7 @@ export const changelog: ChangelogEntry[] = [
         'Find in conversation highlights the whole word as you type, and a deleted conversation no longer appears in search',
         'Headings now keep one typeface in languages using Latin, Cyrillic or Greek letters, and the encryption and reaction labels still in English are translated',
         'Changing your password no longer signs you out at the next reconnect or forgets your server address',
+        'macOS: the typing cursor now appears when you focus an empty room message box',
         'macOS: a file pasted from Finder now attaches as the original file instead of an image copy',
         'iOS: links, widget rows and room Siri suggestions now open the right place when Fluux was closed',
       ],

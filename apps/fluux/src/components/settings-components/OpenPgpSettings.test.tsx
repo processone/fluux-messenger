@@ -1214,6 +1214,7 @@ describe('backup identity states', () => {
     fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.backupAction' }))
     await screen.findByText('settings.encryption.backupConflictTitle')
     fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }))
+    await waitFor(() => expect(screen.queryByText('settings.encryption.backupConflictTitle')).not.toBeInTheDocument())
     const disclosure = screen.getByRole('button', { name: 'settings.encryption.keyManagement' })
     fireEvent.click(disclosure)
     fireEvent.click(screen.getByRole('button', { name: 'settings.encryption.rotateAction' }))
