@@ -234,6 +234,8 @@ export interface RoomHistorySearchOptions {
  * @category MAM
  */
 export interface HistoryPagingSearchOptions {
+  /** Resume the same bounded result set toward older entries. */
+  before?: string
   /** Text query to match against message bodies */
   query: string
   /** Conversation partner bare JID */

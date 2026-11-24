@@ -61,7 +61,7 @@ export function useSearch() {
     searchFilter,
     inPrefixSuggestions,
     isInPrefixActive,
-    filtersBuilding,
+    filtersBuilding, pickedFilters, filtersIncomplete, filtersUnavailable,
   } = useStore(
     searchStore,
     useShallow((state) => ({
@@ -80,6 +80,9 @@ export function useSearch() {
       inPrefixSuggestions: state.inPrefixSuggestions,
       isInPrefixActive: state.isInPrefixActive,
       filtersBuilding: state.filtersBuilding,
+      pickedFilters: state.pickedFilters,
+      filtersIncomplete: state.filtersIncomplete,
+      filtersUnavailable: state.filtersUnavailable,
     }))
   )
 
@@ -113,7 +116,9 @@ export function useSearch() {
     /** Whether the `in:` autocomplete is active */
     isInPrefixActive,
     /** Whether from:, is: or has: wait for this device to finish preparing its history */
-    filtersBuilding,
+    filtersBuilding, pickedFilters, filtersIncomplete, filtersUnavailable,
+    setPickedFilters: searchStore.getState().setPickedFilters,
+    retryFilters: searchStore.getState().retryFilters,
     /** Execute a local search (debounced 300ms) */
     search: searchStore.getState().search,
     /** Clear all search state and results */

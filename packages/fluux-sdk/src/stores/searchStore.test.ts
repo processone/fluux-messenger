@@ -15,6 +15,8 @@ vi.mock('../utils/searchIndex', async () => {
   return {
     search: vi.fn().mockResolvedValue([]),
     isFilterIndexReady: vi.fn().mockResolvedValue(true),
+    getFilterIndexState: vi.fn().mockResolvedValue({ status: 'usable' }),
+    subscribeFilterIndex: vi.fn(() => () => {}),
     indexMessage: vi.fn().mockResolvedValue(undefined),
     indexMessages: vi.fn().mockResolvedValue(undefined),
     removeMessage: vi.fn().mockResolvedValue(undefined),
@@ -2037,7 +2039,7 @@ describe('searchStore', () => {
       await vi.runAllTimersAsync()
       expect(searchIndex.search).toHaveBeenCalledWith('', expect.objectContaining({
         conversationId: roomJid,
-        filterGroups: [[filterToken.has('link')], [filterToken.nick('bob'), filterToken.occupant('occ-bob')]],
+        filterGroups: [[filterToken.has('link')], [filterToken.nick('bob', roomJid), filterToken.occupant('occ-bob', roomJid)]],
       }))
     })
 
@@ -2045,12 +2047,12 @@ describe('searchStore', () => {
       searchStore.getState().search('from:Alice is:mine')
       await vi.runAllTimersAsync()
       expect(searchIndex.search).toHaveBeenCalledWith('', expect.objectContaining({
-        filterGroups: [[filterToken.mine], [filterToken.nick('Alice'), filterToken.from('alice@example.com')]],
+        filterGroups: [[filterToken.mine], [filterToken.from('alice@example.com')]],
       }))
     })
 
     it('shows the index as still building instead of partial results', async () => {
-      vi.mocked(searchIndex.isFilterIndexReady).mockResolvedValueOnce(false)
+      vi.mocked(searchIndex.getFilterIndexState).mockResolvedValueOnce({ status: 'preparing' })
       searchStore.getState().search('has:image')
       await vi.runAllTimersAsync()
       expect(searchIndex.search).not.toHaveBeenCalled()
@@ -2268,6 +2270,7 @@ function createMockMAMClient(opts?: {
     messages: {
         searchMessages: vi.fn().mockResolvedValue({
           messages: results.map(r => ({
+            type: 'chat' as const,
             id: r.id,
             conversationId: r.conversationId,
             from: r.from,

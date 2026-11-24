@@ -182,4 +182,43 @@ describe('Discovery MAM Search Capability', () => {
     expect(sent).toContain('"var":"start"},"children":[{"name":"value","attrs":{},"children":["2024-03-04T23:00:00.000Z"]')
     expect(sent).toContain('"var":"end"},"children":[{"name":"value","attrs":{},"children":["2024-03-05T22:59:59.999Z"]')
   })
+  it('pages a detached one-to-one search with unchanged bounds and an older cursor, without timeline events', async () => {
+    await connect()
+    mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(createMockElement('iq', { type: 'result' }, [
+      { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2' }, children: [
+        { name: 'set', attrs: { xmlns: 'http://jabber.org/protocol/rsm' }, children: [
+          { name: 'first', text: 'older-page' },
+        ] },
+      ] },
+    ]))
+    emitSDKSpy.mockClear()
+    const result = await getInternalSurfaceForTesting(xmppClient).mam.searchConversationByPaging({
+      query: '', with: 'alice@example.com', before: 'previous-page', maxPages: 1,
+      start: '2024-03-01T00:00:00.000Z', end: '2024-04-01T00:00:00.000Z', filter: () => true,
+    })
+    const sent = JSON.stringify(mockXmppClientInstance.iqCaller.request.mock.calls.at(-1)?.[0])
+    expect(sent).toContain('previous-page')
+    expect(sent).toContain('2024-03-01T00:00:00.000Z')
+    expect(sent).toContain('2024-04-01T00:00:00.000Z')
+    expect(sent).not.toContain('{urn:xmpp:fulltext:0}fulltext')
+    expect(result).toMatchObject({ complete: false, page: { first: 'older-page' }, messages: [] })
+    const events: string[] = emitSDKSpy.mock.calls.map((call: unknown[]) => String(call[0]))
+    expect(events.filter(event => event.startsWith('chat:history-'))).toEqual([])
+  })
+
+  it('stops on a stalled archive cursor rather than repeating the same page', async () => {
+    await connect()
+    mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(createMockElement('iq', { type: 'result' }, [
+      { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2' }, children: [
+        { name: 'set', attrs: { xmlns: 'http://jabber.org/protocol/rsm' }, children: [{ name: 'first', text: 'stalled' }] },
+      ] },
+    ]))
+    const before = mockXmppClientInstance.iqCaller.request.mock.calls.length
+    const result = await getInternalSurfaceForTesting(xmppClient).mam.searchConversationByPaging({
+      query: 'design', with: 'alice@example.com', before: 'stalled', maxPages: 20,
+    })
+    expect(result.complete).toBe(true)
+    expect(mockXmppClientInstance.iqCaller.request.mock.calls.length - before).toBe(1)
+  })
+
 })
