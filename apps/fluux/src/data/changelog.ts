@@ -63,6 +63,7 @@ export const changelog: ChangelogEntry[] = [
         'Fluux now rejects message copies and archive results that do not come from your own account or the archive it asked',
         'OpenPGP: a verification you removed can no longer come back when two of your devices update your verified contacts at once',
         'People on servers named chat., muc., rooms., conference. or groupchat. are no longer mistaken for rooms, and a malformed address no longer stops incoming messages',
+        'Loading chat history no longer shows private room messages in a one-to-one chat for the room’s address',
         'A failure in one part of the window no longer takes down the whole app, and Fluux no longer hangs when another tab holds an older local cache',
         'Large contact lists open and filter faster, with exact matches first',
         'Room bookmarks: saving one no longer restores old data, resets notifications, changes your nickname or erases another app\'s settings, and a failed save now shows an error',
