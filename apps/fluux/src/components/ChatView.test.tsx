@@ -238,12 +238,13 @@ vi.mock('@fluux/sdk/react', () => ({
     activeConversationId: null,
     interiorPlacementVersions: new Map(),
   }),
-  useConnectionStore: (selector: (state: { jid: string; ownAvatar: null; ownNickname: string; status: string }) => unknown) => {
+  useConnectionStore: (selector: (state: { jid: string; ownAvatar: null; ownNickname: string; status: string; serverInfo: null }) => unknown) => {
     return selector({
       jid: 'me@example.com/resource',
       ownAvatar: null,
       ownNickname: 'Me',
       status: 'online',
+      serverInfo: null,
     })
   },
   useRosterStore: (selector: (state: { contacts: Map<string, Contact> }) => unknown) => {
@@ -412,6 +413,7 @@ vi.mock('lucide-react', () => ({
   ShieldOff: () => <span data-testid="icon-shield-off">ShieldOff</span>,
   ShieldX: () => <span data-testid="icon-shield-x">ShieldX</span>,
   AlertTriangle: () => <span data-testid="icon-alert-triangle">AlertTriangle</span>,
+  CalendarDays: () => <span data-testid="icon-calendar">Calendar</span>,
   Archive: () => <span data-testid="icon-archive">Archive</span>,
   ArchiveRestore: () => <span data-testid="icon-archive-restore">Unarchive</span>,
   User: () => <span data-testid="icon-user">User</span>,

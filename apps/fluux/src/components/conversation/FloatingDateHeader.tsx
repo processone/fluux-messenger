@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatDateHeader } from '@/utils/dateFormat'
 import { useDayChange } from '@/hooks/useDayChange'
-import { DATE_PILL_CLASSES } from './DateSeparator'
+import { DATE_PILL_CLASSES, DatePill } from './DateSeparator'
 
 /** Within this many px of the bottom the reader is at the newest messages, where the pill hides. */
 export const FLOATING_DATE_LIVE_EDGE_PX = 64
@@ -19,6 +19,8 @@ export interface FloatingDateHeaderProps {
   getTopDate: () => string | null
   /** Hides the pill while another overlay holds the same top-center slot. */
   suppressed?: boolean
+  /** Opens jump to date at the pill's day. */
+  onSelect?: (date: string) => void
 }
 
 /**
@@ -26,9 +28,9 @@ export interface FloatingDateHeaderProps {
  * visible message for as long as the reader is scrolled away from the newest messages,
  * and hides at the live edge and whenever a date separator is itself the topmost row.
  * Owns its own scroll listener and visibility state so the parent MessageList never
- * re-renders on scroll. Informational only.
+ * re-renders on scroll. With `onSelect` the pill opens jump to date at its day.
  */
-export function FloatingDateHeader({ scrollerRef, getTopDate, suppressed = false }: FloatingDateHeaderProps) {
+export function FloatingDateHeader({ scrollerRef, getTopDate, suppressed = false, onSelect }: FloatingDateHeaderProps) {
   const { t, i18n } = useTranslation()
   const lang = i18n.language.split('-')[0]
   // Re-render when the local day rolls over, so the relative label below does not
@@ -82,11 +84,15 @@ export function FloatingDateHeader({ scrollerRef, getTopDate, suppressed = false
       }`}
       aria-hidden={!visible}
     >
-      {date && (
+      {date && (onSelect ? (
+        <span data-floating-date-pill className={visible ? 'pointer-events-auto' : undefined}>
+          <DatePill date={date} label={formatDateHeader(date, t, lang)} onSelect={onSelect} className="shadow-lg" tabIndex={visible ? undefined : -1} />
+        </span>
+      ) : (
         <span data-floating-date-pill className={`${DATE_PILL_CLASSES} shadow-lg`}>
           {formatDateHeader(date, t, lang)}
         </span>
-      )}
+      ))}
     </div>
   )
 }

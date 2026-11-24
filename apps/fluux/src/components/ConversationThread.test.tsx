@@ -35,6 +35,9 @@ const h = vi.hoisted(() => ({
   reportViewport: undefined as undefined | ((...args: unknown[]) => void),
   triggerAnimation: undefined as unknown as (...args: unknown[]) => void,
   setTargetMessageId: undefined as unknown as (...args: unknown[]) => void,
+  findFirstMessageOfDay: vi.fn(),
+  archiveMessages: {},
+  serverInfo: null as { features: string[] } | null,
   emptySet: new Set<string>(),
   emptyMap: new Map<string, number>(),
   blocked: new Set<string>(),
@@ -52,7 +55,8 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     useContactIdentities: () => new Map(),
     useReferencedMessage: () => undefined,
     useRoomMessageSnapshots: (_jid: string, messages: unknown) => messages,
-    useXMPPContext: () => ({ client: { e2ee: null } }),
+    useXMPPContext: () => ({ client: { e2ee: null, messages: h.archiveMessages } }),
+    findFirstMessageOfDay: h.findFirstMessageOfDay,
     useXMPP: () => ({ client: { profile: { fetchProfileDetails: vi.fn().mockResolvedValue(null) } }, sendRawXml: vi.fn(), onStanza: vi.fn(() => vi.fn()), on: vi.fn(() => vi.fn()), setPresence: vi.fn(), xml: vi.fn(), isConnected: () => false, getJid: () => null }),
     useRosterActions: () => ({ addContact: vi.fn(), removeContact: vi.fn(), renameContact: vi.fn() }),
     useBlocking: () => ({ blockJid: vi.fn(), unblockJid: vi.fn() }),
@@ -89,7 +93,7 @@ vi.mock('@fluux/sdk/react', () => ({
     interiorPlacementVersions: h.emptyMap, getVotedPollIds: () => h.emptySet, getDismissedPollIds: () => h.emptySet,
   }),
   useConnectionStore: (selector: (s: unknown) => unknown) => selector({
-    jid: 'me@example.com/resource', ownAvatar: null, ownNickname: 'Me', status: 'online', httpUploadService: { supportsRetention: false },
+    jid: 'me@example.com/resource', ownAvatar: null, ownNickname: 'Me', status: 'online', serverInfo: h.serverInfo, httpUploadService: { supportsRetention: false },
   }),
   useBlockingStore: (selector: (s: unknown) => unknown) => selector({ blockedJids: h.blocked }),
   useIgnoreStore: (selector: (s: unknown) => unknown) => selector({ ignoredUsers: h.ignored }),
@@ -294,6 +298,7 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
     h.listProps = null
     h.composerProps = null
     h.headerProps = null
+    h.serverInfo = null
     h.focus = vi.fn()
     h.reportViewport = vi.fn()
     kind.activate(firstId, kind.messages())
@@ -584,6 +589,129 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
       kind.mount({ onShowSavedInConversation: onSaved })
       ;(h.headerProps!.onShowSavedInConversation as () => void)()
       expect(onSaved).toHaveBeenCalledWith(firstId)
+    })
+
+    it('jumps to the first message of a chosen day in this conversation', async () => {
+      const landing = kind.messages()[0]
+      h.findFirstMessageOfDay.mockResolvedValue({ kind: 'found', message: { ...landing, timestamp: new Date(2024, 2, 10, 9) }, source: 'cache' })
+      kind.mount()
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
+      expect(h.findFirstMessageOfDay).toHaveBeenCalledWith(h.archiveMessages, kind.viewportKind, firstId, new Date(2024, 2, 10), new Date(2024, 2, 11),
+        expect.arrayContaining([expect.objectContaining({ id: landing.id })]), undefined)
+      expect(kind.storeSpies.setTargetMessageId).toHaveBeenCalledWith(
+        kind.name === 'room' ? expect.objectContaining({ id: landing.id }) : landing.id)
+      expect(screen.queryByLabelText('chat.jumpToDate.date')).toBeNull()
+    })
+
+    it.each(['success', 'cache read failure', 'rejection'] as const)(
+      'scrolls to the latest row after an empty date lookup from a parked window on %s', async (outcome) => {
+        const active = kind.name === 'chat' ? h.chat! : h.room!
+        let resolveRecenter!: (result: boolean) => void
+        let rejectRecenter!: (reason: Error) => void
+        const recenterToLatest = vi.fn(() => new Promise<boolean>((resolve, reject) => {
+          resolveRecenter = resolve
+          rejectRecenter = reject
+        }))
+        const scrollToBottom = vi.fn()
+        active.windowAtLiveEdge = false
+        active.recenterToLatest = recenterToLatest
+        h.findFirstMessageOfDay.mockResolvedValue({ kind: 'none' })
+        kind.mount()
+        const listHandleRef = (h.listProps as MessageListProps<Message>).handleRef as unknown as {
+          current: { scrollToBottom: () => void } | null
+        }
+        listHandleRef.current = { scrollToBottom }
+        act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+        fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
+
+        expect(recenterToLatest).toHaveBeenCalledOnce()
+        expect(scrollToBottom).not.toHaveBeenCalled()
+        expect(kind.storeSpies.setTargetMessageId).not.toHaveBeenCalled()
+
+        await act(async () => {
+          if (outcome === 'success') resolveRecenter(true)
+          else if (outcome === 'cache read failure') resolveRecenter(false)
+          else rejectRecenter(new Error('Cache read failed'))
+          await Promise.resolve()
+          await Promise.resolve()
+        })
+        expect(scrollToBottom).toHaveBeenCalledOnce()
+      }
+    )
+
+    it('does not scroll a newly opened conversation when a parked-window recenter settles', async () => {
+      const active = kind.name === 'chat' ? h.chat! : h.room!
+      let finishRecenter!: (result: boolean) => void
+      active.windowAtLiveEdge = false
+      active.recenterToLatest = vi.fn(() => new Promise<boolean>(resolve => { finishRecenter = resolve }))
+      h.findFirstMessageOfDay.mockResolvedValue({ kind: 'none' })
+      const { rerender } = kind.mount()
+      const listHandleRef = (h.listProps as MessageListProps<Message>).handleRef as unknown as {
+        current: { scrollToBottom: () => void } | null
+      }
+      const originalScrollToBottom = vi.fn()
+      listHandleRef.current = { scrollToBottom: originalScrollToBottom }
+
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
+
+      kind.activate(secondId, kind.messages())
+      rerender(kind.name === 'chat' ? <ChatView /> : <RoomView />)
+      const nextScrollToBottom = vi.fn()
+      listHandleRef.current = { scrollToBottom: nextScrollToBottom }
+      await act(async () => {
+        finishRecenter(true)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(originalScrollToBottom).not.toHaveBeenCalled()
+      expect(nextScrollToBottom).not.toHaveBeenCalled()
+    })
+
+    it('uses local history only when a chat server is known not to offer MAM', async () => {
+      if (kind.name !== 'chat') return
+      h.serverInfo = { features: [] }
+      h.findFirstMessageOfDay.mockResolvedValue({ kind: 'unknown' })
+      const unsupported = kind.mount()
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
+      expect(h.findFirstMessageOfDay.mock.calls[0][0]).toBeUndefined()
+
+      unsupported.unmount()
+      h.findFirstMessageOfDay.mockClear()
+      h.serverInfo = null
+      kind.mount()
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
+      expect(h.findFirstMessageOfDay.mock.calls[0][0]).toBe(h.archiveMessages)
+    })
+
+    it('does not land a pending date lookup after switching conversations', async () => {
+      let resolve!: (result: unknown) => void
+      h.findFirstMessageOfDay.mockReturnValueOnce(new Promise((done) => { resolve = done }))
+      const { rerender } = kind.mount()
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      fireEvent.change(screen.getByLabelText('chat.jumpToDate.date'), { target: { value: '2024-03-10' } })
+      fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' }))
+      expect(h.findFirstMessageOfDay).toHaveBeenCalled()
+      kind.activate(secondId, kind.messages())
+      rerender(kind.name === 'chat' ? <ChatView /> : <RoomView />)
+      expect(screen.queryByLabelText('chat.jumpToDate.date')).toBeNull()
+      await act(async () => resolve({ kind: 'found', message: kind.messages()[0], source: 'archive' }))
+      expect(kind.storeSpies.setTargetMessageId).not.toHaveBeenCalled()
+    })
+
+    it('opens jump to date on the day of a date bubble', () => {
+      kind.mount()
+      act(() => { listProps().timeline.window!.onJumpToDate!('2024-03-10') })
+      expect((screen.getByLabelText('chat.jumpToDate.date') as HTMLInputElement).value).toBe('2024-03-10')
     })
 
     it('offers neither when the parent gives no handler', () => {

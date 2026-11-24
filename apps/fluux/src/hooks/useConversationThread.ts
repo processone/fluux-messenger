@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, type RefObject } from 'react'
-import type { Message, MessageRowRef, RoomMessage, ViewportEvidenceKey } from '@fluux/sdk'
+import type { GapInterval, Message, MessageRowRef, RoomMessage, ViewportEvidenceKey } from '@fluux/sdk'
 import { currentViewportGeneration, getStorageScopeJid, reportViewport } from '@fluux/sdk'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMode, useMessageSelection, useDragAndDrop } from '@/hooks'
 import { useConnectionStore } from '@fluux/sdk/react'
@@ -30,10 +30,14 @@ export interface ConversationThreadSource<M extends ThreadMessage> {
   fetchOlderHistory?: () => void
   isLoadingOlder?: boolean
   isHistoryComplete?: boolean
+  historyGaps?: readonly GapInterval[]
+  archiveAvailable?: boolean
+  windowAtLiveEdge?: boolean
+  recenterToLatest?: () => Promise<unknown> | void
   clearFirstNewMessageId: (id: string) => void
   advanceReadPointer: (id: string, row: MessageRowRef) => void
   /** Jumps the list to a message. Must keep one identity across renders. */
-  setTargetMessageId: (messageId: string) => void
+  setTargetMessageId: (target: string | MessageRowRef) => void
   /** Starts an easter egg animation in a conversation. Must keep one identity across renders. */
   triggerAnimation: (id: string, animation: string, senderName: string) => void
   /** The animation now playing in this conversation, or null. */
@@ -56,7 +60,7 @@ const VIEWPORT_LIST_KIND = { chat: 'conversation', room: 'room' } as const
  */
 export function useConversationThread<M extends ThreadMessage>(source: ConversationThreadSource<M>) {
   const {
-    kind, id, displayMessages, allMessages, readAllMessages, fetchOlderHistory, isLoadingOlder, isHistoryComplete,
+    kind, id, displayMessages, allMessages, readAllMessages, fetchOlderHistory, isLoadingOlder, isHistoryComplete, historyGaps, archiveAvailable, windowAtLiveEdge, recenterToLatest,
     clearFirstNewMessageId, advanceReadPointer, setTargetMessageId, triggerAnimation, activeAnimation, clearAnimation,
     onSearchInConversation, onShowSavedInConversation, findOnPageRef,
   } = source
@@ -84,6 +88,13 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
 
   const handleSearchInConversation = id && onSearchInConversation ? () => onSearchInConversation(id) : undefined
   const handleShowSaved = id && onShowSavedInConversation ? () => onShowSavedInConversation(id) : undefined
+  // Bind an open lookup to the conversation that started it, not the next render's id.
+  const [dateDialog, setDateDialog] = useState<{ conversationId: string; day?: string } | null>(null)
+  const openJumpToDateAt = useCallback((day?: string) => {
+    if (id) setDateDialog({ conversationId: id, day })
+  }, [id])
+  const handleJumpToDate = id ? () => openJumpToDateAt() : undefined
+  const closeJumpToDate = useCallback(() => setDateDialog(null), [])
 
   // Stable identities below: they reach memoized rows and the memoized composer
   const handleEditLastMessage = useCallback(() => {
@@ -174,6 +185,7 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
   useEffect(() => {
     setReplyingTo(null)
     setEditingMessage(null)
+    setDateDialog(null)
     // Releases the preview URL and any photo preparation of the previous conversation
     clearPendingAttachment()
     clearSelection()
@@ -224,6 +236,14 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
     (animation: string, senderName: string) => { if (id) triggerAnimation(id, animation, senderName) },
     [id, triggerAnimation],
   )
+  const recenterAndScrollToLatest = useCallback(() => {
+    if (!recenterToLatest) return
+    const handle = listHandleRef.current
+    const scrollToBottom = () => {
+      if (handle && listHandleRef.current === handle) handle.scrollToBottom()
+    }
+    void Promise.resolve(recenterToLatest()).then(scrollToBottom).catch(scrollToBottom)
+  }, [listHandleRef, recenterToLatest])
 
   return {
     id,
@@ -236,9 +256,10 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
     clearPendingAttachment,
     composerHandleRef,
     focusComposer,
-    /** The header's search and saved handlers. */
+    /** The header's search, saved and jump-to-date handlers. */
     handleSearchInConversation,
     handleShowSaved,
+    handleJumpToDate,
     /** Props shared by the view's message list: spread them into it. */
     listProps: {
       listHandleRef,
@@ -256,6 +277,7 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
       highlightTerms: find.highlightTerms,
       currentMatchId: find.currentMatchId,
       lastSentMessageId,
+      onJumpToDate: openJumpToDateAt,
     },
     /** Props shared by the view's composer: spread them into it. */
     composerProps: {
@@ -294,6 +316,9 @@ export function useConversationThread<M extends ThreadMessage>(source: Conversat
       onMouseLeave: handleMouseLeave,
       onSeeReaction: handleSeeReaction,
       onReplayEasterEgg: handleReplayEasterEgg,
+      jumpToDate: dateDialog && dateDialog.conversationId === id
+        ? { kind, conversationId: id, initialDay: dateDialog.day, readLoaded: readAllMessages, gaps: historyGaps, archiveAvailable, windowAtLiveEdge, onRecenterToLatest: recenterAndScrollToLatest, onLand: setTargetMessageId, onClose: closeJumpToDate }
+        : null,
       activeAnimation,
       clearAnimation,
     },

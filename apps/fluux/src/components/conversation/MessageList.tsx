@@ -135,6 +135,7 @@ export function MessageList<T extends BaseMessage>({
     onLoadNewer,
     isLoadingNewer,
     onJumpToLatest,
+    onJumpToDate,
   } = timeline.window ?? {}
   const { intervals: gaps, onCatchUp: onCatchUpHistory, isCatchingUp } = timeline.gaps ?? {}
   const {
@@ -784,7 +785,7 @@ export function MessageList<T extends BaseMessage>({
       case 'date':
         return (
           <div data-row-kind="date" data-date-separator={item.date}>
-            <DateSeparator date={item.date} />
+            <DateSeparator date={item.date} onSelect={onJumpToDate} />
           </div>
         )
       case 'message': {
@@ -948,7 +949,7 @@ export function MessageList<T extends BaseMessage>({
           {groupedMessages.map((group, groupIndex) => (
             <div key={`${group.date}-${groupIndex}`}>
               <div data-date-separator={group.date}>
-                <DateSeparator date={group.date} />
+                <DateSeparator date={group.date} onSelect={onJumpToDate} />
               </div>
               {group.messages.map((msg, idx) => {
                 const rowId = staticMode && getStaticMessageId ? getStaticMessageId(msg) : messageRowId(msg) ?? msg.id
@@ -1005,6 +1006,7 @@ export function MessageList<T extends BaseMessage>({
           scrollerRef={scrollContainerRef}
           getTopDate={getTopDate}
           suppressed={!!firstNewRowId && markerAboveViewport}
+          onSelect={onJumpToDate}
         />
       )}
 

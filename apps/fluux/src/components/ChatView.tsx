@@ -2,6 +2,7 @@ import { iosHaptic } from '@/platform/ios/haptics'
 import { editableForward } from '../utils/forwardMessage'
 import type { ChatMessageTarget, GapInterval } from '@fluux/sdk'
 import type { MessageRowRef } from '@fluux/sdk'
+import { NS_MAM } from '@fluux/sdk/xmpp'
 import { messageRowId } from './conversation/messageRowIdentity'
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -57,7 +58,7 @@ interface ChatViewProps {
 
 
 // Stable identities: the thread reads them in effects keyed on the conversation
-const setChatTargetMessageId = (messageId: string) => chatStore.getState().setTargetMessageId(messageId)
+const setChatTargetMessageId = (target: string | MessageRowRef) => chatStore.getState().setTargetMessageId(target)
 const triggerChatAnimation = (id: string, animation: string, senderName: string) => chatStore.getState().triggerAnimation(id, animation, senderName)
 
 export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, onShowSavedInConversation, onShowProfile, mainContentRef, composerRef, findOnPageRef }: ChatViewProps) {
@@ -91,6 +92,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const activeMessagesRef = useRef(activeMessages)
   useLayoutEffect(() => { activeMessagesRef.current = activeMessages }, [activeMessages])
   const readActiveMessages = useCallback(() => activeMessagesRef.current, [])
+  const serverInfo = useConnectionStore((state) => state.serverInfo)
 
   const thread = useConversationThread<Message>({
     kind: 'chat',
@@ -100,6 +102,10 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     readAllMessages: readActiveMessages,
     fetchOlderHistory,
     isLoadingOlder: activeHistoryState?.isLoading,
+    historyGaps: activeHistoryState?.gaps,
+    archiveAvailable: serverInfo ? serverInfo.features.includes(NS_MAM) : undefined,
+    windowAtLiveEdge,
+    recenterToLatest,
     isHistoryComplete: activeHistoryState?.isHistoryComplete,
     clearFirstNewMessageId,
     advanceReadPointer,
@@ -247,6 +253,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           jid={activeConversation.id}
           onBack={onBack}
           onSearchInConversation={thread.handleSearchInConversation}
+          onJumpToDate={thread.handleJumpToDate}
           onShowSavedInConversation={thread.handleShowSaved}
           encryptionState={encryptionState}
           onEncryptionClick={canDecideTrust ? handleEncryptionClick : undefined}
@@ -425,6 +432,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   highlightTerms,
   currentMatchId,
   lastSentMessageId,
+  onJumpToDate,
   gaps,
   onCatchUpHistory,
   isCatchingUp,
@@ -478,6 +486,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   highlightTerms?: string[]
   currentMatchId?: string
   lastSentMessageId?: string | null
+  onJumpToDate?: (date: string) => void
   gaps?: readonly GapInterval[]
   onCatchUpHistory?: (gapStart: number) => void
   isCatchingUp?: boolean
@@ -574,7 +583,7 @@ export const ChatMessageList = memo(function ChatMessageList({
           unavailable: historyUnavailable,
           onLoadAround,
         },
-        window: { atLiveEdge: windowAtLiveEdge, onLoadNewer, onJumpToLatest },
+        window: { atLiveEdge: windowAtLiveEdge, onLoadNewer, onJumpToLatest, onJumpToDate },
         gaps: { intervals: gaps, onCatchUp: onCatchUpHistory, isCatchingUp },
       }}
       readMarkers={{

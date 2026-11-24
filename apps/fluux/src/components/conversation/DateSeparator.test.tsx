@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { DateSeparator } from './DateSeparator'
 
 // Mock i18next
@@ -37,5 +37,22 @@ describe('DateSeparator', () => {
 
     const dateText = screen.getByText('Formatted: 2024-01-15')
     expect(dateText).toHaveClass('text-xs', 'font-semibold', 'text-fluux-muted')
+  })
+
+  // Captain's ask: a date bubble opens jump to date on its day.
+  it('is a keyboard-reachable button opening jump to date when given onSelect', () => {
+    const onSelect = vi.fn()
+    render(<DateSeparator date="2024-01-15" onSelect={onSelect} />)
+
+    const pill = screen.getByRole('button', { name: 'chat.jumpToDate.fromPill' })
+    expect(pill.tagName).toBe('BUTTON')
+    expect(pill).toHaveTextContent('Formatted: 2024-01-15')
+    fireEvent.click(pill)
+    expect(onSelect).toHaveBeenCalledWith('2024-01-15')
+  })
+
+  it('stays plain text without onSelect', () => {
+    render(<DateSeparator date="2024-01-15" />)
+    expect(screen.queryByRole('button')).toBeNull()
   })
 })

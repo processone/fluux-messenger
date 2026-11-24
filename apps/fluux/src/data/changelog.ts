@@ -19,6 +19,7 @@ export const changelog: ChangelogEntry[] = [
     sections: [{
       type: 'added',
       items: [
+        'Jump to date: open a chat or room at the first message of a day from the conversation menu or a date bubble',
         'Saved messages: keep any message in a new Saved list in the sidebar, from its More menu or the long-press sheet on a phone. The list is stored privately on your server, so it follows you to every Fluux session, and nobody else sees it, not even the other members of a room. A conversation that has saved messages offers a Saved entry with their count in its ⋮ menu, which opens the list narrowed to it, and on a wide window selecting an entry shows that message in place, with the conversation around it',
         'Saved messages are sealed while OpenPGP is on: each one is signed and encrypted to your own key, so your server keeps only unreadable data and the list stays locked until your key is unlocked. Without OpenPGP, plain messages keep their text and encrypted ones keep none',
         'Forward a message from a chat or a room to any contact, chat or joined room, with an optional comment. Photos and files travel with it, and the forward arrives as a source card that opens the original. Enter sends and Shift-Enter adds a line, as in the composer. A message from an encrypted chat can only be forwarded into another encrypted chat',
@@ -55,6 +56,7 @@ export const changelog: ChangelogEntry[] = [
     }, {
       type: 'fixed',
       items: [
+        'Search on server now works with servers that advertise archive full-text search, such as ejabberd with a MySQL archive',
         'Reconnecting is more reliable: messages sent as the connection drops are resent once or marked not delivered with Retry, and long sessions no longer get cut off by strict servers',
         'Fluux no longer silently falls back to plain text for a contact whose key you refused or have not decided on',
         'Fluux now rejects message copies and archive results that do not come from your own account or the archive it asked',

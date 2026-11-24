@@ -1,12 +1,13 @@
 /**
  * Tests for MAM fulltext search capability discovery.
  *
- * Verifies that discoverMAMSearchCapability() correctly detects whether
- * the server supports the `fulltext` field in MAM queries by parsing
- * disco#info responses from the user's bare JID (MAM archive endpoint).
+ * Verifies that discoverMAMSearchCapability() detects XEP-0431 support from
+ * the disco#info of the user's bare JID (MAM archive endpoint): ejabberd
+ * announces the `urn:xmpp:fulltext:0` feature, and a server may instead embed
+ * a MAM form listing the namespaced `{urn:xmpp:fulltext:0}fulltext` field.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient, bindStoresForTesting } from '../XMPPClient'
+import { XMPPClient, bindStoresForTesting, getInternalSurfaceForTesting } from '../XMPPClient'
 import {
   createMockXmppClient,
   createMockStores,
@@ -62,36 +63,26 @@ describe('Discovery MAM Search Capability', () => {
     vi.clearAllMocks()
   })
 
-  it('should detect fulltext support when MAM form includes fulltext field', async () => {
-    // disco#info response with MAM data form containing fulltext field
+  const mamForm = (formType: string, extraFields: string[]) => ({
+    name: 'x',
+    attrs: { xmlns: 'jabber:x:data', type: 'result' },
+    children: [
+      { name: 'field', attrs: { var: 'FORM_TYPE' }, children: [{ name: 'value', text: formType }] },
+      ...['with', 'start', 'end', ...extraFields].map(field => ({ name: 'field', attrs: { var: field } })),
+    ],
+  })
+
+  const discover = async (children: unknown[]) => {
     const response = createMockElement('iq', { type: 'result' }, [
-      {
-        name: 'query',
-        attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
-        children: [
-          { name: 'feature', attrs: { var: 'urn:xmpp:mam:2' } },
-          {
-            name: 'x',
-            attrs: { xmlns: 'jabber:x:data', type: 'result' },
-            children: [
-              {
-                name: 'field',
-                attrs: { var: 'FORM_TYPE' },
-                children: [{ name: 'value', text: 'urn:xmpp:mam:2' }],
-              },
-              { name: 'field', attrs: { var: 'with' } },
-              { name: 'field', attrs: { var: 'start' } },
-              { name: 'field', attrs: { var: 'end' } },
-              { name: 'field', attrs: { var: 'fulltext' } },
-            ],
-          },
-        ],
-      },
+      { name: 'query', attrs: { xmlns: 'http://jabber.org/protocol/disco#info' }, children },
     ])
-
     mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(response)
+    await connect()
+    await xmppClient.server.discoverMAMSearchCapability()
+    await waitForAsyncOps()
+  }
 
-    // Connect to set JID
+  const connect = async () => {
     const connectPromise = xmppClient.connect({
       jid: 'user@example.com',
       password: 'secret',
@@ -100,96 +91,53 @@ describe('Discovery MAM Search Capability', () => {
     })
     mockXmppClientInstance._emit('online')
     await connectPromise
+  }
 
-    await xmppClient.server.discoverMAMSearchCapability()
-    await waitForAsyncOps()
+  it('detects fulltext support from the XEP-0431 feature (ejabberd shape)', async () => {
+    await discover([
+      { name: 'feature', attrs: { var: 'urn:xmpp:mam:2' } },
+      { name: 'feature', attrs: { var: 'urn:xmpp:fulltext:0' } },
+    ])
 
     expect(emitSDKSpy).toHaveBeenCalledWith('connection:history-search', { supported: true })
   })
 
-  it('should report no fulltext support when MAM form lacks fulltext field', async () => {
-    // disco#info response with MAM data form but NO fulltext field
-    const response = createMockElement('iq', { type: 'result' }, [
-      {
-        name: 'query',
-        attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
-        children: [
-          { name: 'feature', attrs: { var: 'urn:xmpp:mam:2' } },
-          {
-            name: 'x',
-            attrs: { xmlns: 'jabber:x:data', type: 'result' },
-            children: [
-              {
-                name: 'field',
-                attrs: { var: 'FORM_TYPE' },
-                children: [{ name: 'value', text: 'urn:xmpp:mam:2' }],
-              },
-              { name: 'field', attrs: { var: 'with' } },
-              { name: 'field', attrs: { var: 'start' } },
-              { name: 'field', attrs: { var: 'end' } },
-            ],
-          },
-        ],
-      },
+  it('detects fulltext support from the namespaced field in an embedded MAM form', async () => {
+    await discover([
+      { name: 'feature', attrs: { var: 'urn:xmpp:mam:2' } },
+      mamForm('urn:xmpp:mam:2', ['{urn:xmpp:fulltext:0}fulltext']),
     ])
 
-    mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(response)
+    expect(emitSDKSpy).toHaveBeenCalledWith('connection:history-search', { supported: true })
+  })
 
-    const connectPromise = xmppClient.connect({
-      jid: 'user@example.com',
-      password: 'secret',
-      server: 'example.com',
-      skipDiscovery: true,
-    })
-    mockXmppClientInstance._emit('online')
-    await connectPromise
-
-    await xmppClient.server.discoverMAMSearchCapability()
-    await waitForAsyncOps()
+  it('ignores a bare fulltext field, which XEP-0431 servers reject', async () => {
+    await discover([
+      { name: 'feature', attrs: { var: 'urn:xmpp:mam:2' } },
+      mamForm('urn:xmpp:mam:2', ['fulltext']),
+    ])
 
     expect(emitSDKSpy).toHaveBeenCalledWith('connection:history-search', { supported: false })
   })
 
-  it('should report no fulltext support when no MAM form is present', async () => {
-    // disco#info response with no data forms at all
-    const response = createMockElement('iq', { type: 'result' }, [
-      {
-        name: 'query',
-        attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
-        children: [
-          { name: 'feature', attrs: { var: 'urn:xmpp:mam:2' } },
-        ],
-      },
+  it('should report no fulltext support when MAM form lacks fulltext field', async () => {
+    await discover([
+      { name: 'feature', attrs: { var: 'urn:xmpp:mam:2' } },
+      mamForm('urn:xmpp:mam:2', []),
     ])
 
-    mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(response)
+    expect(emitSDKSpy).toHaveBeenCalledWith('connection:history-search', { supported: false })
+  })
 
-    const connectPromise = xmppClient.connect({
-      jid: 'user@example.com',
-      password: 'secret',
-      server: 'example.com',
-      skipDiscovery: true,
-    })
-    mockXmppClientInstance._emit('online')
-    await connectPromise
-
-    await xmppClient.server.discoverMAMSearchCapability()
-    await waitForAsyncOps()
+  it('should report no fulltext support when neither the feature nor a MAM form is present', async () => {
+    await discover([{ name: 'feature', attrs: { var: 'urn:xmpp:mam:2' } }])
 
     expect(emitSDKSpy).toHaveBeenCalledWith('connection:history-search', { supported: false })
   })
 
   it('should handle disco#info failure gracefully', async () => {
     mockXmppClientInstance.iqCaller.request.mockRejectedValueOnce(new Error('Service unavailable'))
-
-    const connectPromise = xmppClient.connect({
-      jid: 'user@example.com',
-      password: 'secret',
-      server: 'example.com',
-      skipDiscovery: true,
-    })
-    mockXmppClientInstance._emit('online')
-    await connectPromise
+    await connect()
 
     await xmppClient.server.discoverMAMSearchCapability()
     await waitForAsyncOps()
@@ -198,43 +146,25 @@ describe('Discovery MAM Search Capability', () => {
   })
 
   it('should ignore non-MAM data forms', async () => {
-    // disco#info with a data form for a different namespace (not MAM)
-    const response = createMockElement('iq', { type: 'result' }, [
-      {
-        name: 'query',
-        attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
-        children: [
-          {
-            name: 'x',
-            attrs: { xmlns: 'jabber:x:data', type: 'result' },
-            children: [
-              {
-                name: 'field',
-                attrs: { var: 'FORM_TYPE' },
-                children: [{ name: 'value', text: 'urn:xmpp:http:upload:0' }],
-              },
-              { name: 'field', attrs: { var: 'fulltext' } }, // fulltext in wrong form
-            ],
-          },
-        ],
-      },
-    ])
+    await discover([mamForm('urn:xmpp:http:upload:0', ['{urn:xmpp:fulltext:0}fulltext'])])
 
-    mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(response)
-
-    const connectPromise = xmppClient.connect({
-      jid: 'user@example.com',
-      password: 'secret',
-      server: 'example.com',
-      skipDiscovery: true,
-    })
-    mockXmppClientInstance._emit('online')
-    await connectPromise
-
-    await xmppClient.server.discoverMAMSearchCapability()
-    await waitForAsyncOps()
-
-    // Should not be fooled by fulltext in a non-MAM form
+    // Should not be fooled by the fulltext field in a non-MAM form
     expect(emitSDKSpy).toHaveBeenCalledWith('connection:history-search', { supported: false })
+  })
+
+  it.each([
+    ['searchArchive', () => getInternalSurfaceForTesting(xmppClient).mam.searchArchive({ query: 'hello' })],
+    ['searchRoomArchive', () => getInternalSurfaceForTesting(xmppClient).mam.searchRoomArchive({ query: 'hello', roomJid: 'room@conference.example.com' })],
+  ])('%s sends the namespaced XEP-0431 field', async (_name, search) => {
+    await connect()
+    mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(createMockElement('iq', { type: 'result' }, [
+      { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+    ]))
+
+    await search()
+
+    const sent = JSON.stringify(mockXmppClientInstance.iqCaller.request.mock.calls.at(-1)?.[0])
+    expect(sent).toContain('"var":"{urn:xmpp:fulltext:0}fulltext"')
+    expect(sent).not.toContain('"var":"fulltext"')
   })
 })

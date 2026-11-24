@@ -84,6 +84,8 @@ export interface HistoryQueryOptions {
    * contiguity outside the window.
    */
   preserveGapMarker?: boolean
+  /** Save detached date navigation results without changing history sync state. */
+  dateLookup?: boolean
   /**
    * Epoch ms a forward walk starts from: the timestamp of the message named by
    * `after`, or of `start`. Its pages heal the recorded history gaps at or above
@@ -134,12 +136,16 @@ export interface RoomHistoryQueryOptions {
   after?: string
   /** Filter messages after this timestamp (ISO 8601 format) */
   start?: string
+  /** Filter messages through this timestamp (ISO 8601 format). A bounded query is not live-edge coverage. */
+  end?: string
   /**
    * When true, the resulting merge leaves the recorded history gaps untouched.
    * Used by windowed context queries, whose completion says nothing about
    * contiguity outside the window.
    */
   preserveGapMarker?: boolean
+  /** Save detached date navigation results without changing history sync state. */
+  dateLookup?: boolean
   /**
    * Epoch ms a forward walk starts from: the timestamp of the message named by
    * `after`, or of `start`. Its pages heal the recorded history gaps at or above

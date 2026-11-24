@@ -9,6 +9,8 @@ import {
   NS_HTTP_UPLOAD,
   NS_HTTP_UPLOAD_RETENTION,
   NS_MAM,
+  NS_FULLTEXT,
+  MAM_FULLTEXT_FIELD,
   NS_CARBONS,
   NS_BLOCKING,
   NS_PUBSUB,
@@ -353,8 +355,8 @@ export class Discovery extends BaseModule {
    * Discover whether the server supports fulltext search in MAM queries.
    *
    * Sends disco#info to the user's bare JID (the MAM archive endpoint) and
-   * checks for a `fulltext` field in the MAM data form. This is supported
-   * by ejabberd and some other servers.
+   * looks for XEP-0431: the `urn:xmpp:fulltext:0` feature (what ejabberd
+   * announces), or the namespaced fulltext field in an embedded MAM form.
    */
   async discoverMAMSearchCapability(): Promise<void> {
     const currentJid = this.deps.getCurrentJid()
@@ -374,16 +376,16 @@ export class Discovery extends BaseModule {
         return
       }
 
-      // Look for the MAM data form with a fulltext field
-      const xForms = query.getChildren('x', NS_DATA_FORMS) || []
-      let supportsFulltext = false
+      const features = query.getChildren('feature') || []
+      let supportsFulltext = features.some((f: Element) => f.attrs.var === NS_FULLTEXT)
 
+      const xForms = query.getChildren('x', NS_DATA_FORMS) || []
       for (const form of xForms) {
+        if (supportsFulltext) break
         const fields = form.getChildren('field') || []
         const formType = fields.find((f: Element) => f.attrs.var === 'FORM_TYPE')
         if (formType?.getChildText('value') === NS_MAM) {
-          // Found the MAM form — check for fulltext field
-          supportsFulltext = fields.some((f: Element) => f.attrs.var === 'fulltext')
+          supportsFulltext = fields.some((f: Element) => f.attrs.var === MAM_FULLTEXT_FIELD)
           break
         }
       }
