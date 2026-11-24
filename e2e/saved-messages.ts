@@ -358,7 +358,7 @@ async function seedMarker(page: Page, kind: 'chat' | 'room') {
     if (kind === 'chat') {
       for (const [id, body] of [['marker-checklist', 'The checklist is ready.'], ['marker-other', 'Keep this saved too.']]) {
         scope.__demoClient.emitSDK('chat:message', { message: {
-          type: 'chat', id, conversationId: peer, from: peer, body, stanzaId: `archive-${id}`,
+          type: 'chat', id, conversationId: peer, from: peer, body, stanzaId: `archive-${id}`, originId: undefined,
           timestamp: new Date(), isOutgoing: false,
         }, isLiveArrival: true })
       }
