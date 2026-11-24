@@ -120,7 +120,7 @@ async function checkRoomBadgeGeometry(page: Page, width: number) {
       .map(button => { const rect = button.getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width, height: rect.height } })
       .filter(rect => rect.width > 0 && rect.height > 0))
     for (const control of controls) expect(clearOf(badge, control), 'the badge leaves structured-card controls unobscured').toBe(true)
-    geometryReadings.push({ state: 'structured-poll', direction: layout.direction, width: layout.width, badge, controls })
+    geometryReadings.push({ state: 'structured-poll', direction: layout.direction, width, badge, controls })
   }
   await oldRow.scrollIntoViewIfNeeded()
   await expect(oldRow.locator('[data-read-marker-corner]')).toHaveCount(1)
@@ -182,6 +182,7 @@ async function checkRoomBadgeGeometry(page: Page, width: number) {
   await expect(oldRow.locator('[data-reaction-emoji="👍"]')).toBeVisible()
   const reactionHeights = await checkGeometry(undefined, true)
   await showReaders(page, [fixture.actor], fixture.next)
+  await expect(oldBadge.getByText('+1', { exact: true })).toHaveCount(0)
   await checkGeometry(reactionHeights, true)
   await test.info().attach('room-marker-corner-geometry', { body: JSON.stringify(geometryReadings, null, 2), contentType: 'application/json' })
 }
