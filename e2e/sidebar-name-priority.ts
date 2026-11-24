@@ -145,28 +145,63 @@ for (const mode of ['light', 'dark'] as const) {
     await test.info().attach(`${mode}-larger-text`, { body: JSON.stringify(largerTextReadings, null, 2), contentType: 'application/json' })
     await page.evaluate(() => (window as unknown as DemoWindow).__settingsStore.getState().setFontSize(100))
     await expect.poll(() => page.locator('html').evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeCloseTo(baseFont, 3)
-    // A name's script direction must not move it away from the avatar.
+    // Force the ordering seen in WebKit: reopening Emma's chat must finish
+    // activation (and rebuild its sidebar entry) after the Arabic rename.
+    const releaseChatLoad = await page.evaluateHandle(() => {
+      const store = (window as unknown as DemoWindow).__chatStore
+      const { loadMessagesFromCache } = store.getState()
+      let release!: () => void
+      const held = new Promise<void>(resolve => { release = resolve })
+      store.setState({
+        loadMessagesFromCache: async (...args) => {
+          await held
+          return loadMessagesFromCache(...args)
+        },
+      })
+      return () => {
+        store.setState({ loadMessagesFromCache })
+        release()
+      }
+    })
     await page.locator('[data-nav="messages"]').click()
-    const row = rows(page, 'messages').first()
-    const id = (await row.getAttribute('data-conv-id'))!
+    const id = (await rows(page, 'messages').first().getAttribute('data-conv-id'))!
+    const row = page.locator(`[data-conv-id="${id}"]`)
+    await expect.poll(() => page.evaluate(id => {
+      const { activationTarget, activationPending } = (window as unknown as DemoWindow).__chatStore.getState()
+      return activationTarget === id && activationPending
+    }, id)).toBe(true)
+
+    // A name's script direction must not move it away from the avatar.
+    const nameLabel = row.locator('p').first()
+    const directionReadings = []
     for (const [direction, name] of [['rtl', 'Emma Ward'], ['ltr', 'إيما وارد']] as const) {
       await page.evaluate(({ direction, name, id }) => {
         document.documentElement.dir = direction
+        // Activation records read metadata and rebuilds the derived sidebar row.
+        // Rename its source entity so the rebuild preserves the fixture name.
         const store = (window as unknown as DemoWindow).__chatStore
-        const conversations = new Map(store.getState().conversations)
-        conversations.set(id, { ...conversations.get(id)!, name })
-        store.setState({ conversations })
+        store.getState().updateConversationName(id, name)
       }, { direction, name, id })
-      await expect(row.locator('p').first()).toHaveText(name)
-      const offset = await row.locator('p').first().evaluate((element, direction) => {
+      if (direction === 'ltr') {
+        await releaseChatLoad.evaluate(release => release())
+        await expect.poll(() => page.evaluate(id => {
+          const { activeConversationId, activationPending } = (window as unknown as DemoWindow).__chatStore.getState()
+          return activeConversationId === id && !activationPending
+        }, id)).toBe(true)
+      }
+      await expect(nameLabel).toHaveText(name)
+      const reading = await nameLabel.evaluate((element, direction) => {
         const range = document.createRange()
         range.selectNodeContents(element)
         const letters = range.getBoundingClientRect()
         const line = element.parentElement!.getBoundingClientRect()
-        return direction === 'rtl' ? line.right - letters.right : letters.left - line.left
+        const offset = direction === 'rtl' ? line.right - letters.right : letters.left - line.left
+        return { name: element.textContent, pageDirection: document.documentElement.dir, offset }
       }, direction)
-      expect(Math.abs(offset)).toBeLessThan(2)
+      expect(Math.abs(reading.offset)).toBeLessThan(2)
+      directionReadings.push(reading)
     }
+    await test.info().attach('name-direction-geometry', { body: JSON.stringify(directionReadings), contentType: 'application/json' })
   })
 
   // A bodiless signal still carries a time, and must not expand
