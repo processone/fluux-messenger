@@ -112,10 +112,18 @@ it('commits the next visible row position in the same resize batch as a late rep
   expect(scope.paintedStart(1)).toBe(106)
   const deliver = resizeCallbacks.get(reply)!
   expect(resizeCallbacks.get(next)).toBe(deliver)
-  const entries = [
-    { target: reply, borderBoxSize: [{ blockSize: 180 }] },
-    { target: next, borderBoxSize: [{ blockSize: 115 }] },
-  ] as ResizeObserverEntry[]
+  const resizeEntry = (target: Element, blockSize: number): ResizeObserverEntry => {
+    const inlineSize = target.getBoundingClientRect().width
+    const size = [{ blockSize, inlineSize }]
+    return {
+      target,
+      borderBoxSize: size,
+      contentBoxSize: size,
+      contentRect: new DOMRectReadOnly(0, 0, inlineSize, blockSize),
+      devicePixelContentBoxSize: size,
+    }
+  }
+  const entries = [resizeEntry(reply, 180), resizeEntry(next, 115)]
   act(() => {
     deliver(entries, {} as ResizeObserver)
     // Read the rendered offsets before act can flush an ordinary async render.
