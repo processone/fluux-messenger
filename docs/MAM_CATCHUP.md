@@ -468,6 +468,8 @@ a gap lying entirely below the loaded window gets none until the user scrolls ba
   window but never opens one (`healGapsOnly`).
 - A backward page shrinks or clears each gap it reaches into or across. A fetch-latest that
   leaves every gap unchanged and lands disjoint above the resident boundary records a seam.
+- A detached date-lookup page records seams on both sides; when it lands inside a recorded gap,
+  that gap is split around the saved page.
 - Catch-up aligns to live from the open gap when there is one, otherwise from the newest
   held message. Closed gaps further down stay recorded and heal on demand, so a long absence
   after an earlier one leaves two marked holes rather than one marked and one silent.

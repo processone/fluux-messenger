@@ -72,6 +72,7 @@ import {
 import { findNewestGap, findOpenGap, type GapList } from '../../stores/shared/mamGap'
 import {
   NS_MAM,
+  MAM_FULLTEXT_FIELD,
   NS_RSM,
   NS_DATA_FORMS,
   NS_FORWARD,
@@ -529,10 +530,12 @@ export class MAM extends BaseModule {
   async queryArchive(options: HistoryQueryOptions): Promise<HistoryResult> {
     const session = this.captureQuery()
     const requestId = generateUUID()
-    const { with: withJid, max = 50, before = '', start, end, after, preserveGapMarker, maxAutoPages: maxAutoPagesOpt, walkOriginTs, healGapsOnly } = options
+    const { with: withJid, max = 50, before = '', start, end, after, preserveGapMarker, dateLookup, maxAutoPages: maxAutoPagesOpt, walkOriginTs, healGapsOnly } = options
     const conversationId = getBareJid(withJid)
+    if (dateLookup && !start) throw new Error('Date lookup needs a start')
     const mamStart = Date.now()
 
+    // Date navigation takes one oldest-first page; forward catch-up can walk more.
     // Opt-in forward catch-up: paginate OLDEST-first via the `after` cursor to
     // completion (parity with rooms). Only when a caller explicitly passes
     // maxAutoPages alongside `start`/`after`; every other caller keeps the
@@ -540,7 +543,8 @@ export class MAM extends BaseModule {
     // `after` alone (the XEP-0490 pointer-seed catch-up) selects forward mode
     // exactly like `start` does — it is itself an archive-id cursor to page
     // forward from.
-    const isForwardPaginate = !!(start || after) && maxAutoPagesOpt !== undefined && maxAutoPagesOpt > 0
+    const forwardPages = dateLookup ? 1 : maxAutoPagesOpt ?? 0
+    const isForwardPaginate = !!(start || after) && forwardPages > 0
 
     // Track total messages across automatic pagination
     const allMessages: Message[] = []
@@ -588,10 +592,10 @@ export class MAM extends BaseModule {
     // from the same resident oldest row — so it keeps walking until displayable
     // messages or the archive start, bounded only by a runaway backstop; every
     // modification it collects on the way resolves in the single pass below.
-    const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt
+    const maxAutoPages = isForwardPaginate ? forwardPages
       : canJumpToFloor ? MAM_BACKWARD_SIGNAL_RETRY_PAGES : MAM_BACKWARD_SCROLL_UP_MAX_PAGES
 
-    this.deps.emitSDK('chat:history-loading', { conversationId, requestId, isLoading: true })
+    if (!dateLookup) this.deps.emitSDK('chat:history-loading', { conversationId, requestId, isLoading: true })
 
     try {
       for (let page = 0; page < maxAutoPages; page++) {
@@ -644,7 +648,7 @@ export class MAM extends BaseModule {
             session.assertCurrent()
           } catch (iqError) {
             session.assertCurrent()
-            if (page === 0 && after && isItemNotFoundError(iqError)) {
+            if (!dateLookup && page === 0 && after && isItemNotFoundError(iqError)) {
               // The archive no longer holds the after-anchor (expired/purged):
               // degrade to fetch-latest (spec §5 — degrade gracefully, never error).
               logInfo(`MAM after-cursor purged for ...@${getDomain(conversationId) || '*'} — degrading to fetch-latest`)
@@ -660,7 +664,7 @@ export class MAM extends BaseModule {
               // this is ALREADY a fetch-latest page and skip issuing another one.
               return { ...degraded, degradedToFetchLatest: true }
             }
-            if (page === 0 && !after && currentBefore && currentBefore === coverageRecord?.bottomId && isItemNotFoundError(iqError)) {
+            if (!dateLookup && page === 0 && !after && currentBefore && currentBefore === coverageRecord?.bottomId && isItemNotFoundError(iqError)) {
               // The coverage-seeded before-anchor was purged from the archive:
               // drop the stale record (this degrade site is the only place that
               // KNOWS the id is gone) and degrade to fetch-latest.
@@ -784,12 +788,24 @@ export class MAM extends BaseModule {
         modifications.retractions.length + modifications.corrections.length +
         modifications.fastenings.length + modifications.reactions.length > 0
 
-      this.emitUnresolvedChatModifications(conversationId, { ...unresolved, fastenings: [], reactions: [] })
-      unresolved.corrections = []
-      unresolved.retractions = []
+      if (!dateLookup) {
+        this.emitUnresolvedChatModifications(conversationId, { ...unresolved, fastenings: [], reactions: [] })
+        unresolved.corrections = []
+        unresolved.retractions = []
+      }
       const reconciled = await this.deps.stores?.chat.reconcileHistoryMessages?.(allMessages)
       session.assertCurrent()
       if (reconciled) allMessages.splice(0, allMessages.length, ...reconciled)
+      if (dateLookup) {
+        // An isolated day is not timeline or sync evidence. The target must
+        // already be in the cache when the view starts loading around it.
+        if (allMessages.length > 0 && !await this.deps.stores?.chat.saveDateLookupPage?.(conversationId, allMessages, end === undefined && isComplete)) {
+          throw new Error('Could not save the date lookup page')
+        }
+        session.assertCurrent()
+        this.emitUnresolvedChatModifications(conversationId, unresolved)
+        return { messages: allMessages, complete: isComplete, page: lastPage }
+      }
       this.deps.emitSDK('chat:history-messages', {
         conversationId,
         messages: allMessages,
@@ -823,7 +839,7 @@ export class MAM extends BaseModule {
 
       // Surface unresolved gaps for diagnosis (parity with rooms): a forward
       // catch-up that ends without reaching live means a hole remains.
-      if (isForwardPaginate && !isComplete) {
+      if (isForwardPaginate && end === undefined && !isComplete) {
         this.deps.emitSDK('console:event', {
           message: `Conversation catch-up incomplete for ${conversationId} — gap remains after ${allMessages.length} msg(s)`,
           category: 'sm',
@@ -840,10 +856,10 @@ export class MAM extends BaseModule {
       } else {
         logErr(`MAM error: ...@${getDomain(conversationId) || '*'} — ${msg}`)
       }
-      this.deps.emitSDK('chat:history-error', { conversationId, requestId, error: msg })
+      if (!dateLookup) this.deps.emitSDK('chat:history-error', { conversationId, requestId, error: msg })
       throw error
     } finally {
-      if (session.isAccountCurrent()) this.deps.emitSDK('chat:history-loading', { conversationId, requestId, isLoading: false })
+      if (!dateLookup && session.isAccountCurrent()) this.deps.emitSDK('chat:history-loading', { conversationId, requestId, isLoading: false })
       // A crash may leave metadata counting a placeholder the signal transaction
       // already removed. Replaying that signal must invalidate the stale count.
       if (processedArchiveSignal && session.isCurrent()) {
@@ -864,7 +880,9 @@ export class MAM extends BaseModule {
   async queryRoomArchive(options: RoomHistoryQueryOptions): Promise<RoomHistoryResult> {
     const session = this.captureQuery()
     const requestId = generateUUID()
-    const { roomJid, max = 50, before, after, start, preserveGapMarker, maxAutoPages: maxAutoPagesOpt, walkOriginTs, healGapsOnly } = options
+    const { roomJid, max = 50, before, after, start, end, dateLookup, maxAutoPages: maxAutoPagesOpt, walkOriginTs, healGapsOnly } = options
+    const preserveGapMarker = end === undefined ? options.preserveGapMarker : true
+    if (dateLookup && !start) throw new Error('Date lookup needs a start')
     const roomMamStart = Date.now()
     // `after` alone (the XEP-0490 pointer-seed catch-up) selects forward mode
     // exactly like `start` does — it is itself an archive-id cursor to page
@@ -881,7 +899,7 @@ export class MAM extends BaseModule {
     // going until displayable messages or the archive start (see
     // MAM_BACKWARD_SCROLL_UP_MAX_PAGES). The loop stops as soon as a page
     // yields displayable messages.
-    const maxAutoPages = isForward ? (maxAutoPagesOpt ?? MAM_ROOM_FORWARD_MAX_PAGES)
+    const maxAutoPages = dateLookup ? 1 : isForward ? (maxAutoPagesOpt ?? MAM_ROOM_FORWARD_MAX_PAGES)
       : !before ? MAM_BACKWARD_SIGNAL_RETRY_PAGES : MAM_BACKWARD_SCROLL_UP_MAX_PAGES
     const allMessages: RoomMessage[] = []
     let isComplete = false
@@ -896,7 +914,7 @@ export class MAM extends BaseModule {
       : undefined
     // Only a fetch-latest walk may jump DOWN to the floor; a mid-archive
     // scroll-up cursor sits below the record and must never jump UP to it.
-    const canJumpToFloor = !before
+    const canJumpToFloor = !before && end === undefined
     let jumpedToFloor = false
     // The cursor the walk would have used had it not jumped — the recovery
     // resume point when the jumped-to floor turns out purged.
@@ -921,7 +939,7 @@ export class MAM extends BaseModule {
     const room = this.deps.stores?.room.getRoom(roomJid)
     const me = roomSelf(room)
 
-    this.deps.emitSDK('room:history-loading', { roomJid, requestId, isLoading: true })
+    if (!dateLookup) this.deps.emitSDK('room:history-loading', { roomJid, requestId, isLoading: true })
 
     try {
       for (let page = 0; page < maxAutoPages; page++) {
@@ -932,9 +950,11 @@ export class MAM extends BaseModule {
           xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
         ]
 
-        // Add time filter if specified
         if (start) {
           formFields.push(xml('field', { var: 'start' }, xml('value', {}, start)))
+        }
+        if (end) {
+          formFields.push(xml('field', { var: 'end' }, xml('value', {}, end)))
         }
 
         // Send IQ to room JID (not user's archive)
@@ -973,7 +993,7 @@ export class MAM extends BaseModule {
             session.assertCurrent()
           } catch (iqError) {
             session.assertCurrent()
-            if (page === 0 && after && isItemNotFoundError(iqError)) {
+            if (!dateLookup && page === 0 && after && isItemNotFoundError(iqError)) {
               // The archive no longer holds the after-anchor (expired/purged):
               // degrade to fetch-latest (spec §5 — degrade gracefully, never error).
               logInfo(`Room MAM after-cursor purged for ${roomJid} — degrading to fetch-latest`)
@@ -986,7 +1006,7 @@ export class MAM extends BaseModule {
               // this is ALREADY a fetch-latest page and skip issuing another one.
               return { ...degraded, degradedToFetchLatest: true }
             }
-            if (page === 0 && !after && currentBefore && currentBefore === coverageRecord?.bottomId && isItemNotFoundError(iqError)) {
+            if (!dateLookup && page === 0 && !after && currentBefore && currentBefore === coverageRecord?.bottomId && isItemNotFoundError(iqError)) {
               // The coverage-seeded before-anchor was purged from the archive:
               // drop the stale record and degrade to fetch-latest (see the 1:1
               // twin in queryArchive).
@@ -1042,14 +1062,22 @@ export class MAM extends BaseModule {
             session.assertCurrent()
 
             // Emit modifications targeting messages already in the store (from prior queries/cache)
-            this.emitUnresolvedRoomModifications(roomJid, unresolved)
+            if (!dateLookup) this.emitUnresolvedRoomModifications(roomJid, unresolved)
 
             const reconciled = await this.deps.stores?.room.reconcileHistoryMessages?.(collectedMessages)
             session.assertCurrent()
             if (reconciled) collectedMessages.splice(0, collectedMessages.length, ...reconciled)
             allMessages.push(...collectedMessages)
 
-            // Emit each page's messages immediately so the store can update incrementally
+            if (dateLookup) {
+              if (collectedMessages.length > 0 && !await this.deps.stores?.room.saveDateLookupPage?.(roomJid, collectedMessages, end === undefined && complete)) {
+                throw new Error('Could not save the date lookup page')
+              }
+              session.assertCurrent()
+              this.emitUnresolvedRoomModifications(roomJid, unresolved)
+              return { messages: collectedMessages, complete, page: pageInfo }
+            }
+            // Ordinary catch-up updates the room incrementally.
             this.deps.emitSDK('room:history-messages', {
               roomJid,
               messages: collectedMessages,
@@ -1063,8 +1091,7 @@ export class MAM extends BaseModule {
               initialAfter: after,
               walkOldestId: walkExtentBottomId(allMessages),
               walkCarriedModifications: forwardWalkCarriedModifications,
-              walkOriginTs,
-              healGapsOnly,
+              ...(end === undefined ? { walkOriginTs, healGapsOnly } : {}),
             })
           } else {
             allMessages.push(...collectedMessages)
@@ -1154,7 +1181,7 @@ export class MAM extends BaseModule {
           complete: isComplete,
           direction: 'backward',
           preserveGapMarker,
-          isFetchLatest: !before,
+          isFetchLatest: !before && end === undefined,
           initialBefore: before ?? '',
           fetchLatestTopId,
           sawCoverageTop,
@@ -1177,7 +1204,7 @@ export class MAM extends BaseModule {
       // Surface unresolved gaps for diagnosis: a forward catch-up that ends without
       // reaching live (complete=false) means a hole remains. Visible in the in-app
       // console so we can measure gap prevalence before investing in range tracking.
-      if (isForward && !isComplete) {
+      if (isForward && end === undefined && !isComplete) {
         this.deps.emitSDK('console:event', {
           message: `Room catch-up incomplete for ${roomJid} — gap remains after ${allMessages.length} msg(s)`,
           category: 'sm',
@@ -1194,10 +1221,10 @@ export class MAM extends BaseModule {
       } else {
         logErr(`Room MAM error: ${roomJid} — ${msg}`)
       }
-      this.deps.emitSDK('room:history-error', { roomJid, requestId, error: msg })
+      if (!dateLookup) this.deps.emitSDK('room:history-error', { roomJid, requestId, error: msg })
       throw error
     } finally {
-      if (session.isAccountCurrent()) this.deps.emitSDK('room:history-loading', { roomJid, requestId, isLoading: false })
+      if (!dateLookup && session.isAccountCurrent()) this.deps.emitSDK('room:history-loading', { roomJid, requestId, isLoading: false })
     }
   }
 
@@ -1208,8 +1235,8 @@ export class MAM extends BaseModule {
   /**
    * Search the message archive using server-side fulltext search.
    *
-   * Requires server support for the `fulltext` form field in MAM queries
-   * (supported by ejabberd and some other servers). Use
+   * Requires server support for XEP-0431 (the `{urn:xmpp:fulltext:0}fulltext`
+   * MAM form field, offered by ejabberd with a MySQL backend). Use
    * `connectionStore.mamFulltextSearch` to check availability.
    *
    * @param options - Search options
@@ -1222,7 +1249,7 @@ export class MAM extends BaseModule {
 
     const formFields: Element[] = [
       xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
-      xml('field', { var: 'fulltext' }, xml('value', {}, query)),
+      xml('field', { var: MAM_FULLTEXT_FIELD }, xml('value', {}, query)),
     ]
 
     if (withJid) {
@@ -1307,7 +1334,7 @@ export class MAM extends BaseModule {
 
     const formFields: Element[] = [
       xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
-      xml('field', { var: 'fulltext' }, xml('value', {}, query)),
+      xml('field', { var: MAM_FULLTEXT_FIELD }, xml('value', {}, query)),
     ]
 
     const iq = this.buildMAMQuery(queryId, formFields, max, before ?? '', roomJid)
@@ -1538,9 +1565,8 @@ export class MAM extends BaseModule {
         : undefined
 
       if (isRoom) {
-        // RoomHistoryQueryOptions has no `end` filter (unlike the 1:1 branch below) —
-        // rooms rely on RSM pagination + the oldestInPage/targetTime check below
-        // to stop at the target instead. `endFilter` is intentionally unused here.
+        // This room backfill uses its RSM cursor and stops at the target below.
+        // Unlike a detached date lookup, it does not bound the request with `end`.
         const result = await this.queryRoomArchive({
           roomJid: conversationId,
           max: 100,

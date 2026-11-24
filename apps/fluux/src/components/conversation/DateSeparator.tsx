@@ -10,16 +10,44 @@ import { useDayChange } from '@/hooks/useDayChange'
 export const DATE_PILL_CLASSES =
   'inline-flex items-center px-3 py-1 rounded-full border border-fluux-border bg-fluux-chat text-xs font-semibold text-fluux-muted whitespace-nowrap'
 
+/** Extra classes when a date pill opens jump to date. */
+export const DATE_PILL_BUTTON_CLASSES = 'cursor-pointer hover:text-fluux-text hover:border-fluux-muted transition-colors'
+
+/** A date pill: a button opening jump to date at its day when `onSelect` is given, plain text otherwise. */
+export function DatePill({ date, label, className = '', onSelect, tabIndex }: {
+  date: string
+  label: string
+  className?: string
+  onSelect?: (date: string) => void
+  tabIndex?: number
+}) {
+  const { t } = useTranslation()
+  if (!onSelect) return <span className={`${DATE_PILL_CLASSES} ${className}`}>{label}</span>
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(date)}
+      tabIndex={tabIndex}
+      aria-label={t('chat.jumpToDate.fromPill', { date: label })}
+      className={`${DATE_PILL_CLASSES} ${DATE_PILL_BUTTON_CLASSES} ${className}`}
+    >
+      {label}
+    </button>
+  )
+}
+
 export interface DateSeparatorProps {
   /** Date string in yyyy-MM-dd format */
   date: string
+  /** Opens jump to date at this day. */
+  onSelect?: (date: string) => void
 }
 
 /**
  * Displays a centered date pill between days in conversation views. Centering matches the
  * floating date pill shown while scrolled into history, so both share one horizontal anchor.
  */
-export function DateSeparator({ date }: DateSeparatorProps) {
+export function DateSeparator({ date, onSelect }: DateSeparatorProps) {
   const { t, i18n } = useTranslation()
   const currentLang = i18n.language.split('-')[0]
 
@@ -31,9 +59,7 @@ export function DateSeparator({ date }: DateSeparatorProps) {
     // pt-5 + the 26px pill + pb-0.5 keep the row at the 48px the virtualizer estimates for a
     // date row before one has been measured (useRowMetrics FALLBACK_CHROME.date).
     <div className="flex justify-center pt-5 pb-0.5">
-      <span className={DATE_PILL_CLASSES}>
-        {formatDateHeader(date, t, currentLang)}
-      </span>
+      <DatePill date={date} label={formatDateHeader(date, t, currentLang)} onSelect={onSelect} />
     </div>
   )
 }

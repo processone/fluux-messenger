@@ -107,6 +107,7 @@ export { savedStore, findSavedEntry, selectSavedInConversation, clearSavedLocalD
 export { writeSealHint as setSavedSealing } from './utils/savedSealHint'
 export { canSaveMessage, buildSavedMessage } from './utils/savedMessageBuilder'
 export { findLatestCopy } from './utils/savedLatestCopy'
+export { findFirstMessageOfDay, type FirstMessageOfDay, type DayArchive } from './utils/firstMessageOfDay'
 export { sameSavedMessage } from './utils/savedMessageKeys'
 export { usePresence } from './hooks/usePresence'
 export type { UsePresenceReturn } from './hooks/usePresence'

@@ -115,7 +115,7 @@ const EMPTY_OCCUPANTS: Map<string, RoomOccupant> = new Map()
 
 // Stable identities: the thread reads them in effects keyed on the room
 const readActiveRoomMessages = () => roomStore.getState().activeMessages()
-const setRoomTargetMessageId = (messageId: string) => roomStore.getState().setTargetMessageId(messageId)
+const setRoomTargetMessageId = (target: string | MessageRowRef) => roomStore.getState().setTargetMessageId(target)
 const triggerRoomAnimation = (id: string, animation: string, senderName: string) => roomStore.getState().triggerAnimation(id, animation, senderName)
 
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation, onShowSavedInConversation, covered = false, renderMobileOccupants, onCloseMobileOccupants }: RoomViewProps) {
@@ -209,6 +209,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     readAllMessages: readActiveRoomMessages,
     fetchOlderHistory,
     isLoadingOlder: activeHistoryState?.isLoading,
+    historyGaps: activeHistoryState?.gaps,
+    archiveAvailable: activeRoom?.supportsMAM,
+    windowAtLiveEdge,
+    recenterToLatest,
     isHistoryComplete: activeRoom?.supportsMAM === false || activeHistoryState?.isHistoryComplete,
     clearFirstNewMessageId,
     advanceReadPointer,
@@ -363,6 +367,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             setSubject={setSubject}
             destroyRoom={destroyRoom}
             onSearchInConversation={thread.handleSearchInConversation}
+            onJumpToDate={thread.handleJumpToDate}
             onShowSavedInConversation={thread.handleShowSaved}
             onBulkModeration={canBulkModerate(activeRoom) ? () => {
               setBulkModerationSender(undefined)
@@ -740,6 +745,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   highlightTerms,
   currentMatchId,
   lastSentMessageId,
+  onJumpToDate,
   gaps,
   onCatchUpHistory,
   isCatchingUp,
@@ -803,6 +809,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   highlightTerms?: string[]
   currentMatchId?: string
   lastSentMessageId?: string | null
+  onJumpToDate?: (date: string) => void
   gaps?: readonly GapInterval[]
   onCatchUpHistory?: (gapStart: number) => void
   isCatchingUp?: boolean
@@ -1065,7 +1072,7 @@ export const RoomMessageList = memo(function RoomMessageList({
           unavailable: historyUnavailable,
           onLoadAround,
         },
-        window: { atLiveEdge: windowAtLiveEdge, onLoadNewer, onJumpToLatest },
+        window: { atLiveEdge: windowAtLiveEdge, onLoadNewer, onJumpToLatest, onJumpToDate },
         gaps: { intervals: gaps, onCatchUp: onCatchUpHistory, isCatchingUp },
       }}
       readMarkers={{

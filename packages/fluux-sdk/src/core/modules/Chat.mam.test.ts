@@ -37,10 +37,12 @@ vi.mock('@xmpp/debug', () => ({
 // Import after mocking
 import { client as xmppClientFactory } from '@xmpp/client'
 
+const spyOnEmittedEvents = (client: XMPPClient) => vi.spyOn(client, 'emitSDK')
+
 describe('XMPPClient MAM', () => {
   let xmppClient: XMPPClient
   let mockStores: MockStoreBindings
-  let emitSDKSpy: ReturnType<typeof vi.spyOn>
+  let emitSDKSpy: ReturnType<typeof spyOnEmittedEvents>
 
   // Helper to wait for async operations
   const waitForAsyncOps = async () => {
@@ -85,7 +87,7 @@ describe('XMPPClient MAM', () => {
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
     bindStoresForTesting(xmppClient, mockStores)
-    emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
+    emitSDKSpy = spyOnEmittedEvents(xmppClient)
   })
 
   afterEach(() => {
@@ -124,6 +126,80 @@ describe('XMPPClient MAM', () => {
         features: ['http://jabber.org/protocol/disco#info', 'urn:xmpp:mam:2', 'urn:xmpp:carbons:2'],
       })
       expect(xmppClient.supportsMAM()).toBe(true)
+    })
+  })
+
+  describe.each(['chat', 'room'] as const)('detached %s date search', (kind) => {
+    const start = '2024-01-15T00:00:00.000Z'
+    const end = '2024-01-16T00:00:00.000Z'
+    const roomJid = 'team@conference.example.com'
+    const peer = 'alice@example.com'
+    const query = () => kind === 'chat'
+      ? xmppClient.messages.queryMAM({ with: peer, start, end, dateLookup: true })
+      : xmppClient.messages.queryRoomMAM({ roomJid, start, end, dateLookup: true })
+    const expectNoHistoryChange = () => {
+      for (const event of ['loading', 'messages', 'error']) {
+        expect(emitSDKSpy.mock.calls.map(call => call[0])).not.toContain(`${kind}:history-${event}`)
+      }
+    }
+
+    it.each([true, false])('waits for the cache without touching sync state (complete=%s)', async (complete) => {
+      await connectClient()
+      const store = kind === 'chat' ? mockStores.chat : mockStores.room
+      let finishWrite!: (saved: boolean) => void
+      const pendingWrite = new Promise<boolean>(resolve => { finishWrite = resolve })
+      const writeStarted = new Promise<void>(resolve => {
+        const holdWrite = () => { resolve(); return pendingWrite }
+        if (kind === 'chat') vi.mocked(mockStores.chat.saveDateLookupPage!).mockImplementation(holdWrite)
+        else vi.mocked(mockStores.room.saveDateLookupPage!).mockImplementation(holdWrite)
+      })
+      const from = kind === 'chat' ? 'me@example.com' : roomJid
+      const sender = kind === 'chat' ? `${peer}/phone` : `${roomJid}/Alice`
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async iq => {
+        const queryId = iq.children.find((child: { name?: string }) => child.name === 'query').attrs.queryid
+        mockXmppClientInstance._emit('stanza', createMockElement('message', { from }, [
+          { name: 'result', attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'date-archive-id' }, children: [
+            { name: 'forwarded', attrs: { xmlns: 'urn:xmpp:forward:0' }, children: [
+              { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:00:00Z' } },
+              { name: 'message', attrs: { from: sender, to: 'me@example.com', id: 'date-row', type: kind === 'chat' ? 'chat' : 'groupchat' }, children: [
+                { name: 'body', text: 'An archived message on the selected day' },
+              ] },
+            ] },
+          ] },
+        ]))
+        mockXmppClientInstance._emit('stanza', createMockElement('message', { from }, [
+          { name: 'result', attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'date-retraction' }, children: [
+            { name: 'forwarded', attrs: { xmlns: 'urn:xmpp:forward:0' }, children: [
+              { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:05:00Z' } },
+              { name: 'message', attrs: { from: sender, to: 'me@example.com', id: 'retraction-stanza', type: kind === 'chat' ? 'chat' : 'groupchat' }, children: [
+                { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'older-day-row' } },
+              ] },
+            ] },
+          ] },
+        ]))
+        return createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: String(complete) } },
+        ])
+      })
+      const done = vi.fn()
+      const result = query().then(value => { done(); return value })
+      await writeStarted
+      expect(store.saveDateLookupPage).toHaveBeenCalledWith(kind === 'chat' ? peer : roomJid,
+        [expect.objectContaining({ id: 'date-row' })], false)
+      expect(done).not.toHaveBeenCalled()
+      expect(emitSDKSpy.mock.calls.map(call => call[0])).not.toContain(`${kind}:retraction-pending`)
+      expectNoHistoryChange()
+      finishWrite(true)
+      expect(await result).toMatchObject({ complete, messages: [expect.objectContaining({ id: 'date-row' })] })
+      expect(emitSDKSpy).toHaveBeenCalledWith(`${kind}:retraction-pending`, expect.objectContaining({ targetId: 'older-day-row' }))
+      expectNoHistoryChange()
+    })
+
+    it('reports a rejected archive request only to its caller', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockRejectedValue(new Error('Archive unavailable'))
+      await expect(query()).rejects.toThrow('Archive unavailable')
+      expectNoHistoryChange()
     })
   })
 
@@ -3990,6 +4066,27 @@ describe('XMPPClient MAM', () => {
         isFetchLatest: false, // forward query, never a fetch-latest
         walkCarriedModifications: false // clean walk — may anchor a coverage bootstrap
       })
+    })
+
+    it('sends both date bounds to the room and does not treat a complete range as live coverage', async () => {
+      await connectClient()
+      const request = vi.fn().mockResolvedValue(createMockElement('iq', { type: 'result' }, [
+        { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' } },
+      ]))
+      mockXmppClientInstance.iqCaller.request = request
+      const start = '2026-01-21T00:00:00.000Z'
+      const end = '2026-01-22T00:00:00.000Z'
+      await xmppClient.messages.queryRoomMAM({ roomJid, start, end, walkOriginTs: Date.parse(start), maxAutoPages: 1 })
+      expect(request).toHaveBeenCalledTimes(1)
+      const sent = JSON.stringify(request.mock.lastCall?.[0])
+      expect(sent).toContain(`"var":"start"},"children":[{"name":"value","attrs":{},"children":["${start}"]`)
+      expect(sent).toContain(`"var":"end"},"children":[{"name":"value","attrs":{},"children":["${end}"]`)
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
+        roomJid, complete: true, direction: 'forward', preserveGapMarker: true,
+      }))
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
+        walkOriginTs: expect.any(Number),
+      }))
     })
 
     it('should mark as complete when using before filter (backward query)', async () => {

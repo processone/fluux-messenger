@@ -197,6 +197,11 @@ export const NS_RSM = 'http://jabber.org/protocol/rsm'
 // XEP-0313: Message Archive Management
 export const NS_MAM = 'urn:xmpp:mam:2'
 
+// XEP-0431: Full Text Search in MAM
+export const NS_FULLTEXT = 'urn:xmpp:fulltext:0'
+/** Namespaced MAM form field defined by XEP-0431 (a bare `fulltext` var is rejected by ejabberd) */
+export const MAM_FULLTEXT_FIELD = `{${NS_FULLTEXT}}fulltext`
+
 // XEP-0077: In-Band Registration
 export const NS_REGISTER = 'jabber:iq:register'
 
