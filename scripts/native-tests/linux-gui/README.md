@@ -76,8 +76,9 @@ message, keyring operation or remote service is part of this journey.
 `identity.json`, `session.jsonl`, `native.log`, `login.png` and `cleanup.json`
 identify the executable and runtime, record assertions and preserve the result.
 Missing prerequisites, startup failures and assertion failures are errors, never
-skipped passes. The whole journey is bounded to two minutes; individual protocol
-requests and readiness waits are bounded to 30 seconds.
+skipped passes. The native session has a two-minute deadline, followed by bounded
+shutdown (SIGKILL escalation after three seconds). Individual protocol requests
+and readiness waits are bounded to 30 seconds.
 
 Use `--app /absolute/path/to/fluux` for another provenance-tracked build, or
 `--driver /absolute/tools/bin/tauri-driver` for another managed install of the pin.
@@ -101,7 +102,12 @@ No launcher can handle SIGKILL or a host power loss; use a supervisor for that
 boundary. Do not kill a shared display while cleaning up a failed test.
 
 The smoke's assertions are the integration test. During changes, first run syntax
-checks and the project's affected-test selector. Native execution is explicit,
-not part of the fast deterministic gate, and requires the real Linux prerequisites.
+checks, `node --test scripts/native-tests/linux-gui/run.test.mjs` and the project's
+affected-test selector. After building, run
+`node --test scripts/native-tests/linux-gui/lifecycle.test.mjs` for log-open failure
+and stubborn-supervisor SIGINT/SIGTERM cleanup. These lifecycle tests use real
+Linux processes with a stand-in bus supervisor, not a native GUI session.
+Native execution is explicit, not part of the fast deterministic gate, and
+requires the real Linux prerequisites.
 Repeat the native journey after changes to this harness. Keep unit/mock evidence,
 native smoke evidence and complete release qualification separate.

@@ -8,7 +8,6 @@ import { constants } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { setTimeout as delay } from 'node:timers/promises'
 import { WebDriver, until } from './webdriver.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -168,21 +167,27 @@ async function main() {
   await mkdir(options.evidence, { recursive: true })
   await writeFile(join(options.evidence, 'identity.json'), JSON.stringify(info, null, 2), { flag: 'wx' })
   const profile = await mkdtemp(join(tmpdir(), 'fluux-linux-gui-'))
-  await chmod(profile, 0o700)
+  let log
   let child
   let interrupted
-  const onSignal = signal => {
-    interrupted = signal
-    if (child?.pid) {
+  let escalation
+  const beginShutdown = () => {
+    if (child?.pid && !escalation) {
       try { process.kill(-child.pid, 'SIGTERM') } catch (error) { if (error.code !== 'ESRCH') throw error }
+      // Escalation cannot wait for a supervisor that may ignore SIGTERM.
+      escalation = setTimeout(() => {
+        try { process.kill(-child.pid, 'SIGKILL') } catch (error) { if (error.code !== 'ESRCH') throw error }
+      }, 3000)
     }
   }
+  const onSignal = signal => { interrupted = signal; beginShutdown() }
   const onTerm = () => onSignal('SIGTERM')
   const onInt = () => onSignal('SIGINT')
-  process.on('SIGTERM', onTerm)
-  process.on('SIGINT', onInt)
-  const log = await open(join(options.evidence, 'native.log'), 'wx')
   try {
+    await chmod(profile, 0o700)
+    process.on('SIGTERM', onTerm)
+    process.on('SIGINT', onInt)
+    log = await open(join(options.evidence, 'native.log'), 'wx')
     const env = { PATH: process.env.PATH, LANG: 'C.UTF-8', HOME: profile, GDK_BACKEND: 'x11' }
     for (const key of ['CONFIG', 'DATA', 'CACHE', 'RUNTIME']) {
       env[`XDG_${key}_HOME`] = join(profile, key.toLowerCase())
@@ -199,6 +204,7 @@ async function main() {
     const busConfig = join(profile, 'bus.conf')
     // No service directories: private IPC must not activate a credential store or desktop service.
     await writeFile(busConfig, '<busconfig><type>session</type><listen>unix:tmpdir=' + profile + '</listen><auth>EXTERNAL</auth><policy context="default"><allow send_destination="*"/><allow receive_sender="*"/><allow own="*"/></policy></busconfig>')
+    assert.equal(interrupted, undefined, `Launcher interrupted: ${interrupted}`)
     child = spawn('dbus-run-session', ['--config-file', busConfig, '--', process.execPath, fileURLToPath(import.meta.url), '--worker', JSON.stringify({ profile, evidence: options.evidence, inherited: options['inherited-display'], app: options.app, driver: options.driver, webkit: info.webkit, fail: options['fail-after-session'] })], { env, detached: true, stdio: ['ignore', log.fd, log.fd] })
     const exit = once(child, 'exit')
     const timer = setTimeout(() => onSignal('timeout'), 120000)
@@ -209,20 +215,17 @@ async function main() {
   } finally {
     try {
       if (child?.pid) {
-        try { process.kill(-child.pid, 'SIGTERM') } catch (error) { if (error.code !== 'ESRCH') throw error }
-        const deadline = Date.now() + 3000
-        while ((await groupMembers(child.pid)).length && Date.now() < deadline) await delay(50)
-        if ((await groupMembers(child.pid)).length) {
-          try { process.kill(-child.pid, 'SIGKILL') } catch (error) { if (error.code !== 'ESRCH') throw error }
-        }
-        await until(async () => assert.deepEqual(await groupMembers(child.pid), []), 'Owned process group did not stop', 5000)
+        beginShutdown()
+        await until(async () => assert.deepEqual(await groupMembers(child.pid), []), 'Owned process group did not stop', 8000)
       }
     } finally {
-      await log.close()
-      await rm(profile, { recursive: true, force: true })
-      await writeFile(join(options.evidence, 'cleanup.json'), JSON.stringify({ profile, removed: true, group: child?.pid, remaining: child?.pid ? await groupMembers(child.pid) : [], inheritedDisplayUntouched: true, interrupted: interrupted ?? null }, null, 2))
+      clearTimeout(escalation)
       process.off('SIGTERM', onTerm)
       process.off('SIGINT', onInt)
+      try { await log?.close() } finally {
+        await rm(profile, { recursive: true, force: true })
+        await writeFile(join(options.evidence, 'cleanup.json'), JSON.stringify({ profile, removed: true, group: child?.pid, remaining: child?.pid ? await groupMembers(child.pid) : [], inheritedDisplayUntouched: true, interrupted: interrupted ?? null }, null, 2))
+      }
     }
   }
 }
