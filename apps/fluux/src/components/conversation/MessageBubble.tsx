@@ -712,6 +712,7 @@ export const MessageBubble = memo(function MessageBubble({
       data-message-id={message.id}
       data-message-from={senderName}
       data-message-time={formatTime(message.timestamp)}
+      data-msg-saved-slot={hasSavedAction ? '' : undefined}
       data-message-body={deriveCopyBody(message, t)}
       data-hover-disabled={hasKeyboardSelection || isSelected || inThread ? '' : undefined}
       className={`relative message-hover-surface ${outerRowClass}`}
@@ -802,8 +803,8 @@ export const MessageBubble = memo(function MessageBubble({
         />
       )}
 
-      {/* The content column spans the conversation's real content width whatever the
-          row holds; useRowMetrics reads it to estimate row heights. */}
+      {/* Saved and whisper rows have local insets; only ordinary columns calibrate
+          the conversation-wide row metrics. */}
       <div className={`relative flex-1 min-w-0${readMarkerBadge ? ' room-read-marker-host' : ''}`} data-msg-column="">
       <div
         // Opacity keeps the previous focus target available while the overlay captures and restores focus.
@@ -1036,8 +1037,8 @@ export const MessageBubble = memo(function MessageBubble({
           title={t('chat.removeFromSaved')}
           className="tap-target size-6 shrink-0 self-start inline-flex items-center justify-center rounded text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-fluux-brand"
           onClick={(event) => { event.stopPropagation(); onRemoveSaved() }}
-          onKeyDown={(event) => { event.stopPropagation() }}
-          onKeyUp={(event) => { event.stopPropagation() }}
+          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation() }}
+          onKeyUp={(event) => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation() }}
         >
           <Bookmark className="size-3 fill-current" />
         </button>

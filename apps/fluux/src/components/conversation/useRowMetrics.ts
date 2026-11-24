@@ -36,12 +36,12 @@ export const ROW_METRICS_FALLBACK: RowEstimatorContext = {
 
 /**
  * Pick the text element whose clientWidth is the conversation's real CONTENT width: the first
- * one outside a whisper card. Whisper cards have their own inset and padding, so neither their
- * width nor their chrome calibrates ordinary rows.
+ * one outside a whisper card or Saved action slot. Their local insets must not change the
+ * conversation-wide width tag or calibrate ordinary rows.
  */
 export function pickWidthSampleEl(root: HTMLElement): HTMLElement | null {
   for (const el of root.querySelectorAll<HTMLElement>('[data-msg-text]')) {
-    if (!el.closest('[data-msg-whisper]')) return el
+    if (!el.closest('[data-msg-whisper], [data-msg-saved-slot]')) return el
   }
   return null
 }
@@ -61,8 +61,8 @@ export function realContentWidthPx(textEl: HTMLElement): number | undefined {
 /**
  * Pick a row for chrome sampling (chrome = outer height − predicted text height): it must be
  * a PLAIN-TEXT row. Any other content makes the prediction meaningless (observed: a
- * continuation "chrome" of 369px vs the real ~6px). Whisper cards are skipped for their own
- * inset and padding. Returns the first clean row of the shape, or null;
+ * continuation "chrome" of 369px vs the real ~6px). Whisper cards and Saved action slots are
+ * skipped because local insets also change text wrapping. Returns the first clean row of the shape, or null;
  * useRowMetrics still checks its size bounds.
  */
 export function pickChromeSampleEl(
@@ -71,7 +71,7 @@ export function pickChromeSampleEl(
 ): HTMLElement | null {
   const rows = root.querySelectorAll<HTMLElement>(`[data-msg-chrome="${shape}"]`)
   for (const row of rows) {
-    if (row.hasAttribute('data-msg-whisper')) continue
+    if (row.closest('[data-msg-whisper], [data-msg-saved-slot]')) continue
     if (isPlainTextRow(row, shape)) return row
   }
   return null

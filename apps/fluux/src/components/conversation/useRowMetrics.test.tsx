@@ -3,7 +3,7 @@ import { fireEvent, render, renderHook } from '@testing-library/react'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { CAPPED_PREDICTION_PREFIX_CHARS } from '@/utils/messageHeight/predictMessageTextHeight'
 import { CollapsibleContent } from './CollapsibleContent'
-import { useRowMetrics, ROW_METRICS_FALLBACK, MAX_CALIBRATIONS_PER_GEOMETRY } from './useRowMetrics'
+import { useRowMetrics, pickWidthSampleEl, pickChromeSampleEl, ROW_METRICS_FALLBACK, MAX_CALIBRATIONS_PER_GEOMETRY } from './useRowMetrics'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -31,6 +31,34 @@ function appendHeaderRow(
 }
 
 describe('useRowMetrics', () => {
+  it('skips a saved first row for conversation-wide width and chrome sampling', () => {
+    const view = render(<div>
+      <div data-msg-saved-slot="" data-testid="saved-row">
+        <div data-msg-column="">
+          <div data-msg-chrome="header" data-testid="saved-chrome">
+            <div data-msg-sender="">Emma</div>
+            <div><div data-msg-text="" data-testid="saved-text">The checklist is ready.</div></div>
+          </div>
+        </div>
+        <button type="button" aria-label="Remove from saved">Bookmark</button>
+      </div>
+      <div data-msg-column="" data-testid="ordinary-row">
+        <div data-msg-chrome="header" data-testid="ordinary-chrome">
+          <div data-msg-sender="">Emma</div>
+          <div><div data-msg-text="" data-testid="ordinary-text">Keep this saved too.</div></div>
+        </div>
+      </div>
+    </div>)
+    expect(pickWidthSampleEl(view.container)).toBe(view.getByTestId('ordinary-text'))
+    expect(pickChromeSampleEl(view.container, 'header')).toBe(view.getByTestId('ordinary-chrome'))
+    view.getByTestId('ordinary-row').remove()
+    expect(pickWidthSampleEl(view.container)).toBeNull()
+    expect(pickChromeSampleEl(view.container, 'header')).toBeNull()
+    view.getByTestId('saved-row').removeAttribute('data-msg-saved-slot')
+    expect(pickWidthSampleEl(view.container)).toBe(view.getByTestId('saved-text'))
+    expect(pickChromeSampleEl(view.container, 'header')).toBe(view.getByTestId('saved-chrome'))
+  })
+
   it.each((['header', 'cont'] as const).flatMap(shape => [
     { shape, kind: 'many-line', longBody: Array.from({ length: 100 }, () => 'log line').join('\n'), fullHeight: 2200 },
     { shape, kind: 'uneven-prefix', longBody: ('x'.repeat(149) + '\n').repeat(19) + 'x'.repeat(150) + '\nx'.repeat(100), fullHeight: 2640 },

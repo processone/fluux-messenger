@@ -42,7 +42,10 @@ describe('MessageBubble saved marker', () => {
     const button = screen.getByRole('button', { name: 'chat.removeFromSaved' })
     expect(button).toHaveAttribute('type', 'button')
     expect(button).toHaveAttribute('title', 'chat.removeFromSaved')
+    const row = button.closest('[data-message-id]')!
+    expect(row).toHaveAttribute('data-msg-saved-slot')
     fireEvent.click(button)
+    expect(row).not.toHaveAttribute('data-msg-saved-slot')
     expect(savedStore.getState().entries).toEqual({})
     expect(savedStore.getState().pending).toEqual({ 'saved-entry': 'retract' })
   })
@@ -73,6 +76,11 @@ describe('MessageBubble saved marker', () => {
       fireEvent.keyUp(button, { key: value })
     }
     expect(key).not.toHaveBeenCalled()
+    fireEvent.keyDown(button, { key: 'ArrowUp' })
+    fireEvent.keyUp(button, { key: 'ArrowUp' })
+    expect(key).toHaveBeenCalledTimes(2)
+    expect(key).toHaveBeenNthCalledWith(1, expect.objectContaining({ key: 'ArrowUp', type: 'keydown' }))
+    expect(key).toHaveBeenNthCalledWith(2, expect.objectContaining({ key: 'ArrowUp', type: 'keyup' }))
     const zone = screen.getByTestId('conversation')
     const focus = vi.spyOn(zone, 'focus')
     act(() => savedStore.getState().remove('saved-entry'))
