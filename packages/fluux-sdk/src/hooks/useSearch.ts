@@ -52,7 +52,7 @@ export function useSearch() {
     results,
     error,
     previewResult,
-    isSearchingMAM,
+    isSearchingMAM, mamSearched,
     mamResults,
     hasMoreMAMResults,
     mamError,
@@ -71,6 +71,7 @@ export function useSearch() {
       error: state.error,
       previewResult: state.previewResult,
       isSearchingMAM: state.isSearchingMAM,
+      mamSearched: state.mamSearched,
       mamResults: state.mamResults,
       hasMoreMAMResults: state.hasMoreMAMResults,
       mamError: state.mamError,
@@ -98,7 +99,7 @@ export function useSearch() {
     /** Search result currently being previewed in context */
     previewResult,
     /** Whether a MAM search is in progress */
-    isSearchingMAM,
+    isSearchingMAM, mamSearched,
     /** MAM search results (deduplicated against local results) */
     mamResults,
     /** Whether more MAM results are available */

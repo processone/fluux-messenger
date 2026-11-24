@@ -99,10 +99,11 @@ beforeEach(async () => {
   searchState = {
     query: '', results: [], isSearching: false, error: null,
     search: vi.fn(), clearSearch: vi.fn(), previewResult: null, setPreviewResult: vi.fn(),
-    isSearchingMAM: false, mamResults: [], hasMoreMAMResults: false, mamError: null,
+    isSearchingMAM: false, mamSearched: false, mamResults: [], hasMoreMAMResults: false, mamError: null,
     searchScope: null, searchMAM: vi.fn(), loadMoreMAMResults: vi.fn(), setSearchScope: vi.fn(),
     resultContext: new Map(), searchFilter: 'all', setSearchFilter: vi.fn(),
     inPrefixSuggestions: [], isInPrefixActive: false, selectInPrefixSuggestion: vi.fn(), filtersBuilding: false,
+    pickedFilters: [], filtersIncomplete: false, filtersUnavailable: null, setPickedFilters: vi.fn(), retryFilters: vi.fn(),
   }
   vi.mocked(useSearch).mockImplementation(() => searchState)
   vi.mocked(getMessages).mockResolvedValue([])
@@ -162,7 +163,7 @@ describe('search tab translation', () => {
   })
 
   it.each([
-    { state: {}, english: 'No messages found', french: 'Aucun message trouvé' },
+    { state: {}, english: 'No matches in history on this device.', french: 'Aucun résultat dans l’historique de cet appareil.' },
     { state: { isSearching: true }, english: 'Searching…', french: 'Recherche en cours…' },
     { state: { isSearchingMAM: true }, english: 'Searching server archive…', french: "Recherche dans l'archive du serveur…" },
   ])('updates the $english state when the language changes', async ({ state, english, french }) => {

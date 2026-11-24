@@ -119,6 +119,7 @@ describe('filter store with the persisted index', () => {
     await waitForState(() => !searchStore.getState().isSearchingMAM)
     expect(searchStore.getState().mamResults).toEqual([])
     expect(searchStore.getState().hasMoreMAMResults).toBe(true)
+    expect(searchStore.getState().mamSearched).toBe(true)
     searchStore.getState().loadMoreMAMResults()
     await waitForState(() => !searchStore.getState().isSearchingMAM)
     expect(searchStore.getState().mamResults.map(row => row.messageId)).toEqual(['photo'])
@@ -142,6 +143,13 @@ describe('filter store with the persisted index', () => {
     finish({ messages: [], complete: false, page: { first: 'stale' } })
     await vi.runAllTimersAsync()
     expect(searchStore.getState()).toMatchObject({ query: 'in:alice', isInPrefixActive: true, hasMoreMAMResults: false, isSearchingMAM: false, mamResults: [] })
+  })
+
+  it('drops the prior account’s scope and picked filters when the account changes', () => {
+    connectionStore.getState().setJid(scope)
+    searchStore.setState({ query: 'design', searchScope: photo.conversationId, pickedFilters: ['has:image'] })
+    connectionStore.getState().setJid('next@example.test')
+    expect(searchStore.getState()).toMatchObject({ query: '', searchScope: null, pickedFilters: [], results: [], mamResults: [] })
   })
 
 })

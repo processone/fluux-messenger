@@ -5,13 +5,13 @@ import { applySuggestion, describeSpan, lastWord, operatorSuggestions, quickFilt
 const NOW = new Date(2026, 10, 23, 15, 0)
 
 describe('search operator suggestions', () => {
-  it('offers operator names from two letters, and in: only as the first word', () => {
+  it('keeps ordinary words free of suggestions until an explicit operator prefix', () => {
     expect(operatorSuggestions('a', NOW)).toEqual([])
-    expect(operatorSuggestions('af', NOW).map(s => s.insert)).toEqual(['after:'])
-    expect(operatorSuggestions('in', NOW).map(s => s.insert)).toEqual(['in:'])
+    expect(operatorSuggestions('af', NOW).map(s => s.insert)).toEqual([])
+    expect(operatorSuggestions('in', NOW).map(s => s.insert)).toEqual([])
     expect(operatorSuggestions('report in', NOW)).toEqual([])
     expect(operatorSuggestions('report o', NOW)).toEqual([])
-    expect(operatorSuggestions('report on', NOW).map(s => s.insert)).toEqual(['on:'])
+    expect(operatorSuggestions('report on', NOW).map(s => s.insert)).toEqual([])
   })
 
   it('offers date values once the colon is typed, narrowed by what follows it', () => {
@@ -41,7 +41,7 @@ describe('search operator suggestions', () => {
     const senders = [{ value: 'alice@example.com', label: 'Alice' }, { value: 'Bob Smith', label: 'Bob Smith' }]
     expect(operatorSuggestions('from:', NOW, senders).map(s => s.insert)).toEqual(['from:me', 'from:alice@example.com', 'from:"Bob Smith"'])
     expect(operatorSuggestions('from:b', NOW, senders).map(s => [s.insert, s.label])).toEqual([['from:"Bob Smith"', 'Bob Smith']])
-    expect(operatorSuggestions('fr', NOW).map(s => s.insert)).toEqual(['from:'])
+    expect(operatorSuggestions('fr', NOW).map(s => s.insert)).toEqual([])
   })
 })
 

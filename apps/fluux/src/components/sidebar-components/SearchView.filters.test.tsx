@@ -1,16 +1,11 @@
-/**
- * Filter chips and operator suggestions in the search sidebar: each active
- * operator shows as a chip that removes it, and typing an operator name offers
- * it, then its values, from the keyboard.
- */
 import { beforeEach, describe, it, expect, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { SearchView } from './SearchView'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, string>) => (options ? `${key}${JSON.stringify(options)}` : key),
-    i18n: { language: 'en' },
+    i18n: { language: search.language },
   }),
 }))
 vi.mock('@/hooks', async () => import('@/hooks/useListKeyboardNav'))
@@ -22,17 +17,21 @@ vi.mock('@/stores/settingsStore', () => ({
 }))
 vi.mock('@fluux/sdk/react', () => ({ useRoomStore: () => undefined, useRosterStore: () => undefined }))
 
-const search = vi.hoisted(() => ({ query: '', calls: [] as string[], none: [] as never[], filtersBuilding: false }))
+const search = vi.hoisted(() => ({ language: 'en', query: '', calls: [] as string[], picked: [] as string[], none: [] as never[], filtersBuilding: false,
+  rooms: new Map<string, { jid: string; name: string; nickname: string; occupants: Map<string, { nick: string; occupantId: string }> }>() }))
 vi.mock('@fluux/sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@fluux/sdk')>()
   const { useState } = await import('react')
   return {
     ...actual,
+    roomStore: { getState: () => ({ ...actual.roomStore.getState(), rooms: search.rooms }) },
     useSearch: () => {
       const [query, setQuery] = useState(search.query)
+      const [pickedFilters, setPickedFilters] = useState<string[]>([])
       return {
+        pickedFilters, setPickedFilters: (next: string[]) => { search.picked = next; setPickedFilters(next) }, filtersIncomplete: false, filtersUnavailable: null, retryFilters: vi.fn(),
         query, results: search.none, isSearching: false, error: null, previewResult: null, setPreviewResult: vi.fn(),
-        isSearchingMAM: false, mamResults: search.none, hasMoreMAMResults: false, mamError: null, searchScope: null,
+        isSearchingMAM: false, mamSearched: false, mamResults: search.none, hasMoreMAMResults: false, mamError: null, searchScope: null,
         searchMAM: vi.fn(), loadMoreMAMResults: vi.fn(), setSearchScope: vi.fn(), resultContext: new Map(),
         searchFilter: 'all', setSearchFilter: vi.fn(), inPrefixSuggestions: search.none, isInPrefixActive: false,
         selectInPrefixSuggestion: vi.fn(), filtersBuilding: search.filtersBuilding, clearSearch: () => setQuery(''),
@@ -46,8 +45,11 @@ const input = () => screen.getByRole('combobox')
 
 describe('SearchView filters', () => {
   beforeEach(() => {
+    search.language = 'en'
     search.query = ''
     search.calls = []
+    search.picked = []
+    search.rooms = new Map()
     search.filtersBuilding = false
   })
 
@@ -65,12 +67,13 @@ describe('SearchView filters', () => {
 
   it('completes an operator, then its value, from the keyboard', () => {
     render(<SearchView />)
-    fireEvent.change(input(), { target: { value: 'report bef' } })
+    fireEvent.change(input(), { target: { value: 'report before:' } })
     expect(input().getAttribute('aria-expanded')).toBe('true')
-    expect(screen.getByRole('option', { name: /before:/ })).toBeTruthy()
+    expect(screen.getAllByRole('option', { name: /before:/ })).toHaveLength(4)
 
-    fireEvent.keyDown(input(), { key: 'Tab' })
-    expect(search.calls.at(-1)).toBe('report before:')
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    input().dispatchEvent(tab)
+    expect(tab.defaultPrevented).toBe(false)
     expect(screen.getAllByRole('option')).toHaveLength(4)
 
     fireEvent.keyDown(input(), { key: 'ArrowDown' })
@@ -83,17 +86,25 @@ describe('SearchView filters', () => {
 
   it('closes the suggestions on Escape without clearing the query', () => {
     render(<SearchView />)
-    fireEvent.change(input(), { target: { value: 'on' } })
-    expect(screen.getAllByRole('option')).toHaveLength(1)
+    fireEvent.change(input(), { target: { value: 'on:' } })
+    expect(screen.getAllByRole('option')).toHaveLength(4)
     fireEvent.keyDown(input(), { key: 'Escape' })
     expect(screen.queryAllByRole('option')).toHaveLength(0)
-    expect((input() as HTMLInputElement).value).toBe('on')
+    expect((input() as HTMLInputElement).value).toBe('on:')
   })
 
-  it('lists the operators while the field is empty, and a click starts one', () => {
+  it('shows only Filters on empty search and keeps panel choices out of the query', async () => {
     render(<SearchView />)
-    fireEvent.click(screen.getByRole('button', { name: 'after:' }))
-    expect(search.calls.at(-1)).toBe('after:')
+    expect(screen.queryByRole('button', { name: 'after:' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'search.panel.title' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'search.panel.image' }))
+    expect(screen.queryByText('search.chip.image')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'search.panel.apply' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect((input() as HTMLInputElement).value).toBe('')
+    expect(screen.getByText('search.chip.image')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'search.chip.remove{"label":"search.chip.image"}' }))
+    expect(screen.queryByText('search.chip.image')).toBeNull()
   })
 
   it('names senders and content in the chips', () => {
@@ -119,20 +130,40 @@ describe('SearchView filters', () => {
     expect(screen.queryByText('search.searchServer')).toBeNull()
   })
 
-  it('applies and removes a filter from the quick buttons, showing which are on', () => {
+  it('discards draft choices on Escape without clearing the query', async () => {
     search.query = 'report'
     render(<SearchView />)
-    const images = screen.getByRole('button', { name: 'search.quick.image' })
-    expect(images.getAttribute('aria-pressed')).toBe('false')
-    fireEvent.click(images)
-    expect(search.calls.at(-1)).toBe('report has:image ')
-    expect(screen.getByRole('button', { name: 'search.quick.image' }).getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: 'search.quick.image' }))
-    expect(search.calls.at(-1)).toBe('report')
-
-    // Date… leaves on: open, so the date suggestions show
-    fireEvent.click(screen.getByRole('button', { name: 'search.quick.date' }))
-    expect(search.calls.at(-1)).toBe('report on:')
-    expect(screen.getAllByRole('option')).toHaveLength(4)
+    fireEvent.click(screen.getByRole('button', { name: 'search.panel.title' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'search.panel.image' }))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect((input() as HTMLInputElement).value).toBe('report')
+    expect(screen.queryByText('search.chip.image')).toBeNull()
+    expect(document.activeElement).toBe(input())
   })
+  it('picks a room person by stable identity without exposing the encoded identity in the text field', () => {
+    search.query = 'notes from:'
+    search.rooms = new Map([['team@conference.example.test', {
+      jid: 'team@conference.example.test', name: 'Team', nickname: 'Me',
+      occupants: new Map([['Bob', { nick: 'Bob', occupantId: 'bob-id' }]]),
+    }]])
+    render(<SearchView />)
+    fireEvent.click(screen.getByRole('option', { name: 'from:Bob Bob · Team' }))
+    expect((input() as HTMLInputElement).value).toBe('notes')
+    expect(screen.getByText('search.chip.from{"name":"Bob"}')).toBeTruthy()
+    expect(search.picked).toEqual(['from:"room:team%40conference.example.test:bob-id:Bob"'])
+    search.rooms = new Map()
+    fireEvent.click(screen.getByRole('button', { name: 'search.panel.title' }))
+    expect(screen.getByRole('option', { name: 'Bob', exact: true })).toBeTruthy()
+  })
+
+  it('keeps a localized typed date unchanged when opening the panel', () => {
+    search.language = 'fr'
+    search.query = 'notes on:05/03/2024'
+    render(<SearchView />)
+    fireEvent.click(screen.getByRole('button', { name: 'search.panel.title' }))
+    expect((screen.getByLabelText('search.panel.start') as HTMLInputElement).value).toBe('2024-03-05')
+    expect((screen.getByLabelText('search.panel.end') as HTMLInputElement).value).toBe('2024-03-05')
+  })
+
 })

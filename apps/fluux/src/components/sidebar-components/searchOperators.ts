@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next'
 import { format } from 'date-fns'
-import { DATE_OPERATORS, HAS_VALUES, TOKEN_OPERATORS, localDayValue, removeSearchFilter, type SearchFilterToken } from '@fluux/sdk'
+import { DATE_OPERATORS, HAS_VALUES, searchInputTokens, parseRoomSender, TOKEN_OPERATORS, localDayValue, removeSearchFilter, type SearchFilterToken } from '@fluux/sdk'
 import { getDateLocale } from '@/utils/dateFormat'
 
 /** One line of the operator autocomplete under the search field. */
@@ -13,17 +13,18 @@ export interface OperatorSuggestion {
   hintKey: string
   /** A name shown instead of the hint (a contact or a room nick for `from:`). */
   label?: string
+  pickedFilter?: string
 }
 
 /** Someone `from:` can name: the value typed and the name shown. */
 export interface SenderOption { value: string; label: string }
 
-/** Operators offered while typing their name, in this order. `in:` only works first in the query. */
 export const SEARCH_OPERATOR_NAMES = ['in', ...TOKEN_OPERATORS, ...DATE_OPERATORS] as const
 
 /** The word the caret is in, when it is the last one of the query. */
 export function lastWord(query: string): string {
-  return /(\S*)$/.exec(query)?.[1] ?? ''
+  const token = searchInputTokens(query).at(-1)
+  return token?.end === query.length ? token.raw : ''
 }
 
 /** The query with its last word replaced; a completed value gets a space so the next word can start. */
@@ -42,13 +43,8 @@ function dateValues(now: Date): Array<{ value: string; hintKey: string }> {
   ]
 }
 
-/**
- * Suggestions for the last word of the query: operator names while one is being
- * typed (two letters at least, so ordinary words rarely trigger it), then values
- * once the colon is there.
- */
-/** A value with spaces goes in quotes, so the operator keeps it whole. */
-const quoted = (value: string) => (/\s/.test(value) ? `"${value}"` : value)
+/** JSON quoting keeps whitespace, literal quotes and backslashes within one sender token. */
+const quoted = (value: string) => (/[\s"\\]/.test(value) ? JSON.stringify(value) : value)
 
 export function operatorSuggestions(query: string, now = new Date(), senders: readonly SenderOption[] = []): OperatorSuggestion[] {
   const word = lastWord(query)
@@ -68,7 +64,11 @@ export function operatorSuggestions(query: string, now = new Date(), senders: re
       const people = senders
         .filter(({ value, label }) => value.toLowerCase().startsWith(lower) || label.toLowerCase().startsWith(lower))
         .slice(0, 8)
-        .map(({ value, label }) => ({ id: `from-${value}`, insert: `${name}:${quoted(value)}`, hintKey: '', label }))
+        .map(({ value, label }) => {
+          const roomSender = parseRoomSender(value)
+          return { id: `from-${value}`, insert: `${name}:${quoted(roomSender?.nick ?? value)}`, hintKey: '', label,
+            ...(roomSender ? { pickedFilter: `from:${JSON.stringify(value)}` } : {}) }
+        })
       const me = 'me'.startsWith(lower) && lower !== 'me' ? [{ id: 'from-me', insert: `${name}:me`, hintKey: 'search.values.mine' }] : []
       return [...me, ...people]
     }
@@ -77,11 +77,7 @@ export function operatorSuggestions(query: string, now = new Date(), senders: re
       .filter(({ value }) => value.startsWith(partial) && value !== partial)
       .map(({ value, hintKey }) => ({ id: `${name}-${value}`, insert: `${name}:${value}`, hintKey }))
   }
-  if (word.length < 2) return []
-  const firstWord = query.trimStart() === word
-  return SEARCH_OPERATOR_NAMES
-    .filter((name) => name.startsWith(word.toLowerCase()) && (name !== 'in' || firstWord))
-    .map((name) => ({ id: name, insert: `${name}:`, hintKey: `search.operators.${name}` }))
+  return []
 }
 
 /** A span as a reader names it: a day, a month, a year, or two days. */
@@ -104,14 +100,13 @@ export function describeSpan(range: { start: number; end: number }, lang: string
 export function filterChipLabel(filter: SearchFilterToken, t: TFunction, lang: string): string {
   if (!filter.valid) return filter.raw
   if (filter.op === 'is' || (filter.op === 'from' && filter.value.toLowerCase() === 'me')) return t('search.chip.mine')
-  if (filter.op === 'from') return t('search.chip.from', { name: filter.value })
+  if (filter.op === 'from') return t('search.chip.from', { name: parseRoomSender(filter.value)?.nick ?? filter.value })
   if (filter.op === 'has') return t(`search.chip.${filter.value.toLowerCase()}`)
   if (!filter.range) return filter.raw
   const date = describeSpan(filter.range, lang)
   return t(`search.chip.${filter.op === 'during' ? 'on' : filter.op}`, { date })
 }
 
-/** Buttons that apply a filter without typing it; `from` and `date` start one and let the suggestions finish it. */
 export const QUICK_FILTERS = ['image', 'link', 'file', 'from', 'date'] as const
 export type QuickFilter = typeof QUICK_FILTERS[number]
 
@@ -121,16 +116,10 @@ function belongsTo(quick: QuickFilter, filter: SearchFilterToken): boolean {
   return filter.op === 'has' && filter.value.toLowerCase() === quick
 }
 
-/** Whether the query already holds a finished filter of this button. */
 export function quickFilterActive(quick: QuickFilter, filters: readonly SearchFilterToken[]): boolean {
   return filters.some((filter) => !!filter.value && belongsTo(quick, filter))
 }
 
-/**
- * The query after pressing a quick filter button: an active one takes its
- * filters out; otherwise its operator goes at the end, `from:` and `on:` left
- * open so the suggestions offer people and dates.
- */
 export function toggleQuickFilter(query: string, quick: QuickFilter, filters: readonly SearchFilterToken[]): string {
   const own = filters.filter((filter) => belongsTo(quick, filter))
   const without = own.reduce((rest, filter) => removeSearchFilter(rest, filter), query)

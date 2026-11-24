@@ -4,7 +4,7 @@ import { isSpamModerated } from '@/utils/spamModeration'
 import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import { useSearch, useRoomMessageSnapshots, chatStore, roomStore, getLocalPart, setSearchLocale, parseSearchFilters, removeSearchFilter, hasTokenFilters } from '@fluux/sdk'
+import { useSearch, useRoomMessageSnapshots, chatStore, roomStore, getLocalPart, setSearchLocale, parseSearchFilters, roomSenderValue, removeSearchFilter, hasTokenFilters } from '@fluux/sdk'
 import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
 import type { SearchResult, SearchResultContext, SearchFilterType, RoomMessage, SearchFilterToken } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
@@ -17,11 +17,13 @@ import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 import { useSidebarZone } from './types'
 import { Search, SearchX, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash, CalendarDays, AlertTriangle, Filter, User, Link, Image, Paperclip, BarChart3 } from 'lucide-react'
-import { applySuggestion, filterChipLabel, operatorSuggestions, quickFilterActive, toggleQuickFilter, QUICK_FILTERS, SEARCH_OPERATOR_NAMES, type QuickFilter, type SenderOption } from './searchOperators'
+import { applySuggestion, filterChipLabel, operatorSuggestions, type SenderOption } from './searchOperators'
 import { TextInput } from '../ui/TextInput'
+import { SearchFilterPanel } from './SearchFilterPanel'
 import { ListEmpty } from '../ui/ListEmpty'
 
 const SEARCH_ERROR_KEYS = new Map([
+  ['Invalid search filters', 'search.panel.invalidFilters'],
   ['Search failed', 'search.errors.failed'],
   ['Server does not support archive search for rooms', 'search.errors.archiveRooms'],
   ['Server does not support archive search. Try searching within a conversation.', 'search.errors.archiveUnsupported'],
@@ -29,8 +31,8 @@ const SEARCH_ERROR_KEYS = new Map([
   ['The server archive needs words to search', 'search.errors.serverNeedsWords'],
 ])
 
+const EMPTY_PICKED_FILTERS: string[] = []
 const CHIP_ICONS = { link: Link, image: Image, file: Paperclip, poll: BarChart3 } as const
-const QUICK_ICONS: Record<QuickFilter, typeof Link> = { image: Image, link: Link, file: Paperclip, from: User, date: CalendarDays }
 
 /** The icon of a chip: who for from: and is:, what for has:, a calendar for dates. */
 function chipIcon(filter: SearchFilterToken) {
@@ -55,7 +57,7 @@ function senderOptions(scope: string | null): SenderOption[] {
   for (const [jid, room] of roomStore.getState().rooms) {
     if (scope && scope !== jid) continue
     // The reader is from:me, not their own nick
-    for (const occupant of room.occupants?.values() ?? []) if (occupant.nick !== room.nickname) add(occupant.nick, occupant.nick)
+    for (const occupant of room.occupants?.values() ?? []) if (occupant.nick !== room.nickname) add(roomSenderValue(jid, occupant.occupantId ?? '', occupant.nick), scope ? occupant.nick : `${occupant.nick} · ${room.name || jid}`)
   }
   if (!scope || !roomStore.getState().rooms.has(scope)) {
     for (const [jid, entity] of chatStore.getState().conversationEntities) {
@@ -81,13 +83,14 @@ export function SearchView() {
   const { t, i18n } = useTranslation()
   const {
     query, results: rawResults, isSearching, error, search, clearSearch, previewResult, setPreviewResult,
-    isSearchingMAM, mamResults: rawMamResults, hasMoreMAMResults, mamError, searchScope,
+    isSearchingMAM, mamSearched: archiveRequested, mamResults: rawMamResults, hasMoreMAMResults, mamError, searchScope,
     searchMAM, loadMoreMAMResults, setSearchScope, resultContext,
     searchFilter, setSearchFilter,
-    inPrefixSuggestions, isInPrefixActive, selectInPrefixSuggestion, filtersBuilding,
+    inPrefixSuggestions, isInPrefixActive, selectInPrefixSuggestion, filtersBuilding, pickedFilters = EMPTY_PICKED_FILTERS, setPickedFilters, filtersIncomplete, filtersUnavailable, retryFilters,
   } = useSearch()
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const inputRef = useRef<HTMLInputElement>(null)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const [inPrefixHighlight, setInPrefixHighlight] = useState(-1)
   // The query whose operator suggestions Escape dismissed; typing brings them back
@@ -148,16 +151,21 @@ export function SearchView() {
 
   // Read in the same locale the store gets from the effect above
   const parsedInput = useMemo(() => parseSearchFilters(query, i18n.language), [query, i18n.language])
-  const chips = parsedInput.filters.filter((filter) => filter.value)
+  const pickedChips = useMemo(() => parseSearchFilters(pickedFilters.join(' '), i18n.language).filters, [pickedFilters, i18n.language])
+  const chips = [...parsedInput.filters, ...pickedChips]
+  const hasQuery = !!query.trim() || pickedFilters.length > 0
+  const combinedInput = parseSearchFilters([query, ...pickedFilters].join(' '), i18n.language)
+  const invalidFilters = chips.some(filter => !filter.valid) ||
+    (combinedInput.after !== undefined && combinedInput.before !== undefined && combinedInput.after >= combinedInput.before)
   const operatorOptions = useMemo(
-    () => (isInPrefixActive || dismissedFor === query ? [] : operatorSuggestions(query, new Date(),
+    () => (filtersOpen || dismissedFor === query ? [] : operatorSuggestions(query, new Date(),
       /\bfrom:\S*$/i.test(query) ? senderOptions(searchScope) : [])),
-    [query, isInPrefixActive, dismissedFor, searchScope],
+    [query, filtersOpen, dismissedFor, searchScope],
   )
   // Dates only narrow a search: alone they leave nothing to look for
-  const needsWords = !!query.trim() && !isInPrefixActive && !parsedInput.text && !hasTokenFilters(parsedInput)
+  const needsWords = hasQuery && !isInPrefixActive && !combinedInput.text && !hasTokenFilters(combinedInput)
   const suggestionCount = isInPrefixActive ? inPrefixSuggestions.length : operatorOptions.length
-  const suggestionsOpen = suggestionCount > 0
+  const suggestionsOpen = suggestionCount > 0 && dismissedFor !== query && !filtersOpen
 
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
     enabled: !suggestionsOpen,
@@ -184,8 +192,14 @@ export function SearchView() {
 
   const acceptSuggestion = useCallback((index: number) => {
     if (isInPrefixActive) selectInPrefixSuggestion(inPrefixSuggestions[index])
-    else replaceQuery(applySuggestion(query, operatorOptions[index]))
-  }, [isInPrefixActive, selectInPrefixSuggestion, inPrefixSuggestions, replaceQuery, query, operatorOptions])
+    else {
+      const option = operatorOptions[index]
+      if (option.pickedFilter) {
+        setPickedFilters([...pickedFilters, option.pickedFilter])
+        replaceQuery(applySuggestion(query, { insert: '' }).trimEnd())
+      } else replaceQuery(applySuggestion(query, option))
+    }
+  }, [isInPrefixActive, selectInPrefixSuggestion, inPrefixSuggestions, replaceQuery, query, operatorOptions, pickedFilters, setPickedFilters])
 
   const handleSuggestionKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -196,13 +210,12 @@ export function SearchView() {
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
         setInPrefixHighlight((prev) => Math.max(prev - 1, -1))
-      } else if ((e.key === 'Enter' && inPrefixHighlight >= 0) || (e.key === 'Tab' && !e.shiftKey)) {
+      } else if (e.key === 'Enter' && inPrefixHighlight >= 0) {
         e.preventDefault()
         acceptSuggestion(Math.max(inPrefixHighlight, 0))
       } else if (e.key === 'Escape') {
         e.preventDefault()
-        if (isInPrefixActive) clearSearch()
-        else setDismissedFor(query)
+        setDismissedFor(query)
       }
     },
     [suggestionsOpen, suggestionCount, inPrefixHighlight, acceptSuggestion, isInPrefixActive, clearSearch, query]
@@ -271,8 +284,8 @@ export function SearchView() {
                   className={`w-full px-3 py-1.5 text-start text-sm flex items-center gap-2 transition-colors
                     ${i === inPrefixHighlight ? 'bg-fluux-hover text-fluux-text' : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'}`}
                 >
-                  <span className="font-mono text-fluux-text flex-shrink-0">{option.insert}</span>
-                  <span className="truncate text-xs">{option.label ?? t(option.hintKey)}</span>
+                  <span className="font-mono text-fluux-text flex-shrink-0 max-w-[45%] truncate">{option.insert}</span>
+                  <span className="min-w-0 break-words text-xs">{option.label ?? t(option.hintKey)}</span>
                 </button>
               ))}
               {isInPrefixActive && inPrefixSuggestions.map((s, i) => (
@@ -318,21 +331,25 @@ export function SearchView() {
               </button>
             </li>
           )}
-          {chips.map((filter) => {
+          {chips.map((filter, index) => {
             const label = filterChipLabel(filter, t, currentLang)
             const Icon = chipIcon(filter)
             return (
-              <li key={filter.raw}
+              <li key={`${index}-${filter.raw}`}
                 className={`flex items-center gap-1 min-w-0 max-w-full text-xs rounded ps-2 ${filter.valid
                   ? 'bg-fluux-brand/15 text-fluux-text' : 'bg-fluux-red/20 text-fluux-error'}`}
                 title={filter.valid ? undefined : t('search.chip.invalid', { filter: filter.raw })}
               >
                 <Icon className="size-3 flex-shrink-0" aria-hidden />
                 <span className="truncate">{label}</span>
-                {!filter.valid && <span className="sr-only">{t('search.chip.invalid', { filter: filter.raw })}</span>}
+                {!filter.valid && <span>{t('search.chip.invalid', { filter: filter.raw })}</span>}
                 <button
                   type="button"
-                  onClick={() => replaceQuery(removeSearchFilter(query, filter))}
+                  onClick={() => {
+                    if (index < parsedInput.filters.length) replaceQuery(removeSearchFilter(query, filter))
+                    else setPickedFilters(pickedFilters.filter((_, pickedIndex) => pickedIndex !== index - parsedInput.filters.length))
+                    inputRef.current?.focus()
+                  }}
                   className="p-0.5 rounded hover:bg-fluux-hover-strong flex-shrink-0 tap-target"
                   aria-label={t('search.chip.remove', { label })}
                   title={t('search.chip.remove', { label })}
@@ -345,34 +362,17 @@ export function SearchView() {
         </ul>
       )}
 
-      {/* Quick filters: the common operators as toggle buttons, styled like the type pills below */}
-      {!isInPrefixActive && (
-        <div role="group" aria-label={t('search.quick.label')} className="flex flex-wrap items-center gap-1 px-3 pb-1">
-          {QUICK_FILTERS.map((quick) => {
-            const Icon = QUICK_ICONS[quick]
-            const active = quickFilterActive(quick, parsedInput.filters)
-            return (
-              <button
-                type="button"
-                key={quick}
-                aria-pressed={active}
-                onClick={() => replaceQuery(toggleQuickFilter(query, quick, parsedInput.filters))}
-                className={`text-xs rounded-full px-2.5 py-0.5 transition-colors flex items-center gap-1 ${
-                  active
-                    ? 'bg-fluux-brand text-fluux-text-on-accent'
-                    : 'bg-fluux-hover text-fluux-muted hover:text-fluux-text'
-                }`}
-              >
-                <Icon className="size-3" aria-hidden />
-                {t(`search.quick.${quick}`)}
-              </button>
-            )
-          })}
-        </div>
-      )}
+      <div className="px-3 pb-2">
+        <button type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-fluux-hover text-fluux-text hover:bg-fluux-hover-strong">
+          <Filter className="size-3.5" aria-hidden />{t('search.panel.title')}
+        </button>
+      </div>
+      {filtersOpen && <SearchFilterPanel filters={chips.map(filter => filter.raw)} senders={senderOptions(searchScope)}
+        onApply={next => { setPickedFilters(next); search(parsedInput.text) }} onClose={() => { setFiltersOpen(false); inputRef.current?.focus() }} />}
 
       {/* Type filter pills */}
-      {query && !isInPrefixActive && (
+      {hasQuery && !isInPrefixActive && (
         <div className="flex flex-wrap items-center gap-1 px-3 pb-1">
           {filterOptions.map(({ key, label, icon: Icon }) => (
             <button
@@ -408,17 +408,28 @@ export function SearchView() {
           </p>
         )}
 
-        {!isSearching && needsWords && (
+        {!isSearching && filtersIncomplete && <p role="status" className="mx-2 my-3 text-xs text-fluux-muted">{t('search.panel.incomplete')}</p>}
+        {!isSearching && filtersUnavailable && <div role="alert" className="mx-2 my-3 text-sm text-fluux-error">
+          <p>{t('search.panel.unavailable')}</p><p>{filtersUnavailable}</p>
+          <button type="button" className="underline py-2" onClick={retryFilters}>{t('common.retry')}</button>
+        </div>}
+        {!isSearching && invalidFilters && <p role="alert" className="mx-2 my-3 text-sm text-fluux-error">{t('search.panel.invalidFilters')}</p>}
+
+        {!isSearching && !invalidFilters && needsWords && (
           <ListEmpty icon={Filter} title={t('search.needsWords')} />
         )}
 
-        {!isSearching && !isInPrefixActive && !filtersBuilding && !needsWords && query && results.length === 0 && mamResults.length === 0 && !isSearchingMAM && (
-          <ListEmpty icon={SearchX} title={t('search.noResults')} />
+        {!isSearching && !isInPrefixActive && !filtersBuilding && !needsWords && !invalidFilters && !error && !filtersUnavailable && hasQuery && results.length === 0 && mamResults.length === 0 && !isSearchingMAM && (
+          <ListEmpty icon={SearchX} title={t('search.panel.localEmpty')} />
         )}
 
-        {error && (
+        {error && !invalidFilters && (
           <div className="text-center py-4 text-red-400 text-sm">{translateSearchError(t, error)}</div>
         )}
+
+        {!isSearchingMAM && !mamError && mamResults.length === 0 && archiveRequested && <p role="status" className="mx-2 my-3 text-xs text-fluux-muted">
+          {t(hasMoreMAMResults ? 'search.panel.pageEmpty' : 'search.panel.archiveEmpty')}
+        </p>}
 
         {/* Local results */}
         {!isSearching && results.length > 0 && (
@@ -443,7 +454,7 @@ export function SearchView() {
         )}
 
         {/* MAM search button */}
-        {!isSearching && !isInPrefixActive && !needsWords && query && !isSearchingMAM && mamResults.length === 0 && (
+        {!isSearching && !isInPrefixActive && !needsWords && !invalidFilters && hasQuery && !isSearchingMAM && !hasMoreMAMResults && mamResults.length === 0 && (
           <div className="px-2 py-3">
             <button
               type="button"
@@ -515,30 +526,7 @@ export function SearchView() {
           <div className="text-center py-2 px-3 text-fluux-muted text-xs">{translateSearchError(t, mamError)}</div>
         )}
 
-        {!query && (
-          <>
-            <ListEmpty icon={Search} title={t('search.hint')} />
-            <div className="px-2 pb-3">
-              <p className="flex items-center justify-center gap-1 text-xs text-fluux-muted mb-1.5">
-                <Filter className="size-3" aria-hidden />
-                {t('search.operators.label')}
-              </p>
-              <div className="flex flex-wrap justify-center gap-1">
-                {SEARCH_OPERATOR_NAMES.map((name) => (
-                  <button
-                    type="button"
-                    key={name}
-                    onClick={() => replaceQuery(`${name}:`)}
-                    title={t(`search.operators.${name}`)}
-                    className="font-mono text-xs rounded-full px-2.5 py-0.5 bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
-                  >
-                    {name}:
-                  </button>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
+        {!hasQuery && <ListEmpty icon={Search} title={t('search.hint')} />}
       </div>
     </div>
   )

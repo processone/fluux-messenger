@@ -56,6 +56,7 @@ export async function seedVersion5SearchHistory(scope: string, messages: readonl
     for (const [token, postings] of tokens) await tx.objectStore('search-tokens').put({ token, postings })
     await tx.objectStore('search-meta').put({ key: 'next-doc-no', value: String(messages.length + 1) })
     await tx.objectStore('search-meta').put({ key: 'postings-ready', value: '1' })
+    await tx.objectStore('search-meta').put({ key: 'backfill-complete', value: 'chat-cache-key' })
     await tx.done
   } finally { db.close() }
 }

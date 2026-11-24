@@ -19,6 +19,7 @@ export const changelog: ChangelogEntry[] = [
     sections: [{
       type: 'added',
       items: [
+        'Search filters: open Filters to choose a sender, dates, images, links, files or polls, then apply removable chips without adding syntax to your text. Typed filters still work, and search explains when older content details are missing or preparation needs a retry',
         'Jump to date: open a chat or room at the first message of a day from the conversation menu or a date bubble',
         'Small private rooms can show who has read through each message, with up to three avatars and a full named list. Sharing starts off: enable it in Privacy, then choose each room in its details. Only focused viewing in verified, unlisted, members-only, non-anonymous rooms below 20 occupants can share a position; encrypted messages are excluded. The room archive may retain this metadata. Your unread badges and private read sync stay unchanged',
         'Saved messages: keep any message in a new Saved list in the sidebar, from its More menu or the long-press sheet on a phone. The list is stored privately on your server, so it follows you to every Fluux session, and nobody else sees it, not even the other members of a room. A conversation that has saved messages offers a Saved entry with their count in its ⋮ menu, which opens the list narrowed to it, and on a wide window selecting an entry shows that message in place, with the conversation around it',

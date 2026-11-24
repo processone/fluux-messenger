@@ -6,7 +6,7 @@ import type { Message } from '../core/types'
 import { setStorageScopeJid, _resetStorageScopeForTesting } from './storageScope'
 import * as cache from './messageCache'
 import { generateSearchHistory, seedVersion5SearchHistory } from './fixtures/searchHistory'
-import { _resetDBForTesting, closeSearchIndex, getFilterIndexState, indexMessages, migrateSearchFilters, search } from './searchIndex'
+import { _resetDBForTesting, closeSearchIndex, initSearchIndex, backfillFromMessageCache, getFilterIndexState, indexMessages, migrateSearchFilters, search } from './searchIndex'
 import { filterToken } from './searchFilters'
 
 const scope = 'search@example.test'
@@ -27,6 +27,8 @@ describe('historical filter preparation', () => {
 
   it('keeps unknown old attachments out of Links and repairs them on authoritative replay', async () => {
     await seedVersion5SearchHistory(scope, [photo])
+    await initSearchIndex(scope)
+    await backfillFromMessageCache()
     expect(await getFilterIndexState()).toEqual({ status: 'preparing' })
     await migrateSearchFilters()
     expect(await getFilterIndexState()).toEqual({ status: 'incomplete' })

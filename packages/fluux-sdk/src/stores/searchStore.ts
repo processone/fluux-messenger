@@ -102,6 +102,7 @@ export interface SearchResult {
   isOutgoing?: boolean
   /** The instant a room copy reached the client (epoch ms), when the row recorded one. */
   receivedAt?: number
+  /** Display rows omit attachment and privacy metadata that indexing must preserve. */
   canonicalMessage?: Message | RoomMessage
 }
 
@@ -137,6 +138,7 @@ export interface SearchResultContext {
 export interface SearchState {
   /** Current search query */
   query: string
+  /** Picked filters stay separate so the text field never needs encoded room identities. */
   pickedFilters: string[]
   setPickedFilters: (filters: string[]) => void
   filtersIncomplete: boolean
@@ -153,6 +155,7 @@ export interface SearchState {
 
   /** Whether a MAM search is in progress */
   isSearchingMAM: boolean
+  mamSearched: boolean
   /** MAM search results (excludes duplicates already in local results) */
   mamResults: SearchResult[]
   /** Whether more MAM results are available (for pagination) */
@@ -830,6 +833,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
 
   searchStore.setState({
     isSearchingMAM: true,
+    mamSearched: true,
     mamError: null,
     ...(append ? {} : { mamResults: [] }),
   })
@@ -988,6 +992,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
   error: null,
   previewResult: null,
   isSearchingMAM: false,
+  mamSearched: false,
   mamResults: [],
   hasMoreMAMResults: false,
   mamError: null,
@@ -1010,7 +1015,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
     }
     const trimmed = query.trim()
     if (!trimmed && !get().pickedFilters.length) {
-      set({ filtersIncomplete: false, filtersUnavailable: null, query: '', isSearchingMAM: false, isSearching: false, results: [], error: null, mamResults: [], mamError: null, hasMoreMAMResults: false, searchFilter: 'all', inPrefixSuggestions: [], isInPrefixActive: false, filtersBuilding: false })
+      set({ filtersIncomplete: false, filtersUnavailable: null, query: '', mamSearched: false, isSearchingMAM: false, isSearching: false, results: [], error: null, mamResults: [], mamError: null, hasMoreMAMResults: false, searchFilter: 'all', inPrefixSuggestions: [], isInPrefixActive: false, filtersBuilding: false })
       mamSearchGeneration++  // Cancel any in-flight MAM search
       return
     }
@@ -1024,6 +1029,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
       mamRsmCursor = undefined
       set({
         query,
+        mamSearched: false,
         isSearchingMAM: false,
         mamResults: [],
         hasMoreMAMResults: false,
@@ -1044,6 +1050,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
     const prev = get()
     const patch: Partial<SearchState> = {
       query,
+      mamSearched: false,
       isSearching: true,
       isSearchingMAM: false,
       error: null,
@@ -1085,6 +1092,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
       error: null,
       previewResult: null,
       isSearchingMAM: false,
+      mamSearched: false,
       mamResults: [],
       hasMoreMAMResults: false,
       mamError: null,
@@ -1112,6 +1120,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
     const state = searchStore.getState()
     set({
       searchScope: conversationId,
+      mamSearched: false,
       isSearchingMAM: false,
       results: [],
       mamResults: [],
@@ -1131,6 +1140,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
     const state = searchStore.getState()
     set({
       searchFilter: filter,
+      mamSearched: false,
       isSearchingMAM: false,
       results: [],
       mamResults: [],
@@ -1154,6 +1164,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
     // Set scope via existing mechanism
     set({
       searchScope: suggestion.id,
+      mamSearched: false,
       isSearchingMAM: false,
       query: restQuery,
       inPrefixSuggestions: [],
@@ -1180,5 +1191,8 @@ searchIndex.subscribeFilterIndex(() => {
 })
 
 connectionStore.subscribe((state, previous) => {
-  if (state.jid !== previous.jid) searchStore.getState().clearSearch()
+  if (state.jid !== previous.jid) {
+    searchStore.getState().clearSearch()
+    searchStore.getState().setSearchScope(null)
+  }
 })

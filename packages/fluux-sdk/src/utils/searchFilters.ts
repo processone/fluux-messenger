@@ -33,6 +33,7 @@ export interface SearchFilterToken {
   value: string
   /** The operator exactly as typed, so it can be taken out of the query again. */
   raw: string
+  /** UTF-16 offsets in the unmodified query; end is exclusive. */
   start: number
   end: number
   /** The instants a date operator covers: `start` included, `end` excluded. */
@@ -207,8 +208,8 @@ export const filterToken = {
   occupant: (occupantId: string, room: string) => `${MARK}occ:${room.toLowerCase()}\0${occupantId}`,
 }
 
-/** The parts of a message its filter tokens read. */
 type FilterFields = 'type' | 'from' | 'isOutgoing' | 'body' | 'attachment' | 'poll'
+/** Requiring a room alongside occupant identity prevents global occupant-id collisions. */
 export type FilterTokenSource = Pick<Message, FilterFields> | Pick<RoomMessage, FilterFields | 'nick' | 'occupantId' | 'roomJid'>
 
 const LINK_PATTERN = /(?:\bhttps?:\/\/|\bwww\.)\S/i
