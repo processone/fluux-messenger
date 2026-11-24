@@ -111,8 +111,8 @@ export function useMentionAutocomplete(
   const isDismissed = triggerIndex === dismissedTriggerIndex
   const isActive = hasTrigger && !isDismissed
 
-  // A missing trigger (for example after caret movement) does not lift a dismissal.
-  if (isActive && dismissedTriggerIndex !== null) {
+  // Moving the caret drops the typing snapshot without removing the dismissed @.
+  if (dismissedTriggerIndex !== null && (isActive || text[dismissedTriggerIndex] !== '@')) {
     setDismissedTriggerIndex(null)
   }
 
