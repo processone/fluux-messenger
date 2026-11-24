@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
 import { settle } from './harness/scrollHarness'
+import { watchForWebKitTermination } from './harness/webkitTermination'
 
 const ROW = '[data-message-row-id][data-message-id^="showcase-launch-"]'
 const VIRTUALIZATION_FLAG = 'fluux:flags:enableMessageVirtualization'
@@ -127,18 +128,20 @@ test.describe('phone room timeline', () => {
         const demoOrigin = new URL(baseURL!).origin
         await page.route('**/*', route => new URL(route.request().url()).origin === demoOrigin ? route.continue() : route.abort())
         await trackStartupReplyResize(page)
+        await watchForWebKitTermination(page)
         await page.goto('/demo.html?scene=showcase&virt=1')
         await page.locator('.icon-rail [data-nav="rooms"]').click()
         await page.getByTestId('sidebar-pane').getByText('Launch Crew', { exact: true }).click()
         await expect(page.locator('[data-virtualizer-spacer]')).toHaveCount(1)
         await expectGroupBelowReply(page, 'startup-phone-390', true)
-        const trace = await page.waitForFunction(() => {
-          const samples = (window as StartupWindow).roomStartupResizes
-          return samples?.length ? samples : null
-        })
-        const samples = await trace.jsonValue()
+        const readSamples = () => page.evaluate(() => (window as StartupWindow).roomStartupResizes ?? [])
+        await expect.poll(async () => (await readSamples()).length, {
+          timeout: 5_000,
+          message: 'the startup reply must produce at least one resize sample with its quote and reaction',
+        }).toBeGreaterThan(0)
+        const samples = await readSamples()
         await test.info().attach('startup-resize-batches', { body: JSON.stringify(samples), contentType: 'application/json' })
-        for (const sample of samples!) {
+        for (const sample of samples) {
           expect(sample.privateTop, 'private panel must clear the public reply and reaction at resize delivery')
             .toBeGreaterThanOrEqual(Math.max(sample.replyBottom, sample.reactionBottom))
         }
