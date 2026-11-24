@@ -129,7 +129,7 @@ export const RoomReadBadge = memo(function RoomReadBadge({ markers, roomJid, row
         </div>
       </div>
       {openReaders && createPortal(<ModalShell title={title} dialogLabel={title} onClose={() => setOpenReaders(null)} width="max-w-sm" panelClassName="max-h-[80vh] flex flex-col">
-        <p className="px-4 pt-3 text-xs text-fluux-muted">{t('readMarkers.exactPosition')}</p>
+        <p className="px-4 pt-3 pb-2 text-xs text-fluux-muted">{t('readMarkers.exactPosition')}</p>
         <ul className="p-4 space-y-3 overflow-y-auto min-h-0" tabIndex={0} aria-label={title}>
           {openReaders.map(reader => <li key={reader.occupantId} className="flex items-center gap-3 text-sm text-fluux-text">
             <Avatar identifier={`${roomJid}/${reader.occupantId}`} name={reader.nick} avatarUrl={reader.avatar} size="xs" />
