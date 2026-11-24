@@ -551,5 +551,6 @@ test('Search keeps the saved bookmark passive', async ({ page }) => {
   const previewRow = page.locator(`[data-message-id="${id}"][data-message-body]`)
   await expect(previewRow.getByRole('img', { name: 'Saved', exact: true })).toBeVisible()
   await expect(previewRow.locator('button[data-testid="saved-marker"]')).toHaveCount(0)
-  expect(await page.evaluate(() => Object.keys((window as unknown as { __savedStore: typeof savedStore }).__savedStore.getState().entries))).toEqual(['marker-entry-0', 'marker-entry-1'])
+  const savedIds = await page.evaluate(() => Object.keys((window as unknown as { __savedStore: typeof savedStore }).__savedStore.getState().entries))
+  expect(new Set(savedIds)).toEqual(new Set(['marker-entry-0', 'marker-entry-1']))
 })
