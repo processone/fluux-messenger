@@ -16,8 +16,8 @@ const paragraphs = [
   { direction: 'rtl', body: 'أصبح البث المباشر والبث الاحتياطي جاهزين. يرجى مراجعة قائمة الاستعدادات النهائية، والتأكد من خلفية المنصة، وحصر الكلمة الافتتاحية في خمس دقائق كي يتمكن جميع أعضاء الفريق من متابعة البرنامج.' },
 ] as const
 
-async function openRoom(page: Page, width: number, scan = false, virtualized = false) {
-  await page.setViewportSize({ width, height: 800 })
+async function openRoom(page: Page, width: number, scan = false, virtualized = false, height = 800) {
+  await page.setViewportSize({ width, height })
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
   if (scan) {
     // React must see the packaged developer-tools hook while react-dom loads.
@@ -238,7 +238,8 @@ for (const virtualized of [false, true]) {
 
 for (const virtualized of [false, true]) {
   test(`room read line height changes preserve live edge and history with virtualization ${virtualized}`, async ({ page }) => {
-    const fixture = await openRoom(page, 1280, false, virtualized)
+    // Keep enough content below the reading row to stay away from the live edge.
+    const fixture = await openRoom(page, 1280, false, virtualized, 480)
     const early = fixture.history[1]
     const anchor = fixture.history[Math.floor(fixture.history.length / 2)]
     expect(fixture.history.length).toBeGreaterThan(5)
