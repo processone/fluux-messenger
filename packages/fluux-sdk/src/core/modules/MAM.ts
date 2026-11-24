@@ -82,6 +82,7 @@ import {
   NS_DELAY,
   NS_FASTEN,
   NS_OOB,
+  NS_MUC_USER,
   NS_OCCUPANT_ID,
   NS_POLL,
 } from '../namespaces'
@@ -157,6 +158,7 @@ interface RawArchiveEntry {
   forwarded: Element
   messageEl: Element
   archiveId?: string
+  roomPrivate: boolean
 }
 
 /**
@@ -377,7 +379,7 @@ export class MAM extends BaseModule {
       const entries: RawArchiveEntry[] = []
       const fields = [xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM))]
       if (!room) fields.push(xml('field', { var: 'with' }, xml('value', {}, conversationId)))
-      const collector = this.createMessageCollector(queryId, room ? conversationId : undefined, (forwarded, messageEl, archiveId) => entries.push({ forwarded, messageEl, archiveId }))
+      const collector = this.createMessageCollector(queryId, room ? conversationId : undefined, entry => entries.push(entry))
       const xmpp = this.deps.getXmpp()
       const unregister = this.deps.registerMAMCollector?.(queryId, collector) ?? (() => {
         xmpp?.on('stanza', collector)
@@ -390,7 +392,8 @@ export class MAM extends BaseModule {
         const boundaryIndex = end ? entries.findIndex(entry => entry.archiveId === end) : -1
         const boundedEntries = boundaryIndex < 0 ? entries : entries.slice(0, boundaryIndex + 1)
         const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
-        for (const { forwarded, messageEl, archiveId } of boundedEntries) {
+        for (const { forwarded, messageEl, archiveId, roomPrivate } of boundedEntries) {
+          if (roomPrivate) continue
           if (!isCurrent()) throw new DOMException('Correction target removed', 'AbortError')
           const delay = forwarded.getChild('delay', NS_DELAY)
           const journaled = await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, room ? 'room' : 'chat', delayStamp(delay), archiveId)
@@ -629,9 +632,7 @@ export class MAM extends BaseModule {
         // Collector runs synchronously as stanzas arrive; it just buffers raw
         // elements. The actual parse/decrypt pass happens after `sendIQ`
         // resolves so we can await the E2EE pipeline per entry.
-        const collectMessage = this.createMessageCollector(queryId, undefined, (forwarded, messageEl, archiveId) => {
-          rawEntries.push({ forwarded, messageEl, archiveId })
-        })
+        const collectMessage = this.createMessageCollector(queryId, undefined, entry => rawEntries.push(entry))
 
         // Use the collector registry if available, otherwise fall back to direct listeners
         // (fallback is needed for tests that don't provide the registry)
@@ -699,7 +700,8 @@ export class MAM extends BaseModule {
           // Drain the buffer: E2EE decrypt first (so modification bodies are
           // plaintext, not fallback hints), then modification detection, then parse.
           const correctionStart = modifications.corrections.length
-          for (const { forwarded, messageEl, archiveId } of rawEntries) {
+          for (const { forwarded, messageEl, archiveId, roomPrivate } of rawEntries) {
+            if (roomPrivate) continue
             const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)
             const journaled = await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, 'chat', delayStamp(forwardedDelayEl), archiveId)
             if (journaled) {
@@ -975,9 +977,7 @@ export class MAM extends BaseModule {
         const rawEntries: RawArchiveEntry[] = []
 
         // Collector only buffers; decrypt + parse happen in the async drain below.
-        const collectMessage = this.createMessageCollector(queryId, roomJid, (forwarded, messageEl, archiveId) => {
-          rawEntries.push({ forwarded, messageEl, archiveId })
-        })
+        const collectMessage = this.createMessageCollector(queryId, roomJid, entry => rawEntries.push(entry))
 
         // Use the collector registry if available, otherwise fall back to direct listeners
         let unregister: () => void
@@ -1278,9 +1278,7 @@ export class MAM extends BaseModule {
     const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
     const rawEntries: RawArchiveEntry[] = []
 
-    const collectMessage = this.createMessageCollector(queryId, undefined, (forwarded, messageEl, archiveId) => {
-      rawEntries.push({ forwarded, messageEl, archiveId })
-    })
+    const collectMessage = this.createMessageCollector(queryId, undefined, entry => rawEntries.push(entry))
 
     let unregister: () => void
     if (this.deps.registerMAMCollector) {
@@ -1299,7 +1297,8 @@ export class MAM extends BaseModule {
 
       const currentJid = this.deps.getCurrentJid()
       const ownBareJid = currentJid ? getBareJid(currentJid) : ''
-      for (const { forwarded, messageEl, archiveId } of rawEntries) {
+      for (const { forwarded, messageEl, archiveId, roomPrivate } of rawEntries) {
+        if (roomPrivate) continue
         const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)
         // Derive conversationId from the message's from/to
         const from = getBareJid(messageEl.attrs.from || '')
@@ -1359,9 +1358,7 @@ export class MAM extends BaseModule {
     const rawEntries: RawArchiveEntry[] = []
 
     // Collector only buffers; decrypt + parse happen in the async drain below.
-    const collectMessage = this.createMessageCollector(queryId, roomJid, (forwarded, messageEl, archiveId) => {
-      rawEntries.push({ forwarded, messageEl, archiveId })
-    })
+    const collectMessage = this.createMessageCollector(queryId, roomJid, entry => rawEntries.push(entry))
 
     let unregister: () => void
     if (this.deps.registerMAMCollector) {
@@ -2328,9 +2325,7 @@ export class MAM extends BaseModule {
       // path (the local echo carries no stashed encryptedPayload), so the
       // preview stayed stuck on the fallback until the conversation was opened.
       const rawEntries: RawArchiveEntry[] = []
-      const collectMessage = this.createMessageCollector(queryId, undefined, (forwarded, messageEl, archiveId) => {
-        rawEntries.push({ forwarded, messageEl, archiveId })
-      })
+      const collectMessage = this.createMessageCollector(queryId, undefined, entry => rawEntries.push(entry))
 
       // Use the collector registry if available, otherwise fall back to direct listeners
       let unregister: () => void
@@ -2347,7 +2342,8 @@ export class MAM extends BaseModule {
         session.assertCurrent()
 
         let latestMessage: Message | null = null
-        for (const { forwarded, messageEl, archiveId } of rawEntries) {
+        for (const { forwarded, messageEl, archiveId, roomPrivate } of rawEntries) {
+          if (roomPrivate) continue
           const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
           await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, 'chat', forwardedTimestamp, archiveId)
           session.assertCurrent()
@@ -2459,9 +2455,7 @@ export class MAM extends BaseModule {
       const room = this.deps.stores?.room.getRoom(roomJid)
       const me = roomSelf(room)
       const rawEntries: RawArchiveEntry[] = []
-      const collectMessage = this.createMessageCollector(queryId, roomJid, (forwarded, messageEl, archiveId) => {
-        rawEntries.push({ forwarded, messageEl, archiveId })
-      })
+      const collectMessage = this.createMessageCollector(queryId, roomJid, entry => rawEntries.push(entry))
 
       // Use the collector registry if available, otherwise fall back to direct listeners
       let unregister: () => void
@@ -2550,7 +2544,7 @@ export class MAM extends BaseModule {
     queryId: string,
     /** The room JID when a room archive was queried; undefined for the account's own archive. */
     archiveJid: string | undefined,
-    onMessage: (forwarded: Element, messageEl: Element, archiveId?: string) => void
+    onMessage: (entry: RawArchiveEntry) => void
   ): (stanza: Element) => void {
     const session = this.captureQuery()
     return (stanza: Element) => {
@@ -2570,10 +2564,24 @@ export class MAM extends BaseModule {
       const messageEl = forwarded.getChild('message')
       if (!messageEl) return
 
-      // The <result id="..."> is the MAM archive ID — stable and unique per message
-      this.correctionReceipts.observe(messageEl, true, result.attrs.id)
-      onMessage(forwarded, messageEl, result.attrs.id)
+      // Keep private rows as archive positions, not as chat content or signals.
+      // An exact lookup can need a private row as another row's predecessor.
+      const roomPrivate = archiveJid === undefined && this.isArchivedRoomPrivateMessage(messageEl)
+      const archiveId = result.attrs.id
+      if (!roomPrivate) this.correctionReceipts.observe(messageEl, true, archiveId)
+      onMessage({ forwarded, messageEl, archiveId, roomPrivate })
     }
+  }
+
+  private isArchivedRoomPrivateMessage(message: Element): boolean {
+    const { from, to, type } = message.attrs
+    if (!from || (type || 'chat') !== 'chat') return false
+    const ownBare = getBareJid(this.deps.getCurrentJid() ?? '').toLowerCase()
+    const peer = getBareJid(from).toLowerCase() === ownBare ? to : from
+    if (!peer || !getResource(peer)) return false
+    // A room need not still be joined when history is read. Some servers or
+    // older clients omit the MUC marker; recognize a known room's occupant too.
+    return !!message.getChild('x', NS_MUC_USER) || this.isKnownRoomAddress(getBareJid(peer))
   }
 
   /**
@@ -3536,6 +3544,7 @@ export class MAM extends BaseModule {
 
     const timestamp = this.extractForwardedTimestamp(entry.forwarded)
     if (!timestamp) return { kind: 'unknown' }
+    if (entry.roomPrivate) return { kind: 'found', timestamp }
     await this.decryptArchiveEntryIfNeeded(entry.messageEl, entityId, isRoom ? 'room' : 'chat', timestamp, entry.archiveId)
     if (!session.isCurrent()) return { kind: 'unknown' }
     const row = isRoom
@@ -3598,9 +3607,7 @@ export class MAM extends BaseModule {
     const iq = this.buildMAMQuery(queryId, startFields, max, cursor.before, isRoom ? entityId : undefined, cursor.after)
 
     const entries: RawArchiveEntry[] = []
-    const collectMessage = this.createMessageCollector(queryId, isRoom ? entityId : undefined, (forwarded, messageEl, id) => {
-      entries.push({ forwarded, messageEl, archiveId: id })
-    })
+    const collectMessage = this.createMessageCollector(queryId, isRoom ? entityId : undefined, entry => entries.push(entry))
     let unregister: () => void
     if (this.deps.registerMAMCollector) {
       unregister = this.deps.registerMAMCollector(queryId, collectMessage)
