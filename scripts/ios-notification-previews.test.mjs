@@ -32,7 +32,12 @@ test('deterministic SDK, Rust and Swift identity differential oracle', { skip: p
   const corpus = generatedIdentityCorpus()
   const input = JSON.stringify(corpus)
   const expected = JSON.parse(execFileSync(process.execPath, ['--experimental-strip-types', '--loader', fileURLToPath(new URL('./native-tests/sdk-ts-loader.mjs', import.meta.url)), fileURLToPath(new URL('./native-tests/preview-identity-oracle.mjs', import.meta.url))], { input }).toString())
-  const actual = JSON.parse(execFileSync('cargo', ['run', '--quiet', '--locked', '--manifest-path', fileURLToPath(new URL('../apps/fluux/src-tauri/nse-openpgp/Cargo.toml', import.meta.url)), '--features', 'synthetic-lab', '--example', 'identity_oracle'], { input, timeout: 120000 }).toString())
+  const prebuiltOracle = process.env.FLUUX_PREVIEW_IDENTITY_ORACLE
+  const options = { input, timeout: 120000, encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'] }
+  const rustOutput = prebuiltOracle === undefined
+    ? execFileSync('cargo', ['run', '--locked', '--manifest-path', fileURLToPath(new URL('../apps/fluux/src-tauri/nse-openpgp/Cargo.toml', import.meta.url)), '--features', 'synthetic-lab', '--example', 'identity_oracle'], options)
+    : execFileSync(prebuiltOracle, [], options)
+  const actual = JSON.parse(rustOutput)
   assert.deepEqual(actual, expected)
   corpus.cases.forEach((test, index) => {
     test.resolved = expected[index].resolved
