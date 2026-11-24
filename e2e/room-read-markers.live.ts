@@ -240,17 +240,16 @@ test('two real clients share only opted-in focused reading, keep identity and re
     // Closing the chooser exposes the timeline without an artificial refocus.
     await expect.poll(() => displayed(alice).length).toBe(1)
     await bob.page.bringToFront()
-    const readerButton = bob.page.getByRole('button', { name: 'Read through this message: Alice', exact: true })
-    await expect(readerButton).toBeVisible()
-    // Keyboard activation opens the full named list; Escape returns to its opener.
-    await readerButton.focus(); await readerButton.press('Enter')
-    await expect(bob.page.getByRole('dialog', { name: 'Read through this message' }).getByText('Alice', { exact: true })).toBeVisible()
-    await shot(bob.page, 'readers')
-    await bob.page.keyboard.press('Escape')
-    await expect(readerButton).toBeFocused()
-    await readerButton.tap()
-    await expect(bob.page.getByRole('dialog', { name: 'Read through this message' })).toBeVisible()
-    await bob.page.keyboard.press('Escape')
+    const readerNames = bob.page.locator('[data-read-marker-names]').filter({ hasText: /^Alice$/ })
+    await expect(readerNames).toHaveCount(0)
+    await privacy(bob)
+    await bob.page.getByRole('switch', { name: 'Share room read positions', exact: true }).click()
+    await openRoom(bob)
+    await roomConsent(bob, true)
+    // A short list is now plain text. The demo browser suite owns overflow
+    // activation and dialog focus; this journey owns actual-service visibility.
+    await expect(readerNames).toBeVisible()
+    await expect(bob.page.getByRole('button', { name: 'Read through this message: Alice', exact: true })).toHaveCount(0)
     await shot(bob.page, 'timeline')
     await bob.page.setViewportSize({ width: 390, height: 800 })
     await shot(bob.page, 'phone-timeline')
@@ -316,7 +315,7 @@ test('two real clients share only opted-in focused reading, keep identity and re
     const composer = alice.page.getByRole('combobox', { name: /^Message / })
     await composer.fill('/nick AliceRenamed'); await composer.press('Enter')
     await bob.page.bringToFront()
-    await expect(bob.page.getByRole('button', { name: 'Read through this message: AliceRenamed', exact: true })).toBeVisible()
+    await expect(bob.page.locator('[data-read-marker-names]').filter({ hasText: /^AliceRenamed$/ })).toBeVisible()
     await shot(bob.page, 'nick-change')
 
     // Remove only protocol resumption state after unload has flushed it, while
@@ -330,10 +329,10 @@ test('two real clients share only opted-in focused reading, keep identity and re
     try {
       await bob.page.reload()
       await openRoom(bob)
-      await expect(bob.page.getByRole('button', { name: 'Read through this message: AliceRenamed', exact: true })).toBeVisible({ timeout: 30_000 })
+      await expect(bob.page.locator('[data-read-marker-names]').filter({ hasText: /^AliceRenamed$/ })).toBeVisible({ timeout: 30_000 })
       expect(bob.sent.slice(replayStart).filter(frame => /<(?:[\w.-]+:)?resume(?:\s|\/?>)/.test(frame)),
         'archive replay uses a fresh stream, not stream resumption').toHaveLength(0)
-      await noPublication(bob, 0, 'replay-without-consent')
+      await noPublication(bob, 0, 'replay-without-new-incoming-reading')
       await shot(bob.page, 'archive-replay')
     } catch (error) {
       if (evidence) await bob.page.screenshot({ path: `${evidence}/room-read-after-archive-replay-failure.png`,

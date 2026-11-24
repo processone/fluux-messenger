@@ -2,7 +2,7 @@ import { iosHaptic } from '@/platform/ios/haptics'
 import { editableForward } from '../utils/forwardMessage'
 import { isSpamModerated } from '@/utils/spamModeration'
 import { SpamModerationOption } from './SpamModerationOption'
-import { RoomReadBadge, RoomReadCorner } from './RoomReadMarkers'
+import { RoomReadBadge } from './RoomReadMarkers'
 import type { GapInterval, MessageRowRef, RoomReadMarkers } from '@fluux/sdk'
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useId, useMemo, useSyncExternalStore, memo, type RefObject } from 'react'
 import { flushSync } from 'react-dom'
@@ -1386,9 +1386,6 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   // Build nick extras (affiliation badge and XEP-0317 hats)
   // Note: individual tooltips removed - all info is now in the unified avatar/name tooltip
   // Show affiliation (owner/admin) rather than role, consistent with the member list
-  const readMarkerCorner = useMemo(() => peerReadMarkers && !message.isPrivate
-    ? <RoomReadCorner markers={peerReadMarkers} roomJid={roomJid} /> : undefined,
-  [peerReadMarkers, roomJid, message.isPrivate])
   const readMarkerBadge = useMemo(() => peerReadMarkers && !message.isPrivate
     ? <RoomReadBadge markers={peerReadMarkers} roomJid={roomJid} row={{ id: message.id, occupantId: message.occupantId, stanzaId: message.stanzaId }} /> : undefined,
   [peerReadMarkers, roomJid, message.id, message.occupantId, message.stanzaId, message.isPrivate])
@@ -1488,7 +1485,6 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         senderAffiliation={senderAffiliation}
         senderOccupantJid={`${roomJid}/${message.nick}`}
         nickExtras={nickExtras}
-        readMarkerCorner={readMarkerCorner}
         readMarkerBadge={readMarkerBadge}
         myReactions={myReactions}
         onReaction={supportsReactions ? handleReaction : undefined}

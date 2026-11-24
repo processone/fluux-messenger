@@ -40,8 +40,8 @@ these markers.
 A marker identifies your room occupant and the message you have read through.
 The room and its occupants can see this metadata, and the room archive may retain
 it. Turning sharing off stops future updates; it does not remove markers already
-stored by the server or other participants. Valid incoming markers can remain
-visible while your own sharing is off. This is separate from private read-position
+stored by the server or other participants. Fluux hides other people’s markers while
+your own sharing is off in that room. This is separate from private read-position
 synchronization between your own devices. See [room read positions](ROOM_READ_MARKERS.md).
 
 ## Optional iOS push notifications

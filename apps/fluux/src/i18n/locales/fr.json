@@ -1964,6 +1964,12 @@
         "roomDescription": "Envoi uniquement dans les salons vérifiés, non répertoriés, réservés aux membres et non anonymes, avec moins de 20 occupants et des identités stables. Les messages chiffrés sont exclus.",
         "masterOff": "Le réglage général de confidentialité est désactivé. Ce salon ne partagera pas votre position de lecture tant que vous ne l’aurez pas activé.",
         "metadata": "Le salon et ses occupants peuvent voir votre activité de lecture. Ses archives peuvent conserver ces métadonnées. Désactiver le partage arrête les nouvelles mises à jour sans effacer les marqueurs enregistrés.",
+        "readThroughHere": "Lu jusqu’ici :",
+        "others_one": "+{{count}} autre",
+        "others_other": "+{{count}} autres",
+        "readerCount_one": "{{count}} lecteur",
+        "readerCount_other": "{{count}} lecteurs",
+        "exactPosition": "Les personnes ayant une position de lecture plus avancée ne figurent pas dans cette liste.",
         "readThrough": "Lu jusqu’à ce message",
         "readers": "Lu jusqu’à ce message : {{names}}",
         "saveFailed": "Impossible d’enregistrer ce choix. Le partage reste désactivé. Vérifiez l’accès au stockage avant de le réactiver."

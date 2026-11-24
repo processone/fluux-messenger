@@ -1368,13 +1368,6 @@ html, body {
   opacity: 0.85;
 }
 
-/* Match the reserved text corner, including mixed-direction rooms. The message
-   keeps its existing dir="auto"; reactions stay opposite the badge. */
-.room-read-marker-host:has([data-read-marker-corner]):has([data-msg-text]:dir(ltr)) > [data-read-marker-row] { left: auto; right: 0.5rem; }
-.room-read-marker-host:has([data-read-marker-corner]):has([data-msg-text]:dir(rtl)) > [data-read-marker-row] { right: auto; left: 0.5rem; }
-.room-read-marker-host:has([data-read-marker-corner]):has([data-msg-text]:dir(ltr)) [data-msg-reactions] { direction: ltr; }
-.room-read-marker-host:has([data-read-marker-corner]):has([data-msg-text]:dir(rtl)) [data-msg-reactions] { direction: rtl; }
-
 /* Bulk-copy selection keeps quote/reply cards distinct from the range tint
    (issue #1008). Keyboard selection only paints the row background; its content
    and quote styling must remain identical to the unselected message. */

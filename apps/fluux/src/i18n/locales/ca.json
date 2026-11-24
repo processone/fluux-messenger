@@ -1965,6 +1965,12 @@
         "roomDescription": "Envia només en sales verificades, no llistades, no anònimes i només per a membres, amb menys de 20 ocupants amb identitats estables dins la sala. S'exclouen els missatges xifrats.",
         "masterOff": "L'interruptor general de Privadesa està desactivat. Aquesta sala no compartirà la teva posició de lectura fins que l'activis.",
         "metadata": "La sala i els seus ocupants poden veure la teva activitat de lectura. L'arxiu pot conservar aquestes metadades. Desactivar-ho atura les actualitzacions futures, però no elimina els marcadors desats.",
+        "readThroughHere": "Llegit fins aquí:",
+        "others_one": "+{{count}} altra persona",
+        "others_other": "+{{count}} altres persones",
+        "readerCount_one": "{{count}} lector",
+        "readerCount_other": "{{count}} lectors",
+        "exactPosition": "Les persones amb posicions de lectura posteriors no s’inclouen en aquesta llista.",
         "readThrough": "Llegit fins a aquest missatge",
         "readers": "Llegit fins a aquest missatge: {{names}}",
         "saveFailed": "No s'ha pogut desar la tria. La compartició continua desactivada. Comprova l'accés a l'emmagatzematge abans de tornar-la a activar."

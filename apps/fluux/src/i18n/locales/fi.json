@@ -1961,6 +1961,12 @@
         "roomDescription": "Lähetä vain vahvistetuissa, listaamattomissa, ei-anonyymeissä, vain jäsenille tarkoitetuissa huoneissa, joissa on alle 20 läsnäolijaa ja pysyvät huonekohtaiset tunnisteet. Salatut viestit jätetään pois.",
         "masterOff": "Tietosuojan pääkytkin on pois päältä. Huone ei jaa lukukohtaasi ennen kuin otat sen käyttöön.",
         "metadata": "Huone ja sen läsnäolijat näkevät lukutoimintasi. Arkisto voi säilyttää nämä metatiedot. Poiskytkentä pysäyttää tulevat päivitykset, mutta ei poista tallennettuja merkkejä.",
+        "readThroughHere": "Luettu tähän asti:",
+        "others_one": "+{{count}} muu",
+        "others_other": "+{{count}} muuta",
+        "readerCount_one": "{{count}} lukija",
+        "readerCount_other": "{{count}} lukijaa",
+        "exactPosition": "Myöhempään kohtaan lukeneita ei näytetä tässä luettelossa.",
         "readThrough": "Luettu tähän viestiin asti",
         "readers": "Luettu tähän viestiin asti: {{names}}",
         "saveFailed": "Valintaa ei voitu tallentaa. Jakaminen pysyy pois käytöstä. Tarkista tallennustilan käyttöoikeus ennen uudelleen käyttöönottoa."

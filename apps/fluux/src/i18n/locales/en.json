@@ -1961,6 +1961,12 @@
         "roomDescription": "Send only in verified, unlisted, members-only, non-anonymous rooms with fewer than 20 occupants and stable room identities. Encrypted messages are excluded.",
         "masterOff": "The Privacy master switch is off. This room will not share your read position until you enable it.",
         "metadata": "The room and its occupants can see your reading activity. Its archive may retain this metadata. Turning sharing off stops future updates, not stored markers.",
+        "readThroughHere": "Read through here:",
+        "others_one": "+{{count}} other",
+        "others_other": "+{{count}} others",
+        "readerCount_one": "{{count}} reader",
+        "readerCount_other": "{{count}} readers",
+        "exactPosition": "People with later read positions are not included in this list.",
         "readThrough": "Read through this message",
         "readers": "Read through this message: {{names}}",
         "saveFailed": "Could not save this choice. Sharing stays off. Check storage access before enabling it again."
