@@ -51,6 +51,7 @@ vi.mock('@tanstack/react-virtual', () => ({
     const instance = { scrollElement: opts.getScrollElement() }
     opts.observeElementOffset?.(instance, offsetNotifySpy)
     return {
+      options: { ...opts, onChange: vi.fn() },
       getVirtualItems: () =>
         Array.from({ length: opts.count }, (_, index) => ({
           index, key: opts.getItemKey(index), start: index * 40, end: index * 40 + 40, size: 40, lane: 0,

@@ -1,18 +1,10 @@
 /**
  * The only file that reaches into @tanstack/virtual-core's private state.
  *
- * Fluux keeps @tanstack/react-virtual and relies on ten members virtual-core does not declare for
- * consumers: its command record, held correction, clamped-write bookkeeping, iOS gesture tracker and
- * commit-time update. Every use of them lives here, behind typed accessors, so that:
- *  - a library update that renames or reshapes one is found in one place;
- *  - tanstackVirtualBridge.test.ts runs the installed library through each accessor and fails when a
- *    name is gone, instead of the adapter degrading silently (every accessor is guarded, so a missing
- *    name leaves the write correct and only its bookkeeping as before);
- *  - the library version is locked (apps/fluux/package.json, renovate.json), so the set changes only
- *    by a deliberate update.
- *
- * The ten names: scrollState, _holdOffset, _willUpdate, _iosGesture, _clampedAdjustment,
- * pendingWrite, applyScrollAdjustment, _clampedBy, _canWriteScroll, _awaitingCommandReadBack.
+ * The bridge isolates command and scroll bookkeeping, commit timing and resize batches behind typed
+ * accessors. Each accessor is guarded; the contract test checks the installed library so a missing
+ * or reshaped member does not silently disable a behavior. The version pins in package.json and
+ * renovate.json make that check part of a deliberate upgrade.
  */
 
 // virtual-core's record of a compensation write the browser clamped: the position it meant, in
@@ -31,6 +23,7 @@ type LibraryInternals = {
   _clampedAdjustment?: unknown
   pendingWrite?: { target: number } | null
   applyScrollAdjustment?: (delta: number) => boolean
+  _resizeBatch?: object | null
   _clampedBy?: (target: number) => unknown
   _canWriteScroll?: () => boolean
   _awaitingCommandReadBack?: () => boolean
@@ -128,11 +121,17 @@ export function trackCommitUpdate(instance: object, onCommit: (committing: boole
   commit[COMMIT_TRACKED] = true
 }
 
+/** Whether virtual-core is still measuring entries, before its final batch notification. */
+export function isMeasuringResizeBatch(instance: object): boolean {
+  return Boolean(internals(instance)._resizeBatch)
+}
+
 /** The private names this file relies on, each with how a live instance must present it. */
 export const LIBRARY_PRIVATE_NAMES = {
   scrollState: 'property',
   _holdOffset: 'number',
   _willUpdate: 'function',
+  _resizeBatch: 'property',
   _iosGesture: 'object',
   _clampedAdjustment: 'property',
   pendingWrite: 'property',
