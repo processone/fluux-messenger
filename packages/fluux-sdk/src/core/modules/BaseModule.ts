@@ -4,7 +4,7 @@ import { resolveDefaultMucNick } from '../nick'
 import type { DeferredDecryptEngine } from '../e2ee/deferredDecrypt'
 import { captureStorageScope } from '../../utils/storageScope'
 import type { Client, Element } from '@xmpp/client'
-import type { StoreBindings, ClientEvents, SDKEvents, StorageAdapter, ProxyAdapter, PrivacyOptions } from '../types'
+import type { StoreBindings, ClientEvents, SDKEvents, StorageAdapter, ProxyAdapter, PrivacyOptions, RoomMessage } from '../types'
 import type { E2EEManager } from '../e2ee'
 import type { PresenceReader } from '../presenceReader'
 import type { FastTokenStorageAdapter } from '../fastTokenStorage'
@@ -20,6 +20,15 @@ import type { FastTokenStorageAdapter } from '../fastTokenStorage'
 export interface ModuleDependencies {
   avatarState?: AvatarStateOwner
   stores: StoreBindings | null
+  /** Room-only peer marker port; the base must not depend on its concrete module. */
+  getRoomReadMarkers?: () => {
+    mayQualify(roomJid: string): boolean
+    ensureEligible(roomJid: string): Promise<boolean>
+    recordArchiveOrder(roomJid: string, ids: readonly string[], cursor?: { before?: string; after?: string }): void
+    receive(roomJid: string, stanza: Element, additional?: readonly RoomMessage[], archived?: boolean): Promise<void>
+  }
+  /** Reuse the archive's existing positive purged-anchor classification. */
+  lookUpRoomArchiveAnchor?: (roomJid: string, archiveId: string) => Promise<{ kind: 'found' | 'absent' | 'unknown' }>
   flushRoomOccupants?: (roomJid?: string) => void
   waitForRoomOccupants?: (roomJid: string) => Promise<void>
   /**

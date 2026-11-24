@@ -1,4 +1,5 @@
 import { badgeMessageKey } from '../../diagnostics/badgeIdentity'
+import { isStandaloneRoomReadMarker } from './RoomReadMarkers'
 /**
  * Message Archive Management (XEP-0313) module.
  *
@@ -58,6 +59,7 @@ import {
   isConnectionError,
   MAM_CATCHUP_FORWARD_MAX,
   MAM_CATCHUP_BACKWARD_MAX,
+  MAM_BACKGROUND_CONCURRENCY,
   MAM_CACHE_LOAD_LIMIT,
   MAM_ROOM_FORWARD_MAX_PAGES,
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
@@ -73,6 +75,7 @@ import { findNewestGap, findOpenGap, type GapList } from '../../stores/shared/ma
 import {
   NS_MAM,
   MAM_FULLTEXT_FIELD,
+  NS_CHAT_MARKERS,
   NS_RSM,
   NS_DATA_FORMS,
   NS_FORWARD,
@@ -262,6 +265,9 @@ export class MAM extends BaseModule {
   readonly correctionReceipts = new CorrectionReceipts(this.deps)
   private correctionQueries = new Map<string, CorrectionReconciliation>()
   private observedArchives = new Map<string, () => boolean>()
+  private peerMarkerReplays = new Map<string, { isCurrent: () => boolean; task: Promise<void> }>()
+  private activePeerMarkerReplays = 0
+  private peerMarkerReplayWaiters: Array<() => void> = []
 
   /**
    * Record that an archive answered in the current session. Entries from an
@@ -1030,9 +1036,13 @@ export class MAM extends BaseModule {
           const { complete, page: pageInfo } = this.parseMAMResponse(response)
           if (response.getChild('fin', NS_MAM)) this.observeArchive(JSON.stringify([true, roomJid]), session.isCurrent)
 
+          // Peer markers and targets share this page, but markers are not rows.
           // Drain buffer: E2EE decrypt first, then modification detection, then parse.
           const correctionStart = modifications.corrections.length
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
+            if (isStandaloneRoomReadMarker(messageEl)) {
+              continue
+            }
             const forwardedDelayEl = forwarded.getChild('delay', NS_DELAY)
             await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, 'room', delayStamp(forwardedDelayEl))
             session.assertCurrent()
@@ -1042,6 +1052,11 @@ export class MAM extends BaseModule {
             const msg = this.parseRoomArchiveMessage(forwarded, roomJid, me, archiveId)
             if (msg) collectedMessages.push(msg)
           }
+
+          // Resolve only after all targets in the page have been parsed.
+          await this.resolvePeerMarkers(roomJid, rawEntries, [...allMessages, ...collectedMessages],
+            isForward ? { after: currentAfter } : { before: currentBefore })
+          session.assertCurrent()
 
           if (!isForward) modifications.corrections.unshift(...modifications.corrections.splice(correctionStart))
 
@@ -1374,6 +1389,8 @@ export class MAM extends BaseModule {
         if (msg) collectedMessages.push(msg)
       }
 
+      await this.resolvePeerMarkers(roomJid, rawEntries, collectedMessages)
+      session.assertCurrent()
       const originalBodies = collectedMessages.map(message => message.body)
       const unresolved = await this.applyModifications(collectedMessages, modifications, roomMessageAuthor, undefined, undefined,
         (id, actor) => this.deps.stores?.room.resolveCorrectionReferences?.(roomJid, id, actor))
@@ -1920,6 +1937,7 @@ export class MAM extends BaseModule {
     messages: Array<{ timestamp?: Date; stanzaId?: string }>,
     options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
   ): Promise<void> {
+    if (messages.length) void this.restorePeerMarkers(roomJid).catch(() => {})
     const endUpdate = this.deps.stores?.connection?.beginUpdate?.([`room:${roomJid}`, 'rooms'])
     await this.runCatchUpHistory(messages, options, {
       label: roomJid,
@@ -2421,7 +2439,10 @@ export class MAM extends BaseModule {
       // The delayed background room catch-up will correct the preview later if stale.
       const cached = await this.deps.stores?.room.loadPreviewFromCache(roomJid)
       session.assertCurrent()
-      if (cached) return
+      if (cached) {
+        void this.restorePeerMarkers(roomJid).catch(() => {})
+        return
+      }
 
       const queryId = `preview_${generateUUID()}`
 
@@ -3272,6 +3293,63 @@ export class MAM extends BaseModule {
     return message
   }
 
+  private async runPeerMarkerReplay(operation: () => Promise<void>): Promise<void> {
+    if (this.activePeerMarkerReplays < MAM_BACKGROUND_CONCURRENCY) this.activePeerMarkerReplays++
+    else await new Promise<void>(resolve => { this.peerMarkerReplayWaiters.push(resolve) })
+    try { await operation() }
+    finally {
+      const next = this.peerMarkerReplayWaiters.shift()
+      // Transfer the reserved slot directly, so new arrivals cannot jump ahead.
+      if (next) next()
+      else this.activePeerMarkerReplays--
+    }
+  }
+
+  /** Cached edges can lie after every peer marker. Recover one latest page,
+   * independent of forward catch-up, without timeline or coverage writes. */
+  private async restorePeerMarkers(roomJid: string): Promise<void> {
+    const session = this.captureQuery()
+    for (const [room, replay] of this.peerMarkerReplays) {
+      if (!replay.isCurrent()) this.peerMarkerReplays.delete(room)
+    }
+    const markers = this.deps.getRoomReadMarkers?.()
+    if (!markers?.mayQualify(roomJid)) return
+    const held = this.peerMarkerReplays.get(roomJid)
+    if (held) return held.task
+    let queried = false
+    const task: Promise<void> = this.runPeerMarkerReplay(async () => {
+      session.assertCurrent()
+      const eligible = await markers.ensureEligible(roomJid)
+      session.assertCurrent()
+      if (!eligible) return
+      queried = true
+      const page = await this.queryOneArchivedEntry(roomJid, true, { before: '' }, MAM_CATCHUP_BACKWARD_MAX)
+      session.assertCurrent()
+      if (page.kind !== 'page') return
+      // Only resident/cache targets have passed through their normal content
+      // owners. Raw page rows have not been decrypted and are not candidates.
+      await this.resolvePeerMarkers(roomJid, page.entries, [], { before: '' })
+    }).finally(() => {
+      // A queued room can stop qualifying; do not consume its page before a query.
+      if (!queried && this.peerMarkerReplays.get(roomJid)?.task === task) this.peerMarkerReplays.delete(roomJid)
+    })
+    this.peerMarkerReplays.set(roomJid, { isCurrent: session.isCurrent, task })
+    await task
+  }
+
+  private async resolvePeerMarkers(roomJid: string, entries: readonly RawArchiveEntry[], messages: readonly RoomMessage[],
+    cursor?: { before?: string; after?: string }): Promise<void> {
+    const markers = this.deps.getRoomReadMarkers?.()
+    if (!markers) return
+    const session = this.captureQuery()
+    markers.recordArchiveOrder(roomJid, entries.map(entry => entry.archiveId).filter((id): id is string => !!id), cursor)
+    for (const { messageEl } of entries) {
+      if (!messageEl.getChild('displayed', NS_CHAT_MARKERS) || messageEl.getChild('body')) continue
+      await markers.receive(roomJid, messageEl, messages, true)
+      session.assertCurrent()
+    }
+  }
+
   private async resolveRoomArchiveEntries(entries: RawArchiveEntry[], roomJid: string, me: RoomSelf): Promise<RoomMessage[]> {
     const session = this.captureQuery()
     const messages: RoomMessage[] = []
@@ -3282,6 +3360,8 @@ export class MAM extends BaseModule {
         if (message) messages.push(message)
       }
     }
+    await this.resolvePeerMarkers(roomJid, entries, messages)
+    session.assertCurrent()
     const unresolved = await this.applyModifications(messages, modifications, roomMessageAuthor)
     session.assertCurrent()
     this.emitUnresolvedRoomModifications(roomJid, unresolved)
@@ -3765,6 +3845,8 @@ export class MAM extends BaseModule {
       const message = this.parseRoomArchiveMessage(forwarded, roomJid, me, archiveId)
       if (message) messages.push(message)
     }
+    await this.resolvePeerMarkers(roomJid, entries, messages)
+    session.assertCurrent()
     await this.applyModifications(messages, modifications, roomMessageAuthor, from => getResource(from) || from)
     session.assertCurrent()
     const reconciled = await this.deps.stores.room.reconcileHistoryMessages?.(messages) ?? messages

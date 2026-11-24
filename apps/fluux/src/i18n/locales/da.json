@@ -1953,5 +1953,16 @@
         "title": "Fluux er blevet opdateret i en anden fane",
         "description": "Genindlæs denne fane for at bruge den nye version. Indtil da kan historik og søgning være langsommere.",
         "reload": "Genindlæs"
+    },
+    "readMarkers": {
+        "master": "Del læsepositioner i rum",
+        "description": "Slået fra som standard. Vælg hvert rum særskilt i dets oplysninger, når du har slået dette til.",
+        "shareInRoom": "Del min læseposition i dette rum",
+        "roomDescription": "Send kun i bekræftede, ikke-opførte, ikke-anonyme rum kun for medlemmer med færre end 20 tilstedeværende med stabile rumidentiteter. Krypterede beskeder er udelukket.",
+        "masterOff": "Hovedkontakten under Privatliv er slået fra. Rummet deler ikke din læseposition, før du slår den til.",
+        "metadata": "Rummet og de tilstedeværende kan se din læseaktivitet. Arkivet kan gemme disse metadata. Deaktivering stopper fremtidige opdateringer, men fjerner ikke gemte markører.",
+        "readThrough": "Læst til og med denne besked",
+        "readers": "Læst til og med denne besked: {{names}}",
+        "saveFailed": "Valget kunne ikke gemmes. Deling forbliver slået fra. Kontrollér adgangen til lageret, før du slår det til igen."
     }
 }

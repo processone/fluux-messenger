@@ -1953,5 +1953,16 @@
         "title": "Fluux har uppdaterats i en annan flik",
         "description": "Läs in fliken igen för att använda den nya versionen. Tills dess kan historik och sökning vara långsammare.",
         "reload": "Läs in igen"
+    },
+    "readMarkers": {
+        "master": "Dela läspositioner i rum",
+        "description": "Av som standard. Välj varje rum separat i dess detaljer efter att du har aktiverat detta.",
+        "shareInRoom": "Dela min läsposition i det här rummet",
+        "roomDescription": "Skicka endast i verifierade, olistade, icke-anonyma rum enbart för medlemmar, med färre än 20 närvarande med stabila rumsidentiteter. Krypterade meddelanden är undantagna.",
+        "masterOff": "Huvudreglaget under Integritet är av. Rummet delar inte din läsposition förrän du slår på det.",
+        "metadata": "Rummet och de närvarande kan se din läsaktivitet. Arkivet kan behålla dessa metadata. Avstängning stoppar framtida uppdateringar men tar inte bort sparade markörer.",
+        "readThrough": "Läst till och med detta meddelande",
+        "readers": "Läst till och med detta meddelande: {{names}}",
+        "saveFailed": "Valet kunde inte sparas. Delning förblir av. Kontrollera åtkomsten till lagringen innan du aktiverar igen."
     }
 }

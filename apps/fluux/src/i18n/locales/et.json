@@ -1955,5 +1955,16 @@
         "title": "Fluux uuendati teisel vahekaardil",
         "description": "Uue versiooni kasutamiseks laadi see vahekaart uuesti. Seni võivad ajalugu ja otsing olla aeglasemad.",
         "reload": "Laadi uuesti"
+    },
+    "readMarkers": {
+        "master": "Jaga tubades lugemisjärge",
+        "description": "Vaikimisi välja lülitatud. Pärast sisselülitamist vali iga tuba eraldi selle üksikasjades.",
+        "shareInRoom": "Jaga minu lugemisjärge selles toas",
+        "roomDescription": "Saada ainult kontrollitud, loendis mitteolevates, mitteanonüümsetes liikmetele mõeldud tubades, kus on alla 20 kohalolija püsivate toaidentiteetidega. Krüptitud sõnumid on välistatud.",
+        "masterOff": "Privaatsuse pealüliti on väljas. Tuba ei jaga sinu lugemisjärge enne selle sisselülitamist.",
+        "metadata": "Tuba ja kohalolijad näevad sinu lugemistegevust. Arhiiv võib neid metaandmeid säilitada. Väljalülitamine peatab uued uuendused, kuid ei eemalda salvestatud märgiseid.",
+        "readThrough": "Loetud selle sõnumini",
+        "readers": "Loetud selle sõnumini: {{names}}",
+        "saveFailed": "Valikut ei saanud salvestada. Jagamine jääb välja lülitatuks. Enne uuesti sisselülitamist kontrolli ligipääsu salvestusruumile."
     }
 }

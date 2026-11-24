@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { useTypeToFocus } from './useTypeToFocus'
+import { installFocusRings } from '@/utils/focusRings'
+
+// Sources: the documented type-to-focus contract and native keyboard list access.
+// This file owns focus routing; the built reader-list journey owns activation.
 
 describe('useTypeToFocus', () => {
   const mockFocus = vi.fn()
@@ -12,11 +16,24 @@ describe('useTypeToFocus', () => {
     },
   })
 
+  let stopFocusRings: () => void
+  let originalModality: string | undefined
+  let originallyInteracted: boolean
+  const fixtures: HTMLElement[] = []
+
   beforeEach(() => {
     vi.clearAllMocks()
+    originalModality = document.documentElement.dataset.focusModality
+    originallyInteracted = document.documentElement.classList.contains('user-interacted')
+    stopFocusRings = installFocusRings()
   })
 
   afterEach(() => {
+    stopFocusRings()
+    if (originalModality === undefined) delete document.documentElement.dataset.focusModality
+    else document.documentElement.dataset.focusModality = originalModality
+    document.documentElement.classList.toggle('user-interacted', originallyInteracted)
+    for (const fixture of fixtures.splice(0)) fixture.remove()
     vi.restoreAllMocks()
   })
 
@@ -29,7 +46,7 @@ describe('useTypeToFocus', () => {
       key: 'a',
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(mockFocus).toHaveBeenCalledTimes(1)
   })
@@ -44,7 +61,7 @@ describe('useTypeToFocus', () => {
       ctrlKey: true,
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(mockFocus).not.toHaveBeenCalled()
   })
@@ -59,7 +76,7 @@ describe('useTypeToFocus', () => {
       metaKey: true,
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(mockFocus).not.toHaveBeenCalled()
   })
@@ -74,7 +91,7 @@ describe('useTypeToFocus', () => {
       altKey: true,
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(mockFocus).not.toHaveBeenCalled()
   })
@@ -92,8 +109,7 @@ describe('useTypeToFocus', () => {
       key: 'a',
       bubbles: true,
     })
-    Object.defineProperty(event, 'target', { value: input })
-    window.dispatchEvent(event)
+    input.dispatchEvent(event)
 
     expect(mockFocus).not.toHaveBeenCalled()
 
@@ -112,8 +128,7 @@ describe('useTypeToFocus', () => {
       key: 'x',
       bubbles: true,
     })
-    Object.defineProperty(event, 'target', { value: textarea })
-    window.dispatchEvent(event)
+    textarea.dispatchEvent(event)
 
     expect(mockFocus).not.toHaveBeenCalled()
 
@@ -129,7 +144,7 @@ describe('useTypeToFocus', () => {
       key: 'F1',
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(mockFocus).not.toHaveBeenCalled()
   })
@@ -142,7 +157,7 @@ describe('useTypeToFocus', () => {
       key: 'Escape',
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(mockFocus).not.toHaveBeenCalled()
   })
@@ -155,7 +170,7 @@ describe('useTypeToFocus', () => {
       key: 'ArrowDown',
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(mockFocus).not.toHaveBeenCalled()
   })
@@ -168,7 +183,7 @@ describe('useTypeToFocus', () => {
       key: 'Backspace',
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(mockFocus).toHaveBeenCalledTimes(1)
   })
@@ -181,7 +196,7 @@ describe('useTypeToFocus', () => {
       key: 'Delete',
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(mockFocus).toHaveBeenCalledTimes(1)
   })
@@ -194,7 +209,7 @@ describe('useTypeToFocus', () => {
       key: 'a',
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(mockFocus).not.toHaveBeenCalled()
   })
@@ -209,7 +224,7 @@ describe('useTypeToFocus', () => {
     })
 
     // Should not throw
-    expect(() => window.dispatchEvent(event)).not.toThrow()
+    expect(() => document.body.dispatchEvent(event)).not.toThrow()
   })
 
   it('should focus with Shift modifier for capital letters', () => {
@@ -222,7 +237,7 @@ describe('useTypeToFocus', () => {
       shiftKey: true,
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(mockFocus).toHaveBeenCalledTimes(1)
   })
@@ -235,7 +250,7 @@ describe('useTypeToFocus', () => {
       key: '5',
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(mockFocus).toHaveBeenCalledTimes(1)
   })
@@ -249,9 +264,72 @@ describe('useTypeToFocus', () => {
       shiftKey: true,
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(mockFocus).toHaveBeenCalledTimes(1)
+  })
+
+  const createControlFixture = (kind: 'button' | 'select' | 'option' = 'button') => {
+    const fixture = document.createElement('section')
+    const composer = document.createElement('input')
+    composer.setAttribute('aria-label', 'Message')
+    const control = document.createElement(kind === 'option' ? 'div' : kind)
+    control.tabIndex = 0
+    if (kind === 'button') control.setAttribute('type', 'button')
+    if (kind === 'option') {
+      control.setAttribute('role', 'option')
+      control.setAttribute('aria-selected', 'false')
+    }
+    if (kind === 'select') {
+      const option = document.createElement('option')
+      option.textContent = 'Show readers'
+      control.appendChild(option)
+    } else control.textContent = 'Show readers'
+    if (kind === 'option') {
+      const listbox = document.createElement('div')
+      listbox.setAttribute('role', 'listbox')
+      listbox.appendChild(control)
+      fixture.append(listbox, composer)
+    } else fixture.append(control, composer)
+    document.body.appendChild(fixture)
+    fixtures.push(fixture)
+    renderHook(() => useTypeToFocus({ current: composer }))
+    return { control, composer }
+  }
+
+  it.each(['button', 'select', 'option'] as const)('leaves Space on a keyboard-focused %s', kind => {
+    const { control } = createControlFixture(kind)
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+    control.focus()
+    const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })
+    control.dispatchEvent(space)
+    expect(document.activeElement).toBe(control)
+    expect(space.defaultPrevented).toBe(false)
+  })
+
+  it('starts typing with Space after a pointer focuses a control', () => {
+    const { control, composer } = createControlFixture()
+    control.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    control.focus()
+    control.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+    expect(document.activeElement).toBe(composer)
+  })
+
+  it('starts typing after a pointer presses an already keyboard-focused control', () => {
+    const { control, composer } = createControlFixture()
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+    control.focus()
+    control.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    control.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+    expect(document.activeElement).toBe(composer)
+  })
+
+  it('still starts ordinary typing from a keyboard-focused control', () => {
+    const { control, composer } = createControlFixture()
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+    control.focus()
+    control.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }))
+    expect(document.activeElement).toBe(composer)
   })
 
   it('should work with native HTMLInputElement refs', () => {
@@ -267,7 +345,7 @@ describe('useTypeToFocus', () => {
       key: 'h',
       bubbles: true,
     })
-    window.dispatchEvent(event)
+    document.body.dispatchEvent(event)
 
     expect(focusSpy).toHaveBeenCalledTimes(1)
 

@@ -1953,5 +1953,16 @@
         "title": "Fluux var uppfært í öðrum flipa",
         "description": "Endurhladdu þennan flipa til að nota nýju útgáfuna. Þangað til gætu ferill og leit verið hægari.",
         "reload": "Endurhlaða"
+    },
+    "readMarkers": {
+        "master": "Deila lestrarstöðum í herbergjum",
+        "description": "Slökkt sjálfgefið. Eftir að þú kveikir á þessu skaltu velja hvert herbergi sérstaklega í upplýsingum þess.",
+        "shareInRoom": "Deila lestrarstöðu minni í þessu herbergi",
+        "roomDescription": "Senda aðeins í staðfestum, óskráðum, ónafnlausum herbergjum sem eru eingöngu fyrir meðlimi, með færri en 20 viðstöddum með stöðug auðkenni í herberginu. Dulkóðuð skilaboð eru undanskilin.",
+        "masterOff": "Aðalrofinn í Persónuvernd er slökktur. Herbergið deilir ekki lestrarstöðu þinni fyrr en þú kveikir á honum.",
+        "metadata": "Herbergið og viðstaddir geta séð lestrarvirkni þína. Safnið kann að geyma þessi lýsigögn. Slökkt er á framtíðaruppfærslum, en vistuð merki eru ekki fjarlægð.",
+        "readThrough": "Lesið að þessum skilaboðum",
+        "readers": "Lesið að þessum skilaboðum: {{names}}",
+        "saveFailed": "Ekki tókst að vista valið. Slökkt verður áfram á deilingu. Athugaðu aðgang að geymslu áður en þú kveikir aftur."
     }
 }

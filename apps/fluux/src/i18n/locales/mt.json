@@ -1961,5 +1961,16 @@
         "title": "Fluux ġie aġġornat f'tab ieħor",
         "description": "Erġa' tella' din it-tab biex tuża l-verżjoni l-ġdida. Sa dakinhar, l-istorja u t-tfittxija jistgħu jkunu aktar bil-mod.",
         "reload": "Erġa' tella'"
+    },
+    "readMarkers": {
+        "master": "Aqsam il-pożizzjonijiet tal-qari fil-kmamar",
+        "description": "Mitfi b’mod awtomatiku. Wara li tixgħel dan, agħżel kull kamra separatament fid-dettalji tagħha.",
+        "shareInRoom": "Aqsam il-pożizzjoni tal-qari tiegħi f’din il-kamra",
+        "roomDescription": "Ibgħat biss fi kmamar ivverifikati, mhux elenkati, mhux anonimi u għall-membri biss, b’inqas minn 20 persuna preżenti b’identitajiet stabbli fil-kamra. Il-messaġġi kriptati huma esklużi.",
+        "masterOff": "Is-swiċċ ewlieni tal-Privatezza huwa mitfi. Il-kamra mhux se taqsam il-pożizzjoni tal-qari tiegħek sakemm tixegħlu.",
+        "metadata": "Il-kamra u n-nies fiha jistgħu jaraw l-attività tal-qari tiegħek. L-arkivju jista’ jżomm din il-metadata. It-tifi jwaqqaf aġġornamenti futuri, iżda ma jneħħix il-markaturi maħżuna.",
+        "readThrough": "Inqara sa dan il-messaġġ",
+        "readers": "Inqara sa dan il-messaġġ: {{names}}",
+        "saveFailed": "L-għażla ma setgħetx tinħażen. Il-qsim jibqa’ mitfi. Iċċekkja l-aċċess għall-ħażna qabel ma terġa’ tixegħlu."
     }
 }
