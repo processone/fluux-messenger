@@ -806,6 +806,42 @@ test.describe('composer geometry', () => {
     await expect(picker.getByRole('option').filter({ hasText: '@Emma' })).toBeVisible()
   })
 
+  test('Escape dismisses only the current mention query', async ({ page }) => {
+    const editor = await openRoomComposer(page)
+    await editor.click()
+    await setDraft(editor, 'Ask @Em')
+    const picker = page.locator('[role="listbox"][id$="-mention-autocomplete"]')
+    const value = () => editor.evaluate(el => (el as unknown as { value: string }).value)
+    const caret = () => editor.evaluate(el => (el as unknown as { selectionStart: number }).selectionStart)
+
+    await expect(picker.getByRole('option').filter({ hasText: '@Emma' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(picker).not.toBeVisible()
+    expect(await value()).toBe('Ask @Em')
+
+    await page.keyboard.insertText('m')
+    await expect.poll(value).toBe('Ask @Emm')
+    await expect(picker).not.toBeVisible()
+    await page.keyboard.press('ArrowLeft')
+    await expect.poll(caret).toBe('Ask @Em'.length)
+    await expect(picker).not.toBeVisible()
+    await page.keyboard.press('ArrowRight')
+    await expect.poll(caret).toBe('Ask @Emm'.length)
+    await expect(picker).not.toBeVisible()
+
+    await page.keyboard.press('Space')
+    await expect.poll(value).toBe('Ask @Emm ')
+    await page.keyboard.insertText('@')
+    await expect.poll(value).toBe('Ask @Emm @')
+    await expect(picker).toBeVisible()
+    await page.keyboard.insertText('Em')
+    await expect(picker.getByRole('option').filter({ hasText: '@Emma' })).toBeVisible()
+    await page.keyboard.press('Enter')
+    await expect(editor.locator('[data-mention]')).toHaveText('@Emma')
+    await expect.poll(value).toBe('Ask @Emm @Emma ')
+    await expect(picker).not.toBeVisible()
+  })
+
   test('unfinished mention queries keep picker arrow navigation', async ({ page }) => {
     const editor = await openRoomComposer(page)
     await setDraft(editor, '')

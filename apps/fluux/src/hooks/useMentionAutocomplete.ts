@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { MAX_SUGGESTIONS } from '@/constants/ui'
 import { suggestionMatchRank } from '@/utils/suggestionMatchRank'
 import type { RoomOccupant, RoomRole, MentionReference } from '@fluux/sdk'
@@ -61,9 +61,7 @@ export function useMentionAutocomplete(
 } {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [navSerial, setNavSerial] = useState(0)
-  const [dismissed, setDismissed] = useState(false)
-  const dismissedAtTriggerRef = useRef<number>(-1)
-  const currentTriggerRef = useRef<number>(-1)
+  const [dismissedTriggerIndex, setDismissedTriggerIndex] = useState<number | null>(null)
 
   // Detect @ trigger and extract query
   const detectTrigger = (): { isActive: boolean; query: string; triggerIndex: number } => {
@@ -71,9 +69,6 @@ export function useMentionAutocomplete(
     // moving the caret or restoring a draft). Text alone must not reopen it.
     if (cursorPosition === null) {
       return { isActive: false, query: '', triggerIndex: -1 }
-    }
-    if (dismissed) {
-      return { isActive: false, query: '', triggerIndex: currentTriggerRef.current }
     }
 
     // Look for @ before cursor
@@ -109,12 +104,17 @@ export function useMentionAutocomplete(
       return { isActive: false, query: '', triggerIndex: -1 }
     }
 
-    // Store current trigger position for dismiss tracking
-    currentTriggerRef.current = atIndex
     // Normalize to NFC so that composed (ë) and decomposed (e + ̈) forms match consistently
     return { isActive: true, query: queryText.normalize('NFC').toLowerCase(), triggerIndex: atIndex }
   }
-  const { isActive, query, triggerIndex } = detectTrigger()
+  const { isActive: hasTrigger, query, triggerIndex } = detectTrigger()
+  const isDismissed = triggerIndex === dismissedTriggerIndex
+  const isActive = hasTrigger && !isDismissed
+
+  // A missing trigger (for example after caret movement) does not lift a dismissal.
+  if (isActive && dismissedTriggerIndex !== null) {
+    setDismissedTriggerIndex(null)
+  }
 
   // Build matches list
   const buildMatches = (): MentionMatch[] => {
@@ -162,13 +162,6 @@ export function useMentionAutocomplete(
     setSelectedIndex(0)
   }
 
-  // Reset dismissed state when a NEW @ trigger appears (different position)
-  // Only reset if currently dismissed and we have a valid new trigger at a different position
-  if (dismissed && triggerIndex >= 0 && triggerIndex !== dismissedAtTriggerRef.current) {
-    setDismissed(false)
-    dismissedAtTriggerRef.current = -1
-  }
-
   const selectMatch = (index: number): { newText: string; newCursorPosition: number; reference: MentionReference } => {
     const match = matches[index]
     if (!match || cursorPosition === null) {
@@ -214,16 +207,14 @@ export function useMentionAutocomplete(
   }
 
   const dismiss = () => {
-    // Record where we dismissed so we don't immediately reactivate
-    dismissedAtTriggerRef.current = currentTriggerRef.current
-    setDismissed(true)
+    if (isActive) setDismissedTriggerIndex(triggerIndex)
     setSelectedIndex(0)
   }
 
   return {
     state: {
       isActive: isActive && matches.length > 0,
-      query,
+      query: isDismissed ? '' : query,
       triggerIndex,
       selectedIndex,
       navSerial,
