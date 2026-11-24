@@ -1045,6 +1045,7 @@ export function MessageList<T extends BaseMessage>({
           In history the footer scrolls below the fold, leaving only pt-0.5 and the bottom fade
           between the clipped messages and the pill. Sizing the band from the pill lets crowded
           rooms or wordier locales wrap to two lines (issue #1151) without a fixed band height.
+          Longer labels are clipped so the band cannot take more space from the message area.
           max-w keeps it clear of the bottom-end FAB, which still floats at its own bottom-4 and so
           does not move when the band appears. */}
       {typingUsers.length > 0 && (
