@@ -23,7 +23,7 @@ type Page = { messages: Element[]; complete?: boolean }
 function harness(...pages: Page[]) {
   const stores = createMockStores()
   stores.admin.getMucServiceJid.mockReturnValue('groups.example.org')
-  stores.chat.getAllConversations.mockReturnValue([{ id: ROOM }])
+  stores.chat.getAllConversations.mockReturnValue([{ id: ROOM, messages: [] }])
   const emitSDK = vi.fn()
   let collector: ((stanza: Element) => void) | undefined
   const sendIQ = vi.fn(async (iq: Element) => {
