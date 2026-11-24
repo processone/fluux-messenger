@@ -78,11 +78,11 @@ for (const key of Object.keys(localStorage)) {
 }
 startBadgeDiagnostics()
 
-// Query-param seam: ?virt=1 re-sets the virtualization flag AFTER the clear above.
-// The production default is ON, but demo.tsx clears all fluux:* keys on init, so the
-// Playwright harness passes ?virt=1 to explicitly re-enable it in the cleared environment.
-if (params.get('virt') === '1') {
-  localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
+// Explicit values survive the demo's storage reset so browser journeys can
+// exercise both timeline paths even when the production default changes.
+const virtualizeParam = params.get('virt')
+if (virtualizeParam === '1' || virtualizeParam === '0') {
+  localStorage.setItem('fluux:flags:enableMessageVirtualization', String(virtualizeParam === '1'))
 }
 // Query-param seam: ?density=compact/comfortable drives the store via setDensityMode
 // so the avatar size (store-driven) and the CSS spacing (data-density attribute, set

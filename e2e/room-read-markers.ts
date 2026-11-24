@@ -24,6 +24,8 @@ async function openRoom(page: Page, width: number, scan = false, virtualized = f
     await page.addInitScript({ path: createRequire(import.meta.url).resolve('react-scan/dist/install-hook.global.js') })
   }
   await bootDemo(page, `/demo.html?scene=showcase&tutorial=false&virt=${virtualized ? 1 : 0}${scan ? '&perf=scan' : ''}#/rooms/${encodeURIComponent(LAUNCH_ROOM)}`)
+  if (virtualized) await expect(page.locator('[data-virtualizer-spacer]')).toHaveCount(1)
+  else await expect(page.locator('[data-virtualizer-spacer]')).toHaveCount(0)
   if (scan) await page.waitForFunction(() => typeof (window as unknown as Scope).__perf?.reset === 'function')
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
   return page.evaluate(async ({ roomJid, body }) => {
@@ -201,9 +203,12 @@ for (const virtualized of [false, true]) {
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
       return { counts: scope.__perf.counts(), tally: scope.__perf.tally(), sameMessages: messages === scope.__roomStore.getState().messages.get(roomJid) }
     }, { roomJid: LAUNCH_ROOM, actor: fixture.actor, target: fixture.next })
+    await test.info().attach('room-marker-movement-renders', { body: JSON.stringify(result, null, 2), contentType: 'application/json' })
     expect(result.sameMessages).toBe(true)
     expect(result.counts.RoomReadBadge ?? 0).toBeGreaterThan(0)
-    for (const name of ['RoomView', 'RoomMessageList', 'RoomMessageBubbleWrapper', 'MessageList']) {
+    // Row-height measurements can update MessageList; peer movement must not
+    // rerender the room or unrelated message bodies.
+    for (const name of ['RoomView', 'RoomMessageList', 'RoomMessageBubbleWrapper', 'MessageBubble', 'MessageBody', 'MessageReactions']) {
       expect(result.counts[name] ?? 0, `${name} react-scan renders`).toBe(0)
       expect(result.tally[name] ?? 0, `${name} instrumented renders`).toBe(0)
     }
