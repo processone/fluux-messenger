@@ -3,7 +3,7 @@ import type { DemoClient } from '@fluux/sdk/demo'
 import type { chatStore, roomStore, savedStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
 import { waitForActions } from './harness/messageInteraction'
-import { activateChat } from './harness/scrollHarness'
+import { activateChat, navigateToStressRoom } from './harness/scrollHarness'
 import { ROOM_JID as ROOM } from '../apps/fluux/src/demo/constants'
 
 // Saved messages: save a room message and a chat message from the More menu, see them in the
@@ -350,6 +350,7 @@ async function seedMarker(page: Page, kind: 'chat' | 'room') {
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
   await bootDemo(page, `/demo.html?tutorial=false#/rooms/${encodeURIComponent(ROOM)}`)
   if (kind === 'chat') await activateChat(page, PEER)
+  else await navigateToStressRoom(page, false, ROOM)
   const target = await page.evaluate(({ kind, peer, room }) => {
     const scope = window as unknown as { __demoClient: DemoClient; __roomStore: typeof roomStore; __savedStore: typeof savedStore }
     scope.__demoClient.stopAnimation()
@@ -411,12 +412,35 @@ for (const kind of ['chat', 'room'] as const) {
 
   test(`${kind} marker refusal restores the entry, count and existing error`, async ({ page }) => {
     const { row, marker, body } = await seedMarker(page, kind)
+    // Hold the actual demo retract response: a later store refusal can follow an already settled success.
+    await page.evaluate(() => {
+      type Stanza = { attrs: Record<string, string>; getChild(name: string): Stanza | undefined }
+      const scope = window as unknown as {
+        __demoClient: { beginIQSend(stanza: Stanza): Promise<unknown> }
+        __rejectSavedRemoval?: () => void
+      }
+      const client = scope.__demoClient
+      const send = client.beginIQSend
+      client.beginIQSend = stanza => {
+        const item = stanza.getChild('pubsub')?.getChild('retract')?.getChild('item')
+        if (item?.attrs.id !== 'marker-entry-0') return send.call(client, stanza)
+        return new Promise<never>((_resolve, reject) => {
+          scope.__rejectSavedRemoval = () => {
+            client.beginIQSend = send
+            delete scope.__rejectSavedRemoval
+            reject(Object.assign(new Error('Demo removal refused'), { name: 'StanzaError' }))
+          }
+        })
+      }
+    })
     await marker.click()
     await expect(row.getByTestId('saved-marker')).toHaveCount(0)
-    await page.evaluate(() => {
+    await page.waitForFunction(() => typeof (window as unknown as { __rejectSavedRemoval?: () => void }).__rejectSavedRemoval === 'function')
+    expect(await page.evaluate(() => {
       const state = (window as unknown as { __savedStore: typeof savedStore }).__savedStore.getState()
-      state.refuse('marker-entry-0', 'retract', state.revisions['marker-entry-0'])
-    })
+      return { pending: state.pending['marker-entry-0'], retained: !!state.removed['marker-entry-0'] }
+    })).toEqual({ pending: 'retract', retained: true })
+    await page.evaluate(() => (window as unknown as { __rejectSavedRemoval: () => void }).__rejectSavedRemoval())
     await expect(marker).toBeVisible()
     await expect(row).toContainText(body)
     await expect(page.getByText('Your server refused to store this message.')).toBeVisible()
