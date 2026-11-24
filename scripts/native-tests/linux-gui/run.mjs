@@ -89,6 +89,8 @@ async function worker(config) {
     command('xauth', ['-f', auth, 'add', ':0', '.', cookie])
     const displayFile = await open(join(profile, 'display'), 'w+')
     const xvfb = spawn('Xvfb', ['-displayfd', '3', '-screen', '0', '1280x800x24', '-nolisten', 'tcp', '-auth', auth], { stdio: ['ignore', 'inherit', 'inherit', displayFile.fd] })
+    // The outer supervisor owns process-group teardown after the worker finishes.
+    xvfb.unref()
     try {
       const number = await until(async () => {
         if (xvfb.exitCode !== null) throw new Error('Owned Xvfb exited')
@@ -107,6 +109,7 @@ async function worker(config) {
   let nativePort = await freePort()
   while (nativePort === port) nativePort = await freePort()
   const native = spawn(driver, ['--port', `${port}`, '--native-port', `${nativePort}`, '--native-host', '127.0.0.1', '--native-driver', webkit], { stdio: 'inherit' })
+  native.unref()
   const group = +command('ps', ['-o', 'pgid=', '-p', `${process.pid}`])
   const client = new WebDriver(port, log)
   try {
