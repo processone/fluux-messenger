@@ -745,6 +745,13 @@ export interface E2EEPlugin {
   getDeviceTrust(peer: BareJID, deviceId: string): Promise<TrustState>
 
   /**
+   * Re-evaluate an authenticated device's exact fingerprint for stored content.
+   * Use only local trust records: do not discover devices, fetch keys, or
+   * decrypt the message again. Return `unknown` if no local decision applies.
+   */
+  getStoredDeviceTrust?(device: NonNullable<SecurityContext['authenticatedDevice']>): Promise<TrustState>
+
+  /**
    * Optional: enumerate a peer's trustable identities (OMEMO: one per device)
    * for the per-identity verification UI. Returns `[]` if the peer has none.
    * The host feature-detects (`if (plugin.listPeerIdentities) …`); a plugin

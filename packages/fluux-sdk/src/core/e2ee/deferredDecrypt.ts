@@ -50,8 +50,6 @@ type RetryModification = ArchiveSignal['effect']
  *   retraction) is removed entirely so it never surfaces as a ghost bubble.
  * - `unavailable`: a completed attempt reports waiting or failed availability.
  *   Terminal failures clear the stash without changing the existing timeline placeholder.
- * - `settled`: a legacy OMEMO row already holds authenticated content; retire its
- *   ciphertext without changing the content or asserting a new identity.
  * - `pending`: plugin not ready, an interrupted attempt, an unverified signal
  *   waits for its signature check, or the message already shows this unverified text —
  *   leave `encryptedPayload`.
@@ -62,11 +60,9 @@ type RetryOutcome =
   | { kind: 'unsupported'; info: { namespace: string; name: string } }
   | { kind: 'rejected'; securityContext?: MessageSecurityContext }
   | { kind: 'pending' }
-  | { kind: 'settled'; clearPayload: true }
   | { kind: 'unavailable'; contentAvailability: NonNullable<Message['contentAvailability']>; clearPayload?: true; securityContext?: MessageSecurityContext }
 
-function availabilityUpdates(message: Pick<Message, 'contentAvailability'>, outcome: Extract<RetryOutcome, { kind: 'unavailable' | 'settled' }>): Partial<Pick<Message, 'contentAvailability' | 'encryptedPayload' | 'body' | 'securityContext'>> | undefined {
-  if (outcome.kind === 'settled') return { contentAvailability: { state: 'ready' }, encryptedPayload: undefined }
+function unavailableUpdates(message: Pick<Message, 'contentAvailability'>, outcome: Extract<RetryOutcome, { kind: 'unavailable' }>): Partial<Pick<Message, 'contentAvailability' | 'encryptedPayload' | 'body' | 'securityContext'>> | undefined {
   const previous = message.contentAvailability
   const next = outcome.contentAvailability
   if (!outcome.clearPayload && previous?.state === next.state &&
@@ -291,9 +287,9 @@ export class DeferredDecryptEngine {
         if (accountChanged()) return decryptedCount
         if (this.correctionRecoveries.get(key) !== request) continue
         if (!request.isCurrent()) { this.correctionRecoveries.delete(key); continue }
-        if (outcome.kind === 'unavailable' || outcome.kind === 'settled') {
+        if (outcome.kind === 'unavailable') {
           if (outcome.clearPayload) this.correctionRecoveries.delete(key)
-          const updates = availabilityUpdates(message, outcome)
+          const updates = unavailableUpdates(message, outcome)
           if (updates) {
             request.apply(guardedUpdates(message, updates, accountScope))
             request.message = { ...message, ...updates }
@@ -332,8 +328,8 @@ export class DeferredDecryptEngine {
           if (outcome.kind === 'decrypted') {
             chatBindings.updateMessage(conversationId, msg, recoveredUpdates(msg, outcome, accountScope))
             decryptedCount++
-          } else if (outcome.kind === 'unavailable' || outcome.kind === 'settled') {
-            const updates = availabilityUpdates(msg, outcome)
+          } else if (outcome.kind === 'unavailable') {
+            const updates = unavailableUpdates(msg, outcome)
             if (updates) chatBindings.updateMessage(conversationId, msg, guardedUpdates(msg, updates, accountScope))
           } else if (outcome.kind === 'modification') {
             if (!await this.dropChatPlaceholder(conversationId, msg, stores, accountScope, accountChanged, outcome)) continue
@@ -370,8 +366,8 @@ export class DeferredDecryptEngine {
             roomBindings.updateMessage(roomJid, msg.id, recoveredUpdates(msg, outcome, accountScope))
             decryptedCount++
             roomsToRecount.add(roomJid)
-          } else if (outcome.kind === 'unavailable' || outcome.kind === 'settled') {
-            const updates = availabilityUpdates(msg, outcome)
+          } else if (outcome.kind === 'unavailable') {
+            const updates = unavailableUpdates(msg, outcome)
             if (updates) roomBindings.updateMessage(roomJid, msg.id, guardedUpdates(msg, updates, accountScope))
             if (outcome.clearPayload) roomsToRecount.add(roomJid)
           } else if (outcome.kind === 'rejected') {
@@ -439,13 +435,13 @@ export class DeferredDecryptEngine {
           // message]" fallback. Heal it when this message IS the preview.
           stores.chat.refreshLastMessageContent?.(conversationId, msg, updates)
           decryptedCount++
-        } else if (outcome.kind === 'unavailable' || outcome.kind === 'settled') {
-          const unavailable = availabilityUpdates(msg, outcome)
+        } else if (outcome.kind === 'unavailable') {
+          const unavailable = unavailableUpdates(msg, outcome)
           if (!unavailable) continue
           const updates = guardedUpdates(msg, unavailable, accountScope)
           await this.deps.cache.updateMessage('chat', conversationId, msg.id, updates, msg.from, accountScope, msg.cacheKey)
           if (accountChanged()) return decryptedCount
-          if (outcome.kind === 'unavailable' && outcome.clearPayload) {
+          if (outcome.clearPayload) {
             await this.deps.updateSearchIndex({ ...msg, ...updates }, accountScope)
               .catch(error => logWarn(`Failed to index recovered message: ${String(error)}`))
             if (accountChanged()) return decryptedCount
@@ -507,8 +503,8 @@ export class DeferredDecryptEngine {
         if (outcome.kind === 'decrypted') {
           chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, recoveredUpdates(lastMessage, outcome, accountScope))
           decryptedCount++
-        } else if (outcome.kind === 'unavailable' || outcome.kind === 'settled') {
-          const updates = availabilityUpdates(lastMessage, outcome)
+        } else if (outcome.kind === 'unavailable') {
+          const updates = unavailableUpdates(lastMessage, outcome)
           if (updates) chatBindings.refreshLastMessageContent?.(conversationId, lastMessage, guardedUpdates(lastMessage, updates, accountScope))
         } else if (outcome.kind === 'modification') {
           // Until decrypted, an outgoing signal can carry a fallback body and
@@ -645,15 +641,6 @@ export class DeferredDecryptEngine {
     archiveMessage?: StoredMessage,
     diagnosticMessage: Message | RoomMessage | undefined = archiveMessage,
   ): Promise<RetryOutcome> {
-    // Older SDKs used `verification` for already-authenticated OMEMO text.
-    // A replay cannot prove the identity of that stored text, even if the
-    // ratchet still recognizes the position, so do not consult it.
-    const previous = diagnosticMessage?.securityContext
-    if (diagnosticMessage?.contentAvailability?.state === 'verification' &&
-        previous?.protocolId === 'omemo:2' && previous.trust === 'untrusted' && !previous.failureReason) {
-      return { kind: 'settled', clearPayload: true }
-    }
-
     const scope = captureStorageScope()
     const stores = this.deps.getStores()
     let endActivity = () => {}

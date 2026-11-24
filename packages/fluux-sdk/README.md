@@ -79,13 +79,14 @@ Your app just renders what's in the stores—no orchestration needed.
 OMEMO can authenticate a message before the user has decided whether to trust
 its sender's device. The SDK stores the recovered content and its
 `securityContext.authenticatedDevice`, not a copy of the ciphertext to retry.
-`E2EEManager.getMessageTrust(securityContext)` resolves the current display trust
-for that original device and fingerprint. Refresh it on
-`onConversationSecurityChanged` for the device's address. This lookup does not
-re-decrypt the message or rewrite its stored context. A different device or key
-cannot confer trust; old rows without the original identity keep their stored
-assessment. OpenPGP messages that still need a signature check continue to use
-deferred decryption.
+`E2EEManager.getMessageTrust(securityContext)` checks the original device and
+fingerprint against local trust records. It works offline after the plugin
+registers and does not fetch keys, re-decrypt the message, or rewrite the stored
+context. Refresh it when `onConversationSecurityChanged` reports the device's
+address or `null` (all conversations). If the plugin or a matching decision is
+unavailable, an authenticated device is shown as untrusted. Messages without
+an authenticated device keep their stored assessment. OpenPGP messages that
+still need a signature check continue to use deferred decryption.
 
 ## Architecture
 

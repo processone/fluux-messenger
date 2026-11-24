@@ -38,12 +38,12 @@ import { Chat } from '../../../../packages/fluux-sdk/src/core/modules/Chat'
 import { MAM } from '../../../../packages/fluux-sdk/src/core/modules/MAM'
 import type { ModuleDependencies } from '../../../../packages/fluux-sdk/src/core/modules/BaseModule'
 import { createPresenceReader } from '../../../../packages/fluux-sdk/src/core/presenceReader'
-import { chatStore } from '../../../../packages/fluux-sdk/src/stores/chatStore'
 import * as cache from '../../../../packages/fluux-sdk/src/utils/messageCache'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../../../../packages/fluux-sdk/src/utils/storageScope'
 import { dataToElement } from '../../../../packages/omemo-plugin/src/stanzaData'
 import { OmemoPlugin } from '../../../../packages/omemo-plugin/src/OmemoPlugin'
 import { PluginStorageOmemoStore } from '../../../../packages/omemo-plugin/src/store'
+import { NS_DEVICES } from '../../../../packages/omemo-plugin/src/namespaces'
 import {
   createMockPluginContext,
   newMockNetwork,
@@ -76,10 +76,11 @@ async function ready(
   storage = new InMemoryStorageBackend(),
 ) {
   const { ctx } = createMockPluginContext(jid, net)
+  const queryPEP = vi.fn(ctx.xmpp.queryPEP)
   const host = new E2EEManager({
     account: { jid }, storage,
     xmpp: {
-      ...ctx.xmpp,
+      ...ctx.xmpp, queryPEP,
       // This fixture implements PEP; advertise it as an XMPP server would.
       queryDisco: async () => ({
         features: [{ var: 'http://jabber.org/protocol/pubsub' }],
@@ -92,7 +93,7 @@ async function ready(
     await host.register(plugin)
     await plugin.ensureIdentity()
   }
-  return { host, storage }
+  return { host, storage, queryPEP }
 }
 
 async function identity(host: E2EEManager, protocolId: string, peer = bobJid) {
@@ -334,7 +335,6 @@ describe('stored messages awaiting trust', () => {
   })
 
   afterEach(() => {
-    chatStore.getState().reset()
     cache._resetDBForTesting()
     _resetStorageScopeForTesting()
     vi.unstubAllGlobals()
@@ -343,10 +343,9 @@ describe('stored messages awaiting trust', () => {
   async function deliver(receiver: E2EEManager, ciphertext: XMLElementData, id: string) {
     const stanza = xml('message', { id, from: `${aliceJid}/test`, to: bobJid, type: 'chat' },
       dataToElement(ciphertext), xml('body', {}, '[Encrypted message]'))
-    const originalXml = stanza.toString()
     // Chat emits the parsed message; the fixture writes it to the real SDK cache
     // without a resident conversation, so the durable retry pass owns the row.
-    const message = await new Promise<Message>((resolve) => {
+    return new Promise<Message>((resolve) => {
       const deps: ModuleDependencies = {
         stores: null, presence: createPresenceReader(), sendStanza: async () => {},
         sendIQ: async () => xml('iq', {}), getCurrentJid: () => bobJid, getXmpp: () => null,
@@ -356,7 +355,6 @@ describe('stored messages awaiting trust', () => {
       }
       new Chat(deps, new MAM(deps)).handle(stanza)
     })
-    return { message, originalXml }
   }
 
   function retryEngine(manager: E2EEManager) {
@@ -381,14 +379,15 @@ describe('stored messages awaiting trust', () => {
     expect(device.deviceId).not.toBe(verifiedSibling.id)
     const storeFor = (storage: InMemoryStorageBackend) =>
       new PluginStorageOmemoStore(createPluginStorage(storage, `e2ee/${protocolId}`))
-    return { bob, sender, device, protocolId, store: storeFor(bob.storage), siblingStore: storeFor(sibling.storage) }
+    return { net, bob, sender, device, protocolId, store: storeFor(bob.storage), siblingStore: storeFor(sibling.storage) }
   }
 
-  it('settles consumed OMEMO rows on both chains, but decrypts an unopened row', async () => {
+  it('keeps authenticated OMEMO text out of the queue across a ratchet turn but recovers unopened ciphertext', async () => {
     const { bob, sender, device, store, protocolId } = await omemoPeers()
     const earlierText = 'Private text before the sending chain changed'
     const currentText = 'Private text after the sending chain changed'
     const earlier = await deliver(bob.host, await send(sender.host, toBob, earlierText), 'earlier')
+    await cache.saveMessage('chat', earlier)
     // Bob cannot send to the waiting device. Approve it to turn the ratchet,
     // then refuse it before the next inbound message so that text is untrusted too.
     await bob.host.setIdentityTrust(protocolId, aliceJid, device.deviceId, 'tofu')
@@ -396,42 +395,28 @@ describe('stored messages awaiting trust', () => {
     expectBody(await sender.host.decryptInbound(reply, toBob), 'Private reply advancing the ratchet', protocolId)
     await bob.host.setIdentityTrust(protocolId, aliceJid, device.deviceId, 'untrusted')
     const current = await deliver(bob.host, await send(sender.host, toBob, currentText), 'current')
-    for (const row of [earlier, current]) {
-      expect(row.message.securityContext?.trust).toBe('untrusted')
-      expect(row.message.contentAvailability).toEqual({ state: 'ready' })
-      expect(row.message.encryptedPayload).toBeUndefined()
-    }
-    // Recreate the old persisted shape. Only the current row is still loaded.
-    const legacyRows: Message[] = [earlier, current].map(({ message, originalXml }) => ({
-      ...message, contentAvailability: { state: 'verification' }, encryptedPayload: originalXml,
-      securityContext: { protocolId, trust: 'untrusted' },
-    }))
-    await cache.saveMessages('chat', legacyRows)
-    chatStore.setState({ messages: new Map([[aliceJid, [legacyRows[1]]]]) })
+    await cache.saveMessage('chat', current)
     const session = () => store.loadSession(aliceJid, Number(device.deviceId))
     const before = await session()
     expect(before).not.toBeNull()
     const archive = vi.spyOn(bob.host, 'decryptArchive')
     const engine = retryEngine(bob.host)
-    expect(await cache.getMessagesWithEncryptedPayload()).toHaveLength(2)
-    expect(await engine.retryPending()).toBe(0)
-    const resident = chatStore.getState().messages.get(aliceJid)?.[0]
-    expect(resident).toMatchObject({ body: currentText, contentAvailability: { state: 'ready' } })
-    expect(resident?.encryptedPayload).toBeUndefined()
-    await vi.waitFor(async () => expect(await cache.getMessagesWithEncryptedPayload()).toEqual([]))
+    expect(await cache.getMessagesWithEncryptedPayload()).toEqual([])
     expect(await engine.retryPending()).toBe(0)
     expect(archive).not.toHaveBeenCalled()
     expect(await session()).toEqual(before)
     for (const [id, text] of [['earlier', earlierText], ['current', currentText]]) {
       const row = (await cache.getMessages('chat', aliceJid)).find(m => m.id === id)
-      expect(row).toMatchObject({ body: text, contentAvailability: { state: 'ready' } })
-      expect(row?.securityContext).toEqual({ protocolId: 'omemo:2', trust: 'untrusted' })
+      expect(row).toMatchObject({ body: text, contentAvailability: { state: 'ready' }, securityContext: {
+        protocolId, trust: 'untrusted', authenticatedDevice: { deviceId: device.deviceId },
+      } })
+      expect(row?.encryptedPayload).toBeUndefined()
     }
 
     const waitingText = 'Private text not yet delivered live'
     const unopened = await send(sender.host, toBob, waitingText)
     await cache.saveMessage('chat', {
-      ...current.message, id: 'waiting', body: '[Encrypted message]', securityContext: undefined,
+      ...current, id: 'waiting', body: '[Encrypted message]', securityContext: undefined,
       contentAvailability: { state: 'waiting' }, encryptedPayload: dataToElement(unopened).toString(),
     })
     expect(await engine.retryPending()).toBe(1)
@@ -445,11 +430,11 @@ describe('stored messages awaiting trust', () => {
     expect(await session()).toEqual(before)
   })
 
-  it('reflects decisions about the original OMEMO device and not a replacement key', async () => {
-    const { bob, sender, device, protocolId, store, siblingStore } = await omemoPeers()
+  it('reads saved OMEMO trust offline without trusting a sibling or replacement key', async () => {
+    const { net, bob, sender, device, protocolId, store, siblingStore } = await omemoPeers()
     const text = 'Private text from a device awaiting a decision'
     const received = await deliver(bob.host, await send(sender.host, toBob, text), 'decision')
-    await cache.saveMessage('chat', received.message)
+    await cache.saveMessage('chat', received)
     const [stored] = await cache.getMessages('chat', aliceJid)
     const context = stored.securityContext!
     const fingerprint = await sender.host.getOwnFingerprint(protocolId)
@@ -458,17 +443,20 @@ describe('stored messages awaiting trust', () => {
     expect(stored.encryptedPayload).toBeUndefined()
     const archive = vi.spyOn(bob.host, 'decryptArchive')
     const trust = () => bob.host.getMessageTrust(context)
+    net.nodes.delete(`${aliceJid} ${NS_DEVICES}`)
+    bob.queryPEP.mockClear().mockRejectedValue(new Error('offline'))
     expect(await trust()).toBe('untrusted') // A sibling device is already verified.
-    for (const decision of ['verified', 'untrusted', 'tofu'] as const) {
+    for (const decision of ['verified', 'untrusted', 'tofu', 'verified'] as const) {
       await bob.host.setIdentityTrust(protocolId, aliceJid, device.deviceId, decision)
       expect(await trust()).toBe(decision)
     }
     expect(await bob.host.getMessageTrust({ protocolId, trust: 'untrusted' })).toBe('untrusted')
     const replacement = (await siblingStore.loadIdentity())!.edPub
     await store.saveTrust(aliceJid, Number(device.deviceId), { state: 'undecided', identityKey: replacement })
+    expect(await trust()).toBe('untrusted') // The old verification marker still exists.
     await bob.host.setIdentityTrust(protocolId, aliceJid, device.deviceId, 'verified')
-    expect((await bob.host.listPeerIdentities(aliceJid))[0].identities.find(i => i.id === device.deviceId)).toMatchObject({ trust: 'verified' })
     expect(await trust()).toBe('untrusted')
+    expect(bob.queryPEP).not.toHaveBeenCalled()
     expect(await cache.getMessagesWithEncryptedPayload()).toEqual([])
     expect(await cache.getMessages('chat', aliceJid)).toEqual([stored])
     expect(stored.body).toBe(text)
@@ -481,7 +469,7 @@ describe('stored messages awaiting trust', () => {
     const receiver = new WebOpenPGPPlugin()
     const bob = await ready(bobJid, net, [receiver])
     const text = 'Private text from a sender whose key is not cached yet'
-    const { message } = await deliver(bob.host, await send(alice.host, toBob, text), 'openpgp')
+    const message = await deliver(bob.host, await send(alice.host, toBob, text), 'openpgp')
     expect(message).toMatchObject({ body: text, contentAvailability: { state: 'verification' }, securityContext: { trust: 'untrusted' } })
     expect(message.encryptedPayload).toBeDefined()
     await cache.saveMessage('chat', message)

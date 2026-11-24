@@ -943,12 +943,15 @@ export class E2EEManager {
     const device = context.authenticatedDevice
     if (!device || context.trust === 'rejected') return context.trust
     const plugin = this.plugins.get(context.protocolId)
-    if (!plugin) return 'untrusted'
-    const identities = await this.pluginIdentities(plugin, device.jid)
-    if (this.plugins.get(context.protocolId) !== plugin) return 'untrusted'
-    const trust = identities?.find(({ id, fingerprint }) =>
-      id === device.deviceId && fingerprint === device.fingerprint)?.trust
-    return trust && trust !== 'unknown' ? trust : 'untrusted'
+    if (!plugin?.getStoredDeviceTrust) return 'untrusted'
+    try {
+      const trust = await plugin.getStoredDeviceTrust(device)
+      if (this.plugins.get(context.protocolId) !== plugin || trust === 'unknown') return 'untrusted'
+      return trust
+    } catch (err) {
+      this.logger.warn(`E2EE plugin ${context.protocolId} could not read stored device trust`, err)
+      return 'untrusted'
+    }
   }
 
   /** Record a trust decision for one identity of `protocolId`'s plugin. */
