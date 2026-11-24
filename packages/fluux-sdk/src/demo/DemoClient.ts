@@ -23,8 +23,12 @@
  * @module Demo
  */
 
-import { xml, type Element } from '@xmpp/client'
+import { xml, type Element, type Client } from '@xmpp/client'
 import { XMPPClient } from '../core/XMPPClient'
+import type { XMPPClientConfig } from '../core/clientConfig'
+import { RoomReadMarkers } from '../core/modules/RoomReadMarkers'
+import { createDefaultStoreBindings } from '../core/defaultStoreBindings'
+import { createPresenceReader } from '../core/presenceReader'
 import { parseMessageContent } from '../core/modules/messagingUtils'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
@@ -179,6 +183,50 @@ export class DemoClient extends XMPPClient {
   // marker. Backs the pubsub publish/items/retract IQs so MDS sync and the
   // fresh-session seed (fetchAllDisplayed) work in demo mode.
   private mdsNodeItems = new Map<string, { stanzaId: string; by: string }>()
+
+  private markerDemoRooms = new Set<string>()
+
+  constructor(config: XMPPClientConfig = {}) {
+    super(config)
+    // Demo-only transport boundary. The actual marker validator and row-local
+    // subscriptions run unchanged, but no XMPP traffic leaves this client.
+    const connection = {} as Client
+    this.roomReadMarkers = new RoomReadMarkers({
+      stores: createDefaultStoreBindings(), presence: createPresenceReader(),
+      getCurrentJid: () => this.currentJid, getXmpp: () => connection,
+      sendStanza: async () => {}, emit: () => {}, emitSDK: () => {},
+      sendIQ: async request => {
+        const roomJid = request.attrs.to
+        const room = roomStore.getState().getRoom(roomJid)
+        const features = this.markerDemoRooms.has(roomJid)
+          ? ['muc_hidden', 'muc_membersonly', 'muc_nonanonymous', 'urn:xmpp:occupant-id:0', NS_STANZA_ID] : []
+        return xml('iq', { type: 'result', from: roomJid }, xml('query', { xmlns: NS_DISCO_INFO },
+          ...features.map(feature => xml('feature', { var: feature })),
+          xml('x', { xmlns: NS_DATA_FORMS, type: 'result' },
+            xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, 'http://jabber.org/protocol/muc#roominfo')),
+            xml('field', { var: 'muc#roominfo_occupants' }, xml('value', {}, String(room?.occupants.size ?? 0))))))
+      },
+    })
+  }
+
+  /**
+   * Demo-only peer-marker input for the render harness. Use a small seeded room
+   * whose occupants already have stable IDs (for example the showcase scene).
+   * This proves rendering, never a real server's discovery or identity claims.
+   */
+  async simulateRoomDisplayed(roomJid: string, occupantId: string, stanzaId: string): Promise<void> {
+    const room = roomStore.getState().getRoom(roomJid)
+    const occupant = [...room?.occupants.values() ?? []].find(person => person.occupantId === occupantId)
+    if (!room?.joined || !occupant || ![...room.occupants.values()].every(person => !!person.occupantId)) {
+      throw new Error('The marker demo needs a joined room with stable occupant IDs')
+    }
+    this.markerDemoRooms.add(roomJid)
+    const rows = roomStore.getState().messages.get(roomJid) ?? []
+    this.roomReadMarkers.recordArchiveOrder(roomJid, rows.flatMap(row => row.stanzaId ? [row.stanzaId] : []))
+    await this.roomReadMarkers.receive(roomJid, xml('message', { type: 'groupchat', from: `${roomJid}/${occupant.nick}` },
+      xml('displayed', { xmlns: 'urn:xmpp:chat-markers:0', id: stanzaId }),
+      xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: occupantId })), rows)
+  }
 
   /** Current animation state. */
   get animationState(): AnimationState {

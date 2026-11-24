@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useConnection, useXMPPContext, RequestTimeoutError, type ArchivingDefault, type ArchivingPreferences } from '@fluux/sdk'
 import { chooseArchiving } from '@/utils/archivingOverride'
 import { useSettingsStore, type MediaAutoDownload } from '@/stores/settingsStore'
+import { RoomReadSharing } from '@/components/RoomReadMarkers'
 import { SettingsSection } from '@/components/ui/SettingsSection'
 
 const mediaOptions: { value: MediaAutoDownload; labelKey: string; descriptionKey: string }[] = [
@@ -131,6 +132,7 @@ function ServerArchiveControl() {
 }
 
 export function PrivacySettings() {
+  const { client } = useXMPPContext()
   const { t } = useTranslation()
   const mediaAutoDownload = useSettingsStore((s) => s.mediaAutoDownload)
   const setMediaAutoDownload = useSettingsStore((s) => s.setMediaAutoDownload)
@@ -138,6 +140,7 @@ export function PrivacySettings() {
   return (
     <section className="w-full">
       <SettingsSection>
+        {client.roomReadMarkers && <div className="-mx-4 mb-6"><RoomReadSharing markers={client.roomReadMarkers} /></div>}
         <ServerArchiveSetting />
         <div className="space-y-3">
         <label id="media-auto-download-label" className="type-section-title text-fluux-text">{t('settings.mediaAutoDownload')}</label>

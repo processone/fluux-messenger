@@ -527,6 +527,8 @@ export function useRoomActive() {
       readPointerRow: activeReadPointerRow,
       windowAtLiveEdge: activeWindowAtLiveEdge,
 
+      // Peer positions have row-local subscriptions, not message-list state.
+      peerReadMarkers: client.roomReadMarkers,
       // Actions (spread memoized actions)
       ...actions,
     }),
@@ -545,6 +547,7 @@ export function useRoomActive() {
       activeReadPointerRow,
       activeWindowAtLiveEdge,
       actions,
+      client.roomReadMarkers,
     ]
   )
 }

@@ -1957,5 +1957,16 @@
         "title": "Fluux a fost actualizat în altă filă",
         "description": "Reîncarcă această filă pentru a folosi noua versiune. Până atunci, istoricul și căutarea pot fi mai lente.",
         "reload": "Reîncarcă"
+    },
+    "readMarkers": {
+        "master": "Partajează pozițiile de citire în camere",
+        "description": "Dezactivat implicit. După activare, alege fiecare cameră separat în detaliile acesteia.",
+        "shareInRoom": "Partajează poziția mea de citire în această cameră",
+        "roomDescription": "Trimite numai în camere verificate, nelistate, neanonime și rezervate membrilor, cu mai puțin de 20 de persoane prezente cu identități stabile în cameră. Mesajele criptate sunt excluse.",
+        "masterOff": "Comutatorul principal din Confidențialitate este oprit. Camera nu va partaja poziția ta de citire până când nu îl activezi.",
+        "metadata": "Camera și persoanele prezente pot vedea activitatea ta de citire. Arhiva poate păstra aceste metadate. Dezactivarea oprește actualizările viitoare, dar nu elimină marcajele stocate.",
+        "readThrough": "Citit până la acest mesaj",
+        "readers": "Citit până la acest mesaj: {{names}}",
+        "saveFailed": "Alegerea nu a putut fi salvată. Partajarea rămâne oprită. Verifică accesul la stocare înainte de reactivare."
     }
 }
