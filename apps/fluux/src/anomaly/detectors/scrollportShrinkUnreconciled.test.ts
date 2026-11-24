@@ -19,8 +19,8 @@ const CID = 'carol@example.com'
 const SCOPE = 'me@example.com'
 /** `BOTTOM_PIN_TOLERANCE` as the resize hook reports it. */
 const TOLERANCE = 4
-/** The typing band: `pt-2` 8 + a one-line pill 30 + `pb-0.5` 2. */
-const BAND_PX = 40
+/** A one-line typing band: 2px above the 30px pill and 14px below it. */
+const BAND_PX = 46
 
 const sample = (over: Partial<ShrinkSample> = {}): ShrinkSample => ({
   active: { kind: 'conversation', id: CID },
@@ -89,12 +89,11 @@ describe('createScrollportShrinkUnreconciledDetector', () => {
 
   // ── Supported behaviour that must stay silent ──────────────────────────────────
 
-  // The reader chose to be up there. The band takes its 40px from a viewport that was
-  // already 600px from the bottom, and none of that shortfall is the band's doing.
   it('never arms for a reader who had already scrolled up', () => {
     const d = createScrollportShrinkUnreconciledDetector()
-    d.noteShrank(shrank({ distFromBottom: 640, repin: null }), SCOPE, 1000)
-    expect(d.observe(sample({ distFromBottom: 640 }), 2100)).toBeNull()
+    const distFromBottom = 600 + BAND_PX
+    d.noteShrank(shrank({ distFromBottom, repin: null }), SCOPE, 1000)
+    expect(d.observe(sample({ distFromBottom }), 2100)).toBeNull()
   })
 
   // The arming guard on its own, isolated from the guard in `observe`: a reader who was
@@ -104,7 +103,7 @@ describe('createScrollportShrinkUnreconciledDetector', () => {
   // because where they stopped is where they chose to stop.
   it('never arms for a reader who was up and then returns to near the bottom', () => {
     const d = createScrollportShrinkUnreconciledDetector()
-    d.noteShrank(shrank({ distFromBottom: 640, repin: null }), SCOPE, 1000)
+    d.noteShrank(shrank({ distFromBottom: 600 + BAND_PX, repin: null }), SCOPE, 1000)
     expect(d.observe(sample({ distFromBottom: BAND_PX }), 1500)).toBeNull()
     expect(d.observe(sample({ distFromBottom: BAND_PX }), 2600)).toBeNull()
   })
@@ -224,12 +223,10 @@ describe('createScrollportShrinkUnreconciledDetector', () => {
     expect(d.observe(sample(), 2100)?.heldMs).toBe(1100)
   })
 
-  // A two-line label costs less than a full band. The bound travels with the fact, so the
-  // detector judges each shrink against its own size rather than a constant of its own.
+  // Adding a second line to an open pill costs only the line height, not a full band.
   it('scales the accounted-for shortfall with the shrink it was given', () => {
     const d = createScrollportShrinkUnreconciledDetector()
     d.noteShrank(shrank({ shrunkPx: 16, distFromBottom: 16 }), SCOPE, 1000)
-    // 40px was fine for a 40px band; against a 16px one it is somebody else's.
-    expect(d.observe(sample({ distFromBottom: 40 }), 2100)).toBeNull()
+    expect(d.observe(sample({ distFromBottom: BAND_PX }), 2100)).toBeNull()
   })
 })
