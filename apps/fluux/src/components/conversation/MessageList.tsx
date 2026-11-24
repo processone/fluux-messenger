@@ -1040,13 +1040,11 @@ export function MessageList<T extends BaseMessage>({
           already clipped the last line. As real layout the band cannot be scrolled into: the
           scrollport simply ends above it.
 
-          The scroll footer and the last row already leave space above the pill at the live edge,
-          so put more of the band's padding below it. Keep the total padding and the scroll footer
-          unchanged so the viewport and scroll content keep their respective heights. Sizing the
-          band from the pill (rather than a fixed height) is
-          what lets the label take a second line: a crowded room or a wordier locale wraps instead
-          of being cut off (issue #1151). Two lines is the cap — beyond that the band would take
-          enough of the message area that clipping is the better trade.
+          At the live edge, the scroll footer's pb-2 and the last row's bottom padding add space
+          above the pill, so most of the band's padding goes below it, toward the composer card.
+          In history the footer scrolls below the fold, leaving only pt-0.5 and the bottom fade
+          between the clipped messages and the pill. Sizing the band from the pill lets crowded
+          rooms or wordier locales wrap to two lines (issue #1151) without a fixed band height.
           max-w keeps it clear of the bottom-end FAB, which still floats at its own bottom-4 and so
           does not move when the band appears. */}
       {typingUsers.length > 0 && (
