@@ -1071,7 +1071,6 @@
             "openLogs": "Otvoriť priečinok záznamov"
         },
         "encryption": {
-            "experimental": "Experimentálne",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {
@@ -1414,7 +1413,8 @@
         "added": "Pridané",
         "changed": "Zmenené",
         "fixed": "Opravené",
-        "removed": "Odstránené"
+        "removed": "Odstránené",
+        "viewFull": "Zobraziť úplný zoznam zmien"
     },
     "about": {
         "title": "O aplikácii",
@@ -2007,5 +2007,16 @@
         "title": "Fluux bol aktualizovaný na inej karte",
         "description": "Znova načítajte túto kartu, aby ste mohli používať novú verziu. Dovtedy môžu byť história a vyhľadávanie pomalšie.",
         "reload": "Znova načítať"
+    },
+    "readMarkers": {
+        "master": "Zdieľať pozície prečítania v miestnostiach",
+        "description": "Predvolene vypnuté. Po zapnutí vyberte každú miestnosť osobitne v jej podrobnostiach.",
+        "shareInRoom": "Zdieľať moju pozíciu prečítania v tejto miestnosti",
+        "roomDescription": "Odosielať iba v overených, nezverejnených, neanonymných miestnostiach len pre členov, s menej ako 20 prítomnými so stálymi identitami v miestnosti. Šifrované správy sú vylúčené.",
+        "masterOff": "Hlavný prepínač v Súkromí je vypnutý. Miestnosť nebude zdieľať vašu pozíciu prečítania, kým ho nezapnete.",
+        "metadata": "Miestnosť a jej prítomní vidia vašu aktivitu čítania. Archív môže tieto metaúdaje uchovať. Vypnutie zastaví budúce aktualizácie, no neodstráni uložené značky.",
+        "readThrough": "Prečítané po túto správu",
+        "readers": "Prečítané po túto správu: {{names}}",
+        "saveFailed": "Voľbu sa nepodarilo uložiť. Zdieľanie zostáva vypnuté. Pred opätovným zapnutím skontrolujte prístup k úložisku."
     }
 }

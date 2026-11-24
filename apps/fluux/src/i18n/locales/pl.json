@@ -1072,7 +1072,6 @@
             "openLogs": "Otwórz folder dzienników"
         },
         "encryption": {
-            "experimental": "Eksperymentalne",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {
@@ -1415,7 +1414,8 @@
         "added": "Dodano",
         "changed": "Zmieniono",
         "fixed": "Naprawiono",
-        "removed": "Usunięto"
+        "removed": "Usunięto",
+        "viewFull": "Zobacz pełną listę zmian"
     },
     "about": {
         "title": "O programie",
@@ -2008,5 +2008,16 @@
         "title": "Fluux został zaktualizowany w innej karcie",
         "description": "Odśwież tę kartę, aby korzystać z nowej wersji. Do tego czasu historia i wyszukiwanie mogą działać wolniej.",
         "reload": "Odśwież"
+    },
+    "readMarkers": {
+        "master": "Udostępniaj pozycje odczytu w pokojach",
+        "description": "Domyślnie wyłączone. Po włączeniu wybierz każdy pokój osobno w jego szczegółach.",
+        "shareInRoom": "Udostępniaj moją pozycję odczytu w tym pokoju",
+        "roomDescription": "Wysyłaj tylko w zweryfikowanych, niewidocznych na liście, nieanonimowych pokojach wyłącznie dla członków, z mniej niż 20 obecnymi o stałych tożsamościach w pokoju. Zaszyfrowane wiadomości są wykluczone.",
+        "masterOff": "Główny przełącznik w Prywatności jest wyłączony. Pokój nie udostępni Twojej pozycji odczytu, dopóki go nie włączysz.",
+        "metadata": "Pokój i obecne w nim osoby widzą Twoją aktywność czytania. Archiwum może zachować te metadane. Wyłączenie zatrzymuje przyszłe aktualizacje, ale nie usuwa zapisanych znaczników.",
+        "readThrough": "Przeczytano do tej wiadomości",
+        "readers": "Przeczytano do tej wiadomości: {{names}}",
+        "saveFailed": "Nie udało się zapisać wyboru. Udostępnianie pozostaje wyłączone. Przed ponownym włączeniem sprawdź dostęp do pamięci."
     }
 }

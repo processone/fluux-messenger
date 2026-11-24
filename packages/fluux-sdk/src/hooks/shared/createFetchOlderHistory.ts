@@ -84,7 +84,7 @@ export interface FetchOlderHistoryDeps<T = unknown> {
    * Optional: query MAM for messages archived before a timestamp (XEP-0313
    * `end` filter). This recovery path does not depend on an opaque archive id,
    * so it works even when the oldest in-memory message has no stanzaId or the
-   * cursor is stale. Only the 1:1 chat archive supports the `end` filter.
+   * cursor is stale. The chat caller opts into this recovery path.
    */
   queryMAMByEndTime?: (id: string, endIso: string) => Promise<void>
 
@@ -130,7 +130,7 @@ export function createFetchOlderHistory<T = unknown>(
    * Recover by fetching the page of messages archived before the oldest
    * in-memory message's timestamp. Id-independent, so it works when no valid
    * archive cursor is available. No-op when the dependency or timestamp is
-   * missing (e.g. room MAM, which has no `end` filter).
+   * missing (for example, the room caller uses only cursor recovery).
    */
   const recoverByTimestamp = async (id: string): Promise<boolean> => {
     const oldestTimestamp = getOldestTimestamp?.(id)

@@ -8,7 +8,7 @@ import { iosHaptic } from '@/platform/ios/haptics'
 import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect, useContext, memo, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Bookmark, CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX } from 'lucide-react'
-import { formatMessagePreview, formatXMPPError, forwardedFileName, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
+import { formatMessagePreview, formatXMPPError, forwardedFileName, findRoomMessageLink, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { useKeyDecisions } from '@/e2ee/openpgpTrustView'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { Avatar } from '../Avatar'
@@ -123,6 +123,10 @@ export interface MessageBubbleProps {
 
   // Nick header extras (for room moderator badge, hats)
   nickExtras?: ReactNode
+  /** Stable trailing space for room read badges, independent of reader moves. */
+  readMarkerCorner?: ReactNode
+  /** Row-local badge anchored to this message column, never the avatar gutter. */
+  readMarkerBadge?: ReactNode
 
   // Reactions
   myReactions: string[]
@@ -320,6 +324,8 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
 
   // nickExtras - ReactNode, compare by reference (accept some re-renders)
   if (prev.nickExtras !== next.nickExtras) return false
+  if (prev.readMarkerCorner !== next.readMarkerCorner) return false
+  if (prev.readMarkerBadge !== next.readMarkerBadge) return false
 
   // Time format affects column width
   if (prev.timeFormat !== next.timeFormat) return false
@@ -397,6 +403,8 @@ export const MessageBubble = memo(function MessageBubble({
   timeFormat,
   highlightTerms,
   isCurrentMatch,
+  readMarkerCorner,
+  readMarkerBadge,
   groupSecurityContext,
 }: MessageBubbleProps) {
   const { t } = useTranslation()
@@ -444,6 +452,9 @@ export const MessageBubble = memo(function MessageBubble({
   const copyShown = !!message.forwarded && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
   const hideCopyQuote = copyShown && !!forwardedCopyFallbackRange(message)
   const shown = hideForwardFallback || hideCopyQuote ? withoutForwardFallback(message, mentions, hideCopyQuote) : { body: message.body, mentions }
+  const cornerAfterContent = !!readMarkerCorner && !message.isRetracted && !!(copyShown
+    || message.attachment || message.linkPreview || message.poll || message.pollClosed
+    || (!message.forwarded && findRoomMessageLink(message.body, message.references)))
   const [reactorEmoji, setReactorEmoji] = useState<string | null>(null)
   const [actionAnchor, setActionAnchor] = useState<HTMLElement | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -703,7 +714,7 @@ export const MessageBubble = memo(function MessageBubble({
         </span>
       )}
       {/* Avatar, timestamp (when selected), or spacer - width adapts to time format and density */}
-      <div className={`${avatarColWidth} flex-shrink-0 flex flex-col`}>
+      <div className={`${avatarColWidth} flex-shrink-0 flex flex-col`} data-msg-avatar-column="">
         {/* /me action messages always show timestamp instead of avatar */}
         {isActionMessage(message.body) ? (
           <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100 touch:opacity-100'} transition-opacity`}>
@@ -782,7 +793,7 @@ export const MessageBubble = memo(function MessageBubble({
 
       {/* The content column spans the conversation's real content width whatever the
           row holds; useRowMetrics reads it to estimate row heights. */}
-      <div className="relative flex-1 min-w-0" data-msg-column="">
+      <div className={`relative flex-1 min-w-0${readMarkerBadge ? ' room-read-marker-host' : ''}`} data-msg-column="">
       <div
         // Opacity keeps the previous focus target available while the overlay captures and restores focus.
         className={`relative ${showActionSheet ? 'opacity-0' : ''} w-full min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''}`}
@@ -907,6 +918,7 @@ export const MessageBubble = memo(function MessageBubble({
               isDarkMode={isDarkMode}
               highlightTerms={highlightTerms}
               isCurrentMatch={isCurrentMatch}
+              trailingContent={cornerAfterContent ? undefined : readMarkerCorner}
             />
             </>
           )}
@@ -942,6 +954,8 @@ export const MessageBubble = memo(function MessageBubble({
           {!message.isRetracted && message.pollClosed && (
             <PollClosedCard pollClosed={message.pollClosed} closedAt={message.timestamp} />
           )}
+          {/* Structured cards also need a clear corner below their text and controls. */}
+          {cornerAfterContent && readMarkerCorner}
         </CollapsibleContent>
 
         {/* Reactions display — filter out poll-vote emojis so votes don't double-show as reaction pills */}
@@ -952,6 +966,7 @@ export const MessageBubble = memo(function MessageBubble({
           getReactorName={getReactorName}
           onShowReactors={setReactorEmoji}
           isRetracted={message.isRetracted}
+          trailingContent={readMarkerCorner}
         />
 
         {/* Delivery error indicator */}
@@ -998,6 +1013,7 @@ export const MessageBubble = memo(function MessageBubble({
           </div>
         )}
       </div>
+      {readMarkerBadge}
       </div>
 
       {/* Avatar lightbox overlay */}

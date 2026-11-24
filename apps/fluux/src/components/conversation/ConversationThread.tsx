@@ -109,7 +109,7 @@ export function ConversationThread({
       {thread.activeAnimation && (
         <EasterEggAnimation animation={thread.activeAnimation.animation} onComplete={thread.clearAnimation} senderName={thread.activeAnimation.senderName} />
       )}
-      {thread.jumpToDate && <JumpToDateDialog {...thread.jumpToDate} />}
+      {thread.jumpToDate && <JumpToDateDialog key={thread.jumpToDate.conversationId} {...thread.jumpToDate} />}
       {overlays}
     </div>
   )

@@ -2,8 +2,9 @@ import { iosHaptic } from '@/platform/ios/haptics'
 import { editableForward } from '../utils/forwardMessage'
 import { isSpamModerated } from '@/utils/spamModeration'
 import { SpamModerationOption } from './SpamModerationOption'
-import type { GapInterval, MessageRowRef } from '@fluux/sdk'
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useId, useMemo, memo, type RefObject } from 'react'
+import { RoomReadBadge, RoomReadCorner } from './RoomReadMarkers'
+import type { GapInterval, MessageRowRef, RoomReadMarkers } from '@fluux/sdk'
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useId, useMemo, useSyncExternalStore, memo, type RefObject } from 'react'
 import { flushSync } from 'react-dom'
 import { shallow } from 'zustand/shallow'
 import { useTranslation } from 'react-i18next'
@@ -80,6 +81,8 @@ function getHatColors(hat: { uri: string; hue?: number }) {
   }
 }
 
+const noPeerMarkerSubscription = () => () => {}
+
 interface RoomViewProps {
   onBack?: () => void
   // Focus zone refs for Tab cycling
@@ -123,7 +126,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
   // store, so they add no re-render triggers).
-  const { activeRoom, activeMessages, activeMessageIngressVersion, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeHistoryState, targetMessageId, clearTargetMessageId, firstNewMessageRow, firstNewMessageIsProvisional, firstNewMessageCount, readPointerRow } = useRoomActive()
+  const { activeRoom, activeMessages, activeMessageIngressVersion, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeHistoryState, targetMessageId, clearTargetMessageId, firstNewMessageRow, firstNewMessageIsProvisional, firstNewMessageCount, readPointerRow, peerReadMarkers } = useRoomActive()
   detectRenderLoop('RoomView', activeMessageIngressVersion)
   const interiorPlacementVersion = useRoomStore((state) => {
     const jid = state.activeRoomJid
@@ -209,6 +212,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     readAllMessages: readActiveRoomMessages,
     fetchOlderHistory,
     isLoadingOlder: activeHistoryState?.isLoading,
+    historyGaps: activeHistoryState?.gaps,
+    archiveAvailable: activeRoom?.supportsMAM,
+    windowAtLiveEdge,
+    recenterToLatest,
     isHistoryComplete: activeRoom?.supportsMAM === false || activeHistoryState?.isHistoryComplete,
     clearFirstNewMessageId,
     advanceReadPointer,
@@ -351,6 +358,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
         columnClassName="flex flex-col flex-1 min-w-0"
         header={
           <RoomHeader
+            peerReadMarkers={peerReadMarkers}
             room={activeRoom}
             covered={covered}
             onBack={onBack}
@@ -400,6 +408,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
         list={
               <RoomMessageList
                 {...thread.listProps}
+                peerReadMarkers={peerReadMarkers}
                 messages={displayMessages}
                 identityMessages={activeMessages}
                 loadedMessageCount={activeMessages.length}
@@ -696,6 +705,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   interiorPlacementVersion = 0,
   listHandleRef,
   onLiveEdgeMeasured,
+  peerReadMarkers,
   room,
   unreadCount,
   contactsByJid,
@@ -755,6 +765,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   listHandleRef: RefObject<MessageListHandle | null>
   onLiveEdgeMeasured?: (atEdge: boolean) => void
   room: Room
+  peerReadMarkers?: RoomReadMarkers
   // Read fresh off `activeRoom` (NOT `room`/`stableRoom`): the stable room memo
   // deliberately freezes on jid/nickname/joined/occupants/etc and does NOT refresh
   // on unreadCount, so addMessage's count bump would never reach the in-list
@@ -811,6 +822,8 @@ export const RoomMessageList = memo(function RoomMessageList({
   isCatchingUp?: boolean
 }) {
   const loadedMessageCount = suppliedLoadedMessageCount === undefined ? messages.length : suppliedLoadedMessageCount
+  const sharingSnapshot = useCallback(() => peerReadMarkers?.isEnabledFor(room.jid) ?? false, [peerReadMarkers, room.jid])
+  const collectViews = useSyncExternalStore(peerReadMarkers?.subscribe ?? noPeerMarkerSubscription, sharingSnapshot)
   const { t } = useTranslation()
   const { formatTime, effectiveTimeFormat } = useTimeFormat()
 
@@ -987,6 +1000,7 @@ export const RoomMessageList = memo(function RoomMessageList({
 
     return (
       <RoomMessageBubbleWrapper
+        peerReadMarkers={peerReadMarkers}
         message={msg}
         rowId={rowId}
         showAvatar={shouldShowAvatar(groupMessages, idx)}
@@ -1072,6 +1086,14 @@ export const RoomMessageList = memo(function RoomMessageList({
         gaps: { intervals: gaps, onCatchUp: onCatchUpHistory, isCatchingUp },
       }}
       readMarkers={{
+        onFocusedVisibleRows: peerReadMarkers && collectViews ? rows => {
+          // The shared observer orders these by their measured bottom edge.
+          // Local read/MDS events and hydration never create viewing evidence.
+          const incoming = rows.filter(row => !row.isOutgoing && !row.isPrivate && !row.systemEvent
+            && !row.securityContext && !row.encryptedPayload && !row.unsupportedEncryption && !row.contentAvailability)
+          const last = incoming.at(-1)
+          if (last) void peerReadMarkers.viewed(room.jid, last).catch(() => {})
+        } : undefined,
         firstNewRow: firstNewMessageRow,
         firstNewIsProvisional: firstNewMessageIsProvisional,
         firstNewCount: firstNewMessageCount,
@@ -1095,6 +1117,7 @@ export const RoomMessageList = memo(function RoomMessageList({
 })
 
 interface RoomMessageBubbleWrapperProps {
+  peerReadMarkers?: RoomReadMarkers
   message: RoomMessage
   rowId: string
   showAvatar: boolean
@@ -1178,6 +1201,7 @@ interface RoomMessageBubbleWrapperProps {
 }
 
 const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
+  peerReadMarkers,
   message,
   rowId,
   showAvatar,
@@ -1362,6 +1386,13 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   // Build nick extras (affiliation badge and XEP-0317 hats)
   // Note: individual tooltips removed - all info is now in the unified avatar/name tooltip
   // Show affiliation (owner/admin) rather than role, consistent with the member list
+  const readMarkerCorner = useMemo(() => peerReadMarkers && !message.isPrivate
+    ? <RoomReadCorner markers={peerReadMarkers} roomJid={roomJid} /> : undefined,
+  [peerReadMarkers, roomJid, message.isPrivate])
+  const readMarkerBadge = useMemo(() => peerReadMarkers && !message.isPrivate
+    ? <RoomReadBadge markers={peerReadMarkers} roomJid={roomJid} row={{ id: message.id, occupantId: message.occupantId, stanzaId: message.stanzaId }} /> : undefined,
+  [peerReadMarkers, roomJid, message.id, message.occupantId, message.stanzaId, message.isPrivate])
+
   const nickExtras = (
     <>
       {occupant && occupant.affiliation === 'owner' && (
@@ -1457,6 +1488,8 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         senderAffiliation={senderAffiliation}
         senderOccupantJid={`${roomJid}/${message.nick}`}
         nickExtras={nickExtras}
+        readMarkerCorner={readMarkerCorner}
+        readMarkerBadge={readMarkerBadge}
         myReactions={myReactions}
         onReaction={supportsReactions ? handleReaction : undefined}
         getReactorName={getReactorName}
@@ -1494,6 +1527,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         highlightTerms={highlightTerms}
         isCurrentMatch={isCurrentMatch}
       />
+
 
       {/* Delete own message confirmation dialog */}
       {showDeleteConfirm && (
@@ -1726,6 +1760,9 @@ export const RoomMessageInput = memo(function RoomMessageInput({
 
   // Mention state
   const [cursorPosition, setCursorPosition] = useState(0)
+  // Only an editor edit opens mentions. Bind its caret to that exact text so a
+  // restored/prefilled draft or a later selection report cannot become a query.
+  const [mentionInput, setMentionInput] = useState<{ text: string; position: number } | null>(null)
   const composerRef = useRef<MessageComposerHandle>(null)
 
   // Forward ref to parent for focus after staging attachment
@@ -1756,6 +1793,11 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     getReferences: () => mentionRecovery.current.references,
     onDraftRecovered: (text, references) => mentionRecovery.current.restore(text, references),
   })
+
+  // External writes (including Send clearing the box) end the typing session.
+  // Merely hiding a mismatched snapshot would revive it if recovery or editing
+  // later restored the same text.
+  if (mentionInput && mentionInput.text !== text) setMentionInput(null)
 
   const { references, setReferences, handleEditorEdit, handleValueChange, insertMention, restoreReferences } = useMentionReferences(setText)
   mentionRecovery.current = { references, restore: restoreReferences }
@@ -1810,11 +1852,12 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   // Mention autocomplete hook
   const { state: mentionState, selectMatch, moveSelection, dismiss } = useMentionAutocomplete(
     text,
-    cursorPosition,
+    mentionInput?.text === text ? mentionInput.position : null,
     occupants,
     roomNickname,
     roomJid,
-    messageNicks
+    messageNicks,
+    references
   )
   const mentionListboxId = `${useId()}-mention-autocomplete`
 
@@ -2155,8 +2198,20 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         ariaProps={inputAriaProps}
         mergedRef={mergedRef}
         onEdit={handleEditorEdit}
-        onChange={onChange}
-        onSelect={onSelect ?? noopSelect}
+        onChange={(e) => {
+          setMentionInput({ text: e.target.value, position: e.target.selectionStart })
+          onChange(e)
+        }}
+        onSelect={(e) => {
+          const { value: selectedText, selectionStart: position, selectionEnd } = e.currentTarget
+          // A duplicate report for the edit's own collapsed caret is not a new move.
+          setMentionInput(previous =>
+            previous?.text === selectedText && previous.position === position && position === selectionEnd
+              ? previous
+              : null
+          )
+          onSelect?.(e)
+        }}
         onKeyDown={handleKeyDown}
         onPaste={onPaste}
       />
@@ -2321,5 +2376,3 @@ function RoomJoinPrompt({
     </div>
   )
 }
-
-const noopSelect = () => {}

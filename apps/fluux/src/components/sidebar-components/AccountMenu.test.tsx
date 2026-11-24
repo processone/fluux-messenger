@@ -86,7 +86,7 @@ vi.mock('@/hooks', () => ({
 }))
 
 vi.mock('../AboutModal', () => ({ AboutModal: () => <div>about-modal</div> }))
-vi.mock('../ChangelogModal', () => ({ ChangelogModal: () => null }))
+vi.mock('../ChangelogModal', () => ({ ChangelogModal: () => <div>changelog-modal</div> }))
 vi.mock('../Avatar', () => ({ Avatar: () => null }))
 vi.mock('../Tooltip', () => ({
   Tooltip: ({ children, content }: { children: React.ReactNode; content: string }) => <div data-tooltip={content}>{children}</div>,
@@ -139,6 +139,14 @@ describe('AccountMenu row and menu', () => {
     for (const key of ['sidebar.viewProfile', 'menu.whatsNew', 'menu.keyboardShortcuts', 'menu.reportIssue', 'menu.about', 'menu.logOut']) {
       expect(screen.getByRole('menuitem', { name: key })).toBeInTheDocument()
     }
+  })
+
+  it('loads the What\'s New window when it is chosen from the menu', async () => {
+    render(<AccountMenu onLogout={vi.fn()} onOpenProfile={vi.fn()} />)
+    expect(screen.queryByText('changelog-modal')).not.toBeInTheDocument()
+    fireEvent.click(row())
+    fireEvent.click(screen.getByRole('menuitem', { name: 'menu.whatsNew' }))
+    expect(await screen.findByText('changelog-modal')).toBeInTheDocument()
   })
 
   it('opens when the Alt+Y shortcut opens the presence menu', () => {

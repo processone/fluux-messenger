@@ -1068,7 +1068,6 @@
             "openLogs": "Otvori mapu zapisa"
         },
         "encryption": {
-            "experimental": "Eksperimentalno",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {
@@ -1411,7 +1410,8 @@
         "added": "Dodano",
         "changed": "Promijenjeno",
         "fixed": "Popravljeno",
-        "removed": "Uklonjeno"
+        "removed": "Uklonjeno",
+        "viewFull": "Pogledaj cijeli popis promjena"
     },
     "about": {
         "title": "O aplikaciji",
@@ -2004,5 +2004,16 @@
         "title": "Fluux je ažuriran u drugoj kartici",
         "description": "Ponovno učitajte ovu karticu za korištenje nove verzije. Do tada povijest i pretraživanje mogu biti sporiji.",
         "reload": "Ponovno učitaj"
+    },
+    "readMarkers": {
+        "master": "Dijeli položaje čitanja u sobama",
+        "description": "Isključeno prema zadanim postavkama. Nakon uključivanja odaberite svaku sobu zasebno u njezinim pojedinostima.",
+        "shareInRoom": "Dijeli moj položaj čitanja u ovoj sobi",
+        "roomDescription": "Šalji samo u provjerenim, neuvrštenim, neanonimnim sobama samo za članove, s manje od 20 prisutnih sa stalnim identitetima u sobi. Šifrirane poruke su isključene.",
+        "masterOff": "Glavni prekidač u Privatnosti je isključen. Soba neće dijeliti vaš položaj čitanja dok ga ne uključite.",
+        "metadata": "Soba i prisutni mogu vidjeti vašu aktivnost čitanja. Arhiva može zadržati te metapodatke. Isključivanje zaustavlja buduća ažuriranja, ali ne uklanja pohranjene oznake.",
+        "readThrough": "Pročitano do ove poruke",
+        "readers": "Pročitano do ove poruke: {{names}}",
+        "saveFailed": "Odabir nije spremljen. Dijeljenje ostaje isključeno. Provjerite pristup pohrani prije ponovnog uključivanja."
     }
 }

@@ -1066,7 +1066,6 @@
             "openLogs": "Logboekmap openen"
         },
         "encryption": {
-            "experimental": "Experimenteel",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {
@@ -1409,7 +1408,8 @@
         "added": "Toegevoegd",
         "changed": "Gewijzigd",
         "fixed": "Opgelost",
-        "removed": "Verwijderd"
+        "removed": "Verwijderd",
+        "viewFull": "Volledig wijzigingslogboek bekijken"
     },
     "about": {
         "title": "Over",
@@ -2002,5 +2002,16 @@
         "title": "Fluux is bijgewerkt in een ander tabblad",
         "description": "Laad dit tabblad opnieuw om de nieuwe versie te gebruiken. Tot die tijd kunnen geschiedenis en zoeken trager zijn.",
         "reload": "Opnieuw laden"
+    },
+    "readMarkers": {
+        "master": "Leesposities in kamers delen",
+        "description": "Standaard uitgeschakeld. Kies na het inschakelen elke kamer afzonderlijk in de kamerdetails.",
+        "shareInRoom": "Mijn leespositie in deze kamer delen",
+        "roomDescription": "Alleen verzenden in geverifieerde, niet-vermelde, niet-anonieme kamers uitsluitend voor leden, met minder dan 20 aanwezigen met vaste kameridentiteiten. Versleutelde berichten zijn uitgesloten.",
+        "masterOff": "De hoofdschakelaar onder Privacy is uitgeschakeld. Deze kamer deelt je leespositie pas nadat je die hebt ingeschakeld.",
+        "metadata": "De kamer en de aanwezigen kunnen je leesactiviteit zien. Het archief kan deze metadata bewaren. Uitschakelen stopt toekomstige updates, maar verwijdert opgeslagen markeringen niet.",
+        "readThrough": "Gelezen tot en met dit bericht",
+        "readers": "Gelezen tot en met dit bericht: {{names}}",
+        "saveFailed": "De keuze kon niet worden opgeslagen. Delen blijft uitgeschakeld. Controleer de toegang tot opslag voordat je het opnieuw inschakelt."
     }
 }

@@ -1066,7 +1066,6 @@
             "openLogs": "Naplómappa megnyitása"
         },
         "encryption": {
-            "experimental": "Kísérleti",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {
@@ -1409,7 +1408,8 @@
         "added": "Hozzáadva",
         "changed": "Módosítva",
         "fixed": "Javítva",
-        "removed": "Eltávolítva"
+        "removed": "Eltávolítva",
+        "viewFull": "Teljes változásnapló megtekintése"
     },
     "about": {
         "title": "Névjegy",
@@ -2002,5 +2002,16 @@
         "title": "A Fluux frissült egy másik lapon",
         "description": "Töltsd újra ezt a lapot az új verzió használatához. Addig az előzmények és a keresés lassabb lehet.",
         "reload": "Újratöltés"
+    },
+    "readMarkers": {
+        "master": "Olvasási pozíciók megosztása a szobákban",
+        "description": "Alapértelmezés szerint kikapcsolva. Bekapcsolás után válassza ki külön-külön a szobákat azok adatlapján.",
+        "shareInRoom": "Olvasási pozícióm megosztása ebben a szobában",
+        "roomDescription": "Küldés csak ellenőrzött, nem listázott, nem névtelen, kizárólag tagoknak fenntartott szobákban, 20-nál kevesebb jelenlévővel és állandó szobaazonosítókkal. A titkosított üzenetek kizárva.",
+        "masterOff": "Az Adatvédelem főkapcsolója ki van kapcsolva. A szoba nem osztja meg az olvasási pozícióját, amíg be nem kapcsolja.",
+        "metadata": "A szoba és a jelenlévők láthatják olvasási tevékenységét. Az archívum megőrizheti ezeket a metaadatokat. A kikapcsolás a jövőbeli frissítéseket állítja le, a tárolt jelölőket nem törli.",
+        "readThrough": "Eddig az üzenetig olvasva",
+        "readers": "Eddig az üzenetig olvasva: {{names}}",
+        "saveFailed": "A választás nem menthető. A megosztás kikapcsolva marad. Újbóli bekapcsolás előtt ellenőrizze a tárhely elérhetőségét."
     }
 }

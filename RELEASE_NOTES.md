@@ -1,29 +1,59 @@
-## What's New in v0.18.3
+## What's New in v0.19.0
 
 ### Added
 
-- Badge diagnostics now record anonymous local decisions automatically, including decryption, unread counts and native badge results. Export them separately from the XMPP console when investigating a missing badge; nothing uploads automatically
-- macOS: a native desktop widget lists unread conversations with names, avatars, counts, mention markers and times, without message text. Clicking a row opens the conversation; an old saved list is marked when Fluux stops updating it
-- iOS: a new widget shows your unread conversations on the home screen. The lock screen shows the unread total. Tap a row to open that conversation. Message text is never shown
-- macOS: message notifications now show who wrote to you, with the sender and room details. They look like those of other chat apps
+- Saved messages: keep any message in a new Saved list in the sidebar, from its More menu or the long-press sheet on a phone. The list is stored privately on your server, so it follows you to every Fluux session, and nobody else sees it, not even the other members of a room. A conversation that has saved messages offers a Saved entry with their count in its ⋮ menu, which opens the list narrowed to it, and on a wide window selecting an entry shows that message in place, with the conversation around it
+- Saved messages are sealed while OpenPGP is on: each one is signed and encrypted to your own key, so your server keeps only unreadable data and the list stays locked until your key is unlocked. Without OpenPGP, plain messages keep their text and encrypted ones keep none
+- Forward a message from a chat or a room to any contact, chat or joined room, with an optional comment. Photos and files travel with it, and the forward arrives as a source card that opens the original. Enter sends and Shift-Enter adds a line, as in the composer. A message from an encrypted chat can only be forwarded into another encrypted chat
+- A contact's Security details now list every one of their encryption keys, one row per key and grouped by method, with the key in use marked. Each row shows whether the key is verified, trusted or waiting for your decision, whether it receives your messages, and what you can decide about it
+- OpenPGP: once you have verified a contact, a new key they add receives nothing until you trust or verify it, and the conversation explains why with a Review keys button. While every key of theirs is waiting, the chat header shows a yellow shield and Fluux sends nothing, files included. Contacts you never verified are unaffected. Your verifications sync to your other devices; trusting or refusing a key without verifying it stays on the device where you do it
+- OpenPGP: Encryption settings now remember which server backup they confirmed and check it on every read, without asking for your code. The status tells you when another device replaced the backup, when your key has gained a part the backup lacks, and when this device has no record, and a new Check with code action confirms a backup without installing, publishing or changing your key
+- Settings → Encryption now lists the OMEMO devices on your account, with each one's name and key fingerprint, and removes a device after you confirm. Fluux does not use OMEMO itself yet, so this only reads and edits the list your other apps keep on your server
+- xmpp: links now act inside Fluux: a subscribe link opens Add contact with the address filled in, a link to a room opens it with its Join button, and the text in a message link waits in the composer below your draft. Nothing is sent or joined until you press the button
+- Rooms: copy a link to an archived room message from its More menu, and open one to jump straight to that message; a room you have not joined asks you to join first. A link you share shows a quote from your own room history, or a Join prompt when you have not joined it. Sharing sends the link, never a copy of the message
+- Rooms: a new Off level in a room's notification menu silences it while Fluux is open, mentions included, and is saved in the room's bookmark so your other Fluux sessions follow. The unread count stays visible in grey. Push notifications that arrive while Fluux is closed are not silenced yet
+- Drop a file on a conversation in the sidebar to open it and stage the file in its composer, keeping any draft text. Nothing is uploaded until you press Send
+- Right-click or Control-click a message to open Fluux's own menu at the pointer, with quick reactions first and actions for the text you selected, a link or an image. Right-click in the chat header opens the contact menu. Shift with a right-click still gives you the browser menu
+- A new account with no conversations is now welcomed in the Messages pane, with the app icon and two ways to start, instead of being told to pick from an empty sidebar. The sign-in form is clearer too: sentence-case labels, taller fields and Advanced mode as a visible toggle rather than a hidden menu
+- macOS: Settings → Notifications now warns when system notifications, app icon badges or alerts are turned off, with a shortcut to system settings. Export badge diagnostics moved here from the XMPP console, on desktop, web and mobile
+- When another tab running a newer Fluux takes over the local cache, a banner now says so and offers to reload, instead of leaving history and search quietly slower
+
+### Changed
+
+- Fluux has a refreshed look: the icon rail, sidebar and app bar form one frame with the conversation floating inside it as a rounded panel, the composer lifts off the message list, and messages dissolve under the header and above the composer instead of being cut at a hard edge. Day separators and reaction chips are drawn as pills, your own reactions are tinted, titles follow a clear size hierarchy, and the scroll bar thumb hides about a second after you stop scrolling while its strip stays
+- Messages from you and from other people now share one flat layout, with a single header per run from the same sender instead of a tinted bubble for your own. A message in a run whose encryption trust differs from its header shows a shield in the gutter, swapping for the timestamp on hover
+- Settings, contact profiles and the server overview now group their rows in filled cards on a wider column, each page carrying a one-line description under its title, instead of outlined boxes in a narrow one. Settings → Encryption opens an overview with a row for OpenPGP and one for OMEMO, each on its own screen with a back arrow
+- A room's settings are now a wide dialog with a list of sections instead of four screens of checkboxes in one column. Fields use switches, segmented controls and chips with help always visible. On a phone each section opens on its own
+- A conversation or room header now keeps search and the members toggle, with invite, room management and saved messages in its ⋮ menu. A bell stays in the header only while a room is muted or set to all messages
+- The sidebar's bottom profile block is now one account row showing your avatar, name and status. Clicking it, or pressing Alt+Y, opens a single menu with presence, status message, Profile, What's New, Shortcuts, Report an issue, About and Log out; on a phone it opens as a bottom sheet
+- Capital I and lowercase l now look different everywhere in Fluux: I has small serifs and l a curved foot, so names like Ilia and llia, or a look-alike such as PayPaI, can no longer pass for one another. Italic text uses real italic letters instead of slanted upright ones
+- Aurora is retuned in both modes. In dark, the sidebar, frame and conversation stand apart, text is softer on the eyes, and accent-coloured text and icons use a lighter periwinkle while buttons keep the deeper one. In light, a softer periwinkle accent comes with a lighter sidebar, composer and quote cards, a tinted icon rail and scrollbars that match the theme. Timestamps, code comments, keywords and the offline status dot are easier to read in both
+- Every built-in theme's accent choices are balanced the same way, so each one reads clearly as link and icon colour and carries readable button text. In light mode, orange, yellow, green, teal and sky no longer fade into the page. Nord, Indigo, Monokai, One Dark, Solarized, Tokyo Night, Rosé Pine and Catppuccin get clearer defaults. An accent you picked before this update now follows it instead of keeping its old shade
+- Conversation rows, the command palette and notifications no longer repeat the quoted lines of a reply in their preview, so you see what the sender actually wrote. A message that is nothing but a quote still shows it
+- Message requests, contact requests and room invitations now share one quieter action row: Accept is an accent outline instead of a solid button, and Block is an icon button that turns red only on hover, so they no longer outweigh the conversations listed under them
+- What's New now shows the three latest releases, with a link to the full changelog
 
 ### Fixed
 
-- OpenPGP: importing a key file now checks that your server backup matches it. You see a clear status when the backup is not confirmed, and a warning before you replace it. Rotating a key refreshes the backup and gives you a new code
-- macOS: Fluux cleans up old keychain copies without asking for access again. Copies that differ are kept, so you never lose a secret
-- macOS: a keychain prompt waiting for your answer no longer blocks saving other secrets, such as your credentials, MCP token or encrypted OpenPGP key
-- iOS: room notifications show the room picture. The room name stays first, with the sender above the message
-- Scrolling up in conversations and rooms no longer jumps or skips messages when Fluux corrects its size estimate for older messages, for example after a long run of your own short replies
-- Scrolling back through a very long conversation or room no longer gets stuck or returns to the newest messages once you go past the latest 5,000 messages, so you can read back to the start
-- In long conversations and rooms, the messages you are reading no longer jump away when older messages finish loading while your pointer rests on a message or you keep scrolling
-- Reading stays put when a conversation or room grows, when media finishes loading, and while you keep scrolling. On iOS, pulling past the end of a conversation while it grows brings you back to its newest messages when you let go
-- When the message box grows as you type a longer message, the latest message stays visible above it, in conversations and rooms
-- A reaction added to the last message now shows right away, even while your pointer rests on that message or you use it from the keyboard
-- macOS: reading a conversation or room now also clears its notifications that arrived before Fluux was last restarted
-- iOS: the app icon badge now shows Fluux's own unread count as soon as the app is open and connected, instead of keeping an old saved number until the archive catch-up ends
-- iOS: the unread widget now asks the system to refresh itself about once an hour and re-reads its list, instead of relying only on redraw requests from the app
-- When the system keychain is locked or unavailable as you sign in with Remember me, Fluux now tells you your password was not saved instead of failing silently. On Linux, a keyring still locked at startup no longer makes Fluux forget your saved password, so the next start with the keyring unlocked signs you in
-- Changing your password no longer reports a failure when the server accepted the new password but the system keychain could not save it. Fluux now tells you the new password was not saved, and the next start no longer tries the old saved password
+- Reconnecting is more reliable: messages sent as the connection drops are resent once or marked not delivered with Retry, and long sessions no longer get cut off by strict servers
+- Fluux no longer silently falls back to plain text for a contact whose key you refused or have not decided on
+- Fluux now rejects message copies and archive results that do not come from your own account or the archive it asked
+- OpenPGP: a verification you removed can no longer come back when two of your devices update your verified contacts at once
+- People on servers named chat., muc., rooms., conference. or groupchat. are no longer mistaken for rooms, and a malformed address no longer stops incoming messages
+- A failure in one part of the window no longer takes down the whole app, and Fluux no longer hangs when another tab holds an older local cache
+- Large contact lists open and filter faster, with exact matches first
+- Room bookmarks: saving one no longer restores old data, resets notifications, changes your nickname or erases another app's settings, and a failed save now shows an error
+- Rooms: resuming a session no longer joins a room that exposes your real address before you confirm the warning
+- Room member tools list each person once: membership and hat pickers use account addresses, people present no longer show as Offline, and Invite marks who is already there
+- Replies and forwards no longer reveal the private name you gave a contact
+- Keyboard and screen reader use is fixed in dialogs and contact pickers: Tab stays in the window, Esc leaves a list without closing it, and each remove button is named
+- Scrolling to the latest message now reaches the very bottom
+- Find in conversation highlights the whole word as you type, and a deleted conversation no longer appears in search
+- Headings now keep one typeface in languages using Latin, Cyrillic or Greek letters, and the encryption and reaction labels still in English are translated
+- Changing your password no longer signs you out at the next reconnect or forgets your server address
+- macOS: the typing cursor now appears when you focus an empty room message box
+- macOS: a file pasted from Finder now attaches as the original file instead of an image copy
+- iOS: links, widget rows and room Siri suggestions now open the right place when Fluux was closed
 
 ---
 [Full Changelog](https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md)

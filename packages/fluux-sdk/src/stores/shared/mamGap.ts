@@ -15,7 +15,9 @@
  *    (the server said there is more, and we stopped at the page cap);
  * 2. a `before:''` fetch-latest page that landed entirely above held history
  *    with no dedupe overlap — the page provably does not connect to what we
- *    hold, so the boundary between them is a seam (recorded at formation).
+ *    hold, so the boundary between them is a seam (recorded at formation);
+ * 3. a detached date-lookup page can leave seams to the cached blocks on either
+ *    side. A successfully saved page also splits a known gap around its rows.
  * Recorded gaps close progressively from both directions. A forward walk is
  * contiguous from its origin, so it heals every gap at or above that origin up
  * to its newest fetched message (all of them when it reaches live); backward
@@ -412,6 +414,26 @@ export function healGapsWithForwardPage(list: GapList, page: ForwardPageEvidence
 
   if (!walked && allowCreate && newestTs !== undefined && newestTs >= originTs) {
     out.push(buildGap(newestTs, computeGapEnd(merged, newestTs), lastId))
+  }
+  return out
+}
+
+/** Keep the unknown intervals before and after a successfully saved date page. */
+export function splitGapsAroundDatePage(
+  list: GapList,
+  first: { timestamp: Date; stanzaId?: string },
+  last: { timestamp: Date; stanzaId?: string },
+): GapList {
+  const oldest = +first.timestamp
+  const newest = +last.timestamp
+  const out: GapInterval[] = []
+  for (const gap of list) {
+    if (gap.start >= newest || (gap.end ?? Infinity) <= oldest) {
+      out.push(gap)
+      continue
+    }
+    if (gap.start < oldest) out.push(buildGap(gap.start, oldest, gap.startId, first.stanzaId))
+    if (newest < (gap.end ?? Infinity)) out.push(buildGap(newest, gap.end, last.stanzaId, gap.endId))
   }
   return out
 }

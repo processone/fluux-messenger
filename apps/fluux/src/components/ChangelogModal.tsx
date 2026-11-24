@@ -1,7 +1,11 @@
 import { useTranslation } from 'react-i18next'
-import { Sparkles } from 'lucide-react'
+import { ExternalLink, Sparkles } from 'lucide-react'
 import { ModalShell } from './ModalShell'
 import { changelog } from '@/data/changelog'
+
+/** Older releases stay available through the full changelog link. */
+const RECENT_RELEASE_COUNT = 3
+const FULL_CHANGELOG_URL = 'https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md'
 
 interface ChangelogModalProps {
   onClose: () => void
@@ -36,9 +40,9 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
   )
 
   return (
-    <ModalShell title={title} onClose={onClose} width="max-w-lg" panelClassName="max-h-[80vh] flex flex-col">
+    <ModalShell title={title} onClose={onClose} width="max-w-lg" panelClassName="max-h-[80vh] flex flex-col" initialFocus="panel">
       <div className="flex-1 overflow-y-auto p-4 space-y-6 select-text">
-        {changelog.map((entry) => (
+        {changelog.slice(0, RECENT_RELEASE_COUNT).map((entry) => (
           <div key={entry.version} className="space-y-3">
             {/* Version header */}
             <div className="flex items-baseline gap-3">
@@ -64,6 +68,17 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
             ))}
           </div>
         ))}
+      </div>
+      <div className="flex-shrink-0 border-t border-fluux-hover px-4 py-3">
+        <a
+          href={FULL_CHANGELOG_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="focus-ring inline-flex items-center gap-1.5 rounded text-sm text-fluux-brand hover:underline"
+        >
+          <ExternalLink className="size-3.5" aria-hidden="true" />
+          {t('changelog.viewFull')}
+        </a>
       </div>
     </ModalShell>
   )

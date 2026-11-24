@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { subDays, subMonths } from 'date-fns'
 import { useTranslation } from 'react-i18next'
-import { findFirstMessageOfDay, localDayBounds, localDayValue, messageRowRef, useXMPPContext, type Message, type MessageRowRef, type RoomMessage } from '@fluux/sdk'
+import { findFirstMessageOfDay, messageRowRef, useXMPPContext, type GapInterval, type Message, type MessageRowRef, type RoomMessage } from '@fluux/sdk'
 import { useModalInput } from '@/hooks'
 import { useToastStore } from '@/stores/toastStore'
 import { formatLocalizedDate } from '@/utils/dateFormat'
@@ -14,9 +15,31 @@ export interface JumpToDateDialogProps {
   initialDay?: string
   /** The messages loaded on screen, oldest first: checked before the cache and the archive. */
   readLoaded?: () => readonly (Message | RoomMessage)[]
+  /** Recorded archive holes surrounding the resident and cached messages. */
+  gaps?: readonly GapInterval[]
+  /** False when the server is known not to offer an archive. */
+  archiveAvailable?: boolean
+  /** Whether the current resident window still reaches the live edge. */
+  windowAtLiveEdge?: boolean
+  /** Replaces a parked resident window with the latest cached messages and scrolls there. */
+  onRecenterToLatest?: () => void
   /** Moves the list to the message, as opening a search result does. */
   onLand: (target: string | MessageRowRef) => void
   onClose: () => void
+}
+
+/** `yyyy-MM-dd` of a local day, the value a date input holds. */
+export function localDayValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/** The local midnight that starts the day and the one that ends it; the archive gets them in UTC. */
+export function localDayBounds(value: string): { start: Date; end: Date } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return null
+  const [year, month, day] = match.slice(1).map(Number)
+  return { start: new Date(year, month - 1, day), end: new Date(year, month - 1, day + 1) }
 }
 
 const PRESETS = [
@@ -32,7 +55,7 @@ const PRESETS = [
  * behaves as after opening a search result: highlighted landing row, older and newer
  * history on scroll, and the button back to the latest messages.
  */
-export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded, onLand, onClose }: JumpToDateDialogProps) {
+export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded, gaps, archiveAvailable, windowAtLiveEdge = true, onRecenterToLatest, onLand, onClose }: JumpToDateDialogProps) {
   const { t, i18n } = useTranslation()
   const { client } = useXMPPContext()
   const addToast = useToastStore((s) => s.addToast)
@@ -41,8 +64,12 @@ export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded,
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useModalInput<HTMLInputElement>()
-  // A close while the lookup runs must not move the list afterwards
+  // A close or unmount while the lookup runs must not move the list afterwards.
   const closed = useRef(false)
+  useLayoutEffect(() => {
+    closed.current = false
+    return () => { closed.current = true }
+  }, [])
   const close = () => { closed.current = true; onClose() }
 
   const jump = async (day: string) => {
@@ -52,14 +79,15 @@ export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded,
     setBusy(true)
     setError(null)
     const loaded = readLoaded?.() ?? []
-    const result = await findFirstMessageOfDay(client.messages, kind, conversationId, bounds.start, bounds.end, loaded)
+    const result = await findFirstMessageOfDay(archiveAvailable === false ? undefined : client.messages, kind, conversationId, bounds.start, bounds.end, loaded, gaps)
     if (closed.current) return
     setBusy(false)
     const land = (message: Message | RoomMessage) => onLand(kind === 'room' ? messageRowRef(message) : message.id)
     const latest = loaded.at(-1)
     if (result.kind === 'none' && latest) {
-      // Nothing from that day on: the latest message is the closest one
-      land(latest)
+      // A parked window's last row is not necessarily the live edge.
+      if (windowAtLiveEdge === false && onRecenterToLatest) onRecenterToLatest()
+      else land(latest)
       addToast('info', t('chat.jumpToDate.showingLatest', { date: formatLocalizedDate(bounds.start, lang) }))
       close()
       return
@@ -78,7 +106,7 @@ export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded,
 
   const preset = (days: number, months: number) => {
     const now = new Date()
-    return localDayValue(new Date(now.getFullYear(), now.getMonth() - months, now.getDate() - days))
+    return localDayValue(months ? subMonths(now, months) : subDays(now, days))
   }
 
   return (

@@ -1,6 +1,7 @@
 // Session, prekey and identity lifecycle of OmemoAccount: serialized state updates, identity
 // key binding, prekey replacement, key-exchange replacement, XEP-0384 key transport and
 // recovery from an interrupted initialization.
+import { createHash } from 'node:crypto'
 import { describe, it, expect } from 'vitest'
 import { MemoryStore } from '../store/MemoryStore'
 import { OmemoAccount } from './OmemoAccount'
@@ -19,14 +20,20 @@ function counterRng(start: number) {
   let c = start
   return (n: number) => Uint8Array.from({ length: n }, () => (c = (c + 1) & 0xff))
 }
+
+function ratchetFixtureRng(seed: number) {
+  // Use fresh key material across every DH turn while keeping identity ordering reproducible.
+  let draw = 0
+  return (n: number) => Uint8Array.from(createHash('shake256', { outputLength: n }).update(`${seed}:${draw++}`).digest())
+}
 const enc = (s: string) => new TextEncoder().encode(s)
 const dec = (u: Uint8Array) => new TextDecoder().decode(u)
 
-async function pair(bobSeed = 150) {
+async function pair(bobSeed = 150, fixtureRng = counterRng) {
   const aliceStore = new MemoryStore()
   const bobStore = new MemoryStore()
-  const alice = await OmemoAccount.create(aliceStore, counterRng(1))
-  const bob = await OmemoAccount.create(bobStore, counterRng(bobSeed))
+  const alice = await OmemoAccount.create(aliceStore, fixtureRng(1))
+  const bob = await OmemoAccount.create(bobStore, fixtureRng(bobSeed))
   const bDev = bob.publishableDeviceId()
   await alice.processBundle('bob@x', bDev, await bob.publishableBundleAsync())
   return { alice, bob, aliceStore, bobStore, bDev, to: [{ jid: 'bob@x', deviceIds: [bDev] }] }
@@ -170,7 +177,7 @@ describe('replacement key exchange', () => {
     // Whichever side holds the higher identity key wins, so cover both orderings.
     const seen = new Set<boolean>()
     for (let seed = 150; seed < 190 && seen.size < 2; seed++) {
-      const { alice, bob, to } = await pair(seed)
+      const { alice, bob, to } = await pair(seed, ratchetFixtureRng)
       const aDev = alice.publishableDeviceId()
       const toAlice = [{ jid: 'alice@x', deviceIds: [aDev] }]
       const aliceHigher = (await alice.publishableBundleAsync()).ik.join() > (await bob.publishableBundleAsync()).ik.join()
@@ -204,7 +211,7 @@ describe('crossed initiation with a delayed losing message', () => {
   it('keeps the winning session when a late second message of the losing handshake arrives after a reply', async () => {
     const seen = new Set<boolean>()
     for (let seed = 150; seed < 190 && seen.size < 2; seed++) {
-      const { alice, bob, to } = await pair(seed)
+      const { alice, bob, to } = await pair(seed, ratchetFixtureRng)
       const aDev = alice.publishableDeviceId()
       const toAlice = [{ jid: 'alice@x', deviceIds: [aDev] }]
       const [aik, bik] = [(await alice.publishableBundleAsync()).ik, (await bob.publishableBundleAsync()).ik]

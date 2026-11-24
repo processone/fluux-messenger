@@ -74,6 +74,20 @@ The SDK performs many operations automatically without app intervention:
 
 Your app just renders what's in the stores—no orchestration needed.
 
+### Displaying device trust for stored encrypted messages
+
+OMEMO can authenticate a message before the user has decided whether to trust
+its sender's device. The SDK stores the recovered content and its
+`securityContext.authenticatedDevice`, not a copy of the ciphertext to retry.
+`E2EEManager.getMessageTrust(securityContext)` checks the original device and
+fingerprint against local trust records. It works offline after the plugin
+registers and does not fetch keys, re-decrypt the message, or rewrite the stored
+context. Refresh it when `onConversationSecurityChanged` reports the device's
+address or `null` (all conversations). If the plugin or a matching decision is
+unavailable, an authenticated device is shown as untrusted. Messages without
+an authenticated device keep their stored assessment. OpenPGP messages that
+still need a signature check continue to use deferred decryption.
+
 ## Architecture
 
 The SDK is designed with a layered architecture:

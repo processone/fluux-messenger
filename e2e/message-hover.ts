@@ -2,6 +2,7 @@ import { test, expect, type Page, type Locator } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
+import { AT_BOTTOM_THRESHOLD } from '../apps/fluux/src/utils/scrollStateManager'
 import { AT_BOTTOM_OK_PX, waitForTopVisibleSettled, wheelAwayFromBottom } from './harness/scrollHarness'
 import { arrive, distance, keepJson, measureDuring, mountedMessageIndexes, readInteractionReadState, readInteractionView, scrollToBottomContainer, interactionScrollFrames, findAndRevealInteractionText, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
 
@@ -650,7 +651,7 @@ for (const kind of ['chat', 'room'] as const) {
     await input.focus()
     await input.pressSequentially('A reply in progress')
     await body.hover()
-    await expect(list).toHaveAttribute('data-message-interaction')
+    await expect(list).not.toHaveAttribute('data-message-interaction')
     for (let line = 0; line < 2; line++) {
       await page.keyboard.press('Shift+Enter')
       await expect(list).not.toHaveAttribute('data-message-interaction')
@@ -667,6 +668,8 @@ for (const kind of ['chat', 'room'] as const) {
     const observations: unknown[] = []
     await input.focus()
     await body.hover()
+    await waitForActions(page)
+    await row.getByRole('button', { name: 'More options', exact: true }).hover()
     await expect(list).toHaveAttribute('data-message-interaction')
     await input.pressSequentially('A reply in progress')
     await expect(list).not.toHaveAttribute('data-message-interaction')
@@ -675,6 +678,7 @@ for (const kind of ['chat', 'room'] as const) {
     observations.push({ stage: 'typing releases pointer-only intent', ...await readInteractionView(page) })
     await body.hover()
     await waitForActions(page)
+    await row.getByRole('button', { name: 'Reply', exact: true }).hover()
     await row.getByRole('button', { name: 'Reply', exact: true }).click()
     await expect(list).toHaveAttribute('data-message-interaction')
     await input.pressSequentially(' after choosing Reply')
@@ -684,6 +688,7 @@ for (const kind of ['chat', 'room'] as const) {
     observations.push({ stage: 'typing after Reply click releases and resumes prior following', ...await readInteractionView(page) })
     await body.hover()
     await waitForActions(page)
+    await row.getByRole('button', { name: 'Reply', exact: true }).hover()
     const more = row.getByRole('button', { name: 'More options', exact: true })
     await more.click()
     await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
@@ -698,6 +703,8 @@ for (const kind of ['chat', 'room'] as const) {
     observations.push({ stage: 'mouse focus does not retain toolbar visibility', ...await readInteractionView(page) })
     // Captain G3: an ordinary middle click resumes saved following and ends its hover block.
     await body.hover()
+    await waitForActions(page)
+    await row.getByRole('button', { name: 'Reply', exact: true }).hover()
     await expect(list).toHaveAttribute('data-message-interaction')
     await arrive(page, kind, ['middle-held-arrival'])
     await page.evaluate(() => {
@@ -719,6 +726,8 @@ for (const kind of ['chat', 'room'] as const) {
     observations.push({ stage: 'ordinary middle click resumes prior following', events: await page.evaluate(() => (window as any).__middleEvents), ...await readInteractionView(page) })
     await page.mouse.move(0, 0)
     await body.hover()
+    await waitForActions(page)
+    await row.getByRole('button', { name: 'Reply', exact: true }).hover()
     await expect(list).toHaveAttribute('data-message-interaction')
     observations.push({ stage: 'ordinary middle completion permits new deliberate pointer interest', ...await readInteractionView(page) })
     await page.mouse.move(0, 0)
@@ -851,5 +860,282 @@ for (const kind of ['chat', 'room'] as const) for (const input of ['wheel', 'key
     await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
     await expect(arrival).toBeInViewport()
     await keepJson(`${kind}-${input}-boundary-following`, { held, ended, after: await readInteractionView(page), read: await readInteractionReadState(page, kind) })
+  })
+}
+
+// Drafting at latest: passive message text must not acquire the action anchor.
+for (const kind of ['chat', 'room'] as const) {
+  test(`${kind}: focused drafting follows passive text hover through typing and arrivals`, async ({ page }, info) => {
+    await page.setViewportSize({ width: 1050, height: 620 })
+    await page.route('https://example.invalid/**', route => route.abort())
+    const { row, list } = await setupInteraction(page, kind)
+    await arrive(page, kind, ['drafting-tail'])
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(2)
+    const composer = page.locator('.message-input').filter({ visible: true }).first()
+    await composer.fill('I am drafting a reply.')
+    await composer.focus()
+    await row.locator('[data-msg-text]').hover()
+    await expect(composer).toBeFocused()
+    await stableFrames(page, TARGET)
+    await page.screenshot({ path: info.outputPath('drafting-before.png') })
+    const states: unknown[] = []
+    const typing = async (on: boolean) => {
+      await page.evaluate(({ kind, on }) => {
+        const c = (window as unknown as { __demoClient: DemoClient }).__demoClient
+        if (kind === 'chat') c.emitSDK('chat:typing', { conversationId: 'emma@fluux.chat', jid: 'emma@fluux.chat', isTyping: on })
+        else c.emitSDK('room:typing', { roomJid: 'team@conference.fluux.chat', nick: 'Adrien', isTyping: on })
+      }, { kind, on })
+      await expect(page.locator('[data-typing-pill]')).toHaveCount(on ? 1 : 0)
+    }
+    const check = async (stage: string, id: string) => {
+      await stableFrames(page, TARGET)
+      const samples = await list.evaluate(async (list, id) => {
+        const readings = []
+        for (let frame = 0; frame < 8; frame++) {
+          await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+          const text = list.querySelector(`.message-row[data-message-id="${id}"] [data-msg-text]`)!
+          readings.push({ distance: list.scrollHeight - list.scrollTop - list.clientHeight,
+            textBottom: text.getBoundingClientRect().bottom, viewportBottom: list.getBoundingClientRect().bottom,
+            held: list.getAttribute('data-message-interaction') })
+        }
+        return readings
+      }, id)
+      states.push({ stage, samples })
+      await keepJson('drafting-follow', states)
+      await page.screenshot({ path: info.outputPath(`drafting-${stage}.png`) })
+      await expect(composer).toBeFocused()
+      for (const sample of samples) {
+        expect.soft(sample.distance, `${stage}: latest edge`).toBeLessThanOrEqual(2)
+        expect.soft(sample.textBottom, `${stage}: latest text is visible`).toBeLessThanOrEqual(sample.viewportBottom + 1)
+        expect.soft(sample.held, `${stage}: passive text must not hold`).toBeNull()
+      }
+    }
+    await typing(true)
+    await check('typing', 'drafting-tail')
+    await typing(false)
+    await arrive(page, kind, ['drafting-next'])
+    await check('arrival', 'drafting-next')
+    await page.evaluate(({ kind, target }) => {
+      const c = (window as unknown as { __demoClient: DemoClient }).__demoClient
+      const updates = { body: 'The bookmarks hierarchy proposal has an example worth reading.\nhttps://example.invalid/article' }
+      if (kind === 'chat') c.emitSDK('chat:message-updated', { conversationId: 'emma@fluux.chat', messageId: target, updates })
+      else c.emitSDK('room:message-updated', { roomJid: 'team@conference.fluux.chat', messageId: target, updates })
+    }, { kind, target: TARGET })
+    await expect(row.locator('a[href="https://example.invalid/article"]')).toBeVisible()
+    await check('correction', 'drafting-next')
+    await page.evaluate(({ kind, target }) => {
+      const c = (window as unknown as { __demoClient: DemoClient }).__demoClient
+      const linkPreview = { url: 'https://example.invalid/article', title: 'Bookmarks hierarchy', description: 'A delayed preview of the proposal.', siteName: 'example.invalid' }
+      if (kind === 'chat') {
+        c.emitSDK('chat:reactions', { conversationId: 'emma@fluux.chat', messageId: target, reactorJid: 'emma@fluux.chat', emojis: ['👍'], isLive: true })
+        c.emitSDK('chat:message-updated', { conversationId: 'emma@fluux.chat', messageId: target, updates: { linkPreview } })
+      } else {
+        c.emitSDK('room:reactions', { roomJid: 'team@conference.fluux.chat', messageId: target, reactorNick: 'Adrien', emojis: ['👍'], isLive: true })
+        c.emitSDK('room:message-updated', { roomJid: 'team@conference.fluux.chat', messageId: target, updates: { linkPreview } })
+      }
+    }, { kind, target: TARGET })
+    await expect(row.locator('[data-reaction-emoji]')).toHaveCount(1)
+    await expect(row.getByText('Bookmarks hierarchy', { exact: true })).toBeVisible()
+    await typing(true)
+    await check('preview', 'drafting-next')
+  })
+}
+
+for (const kind of ['chat', 'room'] as const) {
+  test(`${kind}: focused drafting holds direct actions and resumes over text`, async ({ page }) => {
+    const { row, list } = await setupInteraction(page, kind)
+    await arrive(page, kind, ['action-drafting-tail'])
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(2)
+    const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
+    await input.fill('Drafting while reading')
+    await input.focus()
+    await row.locator('[data-msg-text]').hover()
+    await waitForActions(page)
+    const reply = row.getByRole('button', { name: 'Reply', exact: true })
+    await reply.hover()
+    await expect(list).toHaveAttribute('data-message-interaction', await row.getAttribute('data-message-row-id') as string)
+    await measureDuring(page, TARGET, async () => {
+      await arrive(page, kind, ['action-hover-arrival'])
+      await page.evaluate(kind => {
+        const c = (window as unknown as { __demoClient: DemoClient }).__demoClient
+        if (kind === 'chat') c.emitSDK('chat:typing', { conversationId: 'emma@fluux.chat', jid: 'emma@fluux.chat', isTyping: true })
+        else c.emitSDK('room:typing', { roomJid: 'team@conference.fluux.chat', nick: 'Adrien', isTyping: true })
+      }, kind)
+      await expect(page.locator('[data-typing-pill]')).toBeVisible()
+    })
+    await expect(input).toBeFocused()
+    // Leave the toolbar without clicking: saved following must survive the action anchor.
+    await row.locator('[data-msg-text]').hover()
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(2)
+    await row.locator('[data-msg-text]').hover()
+    await waitForActions(page)
+    const quotedText = await row.locator('[data-msg-text]').innerText()
+    await reply.click()
+    await expect(page.locator('[data-conversation-tail]').getByText(quotedText, { exact: true })).toBeVisible()
+    await keepJson('drafting-action-release', await readInteractionView(page))
+  })
+}
+
+async function draftingPeerTyping(page: Page, kind: 'chat' | 'room') {
+  await page.evaluate(kind => {
+    const c = (window as unknown as { __demoClient: DemoClient }).__demoClient
+    if (kind === 'chat') c.emitSDK('chat:typing', { conversationId: 'emma@fluux.chat', jid: 'emma@fluux.chat', isTyping: true })
+    else c.emitSDK('room:typing', { roomJid: 'team@conference.fluux.chat', nick: 'Adrien', isTyping: true })
+  }, kind)
+  await expect(page.locator('[data-typing-pill]')).toBeVisible()
+}
+
+// The passive exception belongs to the exact latest endpoint, not the near-bottom band.
+for (const kind of ['chat', 'room'] as const) {
+  test(`${kind}: focused drafting just above latest keeps its hovered reading position`, async ({ page }) => {
+    const { list } = await setupInteraction(page, kind)
+    const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
+    await input.focus()
+    const bounds = (await list.boundingBox())!
+    await page.mouse.move(bounds.x + 20, bounds.y + bounds.height / 2)
+    await page.mouse.wheel(0, -AT_BOTTOM_THRESHOLD / 3)
+    await expect.poll(() => distance(page)).toBeGreaterThan(1)
+    expect(await waitForTopVisibleSettled(page), 'native wheel must settle its visible window before choosing a row').not.toBeNull()
+    expect(await distance(page), 'fixture remains above the exact latest endpoint').toBeGreaterThan(1)
+    expect(await distance(page), 'fixture stays inside the near-bottom band').toBeLessThan(AT_BOTTOM_THRESHOLD)
+    const id = await list.evaluate(list => {
+      const view = list.getBoundingClientRect()
+      return [...list.querySelectorAll<HTMLElement>('.message-row[data-message-id]')].find(row => {
+        const box = row.getBoundingClientRect()
+        return box.top > view.top + 40 && box.bottom < view.bottom - 40
+      })!.dataset.messageId!
+    })
+    const row = page.locator(`.message-row[data-message-id="${id}"]`)
+    await row.locator('[data-msg-text]').hover()
+    await expect(list).toHaveAttribute('data-message-interaction', await row.getAttribute('data-message-row-id') as string)
+    await waitForActions(page, id)
+    expect(await row.evaluate(row => row.matches(':hover')), 'pointer must rest on the chosen reading row').toBe(true)
+    await measureDuring(page, id, async () => {
+      await draftingPeerTyping(page, kind)
+      await arrive(page, kind, ['near-latest-arrival'])
+    })
+    await expect(input).toBeFocused()
+    await expect(list).toHaveAttribute('data-message-interaction', await row.getAttribute('data-message-row-id') as string)
+    expect(await distance(page), 'do not pull the reader to latest').toBeGreaterThan(1)
+    await keepJson('drafting-near-latest', await readInteractionView(page, id))
+  })
+
+  test(`${kind}: focused drafting ignores invisible action hover while composing`, async ({ page }) => {
+    await page.clock.install()
+    const { row, list } = await setupInteraction(page, kind)
+    await arrive(page, kind, ['hidden-toolbar-tail'])
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await row.locator('[data-msg-text]').hover()
+    await waitForActions(page)
+    const action = row.getByRole('button', { name: 'Reply', exact: true })
+    const box = (await action.boundingBox())!
+    const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
+    await input.focus()
+    // Pause before typing so runner latency cannot end composing during the real pointer move.
+    await page.clock.pauseAt(new Date(Date.now() + 10_000))
+    await input.pressSequentially('Draft')
+    await expect(page.locator('.composer-active')).toHaveCount(1)
+    await expect(row.locator('[data-message-toolbar]')).toHaveCSS('opacity', '0')
+    const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    type ToolbarHit = { toolbarTarget: boolean; composing: boolean; opacity: string | null }
+    type ProbeWindow = Window & { __draftingToolbarProbe?: { hits: ToolbarHit[]; stop: () => void } }
+    await page.evaluate(() => {
+      const scope = window as ProbeWindow
+      const hits: ToolbarHit[] = []
+      const onMove = (event: MouseEvent) => {
+        const toolbar = event.target instanceof Element ? event.target.closest('[data-message-toolbar]') : null
+        hits.push({
+          toolbarTarget: !!toolbar,
+          composing: !!toolbar?.closest('.composer-active'),
+          opacity: toolbar ? getComputedStyle(toolbar).opacity : null,
+        })
+      }
+      document.addEventListener('mousemove', onMove, true)
+      scope.__draftingToolbarProbe = {
+        hits, stop: () => document.removeEventListener('mousemove', onMove, true),
+      }
+    })
+    await page.mouse.move(point.x, point.y, { steps: 2 })
+    const mouseHit = await page.evaluate(() => {
+      const scope = window as ProbeWindow
+      const probe = scope.__draftingToolbarProbe!
+      probe.stop()
+      delete scope.__draftingToolbarProbe
+      return probe.hits.at(-1) ?? null
+    })
+    await keepJson('drafting-hidden-toolbar-mouse', mouseHit)
+    expect(mouseHit, 'the actual mouse event hits the still-hidden composing toolbar').toEqual({
+      toolbarTarget: true, composing: true, opacity: '0',
+    })
+    const hit = await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest('[data-message-toolbar]'), point)
+    expect(hit, 'fixture reaches an invisible pointer-interactive toolbar descendant').toBe(true)
+    await page.clock.resume()
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await draftingPeerTyping(page, kind)
+    await arrive(page, kind, ['hidden-toolbar-arrival'])
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect(input).toBeFocused()
+    await keepJson('drafting-hidden-toolbar', await readInteractionView(page))
+  })
+}
+
+// Native pointer movement must not take ownership while a live-edge pin absorbs row growth.
+for (const kind of ['chat', 'room'] as const) {
+  test(`${kind}: focused drafting keeps following while the pointer moves during row growth`, async ({ page }) => {
+    const { list } = await setupInteraction(page, kind)
+    const input = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
+    await input.focus()
+    const point = await list.evaluate(list => {
+      const view = list.getBoundingClientRect()
+      const text = [...list.querySelectorAll('[data-msg-text]')].find(text => {
+        const box = text.getBoundingClientRect()
+        return box.top > view.top + 40 && box.bottom < view.bottom - 40
+      })!.getBoundingClientRect()
+      return { x: text.left + 40, y: text.top + text.height / 2 }
+    })
+    await page.evaluate(() => {
+      const scope = window as Window & { __draftingMotion?: { trusted: boolean; overMessage: boolean; height: number; distance: number; held: string | null }[]; __draftingMotionStop?: () => void }
+      scope.__draftingMotion = []
+      const record = (event: MouseEvent) => {
+        const list = document.querySelector('[data-message-list]')!
+        scope.__draftingMotion!.push({ trusted: event.isTrusted,
+          overMessage: event.target instanceof Element && !!event.target.closest('[data-message-body]'),
+          height: list.scrollHeight, distance: list.scrollHeight - list.scrollTop - list.clientHeight,
+          held: list.getAttribute('data-message-interaction') })
+      }
+      window.addEventListener('mousemove', record, true)
+      scope.__draftingMotionStop = () => window.removeEventListener('mousemove', record, true)
+    })
+    try {
+      await Promise.all([
+        (async () => {
+          for (let frame = 0; frame < 24; frame++) {
+            await page.mouse.move(point.x + (frame % 2) * 80, point.y)
+            await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())))
+          }
+        })(),
+        page.evaluate(async ({ kind, target }) => {
+          const c = (window as unknown as { __demoClient: DemoClient }).__demoClient
+          for (let lines = 1; lines <= 12; lines++) {
+            await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+            const updates = { body: 'Notes on the bookmarks proposal.\n' + Array.from({ length: lines }, (_, i) => `${i + 1}. Keep the latest discussion visible while a reply is drafted.`).join('\n') }
+            if (kind === 'chat') c.emitSDK('chat:message-updated', { conversationId: 'emma@fluux.chat', messageId: target, updates })
+            else c.emitSDK('room:message-updated', { roomJid: 'team@conference.fluux.chat', messageId: target, updates })
+          }
+        }, { kind, target: TARGET }),
+      ])
+    } finally {
+      await page.evaluate(() => (window as Window & { __draftingMotionStop?: () => void }).__draftingMotionStop?.())
+    }
+    const samples = await page.evaluate(() => (window as Window & { __draftingMotion?: { trusted: boolean; overMessage: boolean; height: number; distance: number; held: string | null }[] }).__draftingMotion!)
+    await keepJson('drafting-moving-pointer', samples)
+    expect(samples.filter(sample => sample.trusted && sample.overMessage).length).toBeGreaterThan(1)
+    expect(Math.max(...samples.map(sample => sample.height))).toBeGreaterThan(Math.min(...samples.map(sample => sample.height)))
+    expect(samples.every(sample => sample.held === null), 'passive motion must never acquire an anchor').toBe(true)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await expect(input).toBeFocused()
   })
 }

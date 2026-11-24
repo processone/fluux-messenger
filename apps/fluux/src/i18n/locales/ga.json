@@ -1072,7 +1072,6 @@
             "openLogs": "Oscail fillteán na logaí"
         },
         "encryption": {
-            "experimental": "Turgnamhach",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {
@@ -1415,7 +1414,8 @@
         "added": "Curtha leis",
         "changed": "Athraithe",
         "fixed": "Deisithe",
-        "removed": "Bainte"
+        "removed": "Bainte",
+        "viewFull": "Féach ar an loga athruithe iomlán"
     },
     "about": {
         "title": "Maidir Le",
@@ -2008,5 +2008,16 @@
         "title": "Nuashonraíodh Fluux i gcluaisín eile",
         "description": "Athlódáil an cluaisín seo chun an leagan nua a úsáid. Go dtí sin, d’fhéadfadh an stair agus an cuardach a bheith níos moille.",
         "reload": "Athlódáil"
+    },
+    "readMarkers": {
+        "master": "Roinn suíomhanna léitheoireachta i seomraí",
+        "description": "Múchta de réir réamhshocraithe. Tar éis é seo a chumasú, roghnaigh gach seomra ar leith ina shonraí.",
+        "shareInRoom": "Roinn mo shuíomh léitheoireachta sa seomra seo",
+        "roomDescription": "Seol i seomraí fíoraithe, neamhliostaithe do bhaill amháin, ina nochtar céannacht na ndaoine, ina bhfuil níos lú ná 20 duine agus aitheantais sheasmhacha seomra. Ní áirítear teachtaireachtaí criptithe.",
+        "masterOff": "Tá an príomhlasc Príobháideachais múchta. Ní roinnfidh an seomra do shuíomh léitheoireachta go dtí go gcumasóidh tú é.",
+        "metadata": "Is féidir leis an seomra agus na daoine ann do ghníomhaíocht léitheoireachta a fheiceáil. Féadfaidh an chartlann na meiteashonraí seo a choinneáil. Stopann múchadh nuashonruithe amach anseo, ach ní bhaineann sé marcóirí sábháilte.",
+        "readThrough": "Léite go dtí an teachtaireacht seo",
+        "readers": "Léite go dtí an teachtaireacht seo: {{names}}",
+        "saveFailed": "Níor sábháladh an rogha. Fanann an roinnt múchta. Seiceáil rochtain ar an stóras sula gcumasaíonn tú arís í."
     }
 }

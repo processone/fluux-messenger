@@ -151,6 +151,22 @@ it('measures a seeded row at its rendered height, not the seed', () => {
   expect(scope.result.current.getTotalSize()).toBe(80 * 20 + 48)
 })
 
+it('jumps to a measured row using measured offsets before and inside the target', () => {
+  const scope = fixture({ size: 100, height: 8000 })
+  scope.measure(3, 160)
+  scope.measure(10, 180)
+  scope.measure(60, 140)
+  const expected = scope.result.current.getOffsetForMessageId('row-60')!
+    - (scope.scroller.clientHeight - 140) / 2
+  const writer = vi.spyOn(scope.scroller, 'scrollTo')
+
+  act(() => scope.result.current.scrollToIndex(60, { align: 'center' }))
+
+  expect(writer).toHaveBeenCalledWith(expect.objectContaining({ top: expected }))
+  expect(scope.scroller.scrollTop).toBe(expected)
+  expect(scope.result.current.getVirtualItems().some(row => row.key === 'row-60')).toBe(true)
+})
+
 it('measures a re-rendered row at its new height, not the cached one', () => {
   const scope = fixture()
   scope.measure(3, 72)

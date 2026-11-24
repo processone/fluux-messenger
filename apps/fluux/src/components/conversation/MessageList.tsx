@@ -23,6 +23,7 @@ import { measureElementViewport } from '@/utils/viewportMetrics'
 import { useStaticContextLanding } from './useStaticContextLanding'
 import type { MessageListHandle, MessageListProps } from './messageListBoundary'
 import { useViewportObserver } from '@/hooks/useViewportObserver'
+import { useFocusedVisibleRows } from '@/hooks/useFocusedVisibleRows'
 import { useRenderCostProbe } from '@/hooks/useRenderCostProbe'
 import { countAnomalyMetric } from '@/utils/anomalyMetric'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
@@ -145,6 +146,7 @@ export function MessageList<T extends BaseMessage>({
     readPointerRow,
     unreadCount,
     onSeen: onMessageSeen,
+    onFocusedVisibleRows,
     onClear: clearFirstNewMessageId,
     onLiveEdgeMeasured,
   } = readMarkers ?? {}
@@ -553,6 +555,7 @@ export function MessageList<T extends BaseMessage>({
     lastUserInputAt,
     observeKeyboardNavigation,
     isAtBottom,
+    isFollowingLatest,
     assumeAwayFromBottomForKeyboard,
     reassertUnreadMarker,
   } = useMessageListScroll({
@@ -587,6 +590,7 @@ export function MessageList<T extends BaseMessage>({
     conversationId,
     enabled: !staticMode,
     begin: beginInteractionHold,
+    isFollowing: isFollowingLatest,
     release: releaseInteractionHold,
     menuChanged: setInteractionMenuOpen,
   })
@@ -697,10 +701,13 @@ export function MessageList<T extends BaseMessage>({
   // VIEWPORT OBSERVER (tracks the bottom-most visible row for the read pointer)
   // --------------------------------------------------------------------------
 
+  const onVisibleRows = useFocusedVisibleRows(scrollContainerRef, messages, onFocusedVisibleRows, !staticMode && !isLoading)
+
   useViewportObserver({
     scrollContainerRef,
     conversationId,
     onMessageSeen,
+    onVisibleRows: !staticMode && onFocusedVisibleRows ? onVisibleRows : undefined,
     enabled: !isLoading && messages.length > 0,
   })
 

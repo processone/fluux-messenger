@@ -627,6 +627,7 @@ export class Chat extends BaseModule {
       trust: stash.trust,
       ...(stash.notes && { notes: stash.notes }),
       ...(stash.fingerprint && { fingerprint: stash.fingerprint }),
+      ...(stash.authenticatedDevice && { authenticatedDevice: stash.authenticatedDevice }),
     }
   }
 

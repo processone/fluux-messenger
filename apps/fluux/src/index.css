@@ -926,6 +926,12 @@ em-emoji-picker {
 .sidebar-row { padding-block: 8px; column-gap: 12px; }
 [data-density="compact"] .sidebar-row { padding-block: 4px; column-gap: 8px; }
 
+/* Give narrow rows their preview line back before times crowd out drafts or typing. */
+.sidebar-row-content { container: sidebar-row-content / inline-size; }
+@container sidebar-row-content (max-width: 6rem) {
+  .sidebar-row-time { display: none; }
+}
+
 /* Command palette result rows + section labels. Same convention as the sidebar:
  * horizontal padding stays a utility (px-4); the density-varying vertical
  * padding + gap live here so a [data-density] flip needs no row re-render.
@@ -1362,6 +1368,13 @@ html, body {
   opacity: 0.85;
 }
 
+/* Match the reserved text corner, including mixed-direction rooms. The message
+   keeps its existing dir="auto"; reactions stay opposite the badge. */
+.room-read-marker-host:has([data-read-marker-corner]):has([data-msg-text]:dir(ltr)) > [data-read-marker-row] { left: auto; right: 0.5rem; }
+.room-read-marker-host:has([data-read-marker-corner]):has([data-msg-text]:dir(rtl)) > [data-read-marker-row] { right: auto; left: 0.5rem; }
+.room-read-marker-host:has([data-read-marker-corner]):has([data-msg-text]:dir(ltr)) [data-msg-reactions] { direction: ltr; }
+.room-read-marker-host:has([data-read-marker-corner]):has([data-msg-text]:dir(rtl)) [data-msg-reactions] { direction: rtl; }
+
 /* Bulk-copy selection keeps quote/reply cards distinct from the range tint
    (issue #1008). Keyboard selection only paints the row background; its content
    and quote styling must remain identical to the unselected message. */
@@ -1651,6 +1664,13 @@ input[type="range"]::-moz-range-thumb {
   /* Reserve the scrollbar gutter unconditionally, so text does not reflow as
      the composer crosses its line cap and starts scrolling. */
   scrollbar-gutter: stable;
+}
+
+/* macOS WKWebView can omit an empty room editor's native caret when the
+   editor has no background paint. A transparent image keeps that paint without
+   adding another color layer over the composer's translucent theme surface. */
+.message-input[contenteditable="true"] {
+  background-image: linear-gradient(transparent, transparent);
 }
 
 /* Tauri window title bar integration */

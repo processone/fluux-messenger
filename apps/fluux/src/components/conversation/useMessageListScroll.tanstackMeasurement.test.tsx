@@ -318,3 +318,17 @@ describe('installed TanStack media preservation during viewport resize', () => {
     })
   })
 })
+
+// A growth scroll can be observed before the active pin loop gets its next frame.
+it('keeps passive-hover following eligible during an owned pin catch-up', () => {
+  const scope = fixture()
+  scope.toBottom()
+  // Intrinsic row growth is visible to scroll events before its measurement callback.
+  scope.rows.at(-1)!.height += scope.scroller.clientHeight
+  fireEvent.scroll(scope.scroller)
+  expect(scope.totalHeight() - scope.scroller.clientHeight - scope.scroller.scrollTop).toBeGreaterThan(1)
+  expect(scope.api.isFollowingLatest()).toBe(true)
+  scope.measure([[scope.rows.length - 1, scope.rows.at(-1)!.height]], 'resize')
+  settle()
+  expect(scope.api.isFollowingLatest()).toBe(true)
+})

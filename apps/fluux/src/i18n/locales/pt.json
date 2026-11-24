@@ -1070,7 +1070,6 @@
             "openLogs": "Abrir pasta de registos"
         },
         "encryption": {
-            "experimental": "Experimental",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {
@@ -1413,7 +1412,8 @@
         "added": "Adicionado",
         "changed": "Alterado",
         "fixed": "Corrigido",
-        "removed": "Removido"
+        "removed": "Removido",
+        "viewFull": "Ver o histórico completo de alterações"
     },
     "about": {
         "title": "Sobre",
@@ -2006,5 +2006,16 @@
         "title": "O Fluux foi atualizado noutro separador",
         "description": "Recarregue este separador para usar a nova versão. Até lá, o histórico e a pesquisa podem ficar mais lentos.",
         "reload": "Recarregar"
+    },
+    "readMarkers": {
+        "master": "Partilhar posições de leitura nas salas",
+        "description": "Desativado por predefinição. Após ativar, escolha cada sala separadamente nos respetivos detalhes.",
+        "shareInRoom": "Partilhar a minha posição de leitura nesta sala",
+        "roomDescription": "Enviar apenas em salas verificadas, não listadas, não anónimas e só para membros, com menos de 20 ocupantes com identidades estáveis na sala. As mensagens encriptadas são excluídas.",
+        "masterOff": "O interruptor geral em Privacidade está desativado. Esta sala não partilhará a sua posição de leitura até o ativar.",
+        "metadata": "A sala e os seus ocupantes podem ver a sua atividade de leitura. O arquivo pode guardar estes metadados. Desativar interrompe as atualizações futuras, mas não elimina os marcadores guardados.",
+        "readThrough": "Lido até esta mensagem",
+        "readers": "Lido até esta mensagem: {{names}}",
+        "saveFailed": "Não foi possível guardar a escolha. A partilha permanece desativada. Verifique o acesso ao armazenamento antes de a reativar."
     }
 }

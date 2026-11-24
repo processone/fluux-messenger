@@ -155,6 +155,23 @@ export function RoomComposerEditor(props: RoomComposerEditorProps) {
     cleanups.push(() => root.removeEventListener('beforeinput', onNativeBeforeInput))
     root.addEventListener('keydown', onNativeKeyDown)
     cleanups.push(() => root.removeEventListener('keydown', onNativeKeyDown))
+
+    // Lexical's macOS Chromium replacement guard can outlive the key press and
+    // swallow an independent insertion. Clear it on key release; macOS may
+    // report Command's keyup but not the letter's after Select All.
+    // https://github.com/meta/lexical/issues/9250 left macOS Chromium affected.
+    // Remove this shim only when the composer regression passes without it.
+    const onNativeKeyUp = () => {
+      const state = editor._inputState
+      if (!state.isInsertTextAfterHandledSelectionCommand) return
+      state.isInsertTextAfterHandledSelectionCommand = false
+      if (state.handledSelectionCommandTimeoutId !== null) {
+        clearTimeout(state.handledSelectionCommandTimeoutId)
+        state.handledSelectionCommandTimeoutId = null
+      }
+    }
+    root.addEventListener('keyup', onNativeKeyUp)
+    cleanups.push(() => root.removeEventListener('keyup', onNativeKeyUp))
     cleanups.push(
       editor.registerCommand(KEY_DOWN_COMMAND, (event) => event.defaultPrevented, COMMAND_PRIORITY_CRITICAL),
     )

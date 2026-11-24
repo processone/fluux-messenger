@@ -38,16 +38,15 @@ describe('findFirstMessageOfDay', () => {
     messageCache._resetDBForTesting()
   })
 
-  it('answers from the cache when it holds the day and a message before it', async () => {
-    await messageCache.saveMessage('chat', chat('before', at(9, 22)))
-    await messageCache.saveMessage('chat', chat('midnight', START))
-    await messageCache.saveMessage('chat', chat('later', at(10, 9)))
-    const archive = archiveWith([])
+  it('checks the archive before a cached day even when an older cache block exists', async () => {
+    await messageCache.saveMessage('chat', chat('older-block', at(9, 22)))
+    await messageCache.saveMessage('chat', chat('cached-later', at(10, 9)))
+    const archive = archiveWith([chat('midnight', START)])
 
     const result = await findFirstMessageOfDay(archive, 'chat', PEER, START, END)
 
-    expect(result).toMatchObject({ kind: 'found', source: 'cache', message: { id: 'midnight' } })
-    expect(archive.queryMAM).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ kind: 'found', source: 'archive', message: { id: 'midnight' } })
+    expect(archive.queryMAM).toHaveBeenCalledTimes(1)
   })
 
   it('asks the archive forward from the day start when the cache does not reach before it', async () => {
@@ -58,7 +57,7 @@ describe('findFirstMessageOfDay', () => {
 
     expect(result).toMatchObject({ kind: 'found', source: 'archive', message: { id: 'archived-first' } })
     expect(archive.queryMAM).toHaveBeenCalledWith(expect.objectContaining({
-      with: PEER, start: START.toISOString(), maxAutoPages: 1, preserveGapMarker: true,
+      with: PEER, start: START.toISOString(), end: END.toISOString(), dateLookup: true,
     }))
   })
 
@@ -68,16 +67,58 @@ describe('findFirstMessageOfDay', () => {
     const result = await findFirstMessageOfDay(archive, 'room', ROOM, START, END)
 
     expect(result).toMatchObject({ kind: 'found', source: 'archive', message: { id: 'r1' } })
-    expect(archive.queryRoomMAM).toHaveBeenCalledWith(expect.objectContaining({ roomJid: ROOM, start: START.toISOString(), maxAutoPages: 1 }))
+    expect(archive.queryRoomMAM).toHaveBeenCalledWith(expect.objectContaining({ roomJid: ROOM, start: START.toISOString(), end: END.toISOString(), dateLookup: true }))
   })
 
   it('returns the first later message when the day is empty', async () => {
     await messageCache.saveMessage('chat', chat('before', at(9, 22)))
     const archive = archiveWith([chat('two-days-later', at(12, 10))])
+    archive.queryMAM.mockResolvedValueOnce({ messages: [], complete: true, page: {} } as never)
 
     const result = await findFirstMessageOfDay(archive, 'chat', PEER, START, END)
 
     expect(result).toMatchObject({ kind: 'found', message: { id: 'two-days-later' } })
+    expect(archive.queryMAM).toHaveBeenCalledTimes(2)
+    expect(archive.queryMAM).toHaveBeenLastCalledWith(expect.objectContaining({ start: END.toISOString() }))
+    expect(archive.queryMAM.mock.lastCall).toEqual([expect.not.objectContaining({ end: expect.anything() })])
+  })
+
+  it('uses the next midnight returned by the bounded request without a second query', async () => {
+    const archive = archiveWith([chat('next-midnight', END)])
+    expect(await findFirstMessageOfDay(archive, 'chat', PEER, START, END))
+      .toMatchObject({ kind: 'found', message: { id: 'next-midnight' } })
+    expect(archive.queryMAM).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not look past an incomplete day page with no displayable messages', async () => {
+    const archive = archiveWith([])
+    expect(await findFirstMessageOfDay(archive, 'chat', PEER, START, END)).toEqual({ kind: 'unknown' })
+    expect(archive.queryMAM).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['failure', 'incomplete'])('does not claim the selected day empty after an archive %s', async (outcome) => {
+    await messageCache.saveMessage('chat', chat('later-cached', at(12, 10)))
+    const archive = archiveWith([])
+    if (outcome === 'failure') archive.queryMAM.mockRejectedValueOnce(new Error('timeout'))
+    expect(await findFirstMessageOfDay(archive, 'chat', PEER, START, END)).toEqual({ kind: 'unknown' })
+    expect(archive.queryMAM).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses local history for a room with no archive', async () => {
+    await messageCache.saveMessage('room', room('same-day', START))
+    expect(await findFirstMessageOfDay(undefined, 'room', ROOM, START, END))
+      .toMatchObject({ kind: 'found', source: 'cache', message: { id: 'same-day' } })
+  })
+
+  it('checks the archive when the loaded and cached rows straddle a recorded gap', async () => {
+    const loaded = [chat('before', at(9, 22)), chat('held', at(10, 12))]
+    for (const message of loaded) await messageCache.saveMessage('chat', message)
+    const gaps = [{ start: at(9, 22).getTime(), end: at(10, 12).getTime() }]
+    const archive = archiveWith([chat('inside-gap', at(10, 8))])
+    expect(await findFirstMessageOfDay(archive, 'chat', PEER, START, END, loaded, gaps))
+      .toMatchObject({ kind: 'found', source: 'archive', message: { id: 'inside-gap' } })
+    archive.queryMAM.mockRejectedValueOnce(new Error('timeout'))
+    expect(await findFirstMessageOfDay(archive, 'chat', PEER, START, END, loaded, gaps)).toEqual({ kind: 'unknown' })
   })
 
   it('keeps a cached message the archive does not hold when it comes first', async () => {

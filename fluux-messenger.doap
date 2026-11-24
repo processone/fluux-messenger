@@ -381,12 +381,21 @@
       </xmpp:SupportedXep>
     </implements>
 
+    <!-- XEP-0333: Chat Markers -->
+    <implements>
+      <xmpp:SupportedXep>
+        <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0333.html"/>
+        <xmpp:status>partial</xmpp:status>
+        <xmpp:note>Opt-in displayed positions in verified private rooms below 20 occupants, with master and per-room consent; no direct-chat markers or delivery receipts</xmpp:note>
+      </xmpp:SupportedXep>
+    </implements>
+
     <!-- XEP-0334: Message Processing Hints -->
     <implements>
       <xmpp:SupportedXep>
         <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0334.html"/>
         <xmpp:status>complete</xmpp:status>
-        <xmpp:note>no-store hint for transient messages, chat states, and reactions</xmpp:note>
+        <xmpp:note>store hint for room read positions; no-store hint for transient messages, chat states, and reactions</xmpp:note>
       </xmpp:SupportedXep>
     </implements>
 
@@ -615,14 +624,6 @@
       </xmpp:SupportedXep>
     </implements>
 
-    <!-- XEP-0333: Chat Markers -->
-    <implements>
-      <xmpp:SupportedXep>
-        <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0333.html"/>
-        <xmpp:status>planned</xmpp:status>
-      </xmpp:SupportedXep>
-    </implements>
-
     <!-- XEP-0384: OMEMO Encryption -->
     <implements>
       <xmpp:SupportedXep>
@@ -632,6 +633,13 @@
     </implements>
 
     <!-- Releases -->
+    <release>
+      <Version>
+        <revision>0.19.0</revision>
+        <created>2026-11-26</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.19.0"/>
+      </Version>
+    </release>
     <release>
       <Version>
         <revision>0.18.3</revision>

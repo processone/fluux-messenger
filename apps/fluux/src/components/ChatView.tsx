@@ -2,6 +2,7 @@ import { iosHaptic } from '@/platform/ios/haptics'
 import { editableForward } from '../utils/forwardMessage'
 import type { ChatMessageTarget, GapInterval } from '@fluux/sdk'
 import type { MessageRowRef } from '@fluux/sdk'
+import { NS_MAM } from '@fluux/sdk/xmpp'
 import { messageRowId } from './conversation/messageRowIdentity'
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -91,6 +92,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const activeMessagesRef = useRef(activeMessages)
   useLayoutEffect(() => { activeMessagesRef.current = activeMessages }, [activeMessages])
   const readActiveMessages = useCallback(() => activeMessagesRef.current, [])
+  const serverInfo = useConnectionStore((state) => state.serverInfo)
 
   const thread = useConversationThread<Message>({
     kind: 'chat',
@@ -100,6 +102,10 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     readAllMessages: readActiveMessages,
     fetchOlderHistory,
     isLoadingOlder: activeHistoryState?.isLoading,
+    historyGaps: activeHistoryState?.gaps,
+    archiveAvailable: serverInfo ? serverInfo.features.includes(NS_MAM) : undefined,
+    windowAtLiveEdge,
+    recenterToLatest,
     isHistoryComplete: activeHistoryState?.isHistoryComplete,
     clearFirstNewMessageId,
     advanceReadPointer,

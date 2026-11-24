@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useMentionAutocomplete } from './useMentionAutocomplete'
-import type { RoomOccupant } from '@fluux/sdk'
+import type { MentionReference, RoomOccupant } from '@fluux/sdk'
 
 // Helper to create occupants map
 function createOccupants(nicks: string[]): Map<string, RoomOccupant> {
@@ -22,6 +22,32 @@ describe('useMentionAutocomplete', () => {
   const ownNickname = 'myself'
 
   describe('trigger detection', () => {
+    it('does not treat existing mention text as a query without a typing caret', () => {
+      const occupants = createOccupants(['Emma'])
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('prefix @Emma', null, occupants, ownNickname, roomJid)
+      )
+      expect(result.current.state.isActive).toBe(false)
+      expect(result.current.state.matches).toEqual([])
+    })
+
+    it('keeps a completed mention inactive after its separator is removed', () => {
+      const occupants = createOccupants(['Emma'])
+      const query = '@Em'
+      const { result, rerender } = renderHook(
+        ({ text, cursor, references }) => useMentionAutocomplete(text, cursor, occupants, ownNickname, roomJid, undefined, references),
+        { initialProps: { text: query, cursor: query.length, references: [] as MentionReference[] } }
+      )
+      const completed = result.current.selectMatch(0)
+      rerender({
+        text: completed.newText.slice(0, completed.reference.end),
+        cursor: completed.reference.end,
+        references: [completed.reference],
+      })
+      expect(result.current.state.isActive).toBe(false)
+      expect(result.current.state.matches).toEqual([])
+    })
+
     it('should not be active when no @ is typed', () => {
       const occupants = createOccupants(['alice', 'bob'])
       const { result } = renderHook(() =>
@@ -382,6 +408,26 @@ describe('useMentionAutocomplete', () => {
   })
 
   describe('dismiss', () => {
+    it.each([
+      { edit: 'clearing the draft', text: '', cursor: null, newText: '@' },
+      { edit: 'deleting the @', text: 'Em', cursor: 0, newText: '@Em' },
+    ])('opens a new @ at the same position after $edit', ({ text, cursor, newText }) => {
+      const occupants = createOccupants(['Emma'])
+      const initialProps: { text: string; cursor: number | null } = { text: '@Em', cursor: 3 }
+      const { result, rerender } = renderHook(
+        ({ text, cursor }) => useMentionAutocomplete(text, cursor, occupants, ownNickname, roomJid),
+        { initialProps }
+      )
+      expect(result.current.state.isActive).toBe(true)
+      act(() => result.current.dismiss())
+      expect(result.current.state.isActive).toBe(false)
+
+      rerender({ text, cursor })
+      expect(result.current.state.isActive).toBe(false)
+      rerender({ text: newText, cursor: 1 })
+      expect(result.current.state.isActive).toBe(true)
+    })
+
     it('should reset selection when dismiss is called', () => {
       const occupants = createOccupants(['alice', 'bob', 'charlie'])
       const { result } = renderHook(() =>

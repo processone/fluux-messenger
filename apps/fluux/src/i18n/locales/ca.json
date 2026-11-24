@@ -1070,7 +1070,6 @@
             "openLogs": "Obre la carpeta de registres"
         },
         "encryption": {
-            "experimental": "Experimental",
             "openpgpName": "OpenPGP",
             "omemoName": "OMEMO",
             "overview": {
@@ -1413,7 +1412,8 @@
         "added": "Afegit",
         "changed": "Canviat",
         "fixed": "Corregit",
-        "removed": "Eliminat"
+        "removed": "Eliminat",
+        "viewFull": "Veure el registre complet de canvis"
     },
     "about": {
         "title": "Quant a",
@@ -2006,5 +2006,16 @@
         "title": "Fluux s'ha actualitzat en una altra pestanya",
         "description": "Torna a carregar aquesta pestanya per fer servir la nova versió. Mentrestant, l'historial i la cerca poden anar més lents.",
         "reload": "Torna a carregar"
+    },
+    "readMarkers": {
+        "master": "Comparteix les posicions de lectura a les sales",
+        "description": "Desactivat per defecte. Després d'activar-ho, tria cada sala per separat als seus detalls.",
+        "shareInRoom": "Comparteix la meva posició de lectura en aquesta sala",
+        "roomDescription": "Envia només en sales verificades, no llistades, no anònimes i només per a membres, amb menys de 20 ocupants amb identitats estables dins la sala. S'exclouen els missatges xifrats.",
+        "masterOff": "L'interruptor general de Privadesa està desactivat. Aquesta sala no compartirà la teva posició de lectura fins que l'activis.",
+        "metadata": "La sala i els seus ocupants poden veure la teva activitat de lectura. L'arxiu pot conservar aquestes metadades. Desactivar-ho atura les actualitzacions futures, però no elimina els marcadors desats.",
+        "readThrough": "Llegit fins a aquest missatge",
+        "readers": "Llegit fins a aquest missatge: {{names}}",
+        "saveFailed": "No s'ha pogut desar la tria. La compartició continua desactivada. Comprova l'accés a l'emmagatzematge abans de tornar-la a activar."
     }
 }

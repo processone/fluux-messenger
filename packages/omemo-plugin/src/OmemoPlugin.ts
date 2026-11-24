@@ -353,6 +353,18 @@ export class OmemoPlugin implements E2EEPlugin {
     return (await this.resolvePeerIdentity(peer, Number(deviceId))).trust
   }
 
+  async getStoredDeviceTrust(device: NonNullable<SecurityContext['authenticatedDevice']>): Promise<TrustState> {
+    const { jid, deviceId, fingerprint: original } = device
+    const id = Number(deviceId)
+    const { storage } = this.ctx
+    const record = await new PluginStorageOmemoStore(storage).loadTrust(jid, id)
+    const bound = record?.identityKey.length ? hex(fingerprint(record.identityKey)) : undefined
+    // A marker for the old key may still exist after the device has rotated.
+    if (bound && bound !== original) return 'untrusted'
+    if (await isVerified(storage, jid, id, original)) return 'verified'
+    return bound && record ? toTrustState(record.state) : 'unknown'
+  }
+
   // --- encrypt / claim / decrypt (the SCE seam). ---
 
   async openConversation(target: ConversationTarget): Promise<ConversationHandle> {
@@ -718,7 +730,14 @@ export class OmemoPlugin implements E2EEPlugin {
 
     const plaintext = new TextEncoder().encode(serializePayloadEnvelope(env.content))
     const authoredAt = env.timeIso ? new Date(env.timeIso) : undefined
-    return { plaintext, status: 'ok', senderDevice, securityContext, ...(authoredAt ? { authoredAt } : {}) }
+    return {
+      plaintext, status: 'ok', senderDevice,
+      securityContext: {
+        ...securityContext,
+        authenticatedDevice: { ...senderDevice, fingerprint: hex(fingerprint(senderIdentityKey)) },
+      },
+      ...(authoredAt ? { authoredAt } : {}),
+    }
   }
 
   async repairSession(_handle: ConversationHandle, peer: BareJID): Promise<void> {

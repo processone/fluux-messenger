@@ -507,13 +507,11 @@ export async function decryptStanzaInPlace(
     }
   }
 
-  // Decrypt succeeded but the plugin reported untrusted trust (e.g. peer
-  // key not yet cached so the signature could not be verified). Stash
-  // the encrypted payload so retryPendingDecrypts() can re-verify the
-  // signature once the peer key arrives — same mechanism used for full
-  // decrypt failures, but here the body is already correct.
-  const needsDeferredVerification =
-    failureReason === null && !consumedControl && securityContext?.trust === 'untrusted'
+  // An authenticated device awaiting a trust decision does not need another
+  // decrypt. In particular, OMEMO has already consumed the live message key.
+  // Untrusted results without that evidence still need signature verification.
+  const needsDeferredVerification = failureReason === null && !consumedControl &&
+    securityContext?.trust === 'untrusted' && !securityContext.authenticatedDevice
   if (needsDeferredVerification) {
     stashPayload(stanza, originalStanzaXml)
   }

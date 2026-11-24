@@ -236,6 +236,42 @@ for (const finish of ['cancel', 'save'] as const) {
  }
 }
 
+// A send clears the typing session even if recovery restores identical @query text.
+test('failed room send does not reactivate an unfinished mention query', async ({ page }) => {
+  const editor = await openRoom(page)
+  await editor.click()
+  const above = 'Text above the query'
+  const queryLine = 'prefix @Em'
+  await page.keyboard.insertText(above)
+  await editor.press('Shift+Enter')
+  await page.keyboard.insertText(queryLine)
+  const body = `${above}\n${queryLine}`
+  const value = () => editor.evaluate(el => (el as unknown as { value: string }).value)
+  await expect.poll(value).toBe(body)
+  const picker = page.locator('[role="listbox"][id$="-mention-autocomplete"]')
+  await expect(picker).toBeVisible()
+  await page.getByRole('button', { name: 'Send', exact: true }).click()
+  await expect.poll(() => calls(page)).toBe(1)
+  await expect.poll(value).toBe('')
+  await page.evaluate(() => (window as any).__sendProbe.fail())
+  await expect(page.getByText('Failed to send message', { exact: true })).toBeVisible()
+  await expect.poll(value).toBe(body)
+  await expect(editor.locator('[data-mention]')).toHaveCount(0)
+  await expect(picker).not.toBeVisible()
+  await editor.focus()
+  await editor.evaluate((el, offset) => {
+    (el as unknown as { setSelectionRange: (start: number, end: number) => void }).setSelectionRange(offset, offset)
+  }, body.length)
+  await editor.press('ArrowUp')
+  await expect.poll(() => editor.evaluate(el => {
+    const input = el as unknown as { value: string; selectionStart: number }
+    return input.value.slice(0, input.selectionStart).split('\n').length
+  })).toBe(1)
+  await expect(picker).not.toBeVisible()
+  expect(await value()).toBe(body)
+  expect(await calls(page)).toBe(1)
+})
+
 // N2: mention chips and outgoing references must survive the failed-send remount.
 for (const newer of ['', 'Oups']) {
   test(`room mentions survive failed-send remount with newer=${newer || 'empty'}`, async ({ page }) => {

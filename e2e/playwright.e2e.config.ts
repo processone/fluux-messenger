@@ -47,6 +47,7 @@ const BASE_URL = isolatedPort !== null
  */
 
 const SUITES = [
+  { name: 'sidebar-name-priority', testMatch: 'sidebar-name-priority.ts' },
   { name: 'focus-ring', testMatch: 'focus-ring.ts' },
   { name: 'account-row', testMatch: 'account-row.ts' },
   { name: 'notification-settings', testMatch: 'notification-settings.ts' },
@@ -58,6 +59,7 @@ const SUITES = [
   { name: 'xmpp-link-actions', testMatch: 'xmpp-link-actions.ts' },
   { name: 'contact-presence', testMatch: 'contact-presence.ts' },
   { name: 'saved-messages', testMatch: 'saved-messages.ts' },
+  { name: 'room-read-markers', testMatch: 'room-read-markers.ts' },
   { name: 'message-context-menu', testMatch: 'message-context-menu.ts' },
   { name: 'header-context-menu', testMatch: 'header-context-menu.ts' },
   { name: 'forward-direct', testMatch: 'forward-direct.ts' },

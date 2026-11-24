@@ -173,6 +173,12 @@ export interface SecurityContext {
    * a stale out-of-band verification.
    */
   fingerprint?: string
+  /**
+   * Device identity that authenticated the recovered content, independent of
+   * whether the user trusts that identity. Set only on authenticated plaintext;
+   * never infer it from a ciphertext header, a duplicate or a failed decrypt.
+   */
+  authenticatedDevice?: DeviceIdentifier & { fingerprint: string }
 }
 
 /**
@@ -737,6 +743,13 @@ export interface E2EEPlugin {
   startVerification(peer: BareJID, method: VerificationMethod): Promise<VerificationFlow>
   getPeerTrust(peer: BareJID): Promise<TrustState>
   getDeviceTrust(peer: BareJID, deviceId: string): Promise<TrustState>
+
+  /**
+   * Re-evaluate an authenticated device's exact fingerprint for stored content.
+   * Use only local trust records: do not discover devices, fetch keys, or
+   * decrypt the message again. Return `unknown` if no local decision applies.
+   */
+  getStoredDeviceTrust?(device: NonNullable<SecurityContext['authenticatedDevice']>): Promise<TrustState>
 
   /**
    * Optional: enumerate a peer's trustable identities (OMEMO: one per device)
