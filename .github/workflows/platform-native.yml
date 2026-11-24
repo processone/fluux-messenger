@@ -107,12 +107,18 @@ jobs:
         run: |
           command -v xcodegen || brew install xcodegen
           npm run test:ios-extensions
-      # The preview tests run this example under a 120 s limit. Compiled here, that
-      # limit covers only the run.
+      # Hand off Cargo's executable so the test deadline excludes Cargo's registry and build locks.
       - name: Build the notification identity oracle
-        run: cargo build --locked --manifest-path apps/fluux/src-tauri/nse-openpgp/Cargo.toml --features synthetic-lab --example identity_oracle
+        id: notification-oracle
+        run: |
+          executable=$(node scripts/native-tests/preview-identity-build.mjs)
+          printf 'executable=%s\n' "$executable" >> "$GITHUB_OUTPUT"
       - name: Test notification diagnostic and preview decisions
-        run: node --test --test-concurrency=1 scripts/ios-notification-diagnostic.test.mjs scripts/ios-notification-previews.test.mjs scripts/ios-notifications.test.mjs
+        env:
+          FLUUX_PREVIEW_IDENTITY_ORACLE: ${{ steps.notification-oracle.outputs.executable }}
+        run: |
+          : "${FLUUX_PREVIEW_IDENTITY_ORACLE:?Build did not provide the notification identity oracle}"
+          node --test --test-concurrency=1 scripts/ios-notification-diagnostic.test.mjs scripts/ios-notification-previews.test.mjs scripts/ios-notifications.test.mjs
       - run: npm run tauri:ios:build
       - name: Preserve simulator bundle permissions and symlinks
         run: |
