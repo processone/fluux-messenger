@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ROOM_READ_MARKERS_STORAGE_KEY } from '@fluux/sdk'
 import {
   bootNativeLocalStorage,
   installNativeLocalStorage,
@@ -106,6 +107,26 @@ describe('installNativeLocalStorage', () => {
     installed = null
     expect(localStorage.getItem('fluux-theme')).toBeNull()
     expect(localStorage.getItem('fluux:cache-marker:alice@example.com')).toBe('1')
+  })
+
+  // Approved room-marker intent: a durable watermark precedes publication.
+  // The bridge must not turn that synchronous write into a fire-and-forget
+  // native write. This owns routing/reinstallation, not native device storage.
+  it('keeps account-scoped marker consent and watermarks synchronous across bridge reinstalls', async () => {
+    const { backend, stored } = fakeBackend()
+    const native = install({}, backend)
+    const key = (kind: string) => `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify(['alice@example.com', kind])}`
+    const values = {
+      [key('consent')]: JSON.stringify({ enabled: true, rooms: ['team@conference.example.com'] }),
+      [key('watermarks')]: JSON.stringify({ sent: {} }),
+    }
+    for (const [name, value] of Object.entries(values)) localStorage.setItem(name, value)
+    await native.flush()
+    expect(backend.apply).not.toHaveBeenCalled()
+    native.uninstall(); installed = null
+    for (const [name, value] of Object.entries(values)) expect(localStorage.getItem(name)).toBe(value)
+    install({ ...stored }, backend)
+    for (const [name, value] of Object.entries(values)) expect(localStorage.getItem(name)).toBe(value)
   })
 
   it('sends the writes of one task as a single batch in their final state', async () => {

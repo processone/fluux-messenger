@@ -1,4 +1,5 @@
 import { useEffect, type RefObject } from 'react'
+import { isKeyboardModalityAtKeydown } from '@/utils/focusRings'
 
 /**
  * Interface for any element that can be focused.
@@ -37,6 +38,12 @@ export function useTypeToFocus(
       ) {
         return
       }
+
+      // Space activates keyboard-focused controls; pointer-origin typing still
+      // starts a message, even after capture has updated the focus-ring marker.
+      if (e.key === ' ' && target instanceof Element
+        && target.closest('button, a[href], select, summary, [role="button"], [role="option"]')
+        && isKeyboardModalityAtKeydown(e)) return
 
       // Skip if modifier keys are pressed (except Shift for capital letters)
       // This prevents interfering with keyboard shortcuts like Ctrl+C, Cmd+N, Alt+1

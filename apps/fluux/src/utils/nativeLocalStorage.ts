@@ -28,6 +28,9 @@ const WEBVIEW_ONLY_EXACT_OR_SCOPED = [
   'xmpp-chat-storage',
   'fluux-room-gaps',
   'fluux-room-coverage',
+  // Synchronous marker watermarks must stay with their webview row references.
+  // Boot runs before SDK imports; nativeLocalStorage.test derives this key from the SDK.
+  'fluux-room-read-markers',
   'fluux:lastArchivedPreviewCheck',
   'fluux:lastRosterDiscovery',
   'fluux:msg-heights',

@@ -28,6 +28,22 @@ OpenPGP encrypted. Public keys and synchronized settings are published to your
 XMPP account; if you choose server key backup, the private-key backup is
 encrypted before it is uploaded to your XMPP server.
 
+## Optional room read positions
+
+Room read-position sharing starts off for each account on this device. Enable
+the Privacy master switch and then choose each room separately in its details.
+Only focused viewing of incoming unencrypted messages in verified, unlisted,
+members-only, non-anonymous rooms with fewer than 20 occupants can share a
+position. Direct chats and private messages to a room occupant do not share
+these markers.
+
+A marker identifies your room occupant and the message you have read through.
+The room and its occupants can see this metadata, and the room archive may retain
+it. Turning sharing off stops future updates; it does not remove markers already
+stored by the server or other participants. Valid incoming markers can remain
+visible while your own sharing is off. This is separate from private read-position
+synchronization between your own devices. See [room read positions](ROOM_READ_MARKERS.md).
+
 ## Optional iOS push notifications
 
 Push notifications require iOS notification permission and support from your

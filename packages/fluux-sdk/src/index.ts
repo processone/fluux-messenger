@@ -72,6 +72,8 @@
 
 // Provider - wraps application with XMPP context
 export { XMPPProvider, useXMPPContext } from './provider'
+export { clearRoomReadMarkersLocalData, ROOM_READ_MARKERS_STORAGE_KEY } from './core/modules/RoomReadMarkers'
+export type { RoomReadMarkers, RoomReadConsent, RoomReader } from './core/modules/RoomReadMarkers'
 export type { XMPPProviderProps } from './provider'
 
 // High-level React hooks

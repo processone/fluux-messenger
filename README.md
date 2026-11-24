@@ -93,6 +93,7 @@
 
 ### Group Chat & Collaboration
 - **Multi-user Chat** - Complete MUC support with roles, affiliations, custom hats (role badges), @mentions, and bookmarks. When the server provides affiliation lists, the participants panel separates affiliated accounts who are absent from the room under **Offline members**, with each account's affiliation shown. This section starts collapsed when it contains more than 10 offline members; select its heading to expand or collapse it.
+- **Room Read Positions** - See who has read through each message in verified private rooms with fewer than 20 occupants. Sharing starts off: enable it in Privacy, then choose each room in its details. The room and its archive can retain this metadata. [Privacy, limits and behavior](docs/ROOM_READ_MARKERS.md).
 - **Room Unread Badges** - Joined rooms show their total unread count over the avatar, like direct chats. The badge is grey for ordinary unread activity and uses the attention colour for mentions or notify-all rooms; muted rooms keep a grey unread badge. The separate `@N` marker shows mentions. Room tooltips show room status, or occupants and your nickname, without repeating unread counts.
 - **Nickname Mentions** - Room mentions such as `@James` and `james:` match the person's name color even when typed in another letter case; mentions of you use your own-name color. Matching uses identities learned from occupants and loaded messages while viewing that room, remembered for the current app session after people leave or you switch rooms. An author not yet seen in that view may use a JID or nickname color until their messages load. If someone else takes a nickname, mentions follow its current holder.
 - **Permission to Speak** - In moderated rooms, visitors choose **Request voice** in place of the public message composer. Room moderators review **Voice requests** and choose **Grant voice** or **Dismiss**. Visitors can request voice again after an unanswered request or an error; the button is disabled while offline or sending. Public messaging becomes available only when the server grants permission. Dismissing a request only removes it locally; whisper permissions remain governed by the room's existing private-message policy.
@@ -309,7 +310,7 @@ We know it's important and we want to bring it. We can't commit to a timeline ye
 
 #### Does Fluux Messenger support read receipts?
 
-Not yet. Read receipts are on our list and we plan to start with 1-to-1 chats. For group rooms we're still weighing the question: how useful they actually are at scale, how best to implement them and the privacy implications of broadcasting read state to every participant.
+Fluux supports opt-in cumulative read positions in small, verified private rooms. Enable the Privacy master switch and choose each room separately; both start off. The room and its occupants can see this reading metadata, and its archive may retain it. Direct-chat read markers and delivery receipts remain separate planned work. See [room read positions](docs/ROOM_READ_MARKERS.md).
 
 #### Does Fluux Messenger support Spaces (bundles of rooms)?
 

@@ -1959,5 +1959,16 @@
         "title": "Fluux byl aktualizován v jiné kartě",
         "description": "Načtěte tuto kartu znovu, abyste mohli používat novou verzi. Do té doby může být historie a vyhledávání pomalejší.",
         "reload": "Načíst znovu"
+    },
+    "readMarkers": {
+        "master": "Sdílet pozice přečtení v místnostech",
+        "description": "Ve výchozím nastavení vypnuto. Po zapnutí vyberte každou místnost zvlášť v jejích podrobnostech.",
+        "shareInRoom": "Sdílet mou pozici přečtení v této místnosti",
+        "roomDescription": "Odesílat jen v ověřených, neveřejně uvedených, neanonymních místnostech pouze pro členy s méně než 20 přítomnými se stálými identitami v místnosti. Šifrované zprávy jsou vyloučeny.",
+        "masterOff": "Hlavní přepínač v nastavení soukromí je vypnutý. Místnost nebude sdílet vaši pozici přečtení, dokud jej nezapnete.",
+        "metadata": "Místnost a její přítomní vidí vaši aktivitu čtení. Archiv může tato metadata uchovat. Vypnutí zastaví budoucí aktualizace, nikoli již uložené značky.",
+        "readThrough": "Přečteno po tuto zprávu",
+        "readers": "Přečteno po tuto zprávu: {{names}}",
+        "saveFailed": "Volbu se nepodařilo uložit. Sdílení zůstává vypnuté. Před opětovným zapnutím zkontrolujte přístup k úložišti."
     }
 }

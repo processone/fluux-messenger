@@ -1953,5 +1953,16 @@
         "title": "Fluux päivitettiin toisessa välilehdessä",
         "description": "Lataa tämä välilehti uudelleen käyttääksesi uutta versiota. Siihen asti historia ja haku voivat olla hitaampia.",
         "reload": "Lataa uudelleen"
+    },
+    "readMarkers": {
+        "master": "Jaa lukukohdat huoneissa",
+        "description": "Oletuksena pois käytöstä. Kun olet ottanut tämän käyttöön, valitse kukin huone erikseen sen tiedoista.",
+        "shareInRoom": "Jaa lukukohtani tässä huoneessa",
+        "roomDescription": "Lähetä vain vahvistetuissa, listaamattomissa, ei-anonyymeissä, vain jäsenille tarkoitetuissa huoneissa, joissa on alle 20 läsnäolijaa ja pysyvät huonekohtaiset tunnisteet. Salatut viestit jätetään pois.",
+        "masterOff": "Tietosuojan pääkytkin on pois päältä. Huone ei jaa lukukohtaasi ennen kuin otat sen käyttöön.",
+        "metadata": "Huone ja sen läsnäolijat näkevät lukutoimintasi. Arkisto voi säilyttää nämä metatiedot. Poiskytkentä pysäyttää tulevat päivitykset, mutta ei poista tallennettuja merkkejä.",
+        "readThrough": "Luettu tähän viestiin asti",
+        "readers": "Luettu tähän viestiin asti: {{names}}",
+        "saveFailed": "Valintaa ei voitu tallentaa. Jakaminen pysyy pois käytöstä. Tarkista tallennustilan käyttöoikeus ennen uudelleen käyttöönottoa."
     }
 }

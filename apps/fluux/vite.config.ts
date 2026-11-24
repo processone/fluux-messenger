@@ -15,6 +15,8 @@ import { anomalyBuildAudit } from './scripts/anomalyBuildAudit'
 // under the repo root and breaks in git worktrees (apps/fluux lives under
 // .claude/worktrees/<name>/), where ../../node_modules does not exist.
 const localRequire = createRequire(resolve(__dirname, 'package.json'))
+const viteRequire = createRequire(localRequire.resolve('vite/package.json'))
+const { Features: cssFeatures } = viteRequire('lightningcss')
 
 // Get git commit hash at build time
 function getGitCommit(): string {
@@ -53,6 +55,13 @@ const isE2EBuild = process.env.FLUUX_E2E_BUILD === '1'
 
 export default defineConfig(({ mode }) => ({
   base: './',
+  css: {
+    lightningcss: {
+      // The language-based fallback cannot represent each message's dir="auto".
+      // Preserve native direction matching in both production and E2E builds.
+      exclude: cssFeatures.DirSelector,
+    },
+  },
   plugins: [
     react(),
     babel({
@@ -185,6 +194,8 @@ export default defineConfig(({ mode }) => ({
         warn(warning)
       },
       output: {
+        // The demo's render-attribution probe identifies components by name.
+        keepNames: isE2EBuild,
         codeSplitting: {
           groups: [
             // Vite's preload helper on its own: `src/boot.ts` uses it before

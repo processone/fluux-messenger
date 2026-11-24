@@ -1957,5 +1957,16 @@
         "title": "Fluux è stato aggiornato in un'altra scheda",
         "description": "Ricarica questa scheda per usare la nuova versione. Fino ad allora cronologia e ricerca potrebbero essere più lente.",
         "reload": "Ricarica"
+    },
+    "readMarkers": {
+        "master": "Condividi le posizioni di lettura nelle stanze",
+        "description": "Disattivato per impostazione predefinita. Dopo l'attivazione, scegli ogni stanza separatamente nei suoi dettagli.",
+        "shareInRoom": "Condividi la mia posizione di lettura in questa stanza",
+        "roomDescription": "Invia solo in stanze verificate, non elencate, non anonime e riservate ai membri, con meno di 20 presenti con identità stabili nella stanza. I messaggi cifrati sono esclusi.",
+        "masterOff": "L'interruttore generale in Privacy è disattivato. Questa stanza non condividerà la tua posizione di lettura finché non lo attivi.",
+        "metadata": "La stanza e i presenti possono vedere la tua attività di lettura. L'archivio può conservare questi metadati. Disattivare la condivisione interrompe gli aggiornamenti futuri, ma non rimuove i marcatori salvati.",
+        "readThrough": "Letto fino a questo messaggio",
+        "readers": "Letto fino a questo messaggio: {{names}}",
+        "saveFailed": "Impossibile salvare la scelta. La condivisione resta disattivata. Controlla l'accesso all'archiviazione prima di riattivarla."
     }
 }

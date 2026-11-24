@@ -1,0 +1,102 @@
+# Room read positions
+
+Fluux can show who has read through a message in a small private room using
+XEP-0333 displayed markers. These are cumulative display positions, not delivery
+receipts and not proof that someone understood a message.
+
+## Privacy and controls
+
+Sharing starts off. Enable **Share room read positions** in Privacy, then enable
+**Share my read position in this room** in each room's details. Both choices are
+saved for the account on this device. Enabling one room never enables another.
+The master switch stops all sending without forgetting the selected rooms.
+
+The room and its occupants can see this metadata, and the room archive may retain
+it. Opting out stops future updates; it cannot retract previously stored markers.
+Incoming valid markers remain visible even when sharing is off.
+
+## Eligibility
+
+The room's current discovery must positively advertise all of:
+
+- `muc_membersonly`, `muc_hidden`, and `muc_nonanonymous`;
+- XEP-0421 occupant IDs and XEP-0359 stanza IDs.
+
+Contradictory public, open or anonymous flags fail closed. Joining must be complete,
+the live roster must include this session and stable occupant identities, and the
+room's discovery count must match the full roster. Nineteen occupants, including
+yourself, may qualify; twenty do not. Presence and configuration updates invalidate
+previous discovery evidence. Fluux cannot react to a server change it has not been
+told about. A failed room-information request is not negative room evidence:
+Fluux retains the last proven display and retries with increasing delays capped
+at one minute while sending remains gated. Presence, configuration or connection
+changes reset that backoff.
+
+## Sending and receiving
+
+Only actual measured viewing of an incoming plaintext row in the focused window
+can request a marker. Covered dialogs and the phone members pane are not viewing;
+closing them re-measures the exposed rows without requiring a scroll or refocus.
+Local read events alone never do. Hydration, mark-all-read,
+background catch-up, private XEP-0490 updates, previews and own outgoing rows are
+not viewing evidence. Encrypted and undecryptable rows are excluded.
+
+A pending advance rechecks the account, session, focus, consent, room evidence and
+confirmed local read pointer. Fluux sends a bodyless groupchat stanza to the room's
+bare address, containing a displayed marker with the verified room-assigned
+stanza ID and an XEP-0334 `store` hint. A persistent account/room watermark prevents
+backwards sends and deduplicates in-flight or restarted work. The watermark is
+written before sending; an uncertain send is not sent again as a new read.
+On native platforms this account-scoped record stays in synchronous webview
+storage with its message-row references, rather than the asynchronous native
+preference bridge. Two devices can still send the same position before either receives the other's
+reflection. Storing markers depends on the server honoring the storage hint.
+
+Live and archived markers share one validator and archive-ID resolver. Marker
+positions are separate from message data and local read state. After a fresh
+session, cached history in a qualifying room triggers at most one read-only page
+of the latest 50 archived stanzas to restore recent peer positions. Cached preview
+and catch-up share this page without waiting for recovery to finish. At most two
+recovery jobs run concurrently, including discovery and archive resolution. Recovery
+skips rooms the join already identifies as public, anonymous or too large. It
+resolves only resident or cached targets that passed normal content processing;
+newer offline rows remain the responsibility of ordinary catch-up. The recovery
+page does not insert timeline rows or change archive coverage or local read
+pointers. It cannot restore markers outside that page; ordinary history queries
+can still resolve them when encountered. A MAM page resolves its markers after
+parsing the page's targets. Only a standalone marker and its
+identity/storage metadata bypass normal message processing; additional encryption,
+reaction, retraction or moderation payloads still reach their existing owners.
+Unresolved, foreign or ambiguous
+targets never move to a different message. Position order comes from server-ordered
+archive pages and undelayed room delivery, never from opaque IDs, nicknames or
+marker timestamps. When two positions have no known order, a read-only, bounded
+MAM probe can establish it without inserting rows or changing archive coverage.
+Walks are shared by their starting position, not repeated for each candidate.
+Completed probes are remembered until order evidence changes; a capped walk
+resumes at its last cursor. A single archived page does not start a new capped
+walk for every marker. A positively purged send anchor is older than
+retained history, matching private read-sync recovery. Failed or unknown lookups
+never establish order. If the server cannot prove order, Fluux leaves the existing
+position alone.
+
+## Display
+
+Each reader appears over the lower-right corner of their most recently displayed
+message (lower-left for right-to-left message text), identified by the room's occupant
+ID. Qualifying messages reserve trailing space after their text and reactions so
+badges cannot cover them. The spacer does not increase a text line's height;
+the visible badge is 24 pixels high within a transparent 28-pixel tap area anchored
+to the message column, outside the sender's avatar gutter.
+Some last lines may wrap earlier; moving a reader does
+not resize a qualified row. Nick changes preserve identity, departures hide the reader,
+and reused nicknames do not inherit another person's position. Fluux hides your
+own marker. Each badge shows up to three avatars; its button opens a full named
+list with keyboard and touch support. An open list keeps the names captured when
+it opened until you close it, even when readers advance. Updates use per-row snapshots rather than
+replacing the timeline's messages.
+
+Unread badges, the new-message divider, the local read pointer and private
+XEP-0490 synchronization keep their existing meanings and writers. Direct chats,
+private messages to room occupants, room delivery receipts and encryption changes
+are not part of this feature.

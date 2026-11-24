@@ -8,7 +8,7 @@
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { NotifyLevel, Room } from '@fluux/sdk'
+import type { NotifyLevel, Room, RoomReadMarkers } from '@fluux/sdk'
 import { getUniqueOccupantCount, useSavedCountInConversation } from '@fluux/sdk'
 import { RoomAvatar } from './RoomAvatar'
 import { Tooltip } from './Tooltip'
@@ -42,6 +42,7 @@ import {
 
 export interface RoomHeaderProps {
   room: Room
+  peerReadMarkers?: RoomReadMarkers
   /** This header is covered by another pane, so retrieval stays silent. */
   covered?: boolean
   onBack?: () => void
@@ -63,6 +64,7 @@ export interface RoomHeaderProps {
 
 export function RoomHeader({
   room,
+  peerReadMarkers,
   covered = false,
   onBack,
   showOccupants,
@@ -314,6 +316,7 @@ export function RoomHeader({
 
       {showInfoModal && (
         <RoomInfoModal
+          peerReadMarkers={peerReadMarkers}
           room={room}
           onClose={() => setShowInfoModal(false)}
         />

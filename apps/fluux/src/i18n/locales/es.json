@@ -1957,5 +1957,16 @@
         "title": "Fluux se actualizó en otra pestaña",
         "description": "Recarga esta pestaña para usar la nueva versión. Mientras tanto, el historial y la búsqueda pueden ir más lentos.",
         "reload": "Recargar"
+    },
+    "readMarkers": {
+        "master": "Compartir posiciones de lectura en salas",
+        "description": "Desactivado por defecto. Después de activarlo, elige cada sala por separado en sus detalles.",
+        "shareInRoom": "Compartir mi posición de lectura en esta sala",
+        "roomDescription": "Enviar solo en salas verificadas, no listadas, no anónimas y solo para miembros, con menos de 20 ocupantes con identidades estables en la sala. Se excluyen los mensajes cifrados.",
+        "masterOff": "El interruptor general de Privacidad está desactivado. Esta sala no compartirá tu posición de lectura hasta que lo actives.",
+        "metadata": "La sala y sus ocupantes pueden ver tu actividad de lectura. El archivo puede conservar estos metadatos. Desactivarlo detiene las actualizaciones futuras, pero no elimina los marcadores guardados.",
+        "readThrough": "Leído hasta este mensaje",
+        "readers": "Leído hasta este mensaje: {{names}}",
+        "saveFailed": "No se pudo guardar la elección. El uso compartido sigue desactivado. Comprueba el acceso al almacenamiento antes de volver a activarlo."
     }
 }
