@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { spawn, execFileSync } from 'node:child_process'
-import { appendFile, open, readFile, writeFile } from 'node:fs/promises'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { appendFile, open, readFile, readdir, writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { WebDriver, until } from '../linux-gui/webdriver.mjs'
 import { encodedPowerShell, psLiteral } from './common.mjs'
 import { fileURLToPath } from 'node:url'
+import { contains } from './paths.mjs'
 
 const config = JSON.parse(await readFile(process.argv[2], 'utf8'))
 const { app, driver, edge, evidence, driverPort, nativePort, fail } = config
@@ -55,10 +56,7 @@ async function verifyWebViewProfile() {
   }
   assert.ok(paths.size, 'No owned WebView2 user-data directory was observable')
   for (const path of paths) {
-    assert.ok([config.profile, ...config.nativeProfiles].some(base => {
-      const inside = relative(base, path)
-      return inside === '' || (!inside.startsWith('..') && !isAbsolute(inside))
-    }), 'WebView2 storage escaped the owned disposable directories')
+    assert.ok([config.profile, ...config.nativeProfiles].some(base => contains(base, path)), 'WebView2 storage escaped the owned disposable directories')
   }
   log({ webviewProfiles: [...paths] })
 }
@@ -98,6 +96,20 @@ async function main() {
     assert.equal(typeof tray.enabled, 'boolean')
     assert.equal(typeof tray.available, 'boolean')
     log({ nativeCommand: 'get_tray_status', result: tray })
+    const logDirectory = await client.command('POST', `/session/${client.id}/execute/async`, {
+      script: 'const done = arguments[arguments.length - 1]; window.__TAURI_INTERNALS__.invoke("get_log_directory").then(done, e => done({error: String(e)}));', args: [],
+    })
+    assert.equal(typeof logDirectory, 'string')
+    assert.ok(config.nativeProfiles.some(base => contains(base, logDirectory)), 'Native diagnostics escaped the owned profile')
+    await until(async () => {
+      const names = (await readdir(logDirectory)).filter(name => /^anomalies\.\d{4}-\d{2}-\d{2}\.jsonl$/.test(name))
+      assert.ok(names.length, 'Startup anomaly diagnostics did not reach the isolated log directory')
+      const contents = (await Promise.all(names.map(name => readFile(join(logDirectory, name), 'utf8')))).join('')
+      const records = contents.trim().split('\n').map(line => JSON.parse(line))
+      assert.ok(records.length)
+      await writeFile(join(evidence, 'anomalies.jsonl'), contents)
+      log({ nativeLogDirectory: logDirectory, anomalyFiles: names, records: records.length })
+    }, 'Isolated frontend diagnostics were not preserved')
     await capture('login.png')
     log({ assertions: 'Actual Windows login input, Tab focus and read-only native IPC passed' })
     if (fail) assert.fail('Requested failure after native assertions')

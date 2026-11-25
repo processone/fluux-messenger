@@ -77,7 +77,9 @@ Missing prerequisites and failed assertions exit nonzero, never skip as a pass.
 The native journey finds login, types `alex@example.org` without submitting,
 sends Tab, verifies password focus, and invokes the read-only `get_tray_status`
 command, asserting its two boolean fields. It saves `login.png`, `identity.json`,
-`session.jsonl`, `native.log`, `worker-result.json`, `job.json` and `cleanup.json`.
+`session.jsonl`, `native.log`, `anomalies.jsonl`, `worker-result.json`, `job.json`
+and `cleanup.json`. The smoke reads the effective native log directory and requires
+the frontend's startup diagnostics to appear inside an owned native profile.
 The screenshot shows the test address and focused password field. Additional
 `login-initial.png` and `login-address.png` frames show the preceding states; the protocol
 log records the actual input, focus and native-response assertions. No password,
