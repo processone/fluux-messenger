@@ -2062,6 +2062,79 @@ describe('RoomReadMarkers', () => {
     } finally { observer.cancelPending() }
   })
 
+  it.each([false, true].flatMap(revoked => (['migration', 'continuity', 'consent'] as const).map(refused => [revoked, refused] as const)))('preserves current independent consent when new On write is refused (previously revoked: %s, %s)', async (revoked, refused) => {
+    if (revoked) {
+      expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+      await markers.viewed(roomJid, rows[0])
+      expect(await markers.setRoomEnabled(roomJid, false)).toBe(true)
+    }
+    expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(true)
+    const storage = localStorage
+    const denied = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, refused])}`
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === denied) throw new DOMException('Save refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    try { expect(await markers.setRoomEnabled(roomJid, true)).toBe(false) }
+    finally { vi.stubGlobal('localStorage', storage) }
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      for (const client of [markers, observer]) {
+        expect(client.isEnabledFor(replayFixture.room)).toBe(true)
+        expect(client.isEnabledFor(roomJid)).toBe(false)
+        client.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+        await client.viewed(roomJid, rows[1])
+      }
+      expect(send).toHaveBeenCalledTimes(revoked ? 1 : 0)
+      expect(await observer.setRoomEnabled(roomJid, true)).toBe(true)
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(revoked ? 2 : 1)
+    } finally { observer.cancelPending() }
+  })
+
+  it.each([false, true].flatMap(local => (['shared', 'linked'] as const).flatMap(form => (['target', 'storage', 'discovery retry'] as const).map(held => [local, form, held] as const))))('requires a fresh confirmed view after another tab converts (local proof: %s, %s, %s)', async (local, form, held) => {
+    const { storage } = await prepareSharedLegacy(local)
+    if (form === 'linked') {
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === consentKey) throw new DOMException('Preference refused', 'SecurityError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      try { expect(await markers.reload()).toBe(false) }
+      finally { vi.stubGlobal('localStorage', storage) }
+    }
+    markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+    const migration = pauseNextConsentOpen()
+    let release!: () => void
+    const blocked = new Promise<void>(resolve => { release = resolve })
+    let reached!: () => void
+    const ready = new Promise<void>(resolve => { reached = resolve })
+    let publication: ReturnType<typeof pauseNextConsentOpen> | undefined
+    if (held !== 'discovery retry') stores.room.getMessageByArchiveId = vi.fn(async (_room: string, id: string) => { reached(); await blocked; return rows.find(row => row.stanzaId === id) ?? null })
+    else {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+      iq.mockRejectedValueOnce(new Error('Discovery timeout')).mockImplementation(async () => disco())
+    }
+    const viewed = markers.viewed(roomJid, rows[1])
+    const peer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      await migration.ready
+      if (held !== 'discovery retry') {
+        await ready
+        if (held === 'storage') { publication = pauseNextConsentOpen(); release(); await publication.ready }
+      } else await viewed
+      expect(await peer.reload()).toBe(true)
+      if (held !== 'discovery retry') { release(); publication?.release(); await viewed }
+      else {
+        await vi.advanceTimersToNextTimerAsync()
+        // An invalid notification can join old work but cannot authorize a new focused observation.
+        await markers.viewed(roomJid, rows[1], () => false)
+      }
+      expect(send).toHaveBeenCalledTimes(1)
+      migration.release()
+      await markers.reload()
+      await markers.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { release(); publication?.release(); migration.release(); await viewed; await markers.reload(); peer.cancelPending() }
+  })
+
   it.each(['absent', 'reserved', 'linked'] as const)('writes only needed continuity proof during scoped conversion (%s)', async state => {
     const storage = localStorage
     const proofKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'continuity'])}`

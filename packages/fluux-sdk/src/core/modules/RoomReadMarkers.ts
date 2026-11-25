@@ -540,7 +540,8 @@ export class RoomReadMarkers extends BaseModule {
           if (optingOut) recoverRevocation(attempted)
           else if (changed) {
             // Confirmed input protects untouched choices without authorizing a failed new On.
-            if (!attempted || !hasConfirmedLegacyInput(attempted) || (change && 'room' in change && attempted.rooms.includes(change.room))) this.failConsentSave(account, !!change)
+            const confirmed = attempted && (hasConfirmedLegacyInput(attempted) || (!attempted.needsMigration && !attempted.cleared && attempted.raw !== null))
+            if (!attempted || !confirmed || (change && 'room' in change && attempted.rooms.includes(change.room))) this.failConsentSave(account, !!change)
             else {
               // Refused replacement must not leave newly reserved identity in a non-erasable shared fallback.
               tryRevokeLegacy(account, attempted, [], attempted.edits, attempted.epoch)
@@ -1029,6 +1030,17 @@ export class RoomReadMarkers extends BaseModule {
     return saved
   }
 
+  private captureConversionBoundary() {
+    const account = this.account()
+    try {
+      const pending = this.readSavedConsent(account).needsMigration
+      return () => {
+        try { return this.account() === account && this.readSavedConsent(account).needsMigration === pending }
+        catch { return false }
+      }
+    } catch { return () => false }
+  }
+
   /** Explicit focused viewport evidence, after the existing read writer ran. */
   viewed(roomJid: string, row: RoomMessage, viewCurrent: () => boolean = () => true): Promise<void> {
     if (!this.focused() || !this.isEnabledFor(roomJid) || !canMark(row, roomJid) || row.isOutgoing) return Promise.resolve()
@@ -1036,10 +1048,11 @@ export class RoomReadMarkers extends BaseModule {
     const key = this.roomKey(roomJid)
     const query = this.capture()
     const watermarkCurrent = this.captureReplayBoundary()
+    const conversionCurrent = this.captureConversionBoundary()
     const held = this.queued.get(key)
     if (!held || !held.isCurrent() || !held.watermarkCurrent() || held.epoch !== (this.epochs.get(key) ?? 0) || held.consent !== this.consentRevision
       || this.order(roomJid).after(row.stanzaId!, held.row.stanzaId!)) {
-      this.queued.set(key, { row, epoch: this.epochs.get(key) ?? 0, consent: this.consentRevision, isCurrent: () => query.isCurrent() && viewCurrent(), sessionCurrent: query.isCurrent, watermarkCurrent })
+      this.queued.set(key, { row, epoch: this.epochs.get(key) ?? 0, consent: this.consentRevision, isCurrent: () => query.isCurrent() && viewCurrent() && conversionCurrent(), sessionCurrent: query.isCurrent, watermarkCurrent })
     }
     return this.publishQueued(roomJid)
   }
