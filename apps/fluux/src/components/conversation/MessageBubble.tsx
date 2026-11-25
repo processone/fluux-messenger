@@ -712,11 +712,6 @@ export const MessageBubble = memo(function MessageBubble({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {isSaved && !message.isRetracted && readOnlyActions && (
-        <span data-testid="saved-marker" role="img" aria-label={t('saved.marker')} title={t('saved.marker')} className="absolute end-2 top-0.5 text-fluux-muted pointer-events-none">
-          <Bookmark className="size-3 fill-current" />
-        </span>
-      )}
       {/* Avatar, timestamp (when selected), or spacer - width adapts to time format and density */}
       <div className={`${avatarColWidth} flex-shrink-0 flex flex-col`} data-msg-avatar-column="">
         {/* /me action messages always show timestamp instead of avatar */}
@@ -1017,6 +1012,11 @@ export const MessageBubble = memo(function MessageBubble({
       {readMarkerBadge}
       </div>
 
+      {isSaved && !message.isRetracted && readOnlyActions && (
+        <span data-testid="saved-marker" role="img" aria-label={t('saved.marker')} title={t('saved.marker')} className="me-1 mt-0.5 shrink-0 self-start text-fluux-muted pointer-events-none">
+          <Bookmark className="size-3 fill-current" />
+        </span>
+      )}
       {hasSavedAction && (
         <button
           ref={savedButtonRef}
