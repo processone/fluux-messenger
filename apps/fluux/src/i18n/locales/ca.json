@@ -1698,6 +1698,10 @@
     "commandPalette": {
         "drafts": "Esborranys",
         "searchDrafts": "Cerca un esborrany…",
+        "confirmResumeTitle": "Obrir l'esborrany?",
+        "confirmResumeEdit": "Obrir l'esborrany descartarà els canvis no desats d'aquest missatge.",
+        "confirmResumeWhisper": "Obrir l'esborrany de la sala descartarà el text privat que no s'hagi enviat.",
+        "confirmResumeAction": "Descarta i obre l'esborrany",
         "moreMatches": "Més resultats",
         "open": "Obre la paleta d'ordres",
         "placeholder": "Ves a...",

@@ -1694,6 +1694,10 @@
     "commandPalette": {
         "drafts": "Drafts",
         "searchDrafts": "Find a draft…",
+        "confirmResumeTitle": "Open draft?",
+        "confirmResumeEdit": "Opening the draft will discard any unsaved changes to this message.",
+        "confirmResumeWhisper": "Opening the room draft will discard any unsent private text.",
+        "confirmResumeAction": "Discard and open draft",
         "moreMatches": "More matches",
         "open": "Open command palette",
         "placeholder": "Go to...",

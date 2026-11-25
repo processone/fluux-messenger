@@ -1694,6 +1694,10 @@
     "commandPalette": {
         "drafts": "Luonnokset",
         "searchDrafts": "Etsi luonnos…",
+        "confirmResumeTitle": "Avataanko luonnos?",
+        "confirmResumeEdit": "Luonnoksen avaaminen hylkää tämän viestin tallentamattomat muutokset.",
+        "confirmResumeWhisper": "Huoneen luonnoksen avaaminen hylkää lähettämättömän yksityisen tekstin.",
+        "confirmResumeAction": "Hylkää ja avaa luonnos",
         "moreMatches": "Lisää osumia",
         "open": "Avaa komentopaletti",
         "placeholder": "Siirry...",

@@ -1702,6 +1702,10 @@
     "commandPalette": {
         "drafts": "Abbozzi",
         "searchDrafts": "Sib abbozz…",
+        "confirmResumeTitle": "Tiftaħ l-abbozz?",
+        "confirmResumeEdit": "Jekk tiftaħ l-abbozz, jintremew il-bidliet mhux salvati f'dan il-messaġġ.",
+        "confirmResumeWhisper": "Jekk tiftaħ l-abbozz tal-kamra, jintrema kwalunkwe test privat li ma ntbagħatx.",
+        "confirmResumeAction": "Armi u iftaħ l-abbozz",
         "moreMatches": "Aktar riżultati",
         "open": "Iftaħ il-palett tal-kmandi",
         "placeholder": "Mur għand...",

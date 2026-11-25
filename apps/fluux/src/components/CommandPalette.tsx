@@ -75,6 +75,7 @@ interface ItemGroup {
 interface CommandPaletteProps {
   isOpen: boolean
   onClose: () => void
+  onResumeDraft?: (view: 'messages' | 'rooms', jid: string) => void
   onSidebarViewChange: (view: SidebarView, targetJid?: string) => void
   onOpenSettings: () => void
   onToggleConsole: () => void
@@ -251,6 +252,7 @@ export function CommandPalette(props: CommandPaletteProps) {
 function CommandPaletteContent({
   onClose,
   onSidebarViewChange,
+  onResumeDraft,
   onOpenSettings,
   onToggleConsole,
   onToggleShortcutHelp,
@@ -315,8 +317,14 @@ function CommandPaletteContent({
   }
 
   // Item selection delegates hydration and history to the same owner for ordinary rows and drafts.
-  const selectConversation = (jid: string) => closeAndNavigate('messages', jid)
-  const selectRoom = (jid: string) => closeAndNavigate('rooms', jid)
+  const selectTarget = (view: 'messages' | 'rooms', jid: string) => {
+    if (draftsOnly && onResumeDraft) {
+      onClose()
+      onResumeDraft(view, jid)
+    } else closeAndNavigate(view, jid)
+  }
+  const selectConversation = (jid: string) => selectTarget('messages', jid)
+  const selectRoom = (jid: string) => selectTarget('rooms', jid)
 
   // =============================================================================
   // Build all command items

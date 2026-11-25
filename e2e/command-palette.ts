@@ -1,3 +1,4 @@
+import { waitForActions } from './harness/messageInteraction'
 import { DRAFT_SAVE_DELAY_MS } from '../apps/fluux/src/constants/ui'
 import { expect, test, type Page } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
@@ -438,30 +439,40 @@ test('older room text stays saved but only a public edit qualifies it for Drafts
   await expect(publicField).toContainText('😀')
   await expect(publicField).toContainText('Older text whose recipient was not recorded.')
   await expect.poll(() => page.evaluate(() => (window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }).__roomStore.getState().ordinaryDrafts.has('team@conference.fluux.chat'))).toBe(true)
-  await page.clock.install()
-  await publicField.fill('A new public agenda for the whole room.')
-  await page.clock.runFor(DRAFT_SAVE_DELAY_MS + 1)
-  await page.clock.resume()
-  await expect.poll(() => page.evaluate(() => {
-    const demo = window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }
-    return demo.__roomStore.getState().ordinaryDrafts.has('team@conference.fluux.chat')
-  })).toBe(true)
-  // Flush through the real account-loading boundary before recreating the app context.
-  await page.evaluate(() => {
-    const demo = window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }
-    const rooms = demo.__roomStore.getState().joinedRooms()
-    demo.__roomStore.getState().switchAccount(null)
-    for (const room of rooms) demo.__roomStore.getState().addRoom(room)
+  const pickerEditedText = await publicField.evaluate(el => el.textContent ?? '')
+  const reloadAndOpen = async () => {
+    await page.evaluate(() => {
+      const demo = window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }
+      const rooms = demo.__roomStore.getState().joinedRooms()
+      demo.__roomStore.getState().switchAccount(null)
+      for (const room of rooms) demo.__roomStore.getState().addRoom(room)
+    })
+    await bootDemo(page, '/demo.html?tutorial=false')
+    await page.evaluate(() => (window as unknown as { __demoClient: DemoClient }).__demoClient.stopAnimation())
+    await page.keyboard.press('ControlOrMeta+k')
+    await expect(palette).toBeVisible()
+    await palette.getByRole('button', { name: /^Drafts/ }).click()
+    await palette.getByRole('button', { name: /Team Chat team/ }).click()
+  }
+  await reloadAndOpen()
+  await expect(publicField).toHaveText(pickerEditedText)
+  const pickerReloaded = await page.evaluate(() => {
+    const state = (window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }).__roomStore.getState()
+    return { text: state.getDraft('team@conference.fluux.chat'), ordinary: state.ordinaryDrafts.has('team@conference.fluux.chat') }
   })
-  await bootDemo(page, '/demo.html?tutorial=false')
-  await page.evaluate(() => (window as unknown as { __demoClient: DemoClient }).__demoClient.stopAnimation())
-  await page.keyboard.press('ControlOrMeta+k')
-  await expect(palette).toBeVisible()
-  await palette.getByRole('button', { name: /^Drafts/ }).click()
-  await palette.getByRole('button', { name: /Team Chat team/ }).click()
+  expect(pickerReloaded).toEqual({ text: pickerEditedText, ordinary: true })
+  await page.getByRole('complementary').getByText('Design Review', { exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Message #Design Review', exact: true })).toBeVisible()
+  await page.evaluate(() => (window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }).__roomStore.getState().setDraft('team@conference.fluux.chat', 'Separate older text for a typed edit.'))
+  await page.getByRole('complementary').getByText('Team Chat', { exact: true }).click()
+  await expect(publicField).toHaveText('Separate older text for a typed edit.')
+  expect(await page.evaluate(() => (window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }).__roomStore.getState().ordinaryDrafts.has('team@conference.fluux.chat'))).toBe(false)
+  await publicField.fill('A new public agenda for the whole room.')
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }).__roomStore.getState().getDraft('team@conference.fluux.chat'))).toBe('A new public agenda for the whole room.')
+  await reloadAndOpen()
   await expect(publicField).toHaveText('A new public agenda for the whole room.')
   await test.info().attach('legacy-room-upgrade', {
-    body: JSON.stringify({ retainedLegacyText, legacyFinderEntryCount, restoredText: await publicField.textContent(), qualifiedAfterReload: await page.evaluate(() => (window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }).__roomStore.getState().ordinaryDrafts.has('team@conference.fluux.chat')) }),
+    body: JSON.stringify({ retainedLegacyText, legacyFinderEntryCount, pickerEditedText, pickerReloaded, restoredTypedText: await publicField.textContent(), qualifiedAfterReload: await page.evaluate(() => (window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }).__roomStore.getState().ordinaryDrafts.has('team@conference.fluux.chat')) }),
     contentType: 'application/json',
   })
 })
@@ -615,5 +626,177 @@ for (const ordinary of [false, true]) {
       await expect(palette.getByRole('button', { name: /Team Chat team/ })).toBeVisible()
     } else await expect(palette.getByRole('button', { name: /^Drafts/ })).toHaveCount(0)
     await test.info().attach('recovered-room-provenance', { body: JSON.stringify(recovered), contentType: 'application/json' })
+  })
+}
+
+for (const kind of ['chat', 'room'] as const) {
+  test(`Saved remains in Back history when resuming its still-active ${kind} draft`, async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+    await bootDemo(page, '/demo.html?tutorial=false')
+    await page.evaluate(() => (window as unknown as { __demoClient: DemoClient }).__demoClient.stopAnimation())
+    const id = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
+    const tab = kind === 'chat' ? 'messages' : 'rooms'
+    await page.locator(`[data-nav="${tab}"]`).click()
+    await page.getByRole('complementary').getByText(kind === 'chat' ? 'Emma Wilson' : 'Team Chat', { exact: true }).click()
+    const field = kind === 'chat' ? page.getByPlaceholder('Message Emma Wilson', { exact: true }) : page.getByRole('combobox', { name: 'Message #Team Chat', exact: true })
+    await expect(field).toBeVisible()
+    const messageId = await page.evaluate(({ kind, id }) => {
+      const demo = window as unknown as { __chatStore: typeof import('@fluux/sdk/stores').chatStore; __roomStore: typeof import('@fluux/sdk/stores').roomStore }
+      const rows = kind === 'chat' ? demo.__chatStore.getState().messages.get(id) : demo.__roomStore.getState().messages.get(id)
+      const row = [...(rows ?? [])].reverse().find(row => row.body && !row.isRetracted && !('isPrivate' in row && row.isPrivate))
+      if (!row) throw new Error('The demo conversation needs a public message to save')
+      return row.id
+    }, { kind, id })
+    const row = page.locator(`[data-message-id="${messageId}"][data-message-body]`)
+    await row.scrollIntoViewIfNeeded()
+    await row.click({ button: 'right' })
+    await page.getByRole('menu', { name: 'More options', exact: true }).getByRole('button', { name: 'Save message', exact: true }).click()
+    await field.fill('Finish these review notes.')
+    await page.getByRole('button', { name: kind === 'chat' ? 'More actions' : 'Room actions', exact: true }).click()
+    await page.getByRole('menu').getByRole('menuitem', { name: /^Saved messages \(/ }).click()
+    await expect(page.getByTestId('saved-scope')).toBeVisible()
+    const savedRoute = await page.evaluate(() => location.hash)
+    await expect(field).toBeVisible()
+    await page.keyboard.press('ControlOrMeta+k')
+    const palette = page.getByRole('dialog')
+    await expect(palette).toBeVisible()
+    await palette.getByRole('button', { name: /^Drafts/ }).click()
+    await palette.getByRole('button', { name: kind === 'chat' ? /Emma Wilson emma/ : /Team Chat team/ }).click()
+    await expect.poll(() => page.evaluate(() => location.hash)).not.toBe(savedRoute)
+    if (kind === 'chat') await expect(field).toHaveValue('Finish these review notes.')
+    else await expect(field).toHaveText('Finish these review notes.')
+    await page.goBack()
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe(savedRoute)
+    await expect(page.getByTestId('saved-row').first()).toBeVisible()
+    await test.info().attach('saved-back-route', { body: JSON.stringify({ kind, route: await page.evaluate(() => location.hash) }), contentType: 'application/json' })
+  })
+}
+
+for (const selection of ['pointer', 'keyboard'] as const) {
+  test(`public slash completion qualifies restored text using ${selection}`, async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+    await bootDemo(page, '/demo.html?tutorial=false')
+    await page.evaluate(() => {
+      const demo = window as unknown as { __demoClient: DemoClient; __roomStore: typeof import('@fluux/sdk/stores').roomStore }
+      demo.__demoClient.stopAnimation()
+      demo.__roomStore.getState().setDraft('team@conference.fluux.chat', '/')
+    })
+    await page.locator('[data-nav="rooms"]').click()
+    await page.getByRole('complementary').getByText('Team Chat', { exact: true }).click()
+    const field = page.getByRole('combobox', { name: 'Message #Team Chat', exact: true })
+    await expect(field).toHaveText('/')
+    await field.focus()
+    await field.press('End')
+    const command = page.locator('.fluux-popover button').filter({ has: page.locator('span.font-medium') }).first()
+    await expect(command).toBeVisible()
+    const chosenName = await command.locator('span.font-medium').innerText()
+    expect(await page.evaluate(() => (window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }).__roomStore.getState().ordinaryDrafts.has('team@conference.fluux.chat'))).toBe(false)
+    if (selection === 'pointer') await command.click()
+    else await field.press('Tab')
+    await expect(field).toHaveText(`${chosenName} `)
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }).__roomStore.getState().ordinaryDrafts.has('team@conference.fluux.chat'))).toBe(true)
+    const savedText = await page.evaluate(() => (window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }).__roomStore.getState().getDraft('team@conference.fluux.chat'))
+    expect(savedText).toBe(`${chosenName} `)
+    await test.info().attach('slash-edit-provenance', { body: JSON.stringify({ selection, chosenName, savedText }), contentType: 'application/json' })
+  })
+}
+
+for (const mode of ['chat-edit', 'room-edit', 'room-whisper'] as const) {
+  test(`asks before resuming an ordinary draft over ${mode}`, async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+    await bootDemo(page, '/demo.html?tutorial=false')
+    const kind = mode === 'chat-edit' ? 'chat' : 'room'
+    const id = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
+    await page.evaluate(() => (window as unknown as { __demoClient: DemoClient }).__demoClient.stopAnimation())
+    await page.locator(`[data-nav="${kind === 'chat' ? 'messages' : 'rooms'}"]`).click()
+    await page.getByRole('complementary').getByText(kind === 'chat' ? 'Emma Wilson' : 'Team Chat', { exact: true }).click()
+    const ordinaryField = kind === 'chat' ? page.getByPlaceholder('Message Emma Wilson', { exact: true }) : page.getByRole('combobox', { name: 'Message #Team Chat', exact: true })
+    await expect(ordinaryField).toBeVisible()
+    if (mode !== 'room-whisper') {
+      await ordinaryField.fill('Sent message for draft-resume editing.')
+      await ordinaryField.press('Enter')
+      if (kind === 'chat') await expect(ordinaryField).toHaveValue('')
+      else await expect(ordinaryField).toHaveText('')
+    }
+    await ordinaryField.fill('Ordinary draft for the shared review.')
+    await expect.poll(() => page.evaluate(({ kind, id }) => {
+      const demo = window as unknown as { __chatStore: typeof import('@fluux/sdk/stores').chatStore; __roomStore: typeof import('@fluux/sdk/stores').roomStore }
+      return kind === 'chat' ? demo.__chatStore.getState().getDraft(id) : demo.__roomStore.getState().getDraft(id)
+    }, { kind, id })).toBe('Ordinary draft for the shared review.')
+    let currentField = ordinaryField
+    if (mode === 'room-whisper') currentField = await enterWhisper(page)
+    else {
+      const messageId = await page.evaluate(({ kind, id }) => {
+        const demo = window as unknown as { __chatStore: typeof import('@fluux/sdk/stores').chatStore; __roomStore: typeof import('@fluux/sdk/stores').roomStore }
+        const rows = kind === 'chat' ? demo.__chatStore.getState().messages.get(id) : demo.__roomStore.getState().messages.get(id)
+        const message = [...(rows ?? [])].reverse().find(row => row.isOutgoing && !row.isRetracted && row.body && !('isPrivate' in row && row.isPrivate))
+        if (!message) throw new Error('The demo needs an outgoing message to edit')
+        return message.id
+      }, { kind, id })
+      const row = page.locator(`[data-message-id="${messageId}"][data-message-body]`)
+      await row.scrollIntoViewIfNeeded()
+      await row.click({ button: 'right' })
+      await page.getByRole('menu', { name: 'More options' }).getByRole('button', { name: 'Edit message', exact: true }).click()
+      await expect(page.getByText('Editing message', { exact: true })).toBeVisible()
+    }
+    await page.evaluate(() => {
+      const demo = window as unknown as { __demoClient: DemoClient; __draftResumeSends: number }
+      const client = demo.__demoClient
+      demo.__draftResumeSends = 0
+      const sendMessage = client.messages.sendMessage.bind(client.messages)
+      const sendCorrection = client.messages.sendCorrection.bind(client.messages)
+      const sendWhisper = client.rooms.sendWhisper.bind(client.rooms)
+      client.messages.sendMessage = (...args) => { demo.__draftResumeSends += 1; return sendMessage(...args) }
+      client.messages.sendCorrection = (...args) => { demo.__draftResumeSends += 1; return sendCorrection(...args) }
+      client.rooms.sendWhisper = (...args) => { demo.__draftResumeSends += 1; return sendWhisper(...args) }
+    })
+    await currentField.fill('Do not lose this unfinished message.')
+    const pickDraft = async () => {
+      await page.keyboard.press('ControlOrMeta+k')
+      const picker = page.getByRole('dialog')
+      await expect(picker).toBeVisible()
+      await picker.getByRole('button', { name: /^Drafts/ }).click()
+      await picker.getByRole('button', { name: kind === 'chat' ? /Emma Wilson emma/ : /Team Chat team/ }).click()
+    }
+    await pickDraft()
+    const confirmation = page.getByRole('alertdialog', { name: 'Open draft?' })
+    await expect(confirmation).toBeVisible()
+    await expect(confirmation).toHaveAccessibleDescription(mode === 'room-whisper' ? /unsent private text/ : /unsaved changes to this message/)
+    if (process.env.FLUUX_DRAFT_PROOF) await page.screenshot({ path: test.info().outputPath(`${mode}-confirmation-desktop.png`), animations: 'disabled' })
+    await confirmation.getByRole('button', { name: 'Cancel', exact: true }).press('Escape')
+    await expect(confirmation).toBeHidden()
+    if (kind === 'chat') await expect(currentField).toHaveValue('Do not lose this unfinished message.')
+    else await expect(currentField).toHaveText('Do not lose this unfinished message.')
+    await expect(currentField).toBeFocused()
+    if (mode === 'room-whisper') await expect(page.getByText('Whispering privately to Emma', { exact: true })).toBeVisible()
+    else await expect(page.getByText('Editing message', { exact: true })).toBeVisible()
+    if (mode === 'room-whisper') await page.getByRole('button', { name: 'Hide members', exact: true }).click()
+    await page.setViewportSize({ width: 390, height: 844 })
+    await pickDraft()
+    await expect(confirmation).toBeVisible()
+    if (process.env.FLUUX_DRAFT_PROOF) await page.screenshot({ path: test.info().outputPath(`${mode}-confirmation-phone.png`), animations: 'disabled' })
+    await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(confirmation).toBeHidden()
+    if (kind === 'chat') await expect(currentField).toHaveValue('Do not lose this unfinished message.')
+    else await expect(currentField).toHaveText('Do not lose this unfinished message.')
+    await expect(currentField).toBeFocused()
+    await pickDraft()
+    await expect(confirmation).toBeVisible()
+    await confirmation.getByRole('button', { name: 'Discard and open draft', exact: true }).click()
+    await expect(confirmation).toBeHidden()
+    if (kind === 'chat') await expect(ordinaryField).toHaveValue('Ordinary draft for the shared review.')
+    else await expect(ordinaryField).toHaveText('Ordinary draft for the shared review.')
+    await expect(page.getByText('Editing message', { exact: true })).toHaveCount(0)
+    await expect(page.getByText('Whispering privately to Emma', { exact: true })).toHaveCount(0)
+    await expect(ordinaryField).toBeFocused()
+    await test.info().attach('restored-composer-geometry', { body: JSON.stringify(await ordinaryField.evaluate(element => ({
+      rect: element.getBoundingClientRect().toJSON(), viewport: { width: innerWidth, height: innerHeight },
+      ancestors: Array.from((function* () { let node: HTMLElement | null = element as HTMLElement; while (node) { yield node; node = node.parentElement } })()).map(node => ({ tag: node.tagName, className: node.className, rect: node.getBoundingClientRect().toJSON(), overflow: getComputedStyle(node).overflow, height: getComputedStyle(node).height })),
+    }))), contentType: 'application/json' })
+    await expect(ordinaryField).toBeInViewport({ ratio: 1 })
+    await page.mouse.move(0, 0)
+    await expect(ordinaryField).toBeInViewport({ ratio: 1 })
+    expect(await page.evaluate(() => (window as unknown as { __draftResumeSends: number }).__draftResumeSends)).toBe(0)
+    if (process.env.FLUUX_DRAFT_PROOF) await page.screenshot({ path: test.info().outputPath(`${mode}-resumed-phone.png`), animations: 'allow' })
   })
 }

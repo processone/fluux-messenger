@@ -1,7 +1,10 @@
+import type { ComponentProps } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ModalOverlay } from './ModalOverlay'
 
 interface ConfirmDialogProps {
+  panelProps?: ComponentProps<typeof ModalOverlay>['panelProps']
+  descriptionId?: string
   title: string
   message: string
   confirmLabel: string
@@ -20,6 +23,8 @@ export function ConfirmDialog({
   onCancel,
   variant = 'danger',
   busy = false,
+  panelProps,
+  descriptionId,
 }: ConfirmDialogProps) {
   const { t } = useTranslation()
 
@@ -28,11 +33,11 @@ export function ConfirmDialog({
     : 'bg-red-500 hover:bg-red-600'
 
   return (
-    <ModalOverlay onClose={onCancel} dismissable={!busy} panelClassName="p-4">
+    <ModalOverlay panelProps={panelProps} onClose={onCancel} dismissable={!busy} panelClassName="p-4">
       {({ close }) => (
         <>
           <h3 className="text-lg font-semibold text-fluux-text mb-2">{title}</h3>
-          <p className="text-sm text-fluux-muted mb-4">{message}</p>
+          <p id={descriptionId} className="text-sm text-fluux-muted mb-4">{message}</p>
           <div className="flex gap-2 justify-end">
             <button
               type="button"

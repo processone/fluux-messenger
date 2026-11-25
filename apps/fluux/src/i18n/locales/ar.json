@@ -1702,6 +1702,10 @@
     "commandPalette": {
         "drafts": "المسودات",
         "searchDrafts": "البحث عن مسودة…",
+        "confirmResumeTitle": "فتح المسودة؟",
+        "confirmResumeEdit": "سيؤدي فتح المسودة إلى تجاهل أي تعديلات غير محفوظة على هذه الرسالة.",
+        "confirmResumeWhisper": "سيؤدي فتح مسودة الغرفة إلى تجاهل أي نص خاص لم يتم إرساله.",
+        "confirmResumeAction": "تجاهل وفتح المسودة",
         "moreMatches": "المزيد من النتائج",
         "open": "فتح لوحة الأوامر",
         "placeholder": "الانتقال إلى...",

@@ -1694,6 +1694,10 @@
     "commandPalette": {
         "drafts": "Utkast",
         "searchDrafts": "Finn et utkast…",
+        "confirmResumeTitle": "Åpne utkast?",
+        "confirmResumeEdit": "Åpning av utkastet forkaster ulagrede endringer i denne meldingen.",
+        "confirmResumeWhisper": "Åpning av romutkastet forkaster privat tekst som ikke er sendt.",
+        "confirmResumeAction": "Forkast og åpne utkast",
         "moreMatches": "Flere treff",
         "open": "Åpne kommandopalett",
         "placeholder": "Gå til...",

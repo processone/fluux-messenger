@@ -79,7 +79,7 @@ export function useConversationDraft({
   editingConversationId, getReferences, onDraftRecovered,
 }: UseConversationDraftOptions): [
   string, React.Dispatch<React.SetStateAction<string>>,
-  (canRecover?: () => boolean) => () => boolean, () => void,
+  (canRecover?: () => boolean) => () => boolean, () => void, () => boolean,
 ] {
   const { owner, getDraft, setDraft, clearDraft, getOrdinary } = draftOperations
   const isEditing = editingConversationId === conversationId
@@ -186,16 +186,17 @@ export function useConversationDraft({
     return cancelPendingSave
   }, [text, isEditing, conversationId, persist, cancelPendingSave, getOrdinary])
 
+  const applySnapshot = useCallback((snapshot: DraftSnapshot) => {
+    cancelPendingSave()
+    messageDraftRef.current = { ...snapshot, references: [...snapshot.references] }
+    currentTextRef.current = snapshot.text
+    callbacks.current.onDraftRecovered?.(snapshot.text, snapshot.references, snapshot.ordinary)
+    if (composerRef.current) composerRef.current.setText(snapshot.text)
+    else userSetText(snapshot.text)
+    persist(conversationId, snapshot)
+  }, [cancelPendingSave, composerRef, userSetText, persist, conversationId])
+
   useEffect(() => {
-    const apply = (snapshot: DraftSnapshot) => {
-      cancelPendingSave()
-      messageDraftRef.current = snapshot
-      currentTextRef.current = snapshot.text
-      callbacks.current.onDraftRecovered?.(snapshot.text, snapshot.references, snapshot.ordinary)
-      if (composerRef.current) composerRef.current.setText(snapshot.text)
-      else userSetText(snapshot.text)
-      persist(conversationId, snapshot)
-    }
     const recoverHere = (failed: FailedDraft) => {
       if (!failed.canRecover() || !failed.text.trim()) return false
       if (editingRef.current || wasEditingRef.current) {
@@ -207,7 +208,7 @@ export function useConversationDraft({
         return false
       }
       const current = readMessageDraft(conversationId)
-      apply(mergeSnapshots(current, failed))
+      applySnapshot(mergeSnapshots(current, failed))
       return !current.text
     }
     put(draftOwners, owner, ownerKey, recoverHere)
@@ -216,7 +217,7 @@ export function useConversationDraft({
       const pending = deferredDrafts.get(owner)?.get(ownerKey)
       if (pending) {
         remove(deferredDrafts, owner, ownerKey)
-        apply(deferredSnapshot(pending))
+        applySnapshot(deferredSnapshot(pending))
       } else if (wasEditingRef.current) {
         // Without a failed send, keep the existing edit-finish behavior.
         const text = composerRef.current?.getText() ?? currentTextRef.current
@@ -234,7 +235,7 @@ export function useConversationDraft({
         remove(draftReaders, owner, ownerKey)
       }
     }
-  }, [owner, ownerKey, conversationId, isEditing, composerRef, cancelPendingSave, userSetText, persist, readMessageDraft, getOrdinary])
+  }, [owner, ownerKey, conversationId, isEditing, composerRef, cancelPendingSave, userSetText, persist, readMessageDraft, getOrdinary, applySnapshot])
 
   const consumeDraft = useCallback((canRecover?: () => boolean) => {
     const id = conversationId
@@ -277,7 +278,24 @@ export function useConversationDraft({
     persist(conversationId, messageDraftRef.current)
   }, [owner, ownerKey, userSetText, persist, conversationId])
 
-  return [text, userSetText, consumeDraft, discardDraft]
+  const restoreMessageDraft = useCallback(() => {
+    if (getStorageScopeJid() !== account) return false
+    const pending = deferredDrafts.get(owner)?.get(ownerKey)
+    let snapshot = pending ? deferredSnapshot(pending) : messageDraftRef.current
+    if (!snapshot.text.trim()) {
+      const saved = getDraft(conversationId)
+      const metadata = draftMentions.get(owner)?.get(ownerKey)
+      snapshot = { text: saved, ordinary: getOrdinary?.(conversationId, saved), references: metadata?.text === saved ? metadata.references : [] }
+    }
+    if (!snapshot.text.trim()) return false
+    remove(deferredDrafts, owner, ownerKey)
+    wasEditingRef.current = false
+    textConversationIdRef.current = conversationId
+    applySnapshot({ ...snapshot, references: [...snapshot.references] })
+    return true
+  }, [account, owner, ownerKey, conversationId, getDraft, getOrdinary, applySnapshot])
+
+  return [text, userSetText, consumeDraft, discardDraft, restoreMessageDraft]
 }
 
 /**

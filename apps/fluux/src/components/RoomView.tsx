@@ -31,6 +31,7 @@ import { composerAutocompleteAriaProps } from './composer/autocompleteAria'
 import { usesMobileEnterKey } from './composer/mobileEnter'
 import { ConversationThread } from './conversation/ConversationThread'
 import { useConversationThread } from '@/hooks/useConversationThread'
+import { useDraftResumeTarget, type RegisterDraftResume } from '@/hooks/useDraftResumeTarget'
 import { RoomHeader } from './RoomHeader'
 import { RoomVoiceControls } from './RoomVoiceControls'
 import { OccupantPanel } from './OccupantPanel'
@@ -84,6 +85,7 @@ function getHatColors(hat: { uri: string; hue?: number }) {
 const noPeerMarkerSubscription = () => () => {}
 
 interface RoomViewProps {
+  onRegisterDraftResume?: RegisterDraftResume
   onBack?: () => void
   // Focus zone refs for Tab cycling
   mainContentRef?: RefObject<HTMLElement | null>
@@ -121,7 +123,7 @@ const readActiveRoomMessages = () => roomStore.getState().activeMessages()
 const setRoomTargetMessageId = (target: string | MessageRowRef) => roomStore.getState().setTargetMessageId(target)
 const triggerRoomAnimation = (id: string, animation: string, senderName: string) => roomStore.getState().triggerAnimation(id, animation, senderName)
 
-export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation, onShowSavedInConversation, covered = false, renderMobileOccupants, onCloseMobileOccupants }: RoomViewProps) {
+export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation, onShowSavedInConversation, covered = false, renderMobileOccupants, onCloseMobileOccupants, onRegisterDraftResume }: RoomViewProps) {
   const { t } = useTranslation()
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
@@ -471,6 +473,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                 <RoomMessageInput
                   {...thread.composerProps}
                   key={activeRoom.jid}
+                  onRegisterDraftResume={onRegisterDraftResume}
                   ref={composerHandleRef}
                   roomJid={activeRoom.jid}
                   textareaRef={composerRef as React.RefObject<ComposerInputElement | null>}
@@ -1637,6 +1640,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 })
 
 interface RoomMessageInputProps {
+  onRegisterDraftResume?: RegisterDraftResume
   roomJid: string
   textareaRef?: React.RefObject<ComposerInputElement | null>
   sendMessage: (roomJid: string, body: string, options?: { replyTo?: { id: string; to: string; fallback?: { author: string; body: string } }; references?: MentionReference[]; attachment?: FileAttachment }) => Promise<string>
@@ -1679,6 +1683,7 @@ export const RoomMessageInput = memo(function RoomMessageInput(props: RoomMessag
 })
 
 const RoomMessageInputContent = memo(function RoomMessageInputContent({
+  onRegisterDraftResume,
   roomJid,
   textareaRef,
   sendMessage,
@@ -1820,7 +1825,7 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
   }), [])
 
   // The current mounted room owns both recovered text and its mention metadata.
-  const [text, setText, consumeDraft, discardDraft] = useConversationDraft({
+  const [text, setText, consumeDraft, discardDraft, restoreMessageDraft] = useConversationDraft({
     conversationId: roomJid,
     draftOperations: whisperTarget ? whisperDraftOperations : { owner: roomStore, getDraft, setDraft, clearDraft, getOrdinary: getOrdinaryDraft },
     composerRef,
@@ -1849,6 +1854,22 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
     discardDraft()
     onClearWhisper?.()
   }
+
+  useDraftResumeTarget(onRegisterDraftResume, 'room', roomJid,
+    whisperTarget ? 'whisper' : editingMessage?.roomJid === roomJid ? 'edit' : null,
+    whisperTarget ?? (editingMessage?.roomJid === roomJid ? editingMessage : null),
+    () => {
+      if (whisperTarget) {
+        const state = roomStore.getState()
+        if (!state.ordinaryDrafts?.has(roomJid) || !state.getDraft(roomJid).trim()) return false
+        handleClearWhisper()
+        onCancelEdit()
+        return true
+      }
+      if (!restoreMessageDraft()) return false
+      onCancelEdit()
+      return true
+    })
 
   // Slash commands (XEP-0045 moderation/subject/invite shortcuts, plus app-level
   // easter eggs). The context composes the room action hooks and the roomUiStore
@@ -2116,6 +2137,15 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
     />
   ) : null
 
+  const handleCommandSelect = (index: number) => {
+    const command = commandMenu.state.matches[index]
+    if (!command) return
+    const value = `/${command.name} `
+    markPublicEdit(value)
+    setText(value)
+    commandMenu.dismiss()
+  }
+
   // Popovers rendered above the composer, in priority order: help panel, then
   // command completion menu, then the mention dropdown.
   const aboveInputNode = helpOpen ? (
@@ -2125,13 +2155,7 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
       matches={commandMenu.state.matches}
       selectedIndex={commandMenu.state.selectedIndex}
       navSerial={commandMenu.state.navSerial}
-      onSelect={(idx) => {
-        const cmd = commandMenu.state.matches[idx]
-        if (cmd) {
-          setText(`/${cmd.name} `)
-          commandMenu.dismiss()
-        }
-      }}
+      onSelect={handleCommandSelect}
       onDismiss={commandMenu.dismiss}
     />
   ) : (
@@ -2184,11 +2208,7 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
         }
         if (enterSelectsSuggestion || e.key === 'Tab') {
           e.preventDefault()
-          const cmd = commandMenu.state.matches[commandMenu.state.selectedIndex]
-          if (cmd) {
-            setText(`/${cmd.name} `)
-            commandMenu.dismiss()
-          }
+          handleCommandSelect(commandMenu.state.selectedIndex)
           return
         }
         if (e.key === 'Escape') {

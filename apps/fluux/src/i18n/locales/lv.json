@@ -1697,6 +1697,10 @@
     "commandPalette": {
         "drafts": "Melnraksti",
         "searchDrafts": "Atrast melnrakstu…",
+        "confirmResumeTitle": "Atvērt melnrakstu?",
+        "confirmResumeEdit": "Atverot melnrakstu, tiks atmestas šī ziņojuma nesaglabātās izmaiņas.",
+        "confirmResumeWhisper": "Atverot istabas melnrakstu, tiks atmests nenosūtītais privātais teksts.",
+        "confirmResumeAction": "Atmest un atvērt melnrakstu",
         "moreMatches": "Vairāk rezultātu",
         "open": "Atvērt komandu paleti",
         "placeholder": "Doties uz...",

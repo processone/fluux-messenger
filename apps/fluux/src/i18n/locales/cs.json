@@ -1700,6 +1700,10 @@
     "commandPalette": {
         "drafts": "Koncepty",
         "searchDrafts": "Najít koncept…",
+        "confirmResumeTitle": "Otevřít koncept?",
+        "confirmResumeEdit": "Otevřením konceptu zahodíte neuložené změny této zprávy.",
+        "confirmResumeWhisper": "Otevřením konceptu místnosti zahodíte neodeslaný soukromý text.",
+        "confirmResumeAction": "Zahodit a otevřít koncept",
         "moreMatches": "Další výsledky",
         "open": "Otevřít příkazovou paletu",
         "placeholder": "Přejít na...",

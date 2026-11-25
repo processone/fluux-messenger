@@ -203,7 +203,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         // Always set conversation (even null) to clear any leftover archived conversation
         const pending = chatStore.getState()
         if (!targetJid || !pending.activationPending || pending.activationTarget !== targetJid) void activateConversation(targetConversation ?? null)
-        if (targetJid) navigateToMessages(targetJid, { replace: shouldReplaceOnSelect(targetJid, sidebarView === newView ? activeJid : currentConversationId) })
+        if (targetJid) navigateToMessages(targetJid, { replace: sidebarView === newView && shouldReplaceOnSelect(targetJid, activeJid) })
         else navigateToMessages(targetConversation ?? undefined)
         break
       }
@@ -222,7 +222,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         // Always set room (even null) to ensure clean state
         const pending = roomStore.getState()
         if (!targetJid || !pending.activationPending || pending.activationTarget !== targetJid) void activateRoom(targetRoom ?? null)
-        if (targetJid) navigateToRooms(targetJid, { replace: shouldReplaceOnSelect(targetJid, sidebarView === newView ? activeJid : currentRoomJid) })
+        if (targetJid) navigateToRooms(targetJid, { replace: sidebarView === newView && shouldReplaceOnSelect(targetJid, activeJid) })
         else navigateToRooms(targetRoom ?? undefined)
         break
       }

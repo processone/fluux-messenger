@@ -1694,6 +1694,10 @@
     "commandPalette": {
         "drafts": "Concepten",
         "searchDrafts": "Zoek een concept…",
+        "confirmResumeTitle": "Concept openen?",
+        "confirmResumeEdit": "Als je het concept opent, gaan niet-opgeslagen wijzigingen aan dit bericht verloren.",
+        "confirmResumeWhisper": "Als je het kamerconcept opent, gaat niet-verzonden privétekst verloren.",
+        "confirmResumeAction": "Verwerpen en concept openen",
         "moreMatches": "Meer resultaten",
         "open": "Opdrachtenpalet openen",
         "placeholder": "Ga naar...",

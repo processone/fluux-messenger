@@ -1698,6 +1698,10 @@
     "commandPalette": {
         "drafts": "Borradores",
         "searchDrafts": "Buscar un borrador…",
+        "confirmResumeTitle": "¿Abrir borrador?",
+        "confirmResumeEdit": "Abrir el borrador descartará los cambios sin guardar de este mensaje.",
+        "confirmResumeWhisper": "Abrir el borrador de la sala descartará el texto privado que no se haya enviado.",
+        "confirmResumeAction": "Descartar y abrir borrador",
         "moreMatches": "Más resultados",
         "open": "Abrir la paleta de comandos",
         "placeholder": "Ir a...",

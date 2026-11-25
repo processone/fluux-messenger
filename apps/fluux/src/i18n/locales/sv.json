@@ -1694,6 +1694,10 @@
     "commandPalette": {
         "drafts": "Utkast",
         "searchDrafts": "Hitta ett utkast…",
+        "confirmResumeTitle": "Öppna utkast?",
+        "confirmResumeEdit": "Om du öppnar utkastet förkastas osparade ändringar i det här meddelandet.",
+        "confirmResumeWhisper": "Om du öppnar rummets utkast förkastas privat text som inte har skickats.",
+        "confirmResumeAction": "Förkasta och öppna utkast",
         "moreMatches": "Fler träffar",
         "open": "Öppna kommandopaletten",
         "placeholder": "Gå till...",

@@ -1698,6 +1698,10 @@
     "commandPalette": {
         "drafts": "Чарнавікі",
         "searchDrafts": "Знайсці чарнавік…",
+        "confirmResumeTitle": "Адкрыць чарнавік?",
+        "confirmResumeEdit": "Адкрыццё чарнавіка адкіне незахаваныя змены гэтага паведамлення.",
+        "confirmResumeWhisper": "Адкрыццё чарнавіка пакоя адкіне неадпраўлены асабісты тэкст.",
+        "confirmResumeAction": "Адкінуць і адкрыць чарнавік",
         "moreMatches": "Іншыя вынікі",
         "open": "Адкрыць палітру каманд",
         "placeholder": "Перайсці да...",
