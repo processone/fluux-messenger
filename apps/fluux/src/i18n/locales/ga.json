@@ -1879,6 +1879,63 @@
         "sent": "Teachtaireacht seolta. Is féidir an mhír iompórtáilte seo a bhaint."
     },
     "search": {
+        "panel": {
+            "title": "Scagairí",
+            "from": "Ó",
+            "anyone": "Duine ar bith",
+            "me": "Mise",
+            "date": "Dáta",
+            "anyTime": "Am ar bith",
+            "custom": "Tréimhse shaincheaptha",
+            "start": "An chéad lá",
+            "end": "An lá deireanach",
+            "contains": "Tá ann",
+            "image": "Íomhánna",
+            "link": "Naisc",
+            "file": "Comhaid",
+            "poll": "Pobalbhreitheanna",
+            "clear": "Glan na scagairí",
+            "apply": "Cuir i bhfeidhm",
+            "localEmpty": "Níl aon mheaitseáil i stair an ghléis seo.",
+            "archiveEmpty": "Níl aon mheaitseáil eile i gcartlann an fhreastalaí.",
+            "pageEmpty": "Níl aon mheaitseáil eile ar an leathanach seo. Lódáil tuilleadh chun teachtaireachtaí níos sine a sheiceáil.",
+            "invalidRange": "Ní féidir leis an gcéad lá a bheith i ndiaidh an lae dheireanaigh.",
+            "invalidFilters": "Comhlánaigh nó ceartaigh na scagairí roimh chuardach.",
+            "incomplete": "Seans go mbeidh roinnt meaitseálacha níos sine ar iarraidh toisc nach bhfuil sonraí a n-ábhair ar fáil ar an ngléas seo.",
+            "unavailable": "Níorbh fhéidir le Fluux na scagairí cuardaigh a ullmhú ar an ngléas seo."
+        },
+        "filtersBuilding": "Tá Fluux ag ullmhú scagairí seoltóra agus ábhair do stair an ghléis seo. Beidh na torthaí le feiceáil nuair a bheidh sé réidh.",
+        "needsWords": "Cuir focal leis nó roghnaigh seoltóir nó ábhar sna Scagairí chun cuardach a dhéanamh laistigh de na dátaí seo",
+        "values": {
+            "mine": "Do theachtaireachtaí féin",
+            "link": "Teachtaireachtaí le nasc",
+            "image": "Teachtaireachtaí le híomhá",
+            "file": "Teachtaireachtaí le comhad",
+            "poll": "Teachtaireachtaí le vótáil"
+        },
+        "chip": {
+            "from": "Ó {{name}}",
+            "mine": "Seolta agamsa",
+            "link": "Le nasc",
+            "image": "Le híomhá",
+            "file": "Le comhad",
+            "poll": "Le vótáil",
+            "list": "Scagairí cuardaigh",
+            "after": "I ndiaidh {{date}}",
+            "before": "Roimh {{date}}",
+            "on": "Dáta: {{date}}",
+            "invalid": "Ní thuigeann Fluux {{filter}}",
+            "remove": "Bain {{label}}"
+        },
+        "dates": {
+            "today": "Inniu",
+            "yesterday": "Inné",
+            "thisMonth": "An mhí seo",
+            "thisYear": "An bhliain seo"
+        },
+        "operators": {
+            "label": "Scagairí"
+        },
         "filter": {
             "all": "Uile",
             "conversations": "Comhráite",
@@ -1899,6 +1956,7 @@
         "goToMessage": "Téigh chuig an teachtaireacht",
         "loadingContext": "Teachtaireachtaí á lódáil…",
         "errors": {
+            "serverNeedsWords": "Teastaíonn focail ó chartlann an fhreastalaí le cuardach a dhéanamh, ach amháin laistigh de chomhrá idir beirt",
             "failed": "Theip ar an gcuardach",
             "archiveRooms": "Ní thacaíonn an freastalaí le cuardach cartlainne do sheomraí",
             "archiveUnsupported": "Ní thacaíonn an freastalaí le cuardach cartlainne. Bain triail as cuardach laistigh de chomhrá.",

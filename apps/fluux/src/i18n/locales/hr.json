@@ -1875,6 +1875,63 @@
         "sent": "Poruka je poslana. Ovu uvezenu stavku možete ukloniti."
     },
     "search": {
+        "panel": {
+            "title": "Filtri",
+            "from": "Od",
+            "anyone": "Bilo tko",
+            "me": "Ja",
+            "date": "Datum",
+            "anyTime": "Bilo kada",
+            "custom": "Prilagođeno razdoblje",
+            "start": "Prvi dan",
+            "end": "Zadnji dan",
+            "contains": "Sadrži",
+            "image": "Slike",
+            "link": "Poveznice",
+            "file": "Datoteke",
+            "poll": "Ankete",
+            "clear": "Očisti filtre",
+            "apply": "Primijeni",
+            "localEmpty": "Nema podudaranja u povijesti na ovom uređaju.",
+            "archiveEmpty": "Nema drugih podudaranja u arhivi poslužitelja.",
+            "pageEmpty": "Nema drugih podudaranja na ovoj stranici. Učitajte još za provjeru starijih poruka.",
+            "invalidRange": "Prvi dan ne smije biti poslije zadnjeg.",
+            "invalidFilters": "Prije pretraživanja dopunite ili ispravite filtre.",
+            "incomplete": "Neka starija podudaranja možda nedostaju jer pojedinosti o njihovu sadržaju nisu dostupne na ovom uređaju.",
+            "unavailable": "Fluux nije mogao pripremiti filtre pretraživanja na ovom uređaju."
+        },
+        "filtersBuilding": "Fluux priprema filtre pošiljatelja i sadržaja za povijest na ovom uređaju. Rezultati će se pojaviti kada priprema završi.",
+        "needsWords": "Za pretraživanje unutar ovih datuma dodajte riječ ili u Filtrima odaberite pošiljatelja ili sadržaj",
+        "values": {
+            "mine": "Vaše vlastite poruke",
+            "link": "Poruke s poveznicom",
+            "image": "Poruke sa slikom",
+            "file": "Poruke s datotekom",
+            "poll": "Poruke s anketom"
+        },
+        "chip": {
+            "from": "Od: {{name}}",
+            "mine": "Moje poruke",
+            "link": "S poveznicom",
+            "image": "Sa slikom",
+            "file": "S datotekom",
+            "poll": "S anketom",
+            "list": "Filtri pretrage",
+            "after": "Nakon: {{date}}",
+            "before": "Prije: {{date}}",
+            "on": "Datum: {{date}}",
+            "invalid": "Fluux ne razumije {{filter}}",
+            "remove": "Ukloni {{label}}"
+        },
+        "dates": {
+            "today": "Danas",
+            "yesterday": "Jučer",
+            "thisMonth": "Ovaj mjesec",
+            "thisYear": "Ova godina"
+        },
+        "operators": {
+            "label": "Filtri"
+        },
         "filter": {
             "all": "Sve",
             "conversations": "Razgovori",
@@ -1895,6 +1952,7 @@
         "goToMessage": "Idi na poruku",
         "loadingContext": "Učitavanje poruka…",
         "errors": {
+            "serverNeedsWords": "Arhiva poslužitelja treba riječi za pretragu, osim unutar razgovora jedan na jedan",
             "failed": "Pretraga nije uspjela",
             "archiveRooms": "Poslužitelj ne podržava pretragu arhive soba",
             "archiveUnsupported": "Poslužitelj ne podržava pretragu arhive. Pokušajte pretraživati unutar razgovora.",

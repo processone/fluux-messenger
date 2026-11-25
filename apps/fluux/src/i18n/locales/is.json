@@ -1873,6 +1873,63 @@
         "sent": "Skilaboð send. Þú getur fjarlægt þetta innflutta atriði."
     },
     "search": {
+        "panel": {
+            "title": "Síur",
+            "from": "Frá",
+            "anyone": "Hver sem er",
+            "me": "Ég",
+            "date": "Dagsetning",
+            "anyTime": "Hvenær sem er",
+            "custom": "Sérsniðið tímabil",
+            "start": "Fyrsti dagur",
+            "end": "Síðasti dagur",
+            "contains": "Inniheldur",
+            "image": "Myndir",
+            "link": "Tenglar",
+            "file": "Skrár",
+            "poll": "Kannanir",
+            "clear": "Hreinsa síur",
+            "apply": "Nota",
+            "localEmpty": "Engar samsvaranir í ferlinum á þessu tæki.",
+            "archiveEmpty": "Engar aðrar samsvaranir í safni þjónsins.",
+            "pageEmpty": "Engar aðrar samsvaranir á þessari síðu. Hladdu meira til að athuga eldri skilaboð.",
+            "invalidRange": "Fyrsti dagur má ekki vera á eftir síðasta degi.",
+            "invalidFilters": "Fylltu út eða leiðréttu síurnar áður en þú leitar.",
+            "incomplete": "Sumar eldri samsvaranir kunna að vanta því upplýsingar um innihald þeirra eru ekki tiltækar á þessu tæki.",
+            "unavailable": "Fluux gat ekki undirbúið leitarsíurnar á þessu tæki."
+        },
+        "filtersBuilding": "Fluux er að undirbúa sendanda- og innihaldssíur fyrir ferilinn á þessu tæki. Niðurstöðurnar birtast þegar því er lokið.",
+        "needsWords": "Bættu við orði eða veldu sendanda eða innihald í Síum til að leita innan þessara dagsetninga",
+        "values": {
+            "mine": "Þín eigin skilaboð",
+            "link": "Skilaboð með tengli",
+            "image": "Skilaboð með mynd",
+            "file": "Skilaboð með skrá",
+            "poll": "Skilaboð með könnun"
+        },
+        "chip": {
+            "from": "Frá {{name}}",
+            "mine": "Sent af mér",
+            "link": "Með tengli",
+            "image": "Með mynd",
+            "file": "Með skrá",
+            "poll": "Með könnun",
+            "list": "Leitarsíur",
+            "after": "Eftir {{date}}",
+            "before": "Fyrir {{date}}",
+            "on": "Dagsetning: {{date}}",
+            "invalid": "Fluux skilur ekki {{filter}}",
+            "remove": "Fjarlægja {{label}}"
+        },
+        "dates": {
+            "today": "Í dag",
+            "yesterday": "Í gær",
+            "thisMonth": "Þessi mánuður",
+            "thisYear": "Þetta ár"
+        },
+        "operators": {
+            "label": "Síur"
+        },
         "filter": {
             "all": "Allt",
             "conversations": "Spjall",
@@ -1893,6 +1950,7 @@
         "goToMessage": "Fara í skilaboð",
         "loadingContext": "Hleð skilaboðum…",
         "errors": {
+            "serverNeedsWords": "Skjalasafn þjónsins þarf orð til að leita að, nema innan samtals milli tveggja",
             "failed": "Leit mistókst",
             "archiveRooms": "Þjónninn styður ekki leit í skjalasafni herbergja",
             "archiveUnsupported": "Þjónninn styður ekki leit í skjalasafni. Prófaðu að leita innan samtals.",

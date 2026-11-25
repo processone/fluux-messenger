@@ -1881,6 +1881,63 @@
         "sent": "Messaġġ mibgħut. Tista’ tħassar dan l-oġġett importat."
     },
     "search": {
+        "panel": {
+            "title": "Filtri",
+            "from": "Minn",
+            "anyone": "Kulħadd",
+            "me": "Jien",
+            "date": "Data",
+            "anyTime": "Kwalunkwe żmien",
+            "custom": "Perjodu personalizzat",
+            "start": "L-ewwel jum",
+            "end": "L-aħħar jum",
+            "contains": "Fih",
+            "image": "Stampi",
+            "link": "Ħoloq",
+            "file": "Fajls",
+            "poll": "Stħarriġ",
+            "clear": "Ħassar il-filtri",
+            "apply": "Applika",
+            "localEmpty": "Ma nstab l-ebda riżultat fl-istorja fuq dan l-apparat.",
+            "archiveEmpty": "Ma nstab l-ebda riżultat ieħor fl-arkivju tas-server.",
+            "pageEmpty": "Ma nstab l-ebda riżultat ieħor f’din il-paġna. Tella’ aktar biex tiċċekkja messaġġi eqdem.",
+            "invalidRange": "L-ewwel jum ma jistax ikun wara l-aħħar jum.",
+            "invalidFilters": "Imla jew ikkoreġi l-filtri qabel tfittex.",
+            "incomplete": "Xi riżultati eqdem jistgħu jkunu nieqsa għax id-dettalji tal-kontenut tagħhom mhumiex disponibbli fuq dan l-apparat.",
+            "unavailable": "Fluux ma setax iħejji l-filtri tat-tiftix fuq dan l-apparat."
+        },
+        "filtersBuilding": "Fluux qed iħejji l-filtri tal-mittent u tal-kontenut għall-istorja fuq dan l-apparat. Ir-riżultati jidhru meta jkun lest.",
+        "needsWords": "Żid kelma jew agħżel mittent jew kontenut fil-Filtri biex tfittex f’dawn id-dati",
+        "values": {
+            "mine": "Il-messaġġi tiegħek",
+            "link": "Messaġġi b'link",
+            "image": "Messaġġi b'immaġni",
+            "file": "Messaġġi b'fajl",
+            "poll": "Messaġġi bi stħarriġ"
+        },
+        "chip": {
+            "from": "Minn {{name}}",
+            "mine": "Mibgħuta minni",
+            "link": "B'link",
+            "image": "B'immaġni",
+            "file": "B'fajl",
+            "poll": "Bi stħarriġ",
+            "list": "Filtri tat-tiftix",
+            "after": "Wara {{date}}",
+            "before": "Qabel {{date}}",
+            "on": "Data: {{date}}",
+            "invalid": "Fluux ma jifhimx {{filter}}",
+            "remove": "Neħħi {{label}}"
+        },
+        "dates": {
+            "today": "Illum",
+            "yesterday": "Ilbieraħ",
+            "thisMonth": "Dan ix-xahar",
+            "thisYear": "Din is-sena"
+        },
+        "operators": {
+            "label": "Filtri"
+        },
         "filter": {
             "all": "Kollox",
             "conversations": "Chats",
@@ -1901,6 +1958,7 @@
         "goToMessage": "Mur għall-messaġġ",
         "loadingContext": "Qed jitgħabbew il-messaġġi…",
         "errors": {
+            "serverNeedsWords": "L-arkivju tas-server jeħtieġ kliem biex ifittex, ħlief f'konversazzjoni bejn tnejn",
             "failed": "It-tiftix falla",
             "archiveRooms": "Is-server ma jappoġġax it-tiftix fl-arkivju tal-kmamar",
             "archiveUnsupported": "Is-server ma jappoġġax it-tiftix fl-arkivju. Ipprova fittex ġewwa konversazzjoni.",

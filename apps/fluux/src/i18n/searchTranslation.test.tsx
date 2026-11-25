@@ -12,6 +12,7 @@ import { SearchView } from '@/components/sidebar-components/SearchView'
 import { SearchContextView } from '@/components/SearchContextView'
 import en from './locales/en.json'
 import fr from './locales/fr.json'
+import de from './locales/de.json'
 
 vi.unmock('@fluux/sdk/react')
 
@@ -91,7 +92,7 @@ beforeEach(async () => {
   vi.clearAllMocks()
   testI18n = createInstance()
   await testI18n.use(initReactI18next).init({
-    resources: { en: { translation: en }, fr: { translation: fr } },
+    resources: { en: { translation: en }, fr: { translation: fr }, de: { translation: de } },
     lng: 'en',
     fallbackLng: 'en',
     interpolation: { escapeValue: false },
@@ -99,10 +100,11 @@ beforeEach(async () => {
   searchState = {
     query: '', results: [], isSearching: false, error: null,
     search: vi.fn(), clearSearch: vi.fn(), previewResult: null, setPreviewResult: vi.fn(),
-    isSearchingMAM: false, mamResults: [], hasMoreMAMResults: false, mamError: null,
+    isSearchingMAM: false, mamSearched: false, mamResults: [], hasMoreMAMResults: false, mamError: null,
     searchScope: null, searchMAM: vi.fn(), loadMoreMAMResults: vi.fn(), setSearchScope: vi.fn(),
     resultContext: new Map(), searchFilter: 'all', setSearchFilter: vi.fn(),
-    inPrefixSuggestions: [], isInPrefixActive: false, selectInPrefixSuggestion: vi.fn(),
+    inPrefixSuggestions: [], isInPrefixActive: false, selectInPrefixSuggestion: vi.fn(), filtersBuilding: false,
+    pickedFilters: [], filtersIncomplete: false, filtersUnavailable: null, setPickedFilters: vi.fn(), retryFilters: vi.fn(),
   }
   vi.mocked(useSearch).mockImplementation(() => searchState)
   vi.mocked(getMessages).mockResolvedValue([])
@@ -162,7 +164,7 @@ describe('search tab translation', () => {
   })
 
   it.each([
-    { state: {}, english: 'No messages found', french: 'Aucun message trouvé' },
+    { state: {}, english: 'No matches in history on this device.', french: 'Aucun résultat dans l’historique de cet appareil.' },
     { state: { isSearching: true }, english: 'Searching…', french: 'Recherche en cours…' },
     { state: { isSearchingMAM: true }, english: 'Searching server archive…', french: "Recherche dans l'archive du serveur…" },
   ])('updates the $english state when the language changes', async ({ state, english, french }) => {
@@ -213,6 +215,42 @@ describe('search tab translation', () => {
       expect(screen.getByText(french)).toBeVisible()
       expect(screen.queryByText(message)).not.toBeInTheDocument()
     })
+  })
+
+  it('uses the selected language for the filter dialog instead of English fallback', async () => {
+    await changeLanguage('de')
+    renderTranslated(<SearchView />)
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }))
+    const dialog = screen.getByRole('dialog', { name: 'Filter' })
+    expect(dialog).toBeVisible()
+    expect(screen.getByLabelText('Von', { exact: true })).toBeVisible()
+    expect(screen.getByRole('checkbox', { name: 'Bilder' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Anwenden' })).toBeVisible()
+  })
+
+  it('localizes the preparation retry action in English and French', async () => {
+    Object.assign(searchState, { query: 'has:image', filtersUnavailable: 'Quota exceeded' })
+    renderTranslated(<SearchView />)
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeVisible()
+    await changeLanguage('fr')
+    expect(screen.getByRole('button', { name: 'Réessayer' })).toBeVisible()
+  })
+
+  it('keeps preparation wording plain for picked filters in English and French', async () => {
+    Object.assign(searchState, { pickedFilters: ['has:image'], filtersBuilding: true })
+    renderTranslated(<SearchView />)
+    expect(screen.getByRole('status')).toHaveTextContent('sender and content filters')
+    expect(screen.getByRole('status')).not.toHaveTextContent('from:')
+    await changeLanguage('fr')
+    expect(screen.getByRole('status')).toHaveTextContent('filtres de personne et de contenu')
+    expect(screen.getByRole('status')).not.toHaveTextContent('has:')
+  })
+
+  it('does not deny the local matches when the archive adds none', () => {
+    Object.assign(searchState, { query: 'bonjour', results: [result], mamResults: [], mamSearched: true })
+    renderTranslated(<SearchView />)
+    expect(screen.getByRole('status')).toHaveTextContent('No other matches in the server archive.')
+    expect(screen.getAllByText('Bonjour', { selector: 'mark' })).toHaveLength(1)
   })
 
   it('updates the preview header, loading state and navigation action', async () => {

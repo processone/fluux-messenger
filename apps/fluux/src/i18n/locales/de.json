@@ -1875,6 +1875,63 @@
         "sent": "Nachricht gesendet. Du kannst diesen importierten Inhalt entfernen."
     },
     "search": {
+        "panel": {
+            "title": "Filter",
+            "from": "Von",
+            "anyone": "Alle",
+            "me": "Ich",
+            "date": "Datum",
+            "anyTime": "Beliebiger Zeitraum",
+            "custom": "Eigener Zeitraum",
+            "start": "Erster Tag",
+            "end": "Letzter Tag",
+            "contains": "Enthält",
+            "image": "Bilder",
+            "link": "Links",
+            "file": "Dateien",
+            "poll": "Umfragen",
+            "clear": "Filter löschen",
+            "apply": "Anwenden",
+            "localEmpty": "Keine Treffer im Verlauf auf diesem Gerät.",
+            "archiveEmpty": "Keine weiteren Treffer im Serverarchiv.",
+            "pageEmpty": "Keine weiteren Treffer auf dieser Seite. Laden Sie mehr, um ältere Nachrichten zu prüfen.",
+            "invalidRange": "Der erste Tag darf nicht nach dem letzten liegen.",
+            "invalidFilters": "Vervollständigen oder korrigieren Sie die Filter vor der Suche.",
+            "incomplete": "Einige ältere Treffer fehlen möglicherweise, weil ihre Inhaltsdetails auf diesem Gerät nicht verfügbar sind.",
+            "unavailable": "Fluux konnte die Suchfilter auf diesem Gerät nicht vorbereiten."
+        },
+        "filtersBuilding": "Fluux bereitet die Absender- und Inhaltsfilter für den Verlauf auf diesem Gerät vor. Die Ergebnisse erscheinen, sobald alles bereit ist.",
+        "needsWords": "Fügen Sie ein Wort hinzu oder wählen Sie unter Filter einen Absender oder Inhalt aus, um in diesem Zeitraum zu suchen",
+        "values": {
+            "mine": "Ihre eigenen Nachrichten",
+            "link": "Nachrichten mit einem Link",
+            "image": "Nachrichten mit einem Bild",
+            "file": "Nachrichten mit einer Datei",
+            "poll": "Nachrichten mit einer Umfrage"
+        },
+        "chip": {
+            "from": "Von {{name}}",
+            "mine": "Von mir gesendet",
+            "link": "Mit Link",
+            "image": "Mit Bild",
+            "file": "Mit Datei",
+            "poll": "Mit Umfrage",
+            "list": "Suchfilter",
+            "after": "Nach {{date}}",
+            "before": "Vor {{date}}",
+            "on": "Datum: {{date}}",
+            "invalid": "Fluux versteht {{filter}} nicht",
+            "remove": "{{label}} entfernen"
+        },
+        "dates": {
+            "today": "Heute",
+            "yesterday": "Gestern",
+            "thisMonth": "Diesen Monat",
+            "thisYear": "Dieses Jahr"
+        },
+        "operators": {
+            "label": "Filter"
+        },
         "filter": {
             "all": "Alle",
             "conversations": "Chats",
@@ -1895,6 +1952,7 @@
         "goToMessage": "Zur Nachricht gehen",
         "loadingContext": "Nachrichten werden geladen…",
         "errors": {
+            "serverNeedsWords": "Das Serverarchiv braucht Suchbegriffe, außer in einer Unterhaltung zu zweit",
             "failed": "Suche fehlgeschlagen",
             "archiveRooms": "Der Server unterstützt keine Archivsuche für Räume",
             "archiveUnsupported": "Der Server unterstützt keine Archivsuche. Versuchen Sie, innerhalb einer Unterhaltung zu suchen.",

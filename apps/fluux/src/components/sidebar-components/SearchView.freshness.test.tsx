@@ -16,6 +16,9 @@ vi.mock('@fluux/sdk', () => ({
   chatStore: { getState: () => ({ conversationEntities: new Map() }) },
   roomStore: { getState: () => ({ rooms: new Map() }) },
   getLocalPart: (jid: string) => jid.split('@')[0],
+  DATE_OPERATORS: ['after', 'before', 'on', 'during'],
+  TOKEN_OPERATORS: ['from', 'is', 'has'],
+  HAS_VALUES: ['link', 'image', 'file', 'poll'],
 }))
 
 vi.mock('@fluux/sdk/react', () => ({

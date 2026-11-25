@@ -11,9 +11,11 @@
  * @module SearchStore
  */
 
+import { captureStorageScope } from '../utils/storageScope'
 import { createStore } from 'zustand/vanilla'
 import * as searchIndex from '../utils/searchIndex'
 import { parseSearchQuery } from '../utils/searchIndex'
+import { filterToken, parseRoomSender, matchesFilterTokens, parseSearchFilters, type ParsedSearchInput } from '../utils/searchFilters'
 import { generateMatchSnippet, type MatchSnippet } from '../utils/searchUtils'
 import { chatStore } from './chatStore'
 import { roomStore } from './roomStore'
@@ -100,6 +102,8 @@ export interface SearchResult {
   isOutgoing?: boolean
   /** The instant a room copy reached the client (epoch ms), when the row recorded one. */
   receivedAt?: number
+  /** Display rows omit attachment and privacy metadata that indexing must preserve. */
+  canonicalMessage?: Message | RoomMessage
 }
 
 /**
@@ -134,6 +138,12 @@ export interface SearchResultContext {
 export interface SearchState {
   /** Current search query */
   query: string
+  /** Picked filters stay separate so the text field never needs encoded room identities. */
+  pickedFilters: string[]
+  setPickedFilters: (filters: string[]) => void
+  filtersIncomplete: boolean
+  filtersUnavailable: string | null
+  retryFilters: () => void
   /** Whether a local search is in progress */
   isSearching: boolean
   /** Local search results sorted by recency */
@@ -145,6 +155,7 @@ export interface SearchState {
 
   /** Whether a MAM search is in progress */
   isSearchingMAM: boolean
+  mamSearched: boolean
   /** MAM search results (excludes duplicates already in local results) */
   mamResults: SearchResult[]
   /** Whether more MAM results are available (for pagination) */
@@ -165,6 +176,12 @@ export interface SearchState {
   inPrefixSuggestions: InPrefixSuggestion[]
   /** Whether the `in:` autocomplete is active */
   isInPrefixActive: boolean
+  /**
+   * Whether the query uses `from:`, `is:` or `has:` while this device is still
+   * giving its stored messages their filter tokens: the results would be partial,
+   * so none are shown until it is done. Missing content metadata remains explicitly incomplete.
+   */
+  filtersBuilding: boolean
 
   /** Execute a local search (debounced internally) */
   search: (query: string) => void
@@ -201,6 +218,99 @@ let mamRsmCursor: string | undefined
 
 /** AbortController for paging search */
 let pagingAbortController: AbortController | null = null
+
+function supersedeArchiveSearch(): number {
+  const controller = pagingAbortController
+  pagingAbortController = null
+  // Invalidate before aborting: abort listeners may observe or replace the active search.
+  const generation = ++mamSearchGeneration
+  controller?.abort()
+  return generation
+}
+
+/** Locale numeric dates in the query are read in (`05/03/2024`); the runtime's when unset. */
+let searchLocale: string | undefined
+
+/**
+ * Set the locale whose numeric date order `after:`, `before:` and `on:` read,
+ * normally the interface language. ISO dates (`2024-03-05`) read the same everywhere.
+ */
+export function setSearchLocale(locale: string | undefined): void {
+  searchLocale = locale
+}
+
+/** The query split into its words and its operators, in the reader's locale. */
+function parseSearchInput(query: string, picked: readonly string[] = []): ParsedSearchInput {
+  return parseSearchFilters(query, searchLocale, picked)
+}
+
+function invalidInput(input: ParsedSearchInput): boolean {
+  return input.filters.some(filter => !filter.valid) ||
+    (input.after !== undefined && input.before !== undefined && input.after >= input.before)
+}
+
+function searchSnapshot() {
+  const state = searchStore.getState()
+  const account = captureStorageScope()
+  const generation = mamSearchGeneration
+  return () => account.isCurrent() && generation === mamSearchGeneration &&
+    searchStore.getState().query === state.query && searchStore.getState().pickedFilters === state.pickedFilters &&
+    searchStore.getState().searchScope === state.searchScope &&
+    searchStore.getState().searchFilter === state.searchFilter
+}
+
+/**
+ * The tokens `from:<name>` stands for. In a one-to-one chat: the contact whose
+ * JID, local part or name it is. In a room: the nick, plus the occupant ids
+ * (XEP-0421) that nick has now among the occupants, which also find the
+ * person's messages sent under an earlier nick.
+ */
+export function senderFilterTokens(name: string, scope: string | null): string[] {
+  const selected = parseRoomSender(name)
+  if (selected) return scope && scope !== selected.room ? ['\u0001unresolved-sender'] : [
+    ...(selected.occupant ? [filterToken.occupant(selected.occupant, selected.room)] : []), filterToken.nick(selected.nick, selected.room),
+  ]
+  const lower = name.toLowerCase()
+  const tokens = new Set<string>()
+  if (name.includes('@')) tokens.add(filterToken.from(name))
+  for (const [jid, entity] of chatStore.getState().conversationEntities) {
+    if (scope && scope !== jid) continue
+    if (jid.toLowerCase() === lower || jid.split('@')[0].toLowerCase() === lower || entity.name?.toLowerCase() === lower) {
+      tokens.add(filterToken.from(jid))
+    }
+  }
+  for (const [jid, room] of roomStore.getState().rooms) {
+    if (scope && scope !== jid) continue
+    tokens.add(filterToken.nick(name, jid))
+    for (const occupant of room.occupants?.values() ?? []) {
+      if (occupant.occupantId && occupant.nick.toLowerCase() === lower) tokens.add(filterToken.occupant(occupant.occupantId, jid))
+    }
+  }
+  return tokens.size ? [...tokens] : ['\u0001unresolved-sender']
+}
+
+/** One group of filter tokens per `from:`, `is:mine` and `has:`; a message needs a token of each. */
+function filterGroupsFor(input: ParsedSearchInput, scope: string | null): string[][] {
+  return [
+    ...(input.mine ? [[filterToken.mine]] : []),
+    ...input.has.map((value) => [filterToken.has(value)]),
+    ...input.from.map((name) => senderFilterTokens(name, scope)),
+  ]
+}
+
+/** The start of a body, for a result found by its filters alone: no word to highlight. */
+function leadSnippet(body: string): MatchSnippet {
+  const text = body.length > 120 ? `${body.slice(0, 120)}…` : body
+  return { text, matchStart: 0, matchEnd: 0 }
+}
+
+/** MAM `start`/`end` for the query's dates: `end` is inclusive there, so one millisecond earlier. */
+function archiveSpan(input: ParsedSearchInput): { start?: string; end?: string } {
+  return {
+    ...(input.after !== undefined ? { start: new Date(input.after).toISOString() } : {}),
+    ...(input.before !== undefined ? { end: new Date(input.before - 1).toISOString() } : {}),
+  }
+}
 
 /**
  * Set the XMPPClient reference used for MAM search queries.
@@ -374,8 +484,9 @@ function messageToSearchResult(msg: Message, query: string, phrases?: string[]):
     from: msg.from,
     timestamp: msg.timestamp.getTime(),
     body: msg.body || '',
-    matchSnippet: generateMatchSnippet(msg.body || '', query, 60, phrases),
+    matchSnippet: query ? generateMatchSnippet(msg.body || '', query, 60, phrases) : leadSnippet(msg.body || ''),
     source: 'mam',
+    canonicalMessage: msg,
     ...(msg.isDelayed ? { isDelayed: true } : {}),
     ...(msg.isOutgoing ? { isOutgoing: true } : {}),
   }
@@ -399,8 +510,9 @@ function roomMessageToSearchResult(msg: RoomMessage, roomJid: string, query: str
     nick: msg.nick,
     timestamp: msg.timestamp.getTime(),
     body: msg.body || '',
-    matchSnippet: generateMatchSnippet(msg.body || '', query, 60, phrases),
+    matchSnippet: query ? generateMatchSnippet(msg.body || '', query, 60, phrases) : leadSnippet(msg.body || ''),
     source: 'mam',
+    canonicalMessage: msg,
     ...(msg.isDelayed ? { isDelayed: true } : {}),
     ...(msg.isOutgoing ? { isOutgoing: true } : {}),
     ...(msg.receivedAt ? { receivedAt: msg.receivedAt.getTime() } : {}),
@@ -504,6 +616,7 @@ function roomContextMessage(message: RoomMessage, roomJid: string): ContextMessa
  * Called after results are set — updates resultContext asynchronously.
  */
 async function fetchResultContexts(results: SearchResult[], query: string): Promise<void> {
+  const isCurrent = searchSnapshot()
   const localResults = results.filter(r => r.source === 'local')
   if (localResults.length === 0) return
 
@@ -555,7 +668,7 @@ async function fetchResultContexts(results: SearchResult[], query: string): Prom
   )
 
   // Guard against stale query
-  if (searchStore.getState().query.trim() === query && contextMap.size > 0) {
+  if (isCurrent() && searchStore.getState().query.trim() === query && contextMap.size > 0) {
     searchStore.setState({ resultContext: contextMap })
   }
 }
@@ -607,18 +720,41 @@ export function getInPrefixSuggestions(term: string): InPrefixSuggestion[] {
 /**
  * Perform the actual local search and update the store.
  */
-async function executeSearch(query: string): Promise<void> {
+async function executeSearch(rawQuery: string): Promise<void> {
+  // The field may end with a space (a completed suggestion adds one); the store keeps it as typed
+  const query = rawQuery.trim()
   const state = searchStore.getState()
+  const isCurrent = searchSnapshot()
   const scope = state.searchScope
   const filter = state.searchFilter
-  const parsed = parseSearchQuery(query)
+  const input = parseSearchInput(query, state.pickedFilters)
+  const text = input.text
+  const parsed = parseSearchQuery(text)
   const phrases = parsed.phrases.length > 0 ? parsed.phrases : undefined
+  const filterGroups = filterGroupsFor(input, scope)
+  if (invalidInput(input)) {
+    searchStore.setState({ results: [], isSearching: false, error: 'Invalid search filters', filtersBuilding: false, filtersIncomplete: false, filtersUnavailable: null })
+    return
+  }
   try {
-    const indexResults = await searchIndex.search(query, {
+    const readiness = filterGroups.length ? await searchIndex.getFilterIndexState() : undefined
+    if (!isCurrent()) return
+    searchStore.setState({ filtersIncomplete: input.has.length > 0 && readiness?.status === 'incomplete',
+      filtersUnavailable: readiness?.status === 'unavailable' ? readiness.reason ?? 'Search filter index unavailable' : null })
+    if (readiness?.status === 'preparing' || readiness?.status === 'unavailable') {
+      if (isCurrent() && searchStore.getState().query.trim() === query) {
+        searchStore.setState({ results: [], isSearching: false, error: null, filtersBuilding: readiness?.status === 'preparing' })
+      }
+      return
+    }
+    const indexResults = await searchIndex.search(text, {
+      ...(filterGroups.length > 0 ? { filterGroups } : {}),
       limit: 50,
       ...(scope ? { conversationId: scope } : {}),
       ...(filter === 'conversations' ? { isRoom: false } : {}),
       ...(filter === 'rooms' ? { isRoom: true } : {}),
+      ...(input.after !== undefined ? { after: input.after } : {}),
+      ...(input.before !== undefined ? { before: input.before } : {}),
     })
 
     const retracted = await classifyRetractedCandidates(indexResults.map(indexResultToCandidate))
@@ -640,7 +776,7 @@ async function executeSearch(query: string): Promise<void> {
         ...(r.isDelayed ? { isDelayed: true } : {}),
         ...(r.isOutgoing ? { isOutgoing: true } : {}),
         ...(r.receivedAt !== undefined ? { receivedAt: r.receivedAt } : {}),
-        matchSnippet: generateMatchSnippet(r.body, query, 60, phrases),
+        matchSnippet: text ? generateMatchSnippet(r.body, text, 60, phrases) : leadSnippet(r.body),
         source: 'local' as const,
       }
     })
@@ -648,16 +784,16 @@ async function executeSearch(query: string): Promise<void> {
 
     // Only update if the query hasn't changed while we were searching
     const current = searchStore.getState()
-    if (current.query === query) {
+    if (isCurrent() && current.query.trim() === query) {
       // A no-match query maps to a fresh empty array; keeping the previous (also
       // empty) one avoids invalidating useSearch for a result set that did not change.
       const nextResults = results.length === 0 && current.results.length === 0 ? current.results : results
-      searchStore.setState({ results: nextResults, isSearching: false, error: null })
+      searchStore.setState({ results: nextResults, isSearching: false, error: null, filtersBuilding: false })
       // Fire-and-forget: load context messages for results
       void fetchResultContexts(results, query)
     }
   } catch (err) {
-    if (searchStore.getState().query === query) {
+    if (isCurrent() && searchStore.getState().query.trim() === query) {
       searchStore.setState({
         isSearching: false,
         error: err instanceof Error ? err.message : 'Search failed',
@@ -672,67 +808,89 @@ async function executeSearch(query: string): Promise<void> {
 async function executeMAMSearch(append: boolean): Promise<void> {
   const state = searchStore.getState()
   const query = state.query
-  if (!query || !clientRef) return
+  if ((!query && !state.pickedFilters.length) || !clientRef) return
 
-  const generation = ++mamSearchGeneration
+  const generation = supersedeArchiveSearch()
+  const isCurrent = searchSnapshot()
   const scope = state.searchScope
   const supportsFulltext = connectionStore.getState().mamFulltextSearch
-  const parsed = parseSearchQuery(query)
+  const input = parseSearchInput(query, state.pickedFilters)
+  if (invalidInput(input)) {
+    searchStore.setState({ isSearchingMAM: false, mamError: 'Invalid search filters', hasMoreMAMResults: false })
+    return
+  }
+  const span = archiveSpan(input)
+  const text = input.text
+  const parsed = parseSearchQuery(text)
   const phrases = parsed.phrases.length > 0 ? parsed.phrases : undefined
-
-  // Cancel any ongoing paging search
-  if (pagingAbortController) {
-    pagingAbortController.abort()
-    pagingAbortController = null
+  // The archive filters by text and date; from:, is: and has: are checked here on each page
+  const filterGroups = filterGroupsFor(input, scope)
+  const kept = <T extends Message | RoomMessage>(messages: T[]) =>
+    filterGroups.length ? messages.filter((message) => matchesFilterTokens(message, filterGroups)) : messages
+  const scopeIsRoom = !!scope && roomStore.getState().rooms.has(scope)
+  // Without words only the client-side paging of a one-to-one chat can look for filters alone
+  if (!text && (filterGroups.length === 0 || !scope || scopeIsRoom)) {
+    searchStore.setState({ isSearchingMAM: false, mamError: 'The server archive needs words to search' })
+    return
   }
 
   searchStore.setState({
     isSearchingMAM: true,
+    mamSearched: true,
     mamError: null,
     ...(append ? {} : { mamResults: [] }),
   })
 
+  const previousCursor = append ? mamRsmCursor : undefined
   try {
     let newResults: SearchResult[] = []
     let hasMore = false
+    let nextCursor: string | undefined
 
     if (scope) {
       // Conversation-scoped search
-      const isRoom = roomStore.getState().rooms.has(scope)
+      const isRoom = scopeIsRoom
 
-      if (supportsFulltext) {
+      if (supportsFulltext && text) {
         // Server fulltext search scoped to conversation
         if (isRoom) {
           const result = await clientRef.messages.searchRoomMessages({
-            query,
+            query: text,
             roomJid: scope,
+            ...span,
             max: 20,
             before: append ? mamRsmCursor : undefined,
           })
-          newResults = await roomMessagesToSearchResults(result.messages, scope, query, phrases)
+          newResults = await roomMessagesToSearchResults(kept(result.messages), scope, text, phrases)
           hasMore = !result.complete
-          mamRsmCursor = result.page.first
+          nextCursor = result.page.first
         } else {
           const result = await clientRef.messages.searchMessages({
-            query,
+            query: text,
             with: scope,
+            ...span,
             max: 20,
             before: append ? mamRsmCursor : undefined,
           })
-          newResults = await messagesToSearchResults(result.messages, query, phrases)
+          newResults = await messagesToSearchResults(kept(result.messages), text, phrases)
           hasMore = !result.complete
-          mamRsmCursor = result.page.first
+          nextCursor = result.page.first
         }
       } else if (!isRoom) {
         // Paging search (1:1 conversations only, no fulltext required)
-        pagingAbortController = new AbortController()
+        const controller = new AbortController()
+        pagingAbortController = controller
         const result = await clientRef.messages.searchConversationHistory(
-          { query, with: scope, maxPages: 20, maxResults: 50 },
-          pagingAbortController.signal
+          {
+            query: text, with: scope, ...span, before: previousCursor, maxPages: 20, maxResults: 100,
+            ...(filterGroups.length ? { filter: (message: Message) => matchesFilterTokens(message, filterGroups) } : {}),
+          },
+          controller.signal
         )
-        pagingAbortController = null
-        newResults = await messagesToSearchResults(result.messages, query, phrases)
+        if (pagingAbortController === controller) pagingAbortController = null
+        newResults = await messagesToSearchResults(result.messages, text, phrases)
         hasMore = !result.complete
+        nextCursor = result.page.first
       } else {
         // Room paging search not supported — too complex without fulltext
         searchStore.setState({
@@ -752,17 +910,20 @@ async function executeMAMSearch(append: boolean): Promise<void> {
       }
 
       const result = await clientRef.messages.searchMessages({
-        query,
+        query: text,
+        ...span,
         max: 20,
         before: append ? mamRsmCursor : undefined,
       })
-      newResults = await messagesToSearchResults(result.messages, query, phrases)
+      newResults = await messagesToSearchResults(kept(result.messages), text, phrases)
       hasMore = !result.complete
-      mamRsmCursor = result.page.first
+      nextCursor = result.page.first
     }
 
     // Check generation — discard if query changed
-    if (generation !== mamSearchGeneration) return
+    if (generation !== mamSearchGeneration || !isCurrent()) return
+
+    mamRsmCursor = nextCursor
 
     // Deduplicate against local results
     const localResults = searchStore.getState().results
@@ -783,11 +944,11 @@ async function executeMAMSearch(append: boolean): Promise<void> {
     searchStore.setState({
       isSearchingMAM: false,
       mamResults: [...existingMAM, ...deduplicated],
-      hasMoreMAMResults: hasMore,
+      hasMoreMAMResults: hasMore && !!mamRsmCursor && mamRsmCursor !== previousCursor,
       mamError: null,
     })
   } catch (err) {
-    if (generation !== mamSearchGeneration) return
+    if (generation !== mamSearchGeneration || !isCurrent()) return
     searchStore.setState({
       isSearchingMAM: false,
       mamError: err instanceof Error ? err.message : 'Server search failed',
@@ -799,55 +960,20 @@ async function executeMAMSearch(append: boolean): Promise<void> {
  * Index MAM search results into the local search index for future queries.
  */
 async function indexMAMResults(results: SearchResult[]): Promise<void> {
+  const account = captureStorageScope()
   try {
-    // Project each result into the shape the index reads.
-    //
-    // `type` is the discriminant — the index derives the document's kind, its
-    // conversation and its room-only fields from it, so a projection that omits it
-    // files a room result as a conversation-less chat document that no room-scoped
-    // removal can ever find.
-    //
-    // The identity fields travel too. Without them a room document is ownerless:
-    // a retraction verified through the archive id cannot prove it names that
-    // document, and its body survives a deletion the user asked for.
-    const chatMessages: Message[] = []
-    const roomMessages: RoomMessage[] = []
-
-    for (const r of results) {
-      const common = {
-        id: r.messageId,
-        from: r.from,
-        body: r.body,
-        timestamp: new Date(r.timestamp),
-        isOutgoing: r.isOutgoing === true,
-        ...(r.isDelayed ? { isDelayed: true } : {}),
-        stanzaId: r.stanzaId || undefined,
-        originId: r.originId || undefined,
-      }
-      if (r.isRoom) {
-        roomMessages.push({
-          ...common,
-          ...(r.receivedAt !== undefined ? { receivedAt: new Date(r.receivedAt) } : {}),
-          type: 'groupchat',
-          roomJid: r.conversationId,
-          nick: r.nick ?? '',
-          occupantId: r.occupantId || undefined,
-        })
-      } else {
-        chatMessages.push({
-          ...common,
-          type: 'chat',
-          conversationId: r.conversationId,
-        })
-      }
-    }
+    const messages = results.flatMap(result => result.canonicalMessage ? [result.canonicalMessage] : [])
+    const chatMessages = messages.filter((message): message is Message => message.type === 'chat')
+    const roomMessages = messages.filter((message): message is RoomMessage => message.type === 'groupchat')
 
     // Index using the same search index used for local messages.
     if (chatMessages.length > 0) {
-      await searchIndex.indexMessages(chatMessages)
+      account.assertCurrent()
+      await searchIndex.indexMessages(chatMessages, {}, account.jid)
     }
     if (roomMessages.length > 0) {
-      await searchIndex.indexMessages(roomMessages)
+      account.assertCurrent()
+      await searchIndex.indexMessages(roomMessages, {}, account.jid)
     }
   } catch {
     // Silently ignore indexing errors — non-critical
@@ -856,11 +982,20 @@ async function indexMAMResults(results: SearchResult[]): Promise<void> {
 
 export const searchStore = createStore<SearchState>((set, get) => ({
   query: '',
+  pickedFilters: [],
+  filtersIncomplete: false,
+  filtersUnavailable: null,
+  setPickedFilters: (pickedFilters) => {
+    set({ pickedFilters })
+    get().search(get().query)
+  },
+  retryFilters: () => { void searchIndex.migrateSearchFilters() },
   isSearching: false,
   results: [],
   error: null,
   previewResult: null,
   isSearchingMAM: false,
+  mamSearched: false,
   mamResults: [],
   hasMoreMAMResults: false,
   mamError: null,
@@ -869,17 +1004,18 @@ export const searchStore = createStore<SearchState>((set, get) => ({
   searchFilter: 'all',
   inPrefixSuggestions: [],
   isInPrefixActive: false,
+  filtersBuilding: false,
 
   search: (query: string) => {
+    supersedeArchiveSearch()
     if (debounceTimer) {
       clearTimeout(debounceTimer)
       debounceTimer = null
     }
 
     const trimmed = query.trim()
-    if (!trimmed) {
-      set({ query: '', isSearching: false, results: [], error: null, mamResults: [], mamError: null, hasMoreMAMResults: false, searchFilter: 'all', inPrefixSuggestions: [], isInPrefixActive: false })
-      mamSearchGeneration++  // Cancel any in-flight MAM search
+    if (!trimmed && !get().pickedFilters.length) {
+      set({ filtersIncomplete: false, filtersUnavailable: null, query: '', mamSearched: false, isSearchingMAM: false, isSearching: false, results: [], error: null, mamResults: [], mamError: null, hasMoreMAMResults: false, searchFilter: 'all', inPrefixSuggestions: [], isInPrefixActive: false, filtersBuilding: false })
       return
     }
 
@@ -888,8 +1024,13 @@ export const searchStore = createStore<SearchState>((set, get) => ({
     if (inParsed && !inParsed.rest) {
       // User is still typing the in: scope — show suggestions, don't search
       const suggestions = getInPrefixSuggestions(inParsed.inTerm)
+      mamRsmCursor = undefined
       set({
         query,
+        mamSearched: false,
+        isSearchingMAM: false,
+        mamResults: [],
+        hasMoreMAMResults: false,
         isSearching: false,
         results: [],
         inPrefixSuggestions: suggestions,
@@ -907,7 +1048,9 @@ export const searchStore = createStore<SearchState>((set, get) => ({
     const prev = get()
     const patch: Partial<SearchState> = {
       query,
+      mamSearched: false,
       isSearching: true,
+      isSearchingMAM: false,
       error: null,
       mamError: null,
       hasMoreMAMResults: false,
@@ -917,7 +1060,6 @@ export const searchStore = createStore<SearchState>((set, get) => ({
     if (prev.mamResults.length > 0) patch.mamResults = []
     if (prev.resultContext.size > 0) patch.resultContext = new Map()
     set(patch)
-    mamSearchGeneration++  // Cancel any in-flight MAM search
     mamRsmCursor = undefined
 
     debounceTimer = setTimeout(() => {
@@ -927,23 +1069,23 @@ export const searchStore = createStore<SearchState>((set, get) => ({
   },
 
   clearSearch: () => {
+    supersedeArchiveSearch()
     if (debounceTimer) {
       clearTimeout(debounceTimer)
       debounceTimer = null
     }
-    mamSearchGeneration++
     mamRsmCursor = undefined
-    if (pagingAbortController) {
-      pagingAbortController.abort()
-      pagingAbortController = null
-    }
     set({
       query: '',
+      pickedFilters: [],
+      filtersIncomplete: false,
+      filtersUnavailable: null,
       isSearching: false,
       results: [],
       error: null,
       previewResult: null,
       isSearchingMAM: false,
+      mamSearched: false,
       mamResults: [],
       hasMoreMAMResults: false,
       mamError: null,
@@ -951,6 +1093,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
       searchFilter: 'all',
       inPrefixSuggestions: [],
       isInPrefixActive: false,
+      filtersBuilding: false,
     })
   },
 
@@ -967,42 +1110,47 @@ export const searchStore = createStore<SearchState>((set, get) => ({
   },
 
   setSearchScope: (conversationId: string | null) => {
+    supersedeArchiveSearch()
     const state = searchStore.getState()
     set({
       searchScope: conversationId,
+      mamSearched: false,
+      isSearchingMAM: false,
       results: [],
       mamResults: [],
       mamError: null,
       hasMoreMAMResults: false,
     })
-    mamSearchGeneration++
     mamRsmCursor = undefined
     // Re-run local search with new scope if there's an active query
-    if (state.query) {
+    if (state.query || state.pickedFilters.length) {
       set({ isSearching: true })
       void executeSearch(state.query)
     }
   },
 
   setSearchFilter: (filter: SearchFilterType) => {
+    supersedeArchiveSearch()
     const state = searchStore.getState()
     set({
       searchFilter: filter,
+      mamSearched: false,
+      isSearchingMAM: false,
       results: [],
       mamResults: [],
       mamError: null,
       hasMoreMAMResults: false,
     })
-    mamSearchGeneration++
     mamRsmCursor = undefined
     // Re-run local search with new filter if there's an active query
-    if (state.query.trim()) {
+    if (state.query.trim() || state.pickedFilters.length) {
       set({ isSearching: true })
       void executeSearch(state.query.trim())
     }
   },
 
   selectInPrefixSuggestion: (suggestion: InPrefixSuggestion) => {
+    supersedeArchiveSearch()
     const state = searchStore.getState()
     const inParsed = parseInPrefix(state.query.trim())
     const restQuery = inParsed?.rest || ''
@@ -1010,6 +1158,8 @@ export const searchStore = createStore<SearchState>((set, get) => ({
     // Set scope via existing mechanism
     set({
       searchScope: suggestion.id,
+      mamSearched: false,
+      isSearchingMAM: false,
       query: restQuery,
       inPrefixSuggestions: [],
       isInPrefixActive: false,
@@ -1018,13 +1168,23 @@ export const searchStore = createStore<SearchState>((set, get) => ({
       mamError: null,
       hasMoreMAMResults: false,
     })
-    mamSearchGeneration++
     mamRsmCursor = undefined
 
-    // If there's remaining query text, trigger search
-    if (restQuery.trim()) {
+    if (restQuery.trim() || state.pickedFilters.length) {
       set({ isSearching: true })
       void executeSearch(restQuery.trim())
     }
   },
 }))
+
+searchIndex.subscribeFilterIndex(() => {
+  const state = searchStore.getState()
+  if (state.filtersBuilding || state.filtersUnavailable || state.filtersIncomplete) void executeSearch(state.query)
+})
+
+connectionStore.subscribe((state, previous) => {
+  if (state.jid !== previous.jid) {
+    searchStore.getState().clearSearch()
+    searchStore.getState().setSearchScope(null)
+  }
+})

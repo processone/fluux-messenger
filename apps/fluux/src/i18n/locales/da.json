@@ -1873,6 +1873,63 @@
         "sent": "Beskeden er sendt. Du kan fjerne dette importerede element."
     },
     "search": {
+        "panel": {
+            "title": "Filtre",
+            "from": "Fra",
+            "anyone": "Alle",
+            "me": "Mig",
+            "date": "Dato",
+            "anyTime": "Alle tidspunkter",
+            "custom": "Tilpasset periode",
+            "start": "Første dag",
+            "end": "Sidste dag",
+            "contains": "Indeholder",
+            "image": "Billeder",
+            "link": "Links",
+            "file": "Filer",
+            "poll": "Afstemninger",
+            "clear": "Ryd filtre",
+            "apply": "Anvend",
+            "localEmpty": "Ingen match i historikken på denne enhed.",
+            "archiveEmpty": "Ingen andre match i serverarkivet.",
+            "pageEmpty": "Ingen andre match på denne side. Indlæs flere for at undersøge ældre beskeder.",
+            "invalidRange": "Den første dag må ikke være efter den sidste.",
+            "invalidFilters": "Udfyld eller ret filtrene, før du søger.",
+            "incomplete": "Nogle ældre match kan mangle, fordi oplysninger om deres indhold ikke er tilgængelige på denne enhed.",
+            "unavailable": "Fluux kunne ikke forberede søgefiltrene på denne enhed."
+        },
+        "filtersBuilding": "Fluux forbereder afsender- og indholdsfiltre til historikken på denne enhed. Resultaterne vises, når det er klar.",
+        "needsWords": "Tilføj et ord, eller vælg en afsender eller indhold under Filtre for at søge inden for disse datoer",
+        "values": {
+            "mine": "Dine egne beskeder",
+            "link": "Beskeder med et link",
+            "image": "Beskeder med et billede",
+            "file": "Beskeder med en fil",
+            "poll": "Beskeder med en afstemning"
+        },
+        "chip": {
+            "from": "Fra {{name}}",
+            "mine": "Sendt af mig",
+            "link": "Med link",
+            "image": "Med billede",
+            "file": "Med fil",
+            "poll": "Med afstemning",
+            "list": "Søgefiltre",
+            "after": "Efter {{date}}",
+            "before": "Før {{date}}",
+            "on": "Dato: {{date}}",
+            "invalid": "Fluux forstår ikke {{filter}}",
+            "remove": "Fjern {{label}}"
+        },
+        "dates": {
+            "today": "I dag",
+            "yesterday": "I går",
+            "thisMonth": "Denne måned",
+            "thisYear": "I år"
+        },
+        "operators": {
+            "label": "Filtre"
+        },
         "filter": {
             "all": "Alle",
             "conversations": "Chats",
@@ -1893,6 +1950,7 @@
         "goToMessage": "Gå til besked",
         "loadingContext": "Indlæser beskeder…",
         "errors": {
+            "serverNeedsWords": "Serverarkivet skal bruge ord for at søge, undtagen i en samtale mellem to",
             "failed": "Søgningen mislykkedes",
             "archiveRooms": "Serveren understøtter ikke arkivsøgning for rum",
             "archiveUnsupported": "Serveren understøtter ikke arkivsøgning. Prøv at søge inden for en samtale.",

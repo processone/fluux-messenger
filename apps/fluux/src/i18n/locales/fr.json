@@ -1876,6 +1876,63 @@
         "sent": "Message envoyé. Vous pouvez supprimer cet élément importé."
     },
     "search": {
+        "panel": {
+            "title": "Filtres",
+            "from": "De",
+            "anyone": "Tout le monde",
+            "me": "Moi",
+            "date": "Date",
+            "anyTime": "Toute période",
+            "custom": "Période personnalisée",
+            "start": "Premier jour",
+            "end": "Dernier jour",
+            "contains": "Contient",
+            "image": "Images",
+            "link": "Liens",
+            "file": "Fichiers",
+            "poll": "Sondages",
+            "clear": "Effacer les filtres",
+            "apply": "Appliquer",
+            "localEmpty": "Aucun résultat dans l’historique de cet appareil.",
+            "archiveEmpty": "Aucun autre résultat dans l’archive du serveur.",
+            "pageEmpty": "Aucun autre résultat sur cette page. Chargez la suite pour vérifier les anciens messages.",
+            "invalidRange": "Le premier jour ne doit pas être après le dernier.",
+            "invalidFilters": "Complétez ou corrigez les filtres avant de rechercher.",
+            "incomplete": "Certains anciens résultats peuvent manquer : les détails de leur contenu ne sont pas disponibles sur cet appareil.",
+            "unavailable": "Fluux n’a pas pu préparer les filtres de recherche sur cet appareil."
+        },
+        "filtersBuilding": "Fluux prépare les filtres de personne et de contenu pour l’historique de cet appareil. Les résultats apparaîtront dès qu’il sera prêt.",
+        "needsWords": "Ajoutez un mot, ou choisissez une personne ou un contenu dans Filtres, pour rechercher sur cette période",
+        "values": {
+            "mine": "Vos propres messages",
+            "link": "Messages avec un lien",
+            "image": "Messages avec une image",
+            "file": "Messages avec un fichier",
+            "poll": "Messages avec un sondage"
+        },
+        "chip": {
+            "from": "De {{name}}",
+            "mine": "Envoyés par moi",
+            "link": "Avec un lien",
+            "image": "Avec une image",
+            "file": "Avec un fichier",
+            "poll": "Avec un sondage",
+            "list": "Filtres de recherche",
+            "after": "Après {{date}}",
+            "before": "Avant {{date}}",
+            "on": "Date : {{date}}",
+            "invalid": "Fluux ne comprend pas {{filter}}",
+            "remove": "Retirer {{label}}"
+        },
+        "dates": {
+            "today": "Aujourd'hui",
+            "yesterday": "Hier",
+            "thisMonth": "Ce mois-ci",
+            "thisYear": "Cette année"
+        },
+        "operators": {
+            "label": "Filtres"
+        },
         "filter": {
             "all": "Tout",
             "conversations": "Discussions",
@@ -1896,6 +1953,7 @@
         "goToMessage": "Aller au message",
         "loadingContext": "Chargement des messages…",
         "errors": {
+            "serverNeedsWords": "L'archive du serveur a besoin de mots pour chercher, sauf dans une conversation à deux",
             "failed": "Échec de la recherche",
             "archiveRooms": "Le serveur ne prend pas en charge la recherche dans l'archive des salons",
             "archiveUnsupported": "Le serveur ne prend pas en charge la recherche dans l'archive. Essayez de rechercher dans une conversation.",

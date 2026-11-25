@@ -98,7 +98,8 @@
     "clean:all": "rm -rf dist node_modules docs",
     "bench:persist": "vitest run --config vitest.bench.config.ts bench/persistCost.bench.ts",
     "bench:seam": "vitest run --config vitest.bench.config.ts bench/outboundSeam.bench.ts",
-    "bench:persist:browser": "node bench/browser/run.mjs"
+    "bench:persist:browser": "node bench/browser/run.mjs",
+    "bench:search:browser": "node bench/search/run.mjs"
   },
   "dependencies": {
     "@xmpp/client": "^0.14.0",

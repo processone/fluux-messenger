@@ -1873,6 +1873,63 @@
         "sent": "Viesti lähetetty. Voit poistaa tämän tuodun kohteen."
     },
     "search": {
+        "panel": {
+            "title": "Suodattimet",
+            "from": "Lähettäjä",
+            "anyone": "Kuka tahansa",
+            "me": "Minä",
+            "date": "Päivämäärä",
+            "anyTime": "Milloin tahansa",
+            "custom": "Mukautettu aikaväli",
+            "start": "Ensimmäinen päivä",
+            "end": "Viimeinen päivä",
+            "contains": "Sisältää",
+            "image": "Kuvia",
+            "link": "Linkkejä",
+            "file": "Tiedostoja",
+            "poll": "Kyselyitä",
+            "clear": "Tyhjennä suodattimet",
+            "apply": "Käytä",
+            "localEmpty": "Ei osumia tämän laitteen historiassa.",
+            "archiveEmpty": "Ei muita osumia palvelimen arkistossa.",
+            "pageEmpty": "Ei muita osumia tällä sivulla. Lataa lisää tarkistaaksesi vanhemmat viestit.",
+            "invalidRange": "Ensimmäinen päivä ei saa olla viimeisen päivän jälkeen.",
+            "invalidFilters": "Täydennä tai korjaa suodattimet ennen hakua.",
+            "incomplete": "Joitakin vanhempia osumia saattaa puuttua, koska niiden sisältötiedot eivät ole saatavilla tällä laitteella.",
+            "unavailable": "Fluux ei voinut valmistella hakusuodattimia tällä laitteella."
+        },
+        "filtersBuilding": "Fluux valmistelee lähettäjä- ja sisältösuodattimia tämän laitteen historiaa varten. Tulokset tulevat näkyviin, kun valmistelu on valmis.",
+        "needsWords": "Lisää sana tai valitse lähettäjä tai sisältö Suodattimet-kohdasta hakeaksesi näiltä päiviltä",
+        "values": {
+            "mine": "Omat viestisi",
+            "link": "Viestit, joissa on linkki",
+            "image": "Viestit, joissa on kuva",
+            "file": "Viestit, joissa on tiedosto",
+            "poll": "Viestit, joissa on äänestys"
+        },
+        "chip": {
+            "from": "Lähettäjä: {{name}}",
+            "mine": "Minun lähettämäni",
+            "link": "Linkki",
+            "image": "Kuva",
+            "file": "Tiedosto",
+            "poll": "Äänestys",
+            "list": "Hakusuodattimet",
+            "after": "{{date}} jälkeen",
+            "before": "Ennen {{date}}",
+            "on": "Päivä: {{date}}",
+            "invalid": "Fluux ei ymmärrä suodatinta {{filter}}",
+            "remove": "Poista {{label}}"
+        },
+        "dates": {
+            "today": "Tänään",
+            "yesterday": "Eilen",
+            "thisMonth": "Tässä kuussa",
+            "thisYear": "Tänä vuonna"
+        },
+        "operators": {
+            "label": "Suodattimet"
+        },
         "filter": {
             "all": "Kaikki",
             "conversations": "Keskustelut",
@@ -1893,6 +1950,7 @@
         "goToMessage": "Siirry viestiin",
         "loadingContext": "Ladataan viestejä…",
         "errors": {
+            "serverNeedsWords": "Palvelimen arkisto tarvitsee hakusanoja, paitsi kahdenkeskisessä keskustelussa",
             "failed": "Haku epäonnistui",
             "archiveRooms": "Palvelin ei tue huoneiden arkistohakua",
             "archiveUnsupported": "Palvelin ei tue arkistohakua. Kokeile hakea keskustelun sisältä.",

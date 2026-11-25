@@ -51,7 +51,7 @@ import { RequestTimeoutError } from './errors'
 import { getBareJid, getDomain } from './jid'
 import { routeStanza } from './stanzaRouting'
 import { createE2EEDiagnosticLogger } from './e2eeDiagnosticLogger'
-import { getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
+import { captureStorageScope, getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
 import { clearLocallyPublishedDisplayed } from './localMdsPublishes'
 import { generateUUID } from '../utils/uuid'
 
@@ -141,7 +141,7 @@ import {
 import { NS_MAM, NS_PING } from './namespaces'
 import { createDefaultStoreBindings } from './defaultStoreBindings'
 import { createPresenceReader, type PresenceReader } from './presenceReader'
-import { initSearchIndex, backfillFromMessageCache, migrateSearchPostings, updateMessage as updateSearchIndex } from '../utils/searchIndex'
+import { initSearchIndex, backfillFromMessageCache, migrateSearchPostings, migrateSearchFilters, updateMessage as updateSearchIndex } from '../utils/searchIndex'
 import { getMessagesWithEncryptedPayload, updateMessage, deleteMessage, deleteMessageForRecovery } from '../utils/messageCache'
 import { queryPepNodeSymbol, publishPepNodeSymbol } from './rawXmppAccess'
 
@@ -1229,14 +1229,16 @@ export class XMPPClient {
 
     // Connection does not wait for local search initialization; backfill policy
     // belongs to backfillFromMessageCache.
+    const searchScope = captureStorageScope()
     void (async () => {
       try {
         await initSearchIndex(scopedJid)
         await backfillFromMessageCache()
         await migrateSearchPostings()
       } catch {
-        // Ignore — search index is non-critical for connection
+        // Search initialization must not prevent sign-in or filter recovery.
       }
+      if (searchScope.isCurrent()) await migrateSearchFilters()
     })()
 
     this.currentJid = options.jid

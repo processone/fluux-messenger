@@ -4,9 +4,9 @@ import { isSpamModerated } from '@/utils/spamModeration'
 import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import { useSearch, useRoomMessageSnapshots, chatStore, roomStore, getLocalPart } from '@fluux/sdk'
+import { useSearch, useRoomMessageSnapshots, chatStore, roomStore, getLocalPart, setSearchLocale, parseSearchFilters, roomSenderValue, removeSearchFilter, hasTokenFilters } from '@fluux/sdk'
 import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
-import type { SearchResult, SearchResultContext, SearchFilterType, RoomMessage } from '@fluux/sdk'
+import type { SearchResult, SearchResultContext, SearchFilterType, RoomMessage, SearchFilterToken } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { RoomAvatar } from '../RoomAvatar'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
@@ -16,16 +16,56 @@ import { useDayChange } from '@/hooks/useDayChange'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 import { useSidebarZone } from './types'
-import { Search, SearchX, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash } from 'lucide-react'
+import { Search, SearchX, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash, CalendarDays, AlertTriangle, Filter, User, Link, Image, Paperclip, BarChart3 } from 'lucide-react'
+import { applySuggestion, filterChipLabel, operatorSuggestions, type SenderOption } from './searchOperators'
 import { TextInput } from '../ui/TextInput'
+import { SearchFilterPanel } from './SearchFilterPanel'
 import { ListEmpty } from '../ui/ListEmpty'
 
 const SEARCH_ERROR_KEYS = new Map([
+  ['Invalid search filters', 'search.panel.invalidFilters'],
   ['Search failed', 'search.errors.failed'],
   ['Server does not support archive search for rooms', 'search.errors.archiveRooms'],
   ['Server does not support archive search. Try searching within a conversation.', 'search.errors.archiveUnsupported'],
   ['Server search failed', 'search.errors.serverFailed'],
+  ['The server archive needs words to search', 'search.errors.serverNeedsWords'],
 ])
+
+const EMPTY_PICKED_FILTERS: string[] = []
+const CHIP_ICONS = { link: Link, image: Image, file: Paperclip, poll: BarChart3 } as const
+
+/** The icon of a chip: who for from: and is:, what for has:, a calendar for dates. */
+function chipIcon(filter: SearchFilterToken) {
+  if (!filter.valid) return AlertTriangle
+  if (filter.op === 'from' || filter.op === 'is') return User
+  if (filter.op === 'has') return CHIP_ICONS[filter.value.toLowerCase() as keyof typeof CHIP_ICONS] ?? Filter
+  return CalendarDays
+}
+
+/**
+ * Who `from:` can name: in a room scope its occupants by nick, otherwise the
+ * one-to-one conversations by JID and the occupants of every joined room.
+ */
+function senderOptions(scope: string | null): SenderOption[] {
+  const options: SenderOption[] = []
+  const seen = new Set<string>()
+  const add = (value: string, label: string) => {
+    if (seen.has(value.toLowerCase())) return
+    seen.add(value.toLowerCase())
+    options.push({ value, label })
+  }
+  for (const [jid, room] of roomStore.getState().rooms) {
+    if (scope && scope !== jid) continue
+    // The reader is from:me, not their own nick
+    for (const occupant of room.occupants?.values() ?? []) if (occupant.nick !== room.nickname) add(roomSenderValue(jid, occupant.occupantId ?? '', occupant.nick), scope ? occupant.nick : `${occupant.nick} · ${room.name || jid}`)
+  }
+  if (!scope || !roomStore.getState().rooms.has(scope)) {
+    for (const [jid, entity] of chatStore.getState().conversationEntities) {
+      if (!scope || scope === jid) add(jid, entity.name || jid)
+    }
+  }
+  return options
+}
 
 function translateSearchError(t: TFunction, message: string): string {
   return t(SEARCH_ERROR_KEYS.get(message) ?? 'search.errors.failed')
@@ -43,18 +83,24 @@ export function SearchView() {
   const { t, i18n } = useTranslation()
   const {
     query, results: rawResults, isSearching, error, search, clearSearch, previewResult, setPreviewResult,
-    isSearchingMAM, mamResults: rawMamResults, hasMoreMAMResults, mamError, searchScope,
+    isSearchingMAM, mamSearched: archiveRequested, mamResults: rawMamResults, hasMoreMAMResults, mamError, searchScope,
     searchMAM, loadMoreMAMResults, setSearchScope, resultContext,
     searchFilter, setSearchFilter,
-    inPrefixSuggestions, isInPrefixActive, selectInPrefixSuggestion,
+    inPrefixSuggestions, isInPrefixActive, selectInPrefixSuggestion, filtersBuilding, pickedFilters = EMPTY_PICKED_FILTERS, setPickedFilters, filtersIncomplete, filtersUnavailable, retryFilters,
   } = useSearch()
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const inputRef = useRef<HTMLInputElement>(null)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const [inPrefixHighlight, setInPrefixHighlight] = useState(-1)
+  // The query whose operator suggestions Escape dismissed; typing brings them back
+  const [dismissedFor, setDismissedFor] = useState<string | null>(null)
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
   const zoneRef = useSidebarZone()
+
+  // Numeric dates in after:, before: and on: read in the interface language's order
+  useEffect(() => setSearchLocale(i18n.language), [i18n.language])
 
   // Auto-focus search input on mount
   useEffect(() => {
@@ -103,7 +149,27 @@ export function SearchView() {
     if (previewResult && hiddenResults.has(previewResult.indexId)) latestRef.current.setPreviewResult(null)
   }, [previewResult, hiddenResults])
 
+  // Read in the same locale the store gets from the effect above
+  const parsedInput = useMemo(() => parseSearchFilters(query, i18n.language), [query, i18n.language])
+  const pickedChips = useMemo(() => parseSearchFilters('', i18n.language, pickedFilters).filters, [pickedFilters, i18n.language])
+  const chips = [...parsedInput.filters, ...pickedChips]
+  const hasQuery = !!query.trim() || pickedFilters.length > 0
+  const combinedInput = parseSearchFilters(query, i18n.language, pickedFilters)
+  const invalidFilters = chips.some(filter => !filter.valid) ||
+    (combinedInput.after !== undefined && combinedInput.before !== undefined && combinedInput.after >= combinedInput.before)
+  const operatorOptions = useMemo(
+    () => (filtersOpen || dismissedFor === query ? [] : operatorSuggestions(query, new Date(),
+      /\bfrom:\S*$/i.test(query) ? senderOptions(searchScope) : [])),
+    [query, filtersOpen, dismissedFor, searchScope],
+  )
+  // Dates only narrow a search: alone they leave nothing to look for
+  const needsWords = hasQuery && !isInPrefixActive && !combinedInput.text && !hasTokenFilters(combinedInput)
+  const archiveNeedsWords = hasQuery && !combinedInput.text && (!searchScope || roomStore.getState().rooms.has(searchScope))
+  const suggestionCount = isInPrefixActive ? inPrefixSuggestions.length : operatorOptions.length
+  const suggestionsOpen = suggestionCount > 0 && dismissedFor !== query && !filtersOpen
+
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
+    enabled: !suggestionsOpen,
     items: allResults,
     onSelect: rowHandlers.onSelect,
     listRef,
@@ -117,26 +183,43 @@ export function SearchView() {
   // Reset highlight when suggestions change
   useEffect(() => {
     setInPrefixHighlight(-1)
-  }, [inPrefixSuggestions])
+  }, [inPrefixSuggestions, operatorOptions])
 
-  const handleInPrefixKeyDown = useCallback(
+  const replaceQuery = useCallback((next: string) => {
+    notifyUserInput()
+    search(next)
+    inputRef.current?.focus()
+  }, [search])
+
+  const acceptSuggestion = useCallback((index: number) => {
+    if (isInPrefixActive) selectInPrefixSuggestion(inPrefixSuggestions[index])
+    else {
+      const option = operatorOptions[index]
+      if (option.pickedFilter) {
+        setPickedFilters([...pickedFilters, option.pickedFilter])
+        replaceQuery(applySuggestion(query, { insert: '' }).trimEnd())
+      } else replaceQuery(applySuggestion(query, option))
+    }
+  }, [isInPrefixActive, selectInPrefixSuggestion, inPrefixSuggestions, replaceQuery, query, operatorOptions, pickedFilters, setPickedFilters])
+
+  const handleSuggestionKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (!isInPrefixActive || inPrefixSuggestions.length === 0) return
+      if (!suggestionsOpen) return
       if (e.key === 'ArrowDown') {
         e.preventDefault()
-        setInPrefixHighlight((prev) => Math.min(prev + 1, inPrefixSuggestions.length - 1))
+        setInPrefixHighlight((prev) => Math.min(prev + 1, suggestionCount - 1))
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
         setInPrefixHighlight((prev) => Math.max(prev - 1, -1))
       } else if (e.key === 'Enter' && inPrefixHighlight >= 0) {
         e.preventDefault()
-        selectInPrefixSuggestion(inPrefixSuggestions[inPrefixHighlight])
+        acceptSuggestion(Math.max(inPrefixHighlight, 0))
       } else if (e.key === 'Escape') {
         e.preventDefault()
-        clearSearch()
+        setDismissedFor(query)
       }
     },
-    [isInPrefixActive, inPrefixSuggestions, inPrefixHighlight, selectInPrefixSuggestion, clearSearch]
+    [suggestionsOpen, suggestionCount, inPrefixHighlight, acceptSuggestion, isInPrefixActive, clearSearch, query]
   )
 
   const filterOptions: { key: SearchFilterType; label: string; icon: typeof Users }[] = [
@@ -164,8 +247,13 @@ export function SearchView() {
               notifyUserInput()
               search(e.target.value)
             }}
-            onKeyDown={handleInPrefixKeyDown}
+            onKeyDown={handleSuggestionKeyDown}
             placeholder={t('search.placeholder')}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={suggestionsOpen}
+            aria-controls={suggestionsOpen ? 'search-suggestions' : undefined}
+            aria-activedescendant={suggestionsOpen && inPrefixHighlight >= 0 ? `search-suggestion-${inPrefixHighlight}` : undefined}
             className="w-full ps-8 pe-8 py-1.5 text-sm bg-fluux-bg border border-fluux-border rounded-md
                        text-fluux-text placeholder-fluux-muted"
           />
@@ -180,13 +268,35 @@ export function SearchView() {
             </button>
           )}
 
-          {/* in: prefix autocomplete dropdown */}
-          {isInPrefixActive && inPrefixSuggestions.length > 0 && (
-            <div className="absolute inset-x-0 top-full mt-1 fluux-popover rounded-md z-50 max-h-48 overflow-y-auto">
-              {inPrefixSuggestions.map((s, i) => (
+          {/* in: and operator autocomplete dropdown */}
+          {suggestionsOpen && (
+            <div id="search-suggestions" role="listbox" aria-label={t('search.operators.label')}
+              className="absolute inset-x-0 top-full mt-1 fluux-popover rounded-md z-50 max-h-48 overflow-y-auto">
+              {!isInPrefixActive && operatorOptions.map((option, i) => (
+                <button
+                  type="button"
+                  key={option.id}
+                  id={`search-suggestion-${i}`}
+                  role="option"
+                  aria-selected={i === inPrefixHighlight}
+                  tabIndex={-1}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => acceptSuggestion(i)}
+                  className={`w-full px-3 py-1.5 text-start text-sm flex items-center gap-2 transition-colors
+                    ${i === inPrefixHighlight ? 'bg-fluux-hover text-fluux-text' : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'}`}
+                >
+                  <span className="font-mono text-fluux-text flex-shrink-0 max-w-[45%] truncate">{option.insert}</span>
+                  <span className="min-w-0 break-words text-xs">{option.label ?? t(option.hintKey)}</span>
+                </button>
+              ))}
+              {isInPrefixActive && inPrefixSuggestions.map((s, i) => (
                 <button
                   type="button"
                   key={s.id}
+                  id={`search-suggestion-${i}`}
+                  role="option"
+                  aria-selected={i === inPrefixHighlight}
+                  tabIndex={-1}
                   onClick={() => selectInPrefixSuggestion(s)}
                   className={`w-full px-3 py-1.5 text-start text-sm flex items-center gap-2 transition-colors
                     ${i === inPrefixHighlight ? 'bg-fluux-hover text-fluux-text' : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'}`}
@@ -205,26 +315,65 @@ export function SearchView() {
         </div>
       </div>
 
-      {/* Scope chip */}
-      {searchScope && (
-        <div className="flex items-center gap-1 px-3 pb-1">
-          <span className="text-xs bg-fluux-hover rounded px-2 py-0.5 text-fluux-muted truncate">
-            {t('search.scopeLabel', { name: getConversationName(searchScope) })}
-          </span>
-          <button
-            type="button"
-            onClick={() => setSearchScope(null)}
-            className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted flex-shrink-0 tap-target"
-            aria-label={t('search.clearScope')}
-            title={t('search.clearScope')}
-          >
-            <X className="size-3" />
-          </button>
-        </div>
+      {/* Scope and filter chips: each removes its scope or operator */}
+      {(searchScope || chips.length > 0) && (
+        <ul className="flex flex-wrap items-center gap-1 px-3 pb-1" aria-label={t('search.chip.list')}>
+          {searchScope && (
+            <li className="flex items-center gap-0.5 min-w-0 max-w-full text-xs bg-fluux-hover rounded ps-2 text-fluux-muted">
+              <span className="truncate">{t('search.scopeLabel', { name: getConversationName(searchScope) })}</span>
+              <button
+                type="button"
+                onClick={() => setSearchScope(null)}
+                className="p-0.5 rounded hover:bg-fluux-hover-strong text-fluux-muted flex-shrink-0 tap-target"
+                aria-label={t('search.clearScope')}
+                title={t('search.clearScope')}
+              >
+                <X className="size-3" />
+              </button>
+            </li>
+          )}
+          {chips.map((filter, index) => {
+            const label = filterChipLabel(filter, t, currentLang)
+            const Icon = chipIcon(filter)
+            return (
+              <li key={`${index}-${filter.raw}`}
+                className={`flex items-center gap-1 min-w-0 max-w-full text-xs rounded ps-2 ${filter.valid
+                  ? 'bg-fluux-brand/15 text-fluux-text' : 'bg-fluux-red/20 text-fluux-error'}`}
+                title={filter.valid ? undefined : t('search.chip.invalid', { filter: filter.raw })}
+              >
+                <Icon className="size-3 flex-shrink-0" aria-hidden />
+                <span className="truncate">{label}</span>
+                {!filter.valid && <span>{t('search.chip.invalid', { filter: filter.raw })}</span>}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (index < parsedInput.filters.length) replaceQuery(removeSearchFilter(query, filter))
+                    else setPickedFilters(pickedFilters.filter((_, pickedIndex) => pickedIndex !== index - parsedInput.filters.length))
+                    inputRef.current?.focus()
+                  }}
+                  className="p-0.5 rounded hover:bg-fluux-hover-strong flex-shrink-0 tap-target"
+                  aria-label={t('search.chip.remove', { label })}
+                  title={t('search.chip.remove', { label })}
+                >
+                  <X className="size-3" />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
       )}
 
+      <div className="px-3 pb-2">
+        <button type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-fluux-hover text-fluux-text hover:bg-fluux-hover-strong">
+          <Filter className="size-3.5" aria-hidden />{t('search.panel.title')}
+        </button>
+      </div>
+      {filtersOpen && <SearchFilterPanel filters={chips.map(filter => filter.raw)} senders={senderOptions(searchScope)}
+        onApply={next => { setPickedFilters(next); search(parsedInput.text) }} onClose={() => { setFiltersOpen(false); inputRef.current?.focus() }} />}
+
       {/* Type filter pills */}
-      {query && !isInPrefixActive && (
+      {hasQuery && !isInPrefixActive && (
         <div className="flex flex-wrap items-center gap-1 px-3 pb-1">
           {filterOptions.map(({ key, label, icon: Icon }) => (
             <button
@@ -253,13 +402,35 @@ export function SearchView() {
           </div>
         )}
 
-        {!isSearching && !isInPrefixActive && query && results.length === 0 && mamResults.length === 0 && !isSearchingMAM && (
-          <ListEmpty icon={SearchX} title={t('search.noResults')} />
+        {!isSearching && filtersBuilding && (
+          <p role="status" className="flex items-start gap-2 mx-2 my-3 p-2 rounded bg-fluux-hover text-xs text-fluux-muted">
+            <Loader2 className="size-3.5 mt-0.5 flex-shrink-0 animate-spin" aria-hidden />
+            {t('search.filtersBuilding')}
+          </p>
         )}
 
-        {error && (
+        {!isSearching && filtersIncomplete && <p role="status" className="mx-2 my-3 text-xs text-fluux-muted">{t('search.panel.incomplete')}</p>}
+        {!isSearching && filtersUnavailable && <div role="alert" className="mx-2 my-3 text-sm text-fluux-error">
+          <p>{t('search.panel.unavailable')}</p><p>{filtersUnavailable}</p>
+          <button type="button" className="underline py-2" onClick={retryFilters}>{t('chat.retry')}</button>
+        </div>}
+        {!isSearching && invalidFilters && <p role="alert" className="mx-2 my-3 text-sm text-fluux-error">{t('search.panel.invalidFilters')}</p>}
+
+        {!isSearching && !invalidFilters && needsWords && (
+          <ListEmpty icon={Filter} title={t('search.needsWords')} />
+        )}
+
+        {!isSearching && !isInPrefixActive && !filtersBuilding && !needsWords && !invalidFilters && !error && !filtersUnavailable && hasQuery && results.length === 0 && mamResults.length === 0 && !isSearchingMAM && (
+          <ListEmpty icon={SearchX} title={t('search.panel.localEmpty')} />
+        )}
+
+        {error && !invalidFilters && (
           <div className="text-center py-4 text-red-400 text-sm">{translateSearchError(t, error)}</div>
         )}
+
+        {!isSearchingMAM && !mamError && mamResults.length === 0 && archiveRequested && <p role="status" className="mx-2 my-3 text-xs text-fluux-muted">
+          {t(hasMoreMAMResults ? 'search.panel.pageEmpty' : 'search.panel.archiveEmpty')}
+        </p>}
 
         {/* Local results */}
         {!isSearching && results.length > 0 && (
@@ -283,8 +454,10 @@ export function SearchView() {
           </div>
         )}
 
+        {!isSearching && !invalidFilters && !needsWords && archiveNeedsWords && <p className="mx-2 my-3 text-xs text-fluux-muted">{t('search.errors.serverNeedsWords')}</p>}
+
         {/* MAM search button */}
-        {!isSearching && !isInPrefixActive && query && !isSearchingMAM && mamResults.length === 0 && (
+        {!isSearching && !isInPrefixActive && !needsWords && !invalidFilters && !archiveNeedsWords && hasQuery && !isSearchingMAM && !hasMoreMAMResults && mamResults.length === 0 && (
           <div className="px-2 py-3">
             <button
               type="button"
@@ -356,9 +529,7 @@ export function SearchView() {
           <div className="text-center py-2 px-3 text-fluux-muted text-xs">{translateSearchError(t, mamError)}</div>
         )}
 
-        {!query && (
-          <ListEmpty icon={Search} title={t('search.hint')} />
-        )}
+        {!hasQuery && <ListEmpty icon={Search} title={t('search.hint')} />}
       </div>
     </div>
   )
@@ -536,9 +707,11 @@ function HighlightedSnippet({
     <p className="text-xs text-fluux-muted line-clamp-1 mt-0.5">
       {nick && <span className="font-medium text-fluux-text">{nick}: </span>}
       {before}
-      <mark className="search-match px-0.5">
-        {match}
-      </mark>
+      {match && (
+        <mark className="search-match px-0.5">
+          {match}
+        </mark>
+      )}
       {after}
     </p>
   )

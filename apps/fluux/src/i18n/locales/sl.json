@@ -1879,6 +1879,63 @@
         "sent": "Sporočilo je poslano. Ta uvoženi element lahko odstranite."
     },
     "search": {
+        "panel": {
+            "title": "Filtri",
+            "from": "Od",
+            "anyone": "Kdorkoli",
+            "me": "Jaz",
+            "date": "Datum",
+            "anyTime": "Kadar koli",
+            "custom": "Obdobje po meri",
+            "start": "Prvi dan",
+            "end": "Zadnji dan",
+            "contains": "Vsebuje",
+            "image": "Slike",
+            "link": "Povezave",
+            "file": "Datoteke",
+            "poll": "Ankete",
+            "clear": "Počisti filtre",
+            "apply": "Uporabi",
+            "localEmpty": "V zgodovini te naprave ni zadetkov.",
+            "archiveEmpty": "V strežniškem arhivu ni drugih zadetkov.",
+            "pageEmpty": "Na tej strani ni drugih zadetkov. Naložite več za pregled starejših sporočil.",
+            "invalidRange": "Prvi dan ne sme biti poznejši od zadnjega.",
+            "invalidFilters": "Pred iskanjem dopolnite ali popravite filtre.",
+            "incomplete": "Nekateri starejši zadetki lahko manjkajo, ker podatki o njihovi vsebini v tej napravi niso na voljo.",
+            "unavailable": "Fluux ni mogel pripraviti iskalnih filtrov v tej napravi."
+        },
+        "filtersBuilding": "Fluux pripravlja filtre pošiljatelja in vsebine za zgodovino te naprave. Rezultati bodo prikazani, ko bo priprava končana.",
+        "needsWords": "Za iskanje v teh datumih dodajte besedo ali v Filtrih izberite pošiljatelja ali vsebino",
+        "values": {
+            "mine": "Vaša lastna sporočila",
+            "link": "Sporočila s povezavo",
+            "image": "Sporočila s sliko",
+            "file": "Sporočila z datoteko",
+            "poll": "Sporočila z anketo"
+        },
+        "chip": {
+            "from": "Od: {{name}}",
+            "mine": "Moja sporočila",
+            "link": "S povezavo",
+            "image": "S sliko",
+            "file": "Z datoteko",
+            "poll": "Z anketo",
+            "list": "Filtri iskanja",
+            "after": "Po: {{date}}",
+            "before": "Pred: {{date}}",
+            "on": "Datum: {{date}}",
+            "invalid": "Fluux ne razume {{filter}}",
+            "remove": "Odstrani {{label}}"
+        },
+        "dates": {
+            "today": "Danes",
+            "yesterday": "Včeraj",
+            "thisMonth": "Ta mesec",
+            "thisYear": "To leto"
+        },
+        "operators": {
+            "label": "Filtri"
+        },
         "filter": {
             "all": "Vse",
             "conversations": "Klepeti",
@@ -1899,6 +1956,7 @@
         "goToMessage": "Pojdi na sporočilo",
         "loadingContext": "Nalaganje sporočil …",
         "errors": {
+            "serverNeedsWords": "Arhiv strežnika potrebuje besede za iskanje, razen v pogovoru med dvema osebama",
             "failed": "Iskanje ni uspelo",
             "archiveRooms": "Strežnik ne podpira iskanja po arhivu sob",
             "archiveUnsupported": "Strežnik ne podpira iskanja po arhivu. Poskusite iskati znotraj pogovora.",

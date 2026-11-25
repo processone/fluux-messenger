@@ -1876,6 +1876,63 @@
         "sent": "Ziņojums nosūtīts. Varat dzēst šo importēto vienumu."
     },
     "search": {
+        "panel": {
+            "title": "Filtri",
+            "from": "No",
+            "anyone": "Ikviens",
+            "me": "Es",
+            "date": "Datums",
+            "anyTime": "Jebkurš laiks",
+            "custom": "Pielāgots periods",
+            "start": "Pirmā diena",
+            "end": "Pēdējā diena",
+            "contains": "Satur",
+            "image": "Attēli",
+            "link": "Saites",
+            "file": "Faili",
+            "poll": "Aptaujas",
+            "clear": "Notīrīt filtrus",
+            "apply": "Lietot",
+            "localEmpty": "Šīs ierīces vēsturē nav atbilstību.",
+            "archiveEmpty": "Servera arhīvā nav citu atbilstību.",
+            "pageEmpty": "Šajā lapā nav citu atbilstību. Ielādējiet vairāk, lai pārbaudītu vecākus ziņojumus.",
+            "invalidRange": "Pirmā diena nedrīkst būt pēc pēdējās.",
+            "invalidFilters": "Pirms meklēšanas aizpildiet vai izlabojiet filtrus.",
+            "incomplete": "Dažas vecākas atbilstības var trūkt, jo to satura informācija šajā ierīcē nav pieejama.",
+            "unavailable": "Fluux nevarēja sagatavot meklēšanas filtrus šajā ierīcē."
+        },
+        "filtersBuilding": "Fluux sagatavo sūtītāja un satura filtrus šīs ierīces vēsturei. Rezultāti parādīsies, kad viss būs gatavs.",
+        "needsWords": "Lai meklētu šajā periodā, pievienojiet vārdu vai filtros izvēlieties sūtītāju vai saturu",
+        "values": {
+            "mine": "Jūsu pašu ziņas",
+            "link": "Ziņas ar saiti",
+            "image": "Ziņas ar attēlu",
+            "file": "Ziņas ar failu",
+            "poll": "Ziņas ar aptauju"
+        },
+        "chip": {
+            "from": "No: {{name}}",
+            "mine": "Manas ziņas",
+            "link": "Ar saiti",
+            "image": "Ar attēlu",
+            "file": "Ar failu",
+            "poll": "Ar aptauju",
+            "list": "Meklēšanas filtri",
+            "after": "Pēc: {{date}}",
+            "before": "Pirms: {{date}}",
+            "on": "Datums: {{date}}",
+            "invalid": "Fluux nesaprot {{filter}}",
+            "remove": "Noņemt {{label}}"
+        },
+        "dates": {
+            "today": "Šodien",
+            "yesterday": "Vakar",
+            "thisMonth": "Šis mēnesis",
+            "thisYear": "Šis gads"
+        },
+        "operators": {
+            "label": "Filtri"
+        },
         "filter": {
             "all": "Viss",
             "conversations": "Tērzēšanas",
@@ -1896,6 +1953,7 @@
         "goToMessage": "Doties uz ziņu",
         "loadingContext": "Ielādē ziņas…",
         "errors": {
+            "serverNeedsWords": "Servera arhīvam meklēšanai vajag vārdus, izņemot sarunu divatā",
             "failed": "Meklēšana neizdevās",
             "archiveRooms": "Serveris neatbalsta istabu arhīva meklēšanu",
             "archiveUnsupported": "Serveris neatbalsta arhīva meklēšanu. Mēģiniet meklēt sarunas iekšienē.",

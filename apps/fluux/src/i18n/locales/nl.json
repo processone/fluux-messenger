@@ -1873,6 +1873,63 @@
         "sent": "Bericht verzonden. Je kunt dit geïmporteerde item verwijderen."
     },
     "search": {
+        "panel": {
+            "title": "Filters",
+            "from": "Van",
+            "anyone": "Iedereen",
+            "me": "Ik",
+            "date": "Datum",
+            "anyTime": "Elke periode",
+            "custom": "Aangepaste periode",
+            "start": "Eerste dag",
+            "end": "Laatste dag",
+            "contains": "Bevat",
+            "image": "Afbeeldingen",
+            "link": "Links",
+            "file": "Bestanden",
+            "poll": "Peilingen",
+            "clear": "Filters wissen",
+            "apply": "Toepassen",
+            "localEmpty": "Geen overeenkomsten in de geschiedenis op dit apparaat.",
+            "archiveEmpty": "Geen andere overeenkomsten in het serverarchief.",
+            "pageEmpty": "Geen andere overeenkomsten op deze pagina. Laad meer om oudere berichten te controleren.",
+            "invalidRange": "De eerste dag mag niet na de laatste liggen.",
+            "invalidFilters": "Vul de filters aan of corrigeer ze voordat je zoekt.",
+            "incomplete": "Sommige oudere overeenkomsten ontbreken mogelijk omdat hun inhoudsgegevens niet beschikbaar zijn op dit apparaat.",
+            "unavailable": "Fluux kon de zoekfilters op dit apparaat niet voorbereiden."
+        },
+        "filtersBuilding": "Fluux bereidt afzender- en inhoudsfilters voor de geschiedenis op dit apparaat voor. De resultaten verschijnen zodra alles klaar is.",
+        "needsWords": "Voeg een woord toe of kies een afzender of inhoud bij Filters om binnen deze datums te zoeken",
+        "values": {
+            "mine": "Je eigen berichten",
+            "link": "Berichten met een link",
+            "image": "Berichten met een afbeelding",
+            "file": "Berichten met een bestand",
+            "poll": "Berichten met een peiling"
+        },
+        "chip": {
+            "from": "Van {{name}}",
+            "mine": "Door mij verzonden",
+            "link": "Met link",
+            "image": "Met afbeelding",
+            "file": "Met bestand",
+            "poll": "Met peiling",
+            "list": "Zoekfilters",
+            "after": "Na {{date}}",
+            "before": "Vóór {{date}}",
+            "on": "Datum: {{date}}",
+            "invalid": "Fluux begrijpt {{filter}} niet",
+            "remove": "{{label}} verwijderen"
+        },
+        "dates": {
+            "today": "Vandaag",
+            "yesterday": "Gisteren",
+            "thisMonth": "Deze maand",
+            "thisYear": "Dit jaar"
+        },
+        "operators": {
+            "label": "Filters"
+        },
         "filter": {
             "all": "Alles",
             "conversations": "Chats",
@@ -1893,6 +1950,7 @@
         "goToMessage": "Ga naar bericht",
         "loadingContext": "Berichten laden…",
         "errors": {
+            "serverNeedsWords": "Het serverarchief heeft woorden nodig om te zoeken, behalve in een één-op-ééngesprek",
             "failed": "Zoeken mislukt",
             "archiveRooms": "De server ondersteunt geen archiefzoekopdrachten voor kamers",
             "archiveUnsupported": "De server ondersteunt geen archiefzoekopdrachten. Probeer te zoeken binnen een gesprek.",

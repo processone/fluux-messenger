@@ -1873,6 +1873,63 @@
         "sent": "메시지를 보냈습니다. 가져온 항목을 삭제할 수 있습니다."
     },
     "search": {
+        "panel": {
+            "title": "필터",
+            "from": "보낸 사람",
+            "anyone": "모든 사람",
+            "me": "나",
+            "date": "날짜",
+            "anyTime": "전체 기간",
+            "custom": "직접 지정",
+            "start": "첫날",
+            "end": "마지막 날",
+            "contains": "포함 내용",
+            "image": "이미지",
+            "link": "링크",
+            "file": "파일",
+            "poll": "투표",
+            "clear": "필터 지우기",
+            "apply": "적용",
+            "localEmpty": "이 기기의 기록에서 일치하는 메시지가 없습니다.",
+            "archiveEmpty": "서버 보관함에 추가로 일치하는 메시지가 없습니다.",
+            "pageEmpty": "이 페이지에 추가로 일치하는 메시지가 없습니다. 이전 메시지를 확인하려면 더 불러오세요.",
+            "invalidRange": "첫날은 마지막 날보다 늦을 수 없습니다.",
+            "invalidFilters": "검색하기 전에 필터를 완성하거나 수정하세요.",
+            "incomplete": "이 기기에서 콘텐츠 세부 정보를 사용할 수 없어 일부 이전 메시지가 검색 결과에서 빠질 수 있습니다.",
+            "unavailable": "Fluux가 이 기기에서 검색 필터를 준비하지 못했습니다."
+        },
+        "filtersBuilding": "Fluux가 이 기기의 기록에 사용할 보낸 사람 및 콘텐츠 필터를 준비하고 있습니다. 준비가 끝나면 결과가 표시됩니다.",
+        "needsWords": "이 기간을 검색하려면 단어를 추가하거나 필터에서 보낸 사람 또는 콘텐츠를 선택하세요",
+        "values": {
+            "mine": "내 메시지",
+            "link": "링크가 있는 메시지",
+            "image": "이미지가 있는 메시지",
+            "file": "파일이 있는 메시지",
+            "poll": "투표가 있는 메시지"
+        },
+        "chip": {
+            "from": "보낸 사람: {{name}}",
+            "mine": "내가 보냄",
+            "link": "링크 포함",
+            "image": "이미지 포함",
+            "file": "파일 포함",
+            "poll": "투표 포함",
+            "list": "검색 필터",
+            "after": "{{date}} 이후",
+            "before": "{{date}} 이전",
+            "on": "날짜: {{date}}",
+            "invalid": "Fluux가 {{filter}}을(를) 이해하지 못합니다",
+            "remove": "{{label}} 제거"
+        },
+        "dates": {
+            "today": "오늘",
+            "yesterday": "어제",
+            "thisMonth": "이번 달",
+            "thisYear": "올해"
+        },
+        "operators": {
+            "label": "필터"
+        },
         "filter": {
             "all": "전체",
             "conversations": "채팅",
@@ -1893,6 +1950,7 @@
         "goToMessage": "메시지로 이동",
         "loadingContext": "메시지 불러오는 중…",
         "errors": {
+            "serverNeedsWords": "일대일 대화가 아니면 서버 보관함 검색에는 검색어가 필요합니다",
             "failed": "검색에 실패했습니다",
             "archiveRooms": "서버가 대화방 보관함 검색을 지원하지 않습니다",
             "archiveUnsupported": "서버가 보관함 검색을 지원하지 않습니다. 대화 안에서 검색해 보세요.",

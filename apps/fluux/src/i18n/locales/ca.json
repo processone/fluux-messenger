@@ -1877,6 +1877,63 @@
         "sent": "Missatge enviat. Podeu suprimir aquest element importat."
     },
     "search": {
+        "panel": {
+            "title": "Filtres",
+            "from": "De",
+            "anyone": "Qualsevol persona",
+            "me": "Jo",
+            "date": "Data",
+            "anyTime": "Qualsevol període",
+            "custom": "Interval personalitzat",
+            "start": "Primer dia",
+            "end": "Últim dia",
+            "contains": "Conté",
+            "image": "Imatges",
+            "link": "Enllaços",
+            "file": "Fitxers",
+            "poll": "Enquestes",
+            "clear": "Esborra els filtres",
+            "apply": "Aplica",
+            "localEmpty": "No hi ha coincidències a l'historial d'aquest dispositiu.",
+            "archiveEmpty": "No hi ha més coincidències a l'arxiu del servidor.",
+            "pageEmpty": "No hi ha més coincidències en aquesta pàgina. Carrega'n més per comprovar missatges anteriors.",
+            "invalidRange": "El primer dia no pot ser posterior a l'últim.",
+            "invalidFilters": "Completa o corregeix els filtres abans de cercar.",
+            "incomplete": "Pot ser que faltin coincidències antigues perquè els detalls del contingut no estan disponibles en aquest dispositiu.",
+            "unavailable": "El Fluux no ha pogut preparar els filtres de cerca en aquest dispositiu."
+        },
+        "filtersBuilding": "El Fluux està preparant els filtres de remitent i contingut de l'historial d'aquest dispositiu. Els resultats apareixeran quan estigui a punt.",
+        "needsWords": "Afegeix una paraula o tria un remitent o contingut a Filtres per cercar en aquestes dates",
+        "values": {
+            "mine": "Els vostres propis missatges",
+            "link": "Missatges amb un enllaç",
+            "image": "Missatges amb una imatge",
+            "file": "Missatges amb un fitxer",
+            "poll": "Missatges amb una enquesta"
+        },
+        "chip": {
+            "from": "De {{name}}",
+            "mine": "Enviats per mi",
+            "link": "Amb enllaç",
+            "image": "Amb imatge",
+            "file": "Amb fitxer",
+            "poll": "Amb enquesta",
+            "list": "Filtres de cerca",
+            "after": "Després de {{date}}",
+            "before": "Abans de {{date}}",
+            "on": "Data: {{date}}",
+            "invalid": "Fluux no entén {{filter}}",
+            "remove": "Treu {{label}}"
+        },
+        "dates": {
+            "today": "Avui",
+            "yesterday": "Ahir",
+            "thisMonth": "Aquest mes",
+            "thisYear": "Aquest any"
+        },
+        "operators": {
+            "label": "Filtres"
+        },
         "filter": {
             "all": "Tot",
             "conversations": "Xats",
@@ -1897,6 +1954,7 @@
         "goToMessage": "Vés al missatge",
         "loadingContext": "Carregant missatges…",
         "errors": {
+            "serverNeedsWords": "L'arxiu del servidor necessita paraules per cercar, excepte dins d'una conversa individual",
             "failed": "La cerca ha fallat",
             "archiveRooms": "El servidor no admet la cerca a l'arxiu de les sales",
             "archiveUnsupported": "El servidor no admet la cerca a l'arxiu. Proveu de cercar dins d'una conversa.",

@@ -1878,6 +1878,63 @@
         "sent": "Správa odoslaná. Túto importovanú položku môžete odstrániť."
     },
     "search": {
+        "panel": {
+            "title": "Filtre",
+            "from": "Od",
+            "anyone": "Ktokoľvek",
+            "me": "Ja",
+            "date": "Dátum",
+            "anyTime": "Kedykoľvek",
+            "custom": "Vlastné obdobie",
+            "start": "Prvý deň",
+            "end": "Posledný deň",
+            "contains": "Obsahuje",
+            "image": "Obrázky",
+            "link": "Odkazy",
+            "file": "Súbory",
+            "poll": "Ankety",
+            "clear": "Vymazať filtre",
+            "apply": "Použiť",
+            "localEmpty": "V histórii tohto zariadenia nie sú žiadne zhody.",
+            "archiveEmpty": "V archíve servera nie sú žiadne ďalšie zhody.",
+            "pageEmpty": "Na tejto stránke nie sú žiadne ďalšie zhody. Načítajte ďalšie a skontrolujte staršie správy.",
+            "invalidRange": "Prvý deň nesmie byť neskôr ako posledný.",
+            "invalidFilters": "Pred hľadaním doplňte alebo opravte filtre.",
+            "incomplete": "Niektoré staršie zhody môžu chýbať, pretože podrobnosti o ich obsahu nie sú v tomto zariadení dostupné.",
+            "unavailable": "Fluux nemohol v tomto zariadení pripraviť filtre hľadania."
+        },
+        "filtersBuilding": "Fluux pripravuje filtre odosielateľa a obsahu pre históriu tohto zariadenia. Výsledky sa zobrazia po dokončení prípravy.",
+        "needsWords": "Ak chcete hľadať v týchto dátumoch, pridajte slovo alebo vo Filtroch vyberte odosielateľa či obsah",
+        "values": {
+            "mine": "Vaše vlastné správy",
+            "link": "Správy s odkazom",
+            "image": "Správy s obrázkom",
+            "file": "Správy so súborom",
+            "poll": "Správy s anketou"
+        },
+        "chip": {
+            "from": "Od: {{name}}",
+            "mine": "Odoslané mnou",
+            "link": "S odkazom",
+            "image": "S obrázkom",
+            "file": "So súborom",
+            "poll": "S anketou",
+            "list": "Filtre hľadania",
+            "after": "Po: {{date}}",
+            "before": "Pred: {{date}}",
+            "on": "Dátum: {{date}}",
+            "invalid": "Fluux nerozumie {{filter}}",
+            "remove": "Odstrániť {{label}}"
+        },
+        "dates": {
+            "today": "Dnes",
+            "yesterday": "Včera",
+            "thisMonth": "Tento mesiac",
+            "thisYear": "Tento rok"
+        },
+        "operators": {
+            "label": "Filtre"
+        },
         "filter": {
             "all": "Všetko",
             "conversations": "Chaty",
@@ -1898,6 +1955,7 @@
         "goToMessage": "Prejsť na správu",
         "loadingContext": "Načítavajú sa správy…",
         "errors": {
+            "serverNeedsWords": "Archív servera potrebuje slová na hľadanie, okrem konverzácie medzi dvoma ľuďmi",
             "failed": "Hľadanie zlyhalo",
             "archiveRooms": "Server nepodporuje hľadanie v archíve miestností",
             "archiveUnsupported": "Server nepodporuje hľadanie v archíve. Skúste hľadať vo vnútri konverzácie.",

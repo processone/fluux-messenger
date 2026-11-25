@@ -1873,6 +1873,63 @@
         "sent": "消息已发送。可以删除此导入项。"
     },
     "search": {
+        "panel": {
+            "title": "筛选",
+            "from": "发件人",
+            "anyone": "任何人",
+            "me": "我",
+            "date": "日期",
+            "anyTime": "不限时间",
+            "custom": "自定义范围",
+            "start": "开始日期",
+            "end": "结束日期",
+            "contains": "包含",
+            "image": "图片",
+            "link": "链接",
+            "file": "文件",
+            "poll": "投票",
+            "clear": "清除筛选",
+            "apply": "应用",
+            "localEmpty": "此设备的历史记录中没有匹配项。",
+            "archiveEmpty": "服务器归档中没有其他匹配项。",
+            "pageEmpty": "此页没有其他匹配项。加载更多以检查较早的消息。",
+            "invalidRange": "开始日期不能晚于结束日期。",
+            "invalidFilters": "请在搜索前补全或更正筛选条件。",
+            "incomplete": "由于此设备上没有某些较早消息的内容详情，搜索结果可能不完整。",
+            "unavailable": "Fluux 无法在此设备上准备搜索筛选。"
+        },
+        "filtersBuilding": "Fluux 正在为此设备的历史记录准备发件人和内容筛选。准备完成后将显示结果。",
+        "needsWords": "请添加关键词，或在筛选中选择发件人或内容，以搜索此日期范围",
+        "values": {
+            "mine": "你自己的消息",
+            "link": "包含链接的消息",
+            "image": "包含图片的消息",
+            "file": "包含文件的消息",
+            "poll": "包含投票的消息"
+        },
+        "chip": {
+            "from": "来自 {{name}}",
+            "mine": "我发送的",
+            "link": "含链接",
+            "image": "含图片",
+            "file": "含文件",
+            "poll": "含投票",
+            "list": "搜索筛选",
+            "after": "{{date}} 之后",
+            "before": "{{date}} 之前",
+            "on": "日期：{{date}}",
+            "invalid": "Fluux 无法理解 {{filter}}",
+            "remove": "移除 {{label}}"
+        },
+        "dates": {
+            "today": "今天",
+            "yesterday": "昨天",
+            "thisMonth": "本月",
+            "thisYear": "今年"
+        },
+        "operators": {
+            "label": "筛选"
+        },
         "filter": {
             "all": "全部",
             "conversations": "聊天",
@@ -1893,6 +1950,7 @@
         "goToMessage": "转到消息",
         "loadingContext": "正在加载消息…",
         "errors": {
+            "serverNeedsWords": "服务器存档需要输入搜索词，一对一对话内除外",
             "failed": "搜索失败",
             "archiveRooms": "服务器不支持搜索房间存档",
             "archiveUnsupported": "服务器不支持搜索存档。请尝试在某个对话中搜索。",

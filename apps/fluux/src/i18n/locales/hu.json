@@ -1873,6 +1873,63 @@
         "sent": "Üzenet elküldve. Ezt az importált elemet törölheti."
     },
     "search": {
+        "panel": {
+            "title": "Szűrők",
+            "from": "Feladó",
+            "anyone": "Bárki",
+            "me": "Én",
+            "date": "Dátum",
+            "anyTime": "Bármikor",
+            "custom": "Egyéni időszak",
+            "start": "Első nap",
+            "end": "Utolsó nap",
+            "contains": "Tartalmaz",
+            "image": "Képek",
+            "link": "Hivatkozások",
+            "file": "Fájlok",
+            "poll": "Szavazások",
+            "clear": "Szűrők törlése",
+            "apply": "Alkalmaz",
+            "localEmpty": "Nincs találat az eszköz előzményeiben.",
+            "archiveEmpty": "Nincs további találat a kiszolgáló archívumában.",
+            "pageEmpty": "Nincs további találat ezen az oldalon. Töltsön be többet a régebbi üzenetek ellenőrzéséhez.",
+            "invalidRange": "Az első nap nem lehet az utolsó után.",
+            "invalidFilters": "Keresés előtt egészítse ki vagy javítsa a szűrőket.",
+            "incomplete": "Néhány régebbi találat hiányozhat, mert a tartalmuk részletei nem érhetők el ezen az eszközön.",
+            "unavailable": "A Fluux nem tudta előkészíteni a keresési szűrőket ezen az eszközön."
+        },
+        "filtersBuilding": "A Fluux előkészíti a feladó- és tartalomszűrőket az eszköz előzményeihez. A találatok az előkészítés után jelennek meg.",
+        "needsWords": "Az időszakon belüli kereséshez adjon meg egy szót, vagy válasszon feladót vagy tartalmat a Szűrők között",
+        "values": {
+            "mine": "Saját üzenetei",
+            "link": "Hivatkozást tartalmazó üzenetek",
+            "image": "Képet tartalmazó üzenetek",
+            "file": "Fájlt tartalmazó üzenetek",
+            "poll": "Szavazást tartalmazó üzenetek"
+        },
+        "chip": {
+            "from": "Feladó: {{name}}",
+            "mine": "Általam küldött",
+            "link": "Hivatkozással",
+            "image": "Képpel",
+            "file": "Fájllal",
+            "poll": "Szavazással",
+            "list": "Keresési szűrők",
+            "after": "{{date}} után",
+            "before": "{{date}} előtt",
+            "on": "Dátum: {{date}}",
+            "invalid": "A Fluux nem érti ezt: {{filter}}",
+            "remove": "{{label}} eltávolítása"
+        },
+        "dates": {
+            "today": "Ma",
+            "yesterday": "Tegnap",
+            "thisMonth": "Ebben a hónapban",
+            "thisYear": "Ebben az évben"
+        },
+        "operators": {
+            "label": "Szűrők"
+        },
         "filter": {
             "all": "Összes",
             "conversations": "Csevegések",
@@ -1893,6 +1950,7 @@
         "goToMessage": "Ugrás az üzenetre",
         "loadingContext": "Üzenetek betöltése…",
         "errors": {
+            "serverNeedsWords": "A szerver archívumában való kereséshez szavak kellenek, kivéve egy kétszemélyes beszélgetésen belül",
             "failed": "A keresés sikertelen",
             "archiveRooms": "A szerver nem támogatja a szobák archívumában való keresést",
             "archiveUnsupported": "A szerver nem támogatja az archívumban való keresést. Próbáljon egy beszélgetésen belül keresni.",

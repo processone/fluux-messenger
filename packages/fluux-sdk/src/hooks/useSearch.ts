@@ -52,7 +52,7 @@ export function useSearch() {
     results,
     error,
     previewResult,
-    isSearchingMAM,
+    isSearchingMAM, mamSearched,
     mamResults,
     hasMoreMAMResults,
     mamError,
@@ -61,6 +61,7 @@ export function useSearch() {
     searchFilter,
     inPrefixSuggestions,
     isInPrefixActive,
+    filtersBuilding, pickedFilters, filtersIncomplete, filtersUnavailable,
   } = useStore(
     searchStore,
     useShallow((state) => ({
@@ -70,6 +71,7 @@ export function useSearch() {
       error: state.error,
       previewResult: state.previewResult,
       isSearchingMAM: state.isSearchingMAM,
+      mamSearched: state.mamSearched,
       mamResults: state.mamResults,
       hasMoreMAMResults: state.hasMoreMAMResults,
       mamError: state.mamError,
@@ -78,6 +80,10 @@ export function useSearch() {
       searchFilter: state.searchFilter,
       inPrefixSuggestions: state.inPrefixSuggestions,
       isInPrefixActive: state.isInPrefixActive,
+      filtersBuilding: state.filtersBuilding,
+      pickedFilters: state.pickedFilters,
+      filtersIncomplete: state.filtersIncomplete,
+      filtersUnavailable: state.filtersUnavailable,
     }))
   )
 
@@ -93,7 +99,7 @@ export function useSearch() {
     /** Search result currently being previewed in context */
     previewResult,
     /** Whether a MAM search is in progress */
-    isSearchingMAM,
+    isSearchingMAM, mamSearched,
     /** MAM search results (deduplicated against local results) */
     mamResults,
     /** Whether more MAM results are available */
@@ -110,6 +116,10 @@ export function useSearch() {
     inPrefixSuggestions,
     /** Whether the `in:` autocomplete is active */
     isInPrefixActive,
+    /** Whether from:, is: or has: wait for this device to finish preparing its history */
+    filtersBuilding, pickedFilters, filtersIncomplete, filtersUnavailable,
+    setPickedFilters: searchStore.getState().setPickedFilters,
+    retryFilters: searchStore.getState().retryFilters,
     /** Execute a local search (debounced 300ms) */
     search: searchStore.getState().search,
     /** Clear all search state and results */

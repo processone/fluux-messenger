@@ -1875,6 +1875,63 @@
         "sent": "Sõnum saadetud. Võid selle imporditud üksuse eemaldada."
     },
     "search": {
+        "panel": {
+            "title": "Filtrid",
+            "from": "Saatja",
+            "anyone": "Kõik",
+            "me": "Mina",
+            "date": "Kuupäev",
+            "anyTime": "Mis tahes aeg",
+            "custom": "Kohandatud vahemik",
+            "start": "Esimene päev",
+            "end": "Viimane päev",
+            "contains": "Sisaldab",
+            "image": "Pildid",
+            "link": "Lingid",
+            "file": "Failid",
+            "poll": "Küsitlused",
+            "clear": "Tühjenda filtrid",
+            "apply": "Rakenda",
+            "localEmpty": "Selle seadme ajaloos pole vasteid.",
+            "archiveEmpty": "Serveri arhiivis pole muid vasteid.",
+            "pageEmpty": "Sellel lehel pole muid vasteid. Vanemate sõnumite kontrollimiseks laadi rohkem.",
+            "invalidRange": "Esimene päev ei tohi olla pärast viimast.",
+            "invalidFilters": "Enne otsimist täienda või paranda filtreid.",
+            "incomplete": "Mõned vanemad vasted võivad puududa, sest nende sisu üksikasjad pole selles seadmes saadaval.",
+            "unavailable": "Fluux ei saanud selles seadmes otsingufiltreid ette valmistada."
+        },
+        "filtersBuilding": "Fluux valmistab selle seadme ajaloo jaoks ette saatja- ja sisufiltreid. Tulemused ilmuvad, kui ettevalmistus on valmis.",
+        "needsWords": "Nende kuupäevade piires otsimiseks lisa sõna või vali filtritest saatja või sisu",
+        "values": {
+            "mine": "Teie enda sõnumid",
+            "link": "Sõnumid lingiga",
+            "image": "Sõnumid pildiga",
+            "file": "Sõnumid failiga",
+            "poll": "Sõnumid küsitlusega"
+        },
+        "chip": {
+            "from": "Saatja: {{name}}",
+            "mine": "Minu saadetud",
+            "link": "Lingiga",
+            "image": "Pildiga",
+            "file": "Failiga",
+            "poll": "Küsitlusega",
+            "list": "Otsingufiltrid",
+            "after": "Pärast {{date}}",
+            "before": "Enne {{date}}",
+            "on": "Kuupäev: {{date}}",
+            "invalid": "Fluux ei mõista filtrit {{filter}}",
+            "remove": "Eemalda {{label}}"
+        },
+        "dates": {
+            "today": "Täna",
+            "yesterday": "Eile",
+            "thisMonth": "See kuu",
+            "thisYear": "See aasta"
+        },
+        "operators": {
+            "label": "Filtrid"
+        },
         "filter": {
             "all": "Kõik",
             "conversations": "Vestlused",
@@ -1895,6 +1952,7 @@
         "goToMessage": "Ava sõnum",
         "loadingContext": "Sõnumite laadimine…",
         "errors": {
+            "serverNeedsWords": "Serveri arhiiv vajab otsimiseks sõnu, välja arvatud kahe inimese vestluses",
             "failed": "Otsing ebaõnnestus",
             "archiveRooms": "Server ei toeta ruumide arhiivist otsimist",
             "archiveUnsupported": "Server ei toeta arhiivist otsimist. Proovige otsida vestluse sees.",

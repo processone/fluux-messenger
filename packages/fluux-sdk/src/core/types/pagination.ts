@@ -198,6 +198,10 @@ export interface HistorySearchOptions {
   with?: string
   /** Maximum results to return (default 20) */
   max?: number
+  /** Only messages at or after this instant (ISO 8601) */
+  start?: string
+  /** Only messages at or before this instant (ISO 8601) */
+  end?: string
   /** RSM cursor for backward pagination */
   before?: string
 }
@@ -214,6 +218,10 @@ export interface RoomHistorySearchOptions {
   roomJid: string
   /** Maximum results to return (default 20) */
   max?: number
+  /** Only messages at or after this instant (ISO 8601) */
+  start?: string
+  /** Only messages at or before this instant (ISO 8601) */
+  end?: string
   /** RSM cursor for backward pagination */
   before?: string
 }
@@ -226,13 +234,22 @@ export interface RoomHistorySearchOptions {
  * @category MAM
  */
 export interface HistoryPagingSearchOptions {
+  /** Resume the same bounded result set toward older entries. */
+  before?: string
   /** Text query to match against message bodies */
   query: string
   /** Conversation partner bare JID */
   with: string
   /** Timestamp to start searching backward from (ISO 8601), defaults to now */
   end?: string
-  /** Maximum pages to scan (default 20, each page ~100 messages) */
+  /** Oldest instant to search (ISO 8601); paging stops there */
+  start?: string
+  /**
+   * What else a message must satisfy, checked on each page (`from:`, `has:`).
+   * With a filter the query may be empty: the filter alone picks the messages.
+   */
+  filter?: (message: Message) => boolean
+  /** Maximum requests to scan (default 20, at most 100 archive entries per request). */
   maxPages?: number
   /** Maximum matching results to collect (default 50) */
   maxResults?: number

@@ -1873,6 +1873,63 @@
         "sent": "Meddelandet har skickats. Du kan ta bort det importerade objektet."
     },
     "search": {
+        "panel": {
+            "title": "Filter",
+            "from": "Från",
+            "anyone": "Alla",
+            "me": "Jag",
+            "date": "Datum",
+            "anyTime": "Alla tider",
+            "custom": "Eget intervall",
+            "start": "Första dagen",
+            "end": "Sista dagen",
+            "contains": "Innehåller",
+            "image": "Bilder",
+            "link": "Länkar",
+            "file": "Filer",
+            "poll": "Omröstningar",
+            "clear": "Rensa filter",
+            "apply": "Tillämpa",
+            "localEmpty": "Inga träffar i historiken på den här enheten.",
+            "archiveEmpty": "Inga andra träffar i serverarkivet.",
+            "pageEmpty": "Inga andra träffar på den här sidan. Läs in fler för att kontrollera äldre meddelanden.",
+            "invalidRange": "Den första dagen får inte vara efter den sista.",
+            "invalidFilters": "Fyll i eller rätta filtren innan du söker.",
+            "incomplete": "Vissa äldre träffar kan saknas eftersom uppgifter om innehållet inte är tillgängliga på den här enheten.",
+            "unavailable": "Fluux kunde inte förbereda sökfiltren på den här enheten."
+        },
+        "filtersBuilding": "Fluux förbereder avsändar- och innehållsfilter för historiken på den här enheten. Resultaten visas när allt är klart.",
+        "needsWords": "Lägg till ett ord eller välj en avsändare eller innehåll under Filter för att söka inom dessa datum",
+        "values": {
+            "mine": "Dina egna meddelanden",
+            "link": "Meddelanden med en länk",
+            "image": "Meddelanden med en bild",
+            "file": "Meddelanden med en fil",
+            "poll": "Meddelanden med en omröstning"
+        },
+        "chip": {
+            "from": "Från {{name}}",
+            "mine": "Skickat av mig",
+            "link": "Med länk",
+            "image": "Med bild",
+            "file": "Med fil",
+            "poll": "Med omröstning",
+            "list": "Sökfilter",
+            "after": "Efter {{date}}",
+            "before": "Före {{date}}",
+            "on": "Datum: {{date}}",
+            "invalid": "Fluux förstår inte {{filter}}",
+            "remove": "Ta bort {{label}}"
+        },
+        "dates": {
+            "today": "I dag",
+            "yesterday": "I går",
+            "thisMonth": "Den här månaden",
+            "thisYear": "I år"
+        },
+        "operators": {
+            "label": "Filter"
+        },
         "filter": {
             "all": "Alla",
             "conversations": "Chattar",
@@ -1893,6 +1950,7 @@
         "goToMessage": "Gå till meddelandet",
         "loadingContext": "Laddar meddelanden…",
         "errors": {
+            "serverNeedsWords": "Serverarkivet behöver ord att söka efter, utom i en konversation mellan två",
             "failed": "Sökningen misslyckades",
             "archiveRooms": "Servern stöder inte arkivsökning för rum",
             "archiveUnsupported": "Servern stöder inte arkivsökning. Försök söka inom en konversation.",

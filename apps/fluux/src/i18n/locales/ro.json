@@ -1877,6 +1877,63 @@
         "sent": "Mesaj trimis. Puteți șterge acest element importat."
     },
     "search": {
+        "panel": {
+            "title": "Filtre",
+            "from": "De la",
+            "anyone": "Oricine",
+            "me": "Eu",
+            "date": "Data",
+            "anyTime": "Oricând",
+            "custom": "Interval personalizat",
+            "start": "Prima zi",
+            "end": "Ultima zi",
+            "contains": "Conține",
+            "image": "Imagini",
+            "link": "Linkuri",
+            "file": "Fișiere",
+            "poll": "Sondaje",
+            "clear": "Șterge filtrele",
+            "apply": "Aplică",
+            "localEmpty": "Niciun rezultat în istoricul de pe acest dispozitiv.",
+            "archiveEmpty": "Niciun alt rezultat în arhiva serverului.",
+            "pageEmpty": "Niciun alt rezultat pe această pagină. Încarcă mai multe pentru a verifica mesajele mai vechi.",
+            "invalidRange": "Prima zi nu poate fi după ultima.",
+            "invalidFilters": "Completează sau corectează filtrele înainte de căutare.",
+            "incomplete": "Unele rezultate mai vechi pot lipsi deoarece detaliile conținutului nu sunt disponibile pe acest dispozitiv.",
+            "unavailable": "Fluux nu a putut pregăti filtrele de căutare pe acest dispozitiv."
+        },
+        "filtersBuilding": "Fluux pregătește filtrele de expeditor și conținut pentru istoricul de pe acest dispozitiv. Rezultatele vor apărea când pregătirea este gata.",
+        "needsWords": "Adaugă un cuvânt sau alege un expeditor ori conținut în Filtre pentru a căuta în acest interval",
+        "values": {
+            "mine": "Propriile mesaje",
+            "link": "Mesaje cu un link",
+            "image": "Mesaje cu o imagine",
+            "file": "Mesaje cu un fișier",
+            "poll": "Mesaje cu un sondaj"
+        },
+        "chip": {
+            "from": "De la {{name}}",
+            "mine": "Trimise de mine",
+            "link": "Cu link",
+            "image": "Cu imagine",
+            "file": "Cu fișier",
+            "poll": "Cu sondaj",
+            "list": "Filtre de căutare",
+            "after": "După {{date}}",
+            "before": "Înainte de {{date}}",
+            "on": "Data: {{date}}",
+            "invalid": "Fluux nu înțelege {{filter}}",
+            "remove": "Elimină {{label}}"
+        },
+        "dates": {
+            "today": "Azi",
+            "yesterday": "Ieri",
+            "thisMonth": "Luna aceasta",
+            "thisYear": "Anul acesta"
+        },
+        "operators": {
+            "label": "Filtre"
+        },
         "filter": {
             "all": "Toate",
             "conversations": "Conversații",
@@ -1897,6 +1954,7 @@
         "goToMessage": "Mergi la mesaj",
         "loadingContext": "Se încarcă mesajele…",
         "errors": {
+            "serverNeedsWords": "Arhiva serverului are nevoie de cuvinte pentru căutare, cu excepția unei conversații între două persoane",
             "failed": "Căutarea a eșuat",
             "archiveRooms": "Serverul nu acceptă căutarea în arhiva camerelor",
             "archiveUnsupported": "Serverul nu acceptă căutarea în arhivă. Încercați să căutați într-o conversație.",

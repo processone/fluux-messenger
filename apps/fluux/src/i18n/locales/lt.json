@@ -1877,6 +1877,63 @@
         "sent": "Žinutė išsiųsta. Galite pašalinti šį importuotą elementą."
     },
     "search": {
+        "panel": {
+            "title": "Filtrai",
+            "from": "Nuo",
+            "anyone": "Bet kas",
+            "me": "Aš",
+            "date": "Data",
+            "anyTime": "Bet kada",
+            "custom": "Pasirinktinis laikotarpis",
+            "start": "Pirma diena",
+            "end": "Paskutinė diena",
+            "contains": "Yra",
+            "image": "Vaizdai",
+            "link": "Nuorodos",
+            "file": "Failai",
+            "poll": "Apklausos",
+            "clear": "Išvalyti filtrus",
+            "apply": "Taikyti",
+            "localEmpty": "Šio įrenginio istorijoje atitikmenų nėra.",
+            "archiveEmpty": "Serverio archyve kitų atitikmenų nėra.",
+            "pageEmpty": "Šiame puslapyje kitų atitikmenų nėra. Įkelkite daugiau, kad patikrintumėte senesnius pranešimus.",
+            "invalidRange": "Pirma diena negali būti vėlesnė už paskutinę.",
+            "invalidFilters": "Prieš ieškodami užpildykite arba pataisykite filtrus.",
+            "incomplete": "Kai kurių senesnių atitikmenų gali trūkti, nes šiame įrenginyje nėra jų turinio duomenų.",
+            "unavailable": "Fluux nepavyko paruošti paieškos filtrų šiame įrenginyje."
+        },
+        "filtersBuilding": "Fluux ruošia siuntėjo ir turinio filtrus šio įrenginio istorijai. Rezultatai bus rodomi, kai viskas bus paruošta.",
+        "needsWords": "Norėdami ieškoti šiomis datomis, pridėkite žodį arba filtruose pasirinkite siuntėją ar turinį",
+        "values": {
+            "mine": "Jūsų pačių žinutės",
+            "link": "Žinutės su nuoroda",
+            "image": "Žinutės su paveikslėliu",
+            "file": "Žinutės su failu",
+            "poll": "Žinutės su apklausa"
+        },
+        "chip": {
+            "from": "Siuntėjas: {{name}}",
+            "mine": "Išsiųsta manęs",
+            "link": "Su nuoroda",
+            "image": "Su paveikslėliu",
+            "file": "Su failu",
+            "poll": "Su apklausa",
+            "list": "Paieškos filtrai",
+            "after": "Po: {{date}}",
+            "before": "Iki: {{date}}",
+            "on": "Data: {{date}}",
+            "invalid": "Fluux nesupranta {{filter}}",
+            "remove": "Pašalinti {{label}}"
+        },
+        "dates": {
+            "today": "Šiandien",
+            "yesterday": "Vakar",
+            "thisMonth": "Šis mėnuo",
+            "thisYear": "Šie metai"
+        },
+        "operators": {
+            "label": "Filtrai"
+        },
         "filter": {
             "all": "Viskas",
             "conversations": "Pokalbiai",
@@ -1897,6 +1954,7 @@
         "goToMessage": "Eiti į žinutę",
         "loadingContext": "Įkeliamos žinutės…",
         "errors": {
+            "serverNeedsWords": "Serverio archyvui reikia paieškos žodžių, išskyrus pokalbį dviese",
             "failed": "Paieška nepavyko",
             "archiveRooms": "Serveris nepalaiko kambarių archyvo paieškos",
             "archiveUnsupported": "Serveris nepalaiko archyvo paieškos. Pabandykite ieškoti pokalbio viduje.",

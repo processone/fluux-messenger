@@ -142,6 +142,14 @@ import {
 } from '../../utils/messageIdentity'
 
 
+/** The `start` and `end` fields of a search that asks for a time span. */
+function spanFields({ start, end }: { start?: string; end?: string }): Element[] {
+  return [
+    ...(start ? [xml('field', { var: 'start' }, xml('value', {}, start))] : []),
+    ...(end ? [xml('field', { var: 'end' }, xml('value', {}, end))] : []),
+  ]
+}
+
 /** XEP-0203: the date an archive or carbon envelope stamps on what it wraps. */
 function delayStamp(delayEl?: Element): Date | undefined {
   const stamp = delayEl?.attrs.stamp
@@ -1264,7 +1272,8 @@ export class MAM extends BaseModule {
 
     const formFields: Element[] = [
       xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
-      xml('field', { var: MAM_FULLTEXT_FIELD }, xml('value', {}, query)),
+      ...(query ? [xml('field', { var: MAM_FULLTEXT_FIELD }, xml('value', {}, query))] : []),
+      ...spanFields(options),
     ]
 
     if (withJid) {
@@ -1348,7 +1357,8 @@ export class MAM extends BaseModule {
 
     const formFields: Element[] = [
       xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
-      xml('field', { var: MAM_FULLTEXT_FIELD }, xml('value', {}, query)),
+      ...(query ? [xml('field', { var: MAM_FULLTEXT_FIELD }, xml('value', {}, query))] : []),
+      ...spanFields(options),
     ]
 
     const iq = this.buildMAMQuery(queryId, formFields, max, before ?? '', roomJid)
@@ -1425,16 +1435,17 @@ export class MAM extends BaseModule {
     signal?: AbortSignal
   ): Promise<HistoryResult> {
     const session = this.captureQuery()
-    const { query, with: withJid, end, maxPages = 20, maxResults = 50 } = options
+    const { query, with: withJid, start, end, maxPages = 20, maxResults = 50, filter } = options
     const parsed = parseSearchQuery(query)
     const phraseTokens = parsed.phrases.flatMap((p) => tokenize(p))
     const allTokens = [...new Set([...parsed.terms, ...phraseTokens])]
-    if (allTokens.length === 0 && parsed.phrases.length === 0) {
+    const wordless = allTokens.length === 0 && parsed.phrases.length === 0
+    if (wordless && !filter) {
       return { messages: [], complete: true, page: {} }
     }
 
     const matches: Message[] = []
-    let beforeCursor: string | undefined
+    let beforeCursor: string | undefined = options.before
     let isComplete = false
     let lastPage: PageInfo = {}
 
@@ -1444,30 +1455,46 @@ export class MAM extends BaseModule {
       if (signal?.aborted) break
       if (matches.length >= maxResults) break
 
-      const result = await this.queryArchive({
+      const result = await this.searchArchive({
+        query: '',
         with: withJid,
         max: 100,
         before: beforeCursor ?? '',
-        ...(page === 0 && end ? { end } : {}),
+        // Every page repeats the span: RSM pages through one fixed result set.
+        ...(start ? { start } : {}),
+        ...(end ? { end } : {}),
       })
 
       session.assertCurrent()
+      if (signal?.aborted) break
       isComplete = result.complete
       lastPage = result.page
 
-      // Match messages client-side
-      for (const msg of result.messages) {
-        if (matches.length >= maxResults) break
-        if (!msg.isRetracted && msg.body && this.matchesQuery(msg.body, allTokens, parsed.phrases)) {
+      // Backward MAM pages arrive oldest first; consume newest first so a partial page can resume before its last read row.
+      const newestFirst = [...result.messages].reverse()
+      let partial = false
+      for (const [index, msg] of newestFirst.entries()) {
+        if (!msg.isRetracted && (msg.body || wordless) && (wordless || this.matchesQuery(msg.body ?? '', allTokens, parsed.phrases)) &&
+          (!filter || filter(msg))) {
           matches.push(msg)
         }
+        if (matches.length >= maxResults && index < newestFirst.length - 1) {
+          lastPage = { ...result.page, first: msg.ownArchiveId ?? msg.stanzaId, firstIndex: undefined }
+          isComplete = false
+          partial = true
+          break
+        }
       }
+      if (partial) break
 
-      if (isComplete || !result.page.first) break
+      if (isComplete || !result.page.first || result.page.first === beforeCursor) {
+        isComplete = true
+        break
+      }
       beforeCursor = result.page.first
-
-      // Small delay between pages to avoid overwhelming the server
-      await new Promise(resolve => setTimeout(resolve, 100))
+      if (page + 1 < maxPages && matches.length < maxResults && !signal?.aborted) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
       session.assertCurrent()
     }
 
@@ -1479,7 +1506,7 @@ export class MAM extends BaseModule {
   private filterReconciledSearchMessages<T extends Message | RoomMessage>(originalBodies: Array<string | undefined>, reconciled: T[], query: string): T[] {
     const parsed = parseSearchQuery(query)
     const tokens = [...new Set([...parsed.terms, ...parsed.phrases.flatMap(phrase => tokenize(phrase))])]
-    return reconciled.filter((message, index) => !message.isRetracted && (message.body === originalBodies[index] ||
+    return reconciled.filter((message, index) => !message.isRetracted && (query.trim().length === 0 || message.body === originalBodies[index] ||
       this.matchesQuery(message.body ?? '', tokens, parsed.phrases)))
   }
 

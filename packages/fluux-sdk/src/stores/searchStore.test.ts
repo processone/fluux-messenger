@@ -4,6 +4,7 @@ import { chatStore } from './chatStore'
 import { roomStore } from './roomStore'
 import { connectionStore } from './connectionStore'
 import * as searchIndex from '../utils/searchIndex'
+import { filterToken } from '../utils/searchFilters'
 import type { SearchIndexResult } from '../utils/searchIndex'
 import * as messageCache from '../utils/messageCache'
 import type { Message, RoomMessage } from '../core/types'
@@ -13,6 +14,9 @@ vi.mock('../utils/searchIndex', async () => {
   const actual = await vi.importActual('../utils/searchIndex')
   return {
     search: vi.fn().mockResolvedValue([]),
+    isFilterIndexReady: vi.fn().mockResolvedValue(true),
+    getFilterIndexState: vi.fn().mockResolvedValue({ status: 'usable' }),
+    subscribeFilterIndex: vi.fn(() => () => {}),
     indexMessage: vi.fn().mockResolvedValue(undefined),
     indexMessages: vi.fn().mockResolvedValue(undefined),
     removeMessage: vi.fn().mockResolvedValue(undefined),
@@ -1997,6 +2001,99 @@ describe('searchStore', () => {
   // in: prefix
   // ===========================================================================
 
+  describe('date operators', () => {
+    const local = (y: number, m: number, d: number) => new Date(y, m - 1, d).getTime()
+
+    it('searches the words alone, within the span of the date operators', async () => {
+      searchStore.getState().search('report after:2024-03-01 before:2024-04-01')
+      await vi.runAllTimersAsync()
+      expect(searchIndex.search).toHaveBeenCalledWith('report', expect.objectContaining({
+        after: local(2024, 3, 2), before: local(2024, 4, 1),
+      }))
+    })
+
+    it('asks the server archive for the same span, its end included', async () => {
+      const client = createMockMAMClient()
+      setSearchClient(client as any)
+      connectionStore.getState().setMAMFulltextSearch(true)
+      searchStore.setState({ query: 'report on:2024-03-05' })
+      searchStore.getState().searchMAM()
+      await vi.runAllTimersAsync()
+      expect(client.messages.searchMessages).toHaveBeenCalledWith(expect.objectContaining({
+        query: 'report',
+        start: new Date(local(2024, 3, 5)).toISOString(),
+        end: new Date(local(2024, 3, 6) - 1).toISOString(),
+      }))
+    })
+  })
+
+  describe('sender and content operators', () => {
+    it('passes one token group per filter, from: in a room standing for its occupant ids', async () => {
+      const roomJid = 'team@conference.example.com'
+      roomStore.setState({ rooms: new Map([[roomJid, { jid: roomJid, occupants: new Map([
+        ['Bob', { nick: 'Bob', occupantId: 'occ-bob' }],
+        ['Carol', { nick: 'Carol', occupantId: 'occ-carol' }],
+      ]) } as any]]) })
+      searchStore.setState({ searchScope: roomJid })
+      searchStore.getState().search('from:bob has:link')
+      await vi.runAllTimersAsync()
+      expect(searchIndex.search).toHaveBeenCalledWith('', expect.objectContaining({
+        conversationId: roomJid,
+        filterGroups: [[filterToken.has('link')], [filterToken.nick('bob', roomJid), filterToken.occupant('occ-bob', roomJid)]],
+      }))
+    })
+
+    it('names a one-to-one contact by name, local part or JID', async () => {
+      searchStore.getState().search('from:Alice is:mine')
+      await vi.runAllTimersAsync()
+      expect(searchIndex.search).toHaveBeenCalledWith('', expect.objectContaining({
+        filterGroups: [[filterToken.mine], [filterToken.from('alice@example.com')]],
+      }))
+    })
+
+    it('shows the index as still building instead of partial results', async () => {
+      vi.mocked(searchIndex.getFilterIndexState).mockResolvedValueOnce({ status: 'preparing' })
+      searchStore.getState().search('has:image')
+      await vi.runAllTimersAsync()
+      expect(searchIndex.search).not.toHaveBeenCalled()
+      expect(searchStore.getState()).toMatchObject({ filtersBuilding: true, results: [], isSearching: false })
+      searchStore.getState().search('has:image ')
+      await vi.runAllTimersAsync()
+      expect(searchStore.getState().filtersBuilding).toBe(false)
+    })
+
+    it('checks server pages against the filters the archive cannot apply', async () => {
+      const client = createMockMAMClient({ searchArchiveResults: [
+        { id: 'a', conversationId: 'alice@example.com', from: 'alice@example.com', body: 'plan https://x.example', timestamp: new Date(2000) },
+        { id: 'b', conversationId: 'alice@example.com', from: 'alice@example.com', body: 'plan without link', timestamp: new Date(1000) },
+      ] })
+      setSearchClient(client as any)
+      connectionStore.getState().setMAMFulltextSearch(true)
+      searchStore.setState({ query: 'plan has:link' })
+      searchStore.getState().searchMAM()
+      await vi.runAllTimersAsync()
+      expect(client.messages.searchMessages).toHaveBeenCalledWith(expect.objectContaining({ query: 'plan' }))
+      expect(searchStore.getState().mamResults.map(r => r.messageId)).toEqual(['a'])
+    })
+
+    it('pages a one-to-one archive for filters alone, and asks for words elsewhere', async () => {
+      const client = createMockMAMClient()
+      setSearchClient(client as any)
+      connectionStore.getState().setMAMFulltextSearch(true)
+      searchStore.setState({ query: 'has:file', searchScope: 'alice@example.com' })
+      searchStore.getState().searchMAM()
+      await vi.runAllTimersAsync()
+      expect(client.messages.searchConversationHistory).toHaveBeenCalledWith(
+        expect.objectContaining({ query: '', with: 'alice@example.com', filter: expect.any(Function) }), expect.anything())
+
+      searchStore.setState({ query: 'has:file', searchScope: null })
+      searchStore.getState().searchMAM()
+      await vi.runAllTimersAsync()
+      expect(client.messages.searchMessages).not.toHaveBeenCalled()
+      expect(searchStore.getState().mamError).toBe('The server archive needs words to search')
+    })
+  })
+
   describe('in: prefix', () => {
     describe('parseInPrefix', () => {
       it('should return null for non-prefixed query', () => {
@@ -2173,6 +2270,7 @@ function createMockMAMClient(opts?: {
     messages: {
         searchMessages: vi.fn().mockResolvedValue({
           messages: results.map(r => ({
+            type: 'chat' as const,
             id: r.id,
             conversationId: r.conversationId,
             from: r.from,
