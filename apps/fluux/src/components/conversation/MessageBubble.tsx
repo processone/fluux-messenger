@@ -577,7 +577,9 @@ export const MessageBubble = memo(function MessageBubble({
   const { canReply, canEdit, canDelete } = actions
   const messageLink = roomMessageLinkFor(message, supportsMAM)
   const { isSaved, onToggleSaved, onRemoveSaved } = useSavedMessageAction(message)
-  const hasSavedAction = isSaved && !message.isRetracted && !readOnlyActions
+  const hasSavedMarker = isSaved && !message.isRetracted
+  const hasSavedAction = hasSavedMarker && !readOnlyActions
+  const hasPassiveSavedMarker = hasSavedMarker && readOnlyActions
   const savedButtonRef = useCallback((button: HTMLButtonElement | null) => {
     if (!button) return
     // React detaches the ref before removing the focused control, including remote removals.
@@ -834,7 +836,10 @@ export const MessageBubble = memo(function MessageBubble({
           // Row-chrome sampling needs the sender header to tell header rows apart (useRowMetrics).
           <div data-msg-sender className="flex items-center gap-1 pb-1">
             <div className="flex flex-1 min-w-0 items-baseline gap-2 flex-wrap">
-              <UserInfoPopover contact={senderContact} jid={senderJid} occupantJid={senderOccupantJid} role={senderRole} affiliation={senderAffiliation}>
+              <UserInfoPopover
+                contact={senderContact} jid={senderJid} occupantJid={senderOccupantJid} role={senderRole} affiliation={senderAffiliation}
+                className={hasPassiveSavedMarker ? 'max-w-full [overflow-wrap:anywhere]' : undefined}
+              >
                 <span
                   className="font-medium"
                   style={{ color: senderColor }}
@@ -1012,7 +1017,7 @@ export const MessageBubble = memo(function MessageBubble({
       {readMarkerBadge}
       </div>
 
-      {isSaved && !message.isRetracted && readOnlyActions && (
+      {hasPassiveSavedMarker && (
         <span data-testid="saved-marker" role="img" aria-label={t('saved.marker')} title={t('saved.marker')} className="me-1 mt-0.5 shrink-0 self-start text-fluux-muted pointer-events-none">
           <Bookmark className="size-3 fill-current" />
         </span>
