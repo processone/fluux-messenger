@@ -17,6 +17,8 @@ default = []
 macos-communication = []
 # Disposable unsigned qualification only: no real secrets or notifications.
 startup-recovery-lab = []
+# Disposable Windows GUI qualification; never enabled by release configuration.
+windows-gui-test = []
 # Enabled by the production Tauri config; local Dev builds keep ring only.
 production-tls = ["rustls/aws_lc_rs", "rustls/prefer-post-quantum"]
 

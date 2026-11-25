@@ -199,6 +199,9 @@ jobs:
       - name: Check Tauri feature policy
         run: npm run test:tauri-features
 
+      - name: Windows GUI harness provenance contracts
+        run: node --test scripts/native-tests/windows-gui/common.test.mjs scripts/native-tests/windows-gui/paths.test.mjs scripts/native-tests/windows-gui/workspace.test.mjs scripts/native-tests/windows-gui/launcher.test.mjs scripts/native-tests/linux-gui/webdriver.test.mjs scripts/test-local-windows.test.mjs
+
       - name: Run SDK tests
         run: npm run test:run --workspace=@fluux/sdk
 
@@ -629,6 +632,18 @@ jobs:
           # Only main saves: a cache saved from a pull request is private to it and
           # costs about 3 GB each.
           save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Setup Node.js for Windows GUI harness contracts
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+
+      - name: Windows GUI owned-process contracts
+        run: node --test scripts/native-tests/windows-gui/job.test.mjs
+
+      - name: Windows GUI isolated bootstrap tests
+        working-directory: apps/fluux/src-tauri
+        run: cargo test --locked --features production-tls,windows-gui-test --bin fluux windows_gui_test::
 
       # Windows notification activation is cfg-gated and cannot be type-checked
       # by the Ubuntu Rust job. Keep a native compiler backstop on every PR.
