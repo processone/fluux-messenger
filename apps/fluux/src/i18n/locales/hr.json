@@ -1520,7 +1520,7 @@
         },
         "search": {
             "title": "Rezultati pretraživanja",
-            "description": "Odaberite rezultat u bočnoj traci za prikaz razgovora."
+            "description": "Ovdje se prikazuju pretpregledi poruka."
         }
     },
     "avatar": {

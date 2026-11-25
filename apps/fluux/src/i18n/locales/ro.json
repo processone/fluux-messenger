@@ -1522,7 +1522,7 @@
         },
         "search": {
             "title": "Rezultatele căutării",
-            "description": "Selectați un rezultat din bara laterală pentru a vizualiza conversația."
+            "description": "Previzualizările mesajelor apar aici."
         }
     },
     "avatar": {

@@ -1524,7 +1524,7 @@
         },
         "search": {
             "title": "Rezultati iskanja",
-            "description": "Izberite rezultat v stranski vrstici za prikaz pogovora."
+            "description": "Tukaj se prikažejo predogledi sporočil."
         }
     },
     "avatar": {

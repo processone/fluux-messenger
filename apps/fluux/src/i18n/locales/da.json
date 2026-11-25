@@ -1518,7 +1518,7 @@
         },
         "search": {
             "title": "Søgeresultater",
-            "description": "Vælg et resultat i sidebjælken for at se samtalen."
+            "description": "Forhåndsvisninger af beskeder vises her."
         }
     },
     "avatar": {
