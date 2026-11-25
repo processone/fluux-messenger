@@ -93,7 +93,7 @@ export function SettingsView({ onBack, onSubPageBack, showOverview = false }: Se
   return (
     <div className="h-full flex flex-col bg-fluux-chat">
       {/* Header */}
-      <div className="min-h-14 shrink-0 px-4 py-2 md:h-14 md:py-0 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
+      <div className="min-h-14 shrink-0 px-4 md:h-14 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
         {/* Back to the Encryption overview, at every width */}
         {encryptionSubPage && (
           <button
@@ -117,7 +117,7 @@ export function SettingsView({ onBack, onSubPageBack, showOverview = false }: Se
           </button>
         )}
         {CategoryIcon && <CategoryIcon className="size-5 shrink-0 text-fluux-muted me-2" />}
-        <div className="min-w-0">
+        <div className="min-w-0 py-2 md:py-0">
           <h2 className="type-view-title text-fluux-text truncate !leading-tight">{headerLabel}</h2>
           {categoryDescription && (
             <p className="text-xs text-fluux-muted break-words md:truncate">{categoryDescription}</p>

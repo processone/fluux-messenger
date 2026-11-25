@@ -1,11 +1,9 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
-import { activateChat } from './harness/scrollHarness'
+import { activateChat, navigateToStressRoom } from './harness/scrollHarness'
+import { ROOM_JID } from '../apps/fluux/src/demo/constants'
 
-// The approved pre-release UI polish owns narrow Find geometry, compact settings
-// description visibility and truthful unselected Search copy. Use the real demo UI.
 const locales = Object.fromEntries(['en', 'fr'].map(lang => [lang,
   JSON.parse(readFileSync(new URL(`../apps/fluux/src/i18n/locales/${lang}.json`, import.meta.url), 'utf8')),
 ]))
@@ -25,8 +23,28 @@ async function boot(page: Page, lang: string, mode: string) {
 
 async function capture(page: Page, name: string) {
   if (process.env.FLUUX_UI_POLISH_PROOF) {
-    await page.screenshot({ path: join(process.env.FLUUX_UI_POLISH_PROOF, name + '.png') })
+    await page.screenshot({ path: test.info().outputPath(name + '.png') })
   }
+}
+
+async function findGeometry(input: Locator) {
+  expect(await input.evaluate(el => {
+    const container = el.closest('[data-find-on-page-bar]')!
+    const bar = container.getBoundingClientRect()
+    const pane = container.parentElement!.parentElement!.getBoundingClientRect()
+    const field = el.getBoundingClientRect()
+    const style = getComputedStyle(el)
+    const ring = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset)
+    const font = parseFloat(getComputedStyle(document.documentElement).fontSize)
+    return field.width >= 4 * font && field.left - ring >= pane.left && field.right + ring <= pane.right &&
+      field.top - ring >= bar.top && field.bottom + ring <= bar.bottom &&
+      bar.left >= pane.left && bar.right <= pane.right &&
+      Array.from(container.querySelectorAll('button, span')).every(control => {
+        const rect = control.getBoundingClientRect()
+        return rect.left >= bar.left && rect.right <= bar.right && rect.top >= bar.top && rect.bottom <= bar.bottom &&
+          control.scrollWidth <= control.clientWidth && control.scrollHeight <= control.clientHeight
+      })
+  })).toBe(true)
 }
 
 async function fullDescription(description: Locator) {
@@ -45,47 +63,62 @@ for (const lang of ['en', 'fr'] as const) {
     test(`${lang} ${mode}: Find fits and preserves keyboard navigation`, async ({ page }) => {
       await page.setViewportSize({ width: 375, height: 812 })
       await boot(page, lang, mode)
-      await activateChat(page, 'emma@fluux.chat')
-      await page.keyboard.press('Control+f')
-      const bar = page.locator('[data-find-on-page-bar]')
-      const input = bar.locator('input')
-      await expect(input).toBeFocused()
-      await expect(input).not.toHaveCSS('outline-style', 'none')
-      await expect(input).toHaveAttribute('placeholder', words.shortcuts.findInConversation)
-      await expect(bar.getByTitle(`${words.shortcuts.previousMatch} (Shift+Enter)`)).toBeVisible()
-      await expect(bar.getByTitle(`${words.shortcuts.nextMatch} (Enter)`)).toBeVisible()
-      await expect(bar.getByTitle(`${words.common.close} (Esc)`)).toBeVisible()
-      for (const width of [320, 375, 1280]) {
-        await page.setViewportSize({ width, height: 812 })
+      for (const caller of ['chat', 'room']) {
+        if (caller === 'chat') await activateChat(page, 'emma@fluux.chat')
+        else await navigateToStressRoom(page, false, ROOM_JID)
+        await page.keyboard.press('Control+f')
+        const bar = page.locator('[data-find-on-page-bar]')
+        const input = bar.locator('input')
+        await expect(input).toBeFocused()
+        await expect(input).not.toHaveCSS('outline-style', 'none')
+        await expect(input).toHaveAttribute('placeholder', words.shortcuts.findInConversation)
+        await expect(bar.getByTitle(`${words.shortcuts.previousMatch} (Shift+Enter)`)).toBeVisible()
+        await expect(bar.getByTitle(`${words.shortcuts.nextMatch} (Enter)`)).toBeVisible()
+        await expect(bar.getByTitle(`${words.common.close} (Esc)`)).toBeVisible()
+        for (const width of [320, 375, 1280]) {
+          await page.setViewportSize({ width, height: 812 })
+          for (const query of ['', 'the', 'quartzbadger']) {
+            await input.fill(query)
+            if (query === 'quartzbadger') {
+              await expect(bar.getByText(words.search.noResults, { exact: true })).toBeVisible()
+              await expect(bar.getByTitle(`${words.shortcuts.nextMatch} (Enter)`)).toBeDisabled()
+            }
+            if (query === 'the') await expect(bar.locator('span')).toHaveText(/\d+\/\d+/)
+            await findGeometry(input)
+            if (query === 'quartzbadger') {
+              if (width >= 375) {
+                expect(await bar.locator('span').evaluate(el => el.clientHeight)).toBe(
+                  await bar.locator('span').evaluate(el => parseFloat(getComputedStyle(el).lineHeight)),
+                )
+              }
+              await capture(page, `find-${caller}-${lang}-${mode}-${width}`)
+            }
+          }
+        }
+        await page.setViewportSize({ width: 320, height: 812 })
+        const baseFont = await page.locator('html').evaluate(el => parseFloat(getComputedStyle(el).fontSize))
+        await page.evaluate(() => (window as any).__settingsStore.getState().setFontSize(150))
+        await expect(page.locator('html')).toHaveCSS('font-size', `${baseFont * 1.5}px`)
         for (const query of ['', 'the', 'quartzbadger']) {
           await input.fill(query)
-          if (query === 'quartzbadger') {
-            await expect(bar.getByText(words.search.noResults, { exact: true })).toBeVisible()
-            await expect(bar.getByTitle(`${words.shortcuts.nextMatch} (Enter)`)).toBeDisabled()
-          }
+          if (query === 'quartzbadger') await expect(bar.locator('span')).toHaveText(words.search.noResults)
           if (query === 'the') await expect(bar.locator('span')).toHaveText(/\d+\/\d+/)
-          expect(await input.evaluate(el => {
-            const bar = el.closest('[data-find-on-page-bar]')!.getBoundingClientRect()
-            const pane = el.closest('[data-find-on-page-bar]')!.parentElement!.parentElement!.getBoundingClientRect()
-            const field = el.getBoundingClientRect()
-            const style = getComputedStyle(el)
-            const ring = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset)
-            return field.width > 0 && field.left - ring >= pane.left && field.right + ring <= pane.right &&
-              bar.left >= pane.left && bar.right <= pane.right
-          })).toBe(true)
-          if (query === 'quartzbadger') await capture(page, `find-${lang}-${mode}-${width}`)
+          await findGeometry(input)
+          await capture(page, `find-${caller}-${lang}-${mode}-320-large-${query || 'empty'}`)
         }
+        await input.fill('the')
+        await expect(bar.locator('span')).toHaveText(/\d+\/\d+/)
+        const count = (await bar.locator('span').innerText()).split('/').map(Number)
+        expect(count[1]).toBeGreaterThan(1)
+        await input.press('Enter')
+        await expect(bar.locator('span')).toHaveText(`${count[0] % count[1] + 1}/${count[1]}`)
+        await input.press('Shift+Enter')
+        await expect(bar.locator('span')).toHaveText(count.join('/'))
+        await input.press('Escape')
+        await expect(bar).toHaveCount(0)
+        await page.evaluate(() => (window as any).__settingsStore.getState().setFontSize(100))
+        await expect(page.locator('html')).toHaveCSS('font-size', `${baseFont}px`)
       }
-      await input.fill('the')
-      await expect(bar.locator('span')).toHaveText(/\d+\/\d+/)
-      const count = (await bar.locator('span').innerText()).split('/').map(Number)
-      expect(count[1]).toBeGreaterThan(1)
-      await input.press('Enter')
-      await expect(bar.locator('span')).toHaveText(`${count[0] % count[1] + 1}/${count[1]}`)
-      await input.press('Shift+Enter')
-      await expect(bar.locator('span')).toHaveText(count.join('/'))
-      await input.press('Escape')
-      await expect(bar).toHaveCount(0)
     })
 
     test(`${lang} ${mode}: compact settings show full descriptions`, async ({ page }) => {
@@ -132,13 +165,67 @@ for (const lang of ['en', 'fr'] as const) {
       await expect(field).toBeFocused()
       await expect(page.getByRole('button', { name: words.search.searchServer, exact: true })).toBeVisible()
       await capture(page, `search-no-results-${lang}-${mode}`)
-      await field.fill('the')
-      const result = page.locator('[data-search-result-id]').first()
+      const hit = await page.evaluate(() => {
+        const state = (window as any).__chatStore.getState()
+        const conversation = state.conversations.get('emma@fluux.chat')
+        const message = state.messages.get(conversation.id).find((message: { id: string }) => message.id === 'demo-emma-0c')
+        return { body: message.body as string, name: conversation.name as string }
+      })
+      await field.fill('CSS transforms')
+      const result = page.locator('[data-search-result-id]').filter({ hasText: hit.body })
       await expect(result).toBeVisible()
       await result.click()
       await expect(description).toHaveCount(0)
-      await expect(page.locator('[data-message-list]')).toBeVisible()
+      const banner = page.getByText(words.search.previewBanner, { exact: true })
+      await expect(banner).toBeVisible()
+      const preview = banner.locator('..').locator('..').locator('..')
+      await expect(preview.locator('header').getByText(hit.name, { exact: true })).toBeVisible()
+      await expect(preview.locator('[data-message-list]').getByText(hit.body, { exact: true })).toBeVisible()
       await capture(page, `search-selected-${lang}-${mode}`)
+    })
+  }
+}
+
+for (const lang of ['en', 'fr']) {
+  for (const mode of ['light', 'dark']) {
+    test.describe(`${lang} ${mode}: touch settings`, () => {
+      test.use({ hasTouch: true })
+      test('Back keeps its touch target without enlarging short headers', async ({ page }) => {
+        await page.setViewportSize({ width: 375, height: 812 })
+        await boot(page, lang, mode)
+        expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true)
+        const words = locales[lang]
+        await page.locator('[data-nav="settings"]').click()
+        await page.getByRole('button', { name: words.settings.categories.language, exact: true }).click()
+        const title = page.getByRole('heading', { name: words.settings.categories.language, exact: true, level: 2 })
+        const description = title.locator('..').locator('p')
+        await fullDescription(description)
+        expect(await description.evaluate(el => el.clientHeight)).toBe(
+          await description.evaluate(el => parseFloat(getComputedStyle(el).lineHeight)),
+        )
+        const header = title.locator('..').locator('..')
+        expect(await header.evaluate(el => el.getBoundingClientRect().height)).toBe(56)
+        const back = header.getByRole('button', { name: words.common.back, exact: true })
+        expect(await back.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44)
+        expect(await back.evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(44)
+        await capture(page, `settings-short-touch-${lang}-${mode}`)
+        await back.click()
+        await page.getByRole('button', { name: words.settings.categories.encryption, exact: true }).click()
+        for (const method of ['openpgp', 'omemo']) {
+          const name = words.settings.encryption[`${method}Name`]
+          await page.getByRole('button', { name: new RegExp(`^${name}`) }).click()
+          const methodTitle = page.getByRole('heading', { name, exact: true, level: 2 })
+          const methodHeader = methodTitle.locator('..').locator('..')
+          await expect(methodTitle.locator('..').locator('p')).toHaveCount(0)
+          expect(await methodHeader.evaluate(el => el.getBoundingClientRect().height)).toBe(56)
+          const methodBack = methodHeader.getByRole('button', { name: words.common.back, exact: true })
+          expect(await methodBack.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44)
+          expect(await methodBack.evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(44)
+          await capture(page, `settings-${method}-touch-${lang}-${mode}`)
+          await methodBack.click()
+          await expect(page.getByRole('heading', { name: words.settings.categories.encryption, exact: true, level: 2 })).toBeVisible()
+        }
+      })
     })
   }
 }

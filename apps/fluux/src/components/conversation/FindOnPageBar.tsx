@@ -53,7 +53,9 @@ export function FindOnPageBar({
 
   return (
     <div className="absolute top-0 end-0 z-30 m-2 max-w-[calc(100%-1rem)]">
-      <div data-find-on-page-bar className="flex items-center gap-1 px-2 py-1.5 bg-fluux-bg border border-fluux-border rounded-lg shadow-lg">
+      <div data-find-on-page-bar className={`grid ${matchLabel
+        ? 'grid-cols-[minmax(4rem,1fr)_minmax(0,max-content)_repeat(3,auto)]'
+        : 'grid-cols-[minmax(4rem,1fr)_repeat(3,auto)]'} items-center gap-1 px-2 py-1.5 bg-fluux-bg border border-fluux-border rounded-lg shadow-lg`}>
         <TextInput
           ref={inputRef}
           type="text"
@@ -61,11 +63,11 @@ export function FindOnPageBar({
           onChange={(e) => onSearchTextChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={t('shortcuts.findInConversation', 'Find in conversation')}
-          className="w-40 min-w-0 shrink px-1.5 py-0.5 text-sm bg-transparent border-none outline-none
+          className="w-40 min-w-0 max-w-full px-1.5 py-0.5 text-sm bg-transparent border-none outline-none
                      text-fluux-text placeholder-fluux-muted"
         />
         {matchLabel && (
-          <span className="text-xs text-fluux-muted whitespace-nowrap px-1">
+          <span className="min-w-0 text-xs text-fluux-muted break-words px-1">
             {matchLabel}
           </span>
         )}
