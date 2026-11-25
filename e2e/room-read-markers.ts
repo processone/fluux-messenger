@@ -125,7 +125,9 @@ async function checkRoomLineGeometry(page: Page, width: number) {
           const style = getComputedStyle(element)
           const buttonStyle = getComputedStyle(button)
           return { row: rect(element), column: rect(column), link: rect(button),
-            message: rect(column.querySelector('[data-msg-text]')!),
+            // The chrome includes the visible collapse control; a clipped text
+            // descendant still reports its hidden full height at large text sizes.
+            message: rect(column.querySelector('[data-msg-chrome]')!),
             reaction: rect(column.querySelector('[data-reaction-emoji="👍"]')!),
             accessibleName: button.getAttribute('aria-label'), text: names?.textContent ?? '',
             linkText: button.textContent!, fontSize: style.fontSize, color: style.color,
