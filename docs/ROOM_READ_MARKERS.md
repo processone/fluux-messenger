@@ -56,7 +56,11 @@ storage, including after compacting history fences. A refused growing save
 retains a compact revocation boundary wherever storage allows it. Uncoordinated
 recovery may change only the initiating unchanged storage boundary; it cannot
 recreate cleared records or erase newer choices. Transaction abort never replays
-durable cleanup outside its storage turn. A later fresh choice preserves the fallback epoch independently of the
+destructive cleanup outside its storage turn. A failed Off instead obtains a
+fresh storage turn to revoke only its still-owned choices, preserving newer
+independent opt-ins. Local room suppression survives failed saving until a fresh
+choice or a new account boundary supersedes it. Pre-clear Off cannot modify
+post-clear consent, even after a legacy overwrite or fresh opt-in. A later fresh choice preserves the fallback epoch independently of the
 consent record, so an older overwrite cannot reset the erasure boundary.
 The empty coordination database contains no account data.
 

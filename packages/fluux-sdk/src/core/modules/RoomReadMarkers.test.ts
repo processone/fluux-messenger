@@ -1176,13 +1176,13 @@ describe('RoomReadMarkers', () => {
       expected = localStorage.getItem(consentKey)
     } finally { opening.release(); next.cancelPending() }
     expect(await pending).toBe(false)
-    expect(localStorage.getItem(consentKey)).toBe(expected)
+    if (mode === 'On') expect(localStorage.getItem(consentKey)).toBe(expected)
     const observer = new RoomReadMarkers(dependencies, () => focused)
-    try { expect(observer.isEnabledFor(replayFixture.room)).toBe(true) }
+    try { expect(observer.isEnabledFor(replayFixture.room)).toBe(true); expect(observer.isEnabledFor(roomJid)).toBe(mode === 'On') }
     finally { observer.cancelPending() }
   })
 
-  it.each(['On', 'room Off', 'all Off'] as const)('does not durably replay cleanup after a transaction abort (%s)', async mode => {
+  it.each(['On', 'room Off', 'all Off'] as const)('recovers only the requested revocation after a pre-write abort (%s)', async mode => {
     expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     const expected = [localStorage.getItem(consentKey), localStorage.getItem(migrationKey)]
     const open = idbConnection.openIndexedDB
@@ -1197,7 +1197,10 @@ describe('RoomReadMarkers', () => {
       return db
     })
     expect(mode === 'all Off' ? await markers.setEnabled(false) : await markers.setRoomEnabled(roomJid, mode === 'On')).toBe(false)
-    expect([localStorage.getItem(consentKey), localStorage.getItem(migrationKey)]).toEqual(expected)
+    if (mode === 'On') expect([localStorage.getItem(consentKey), localStorage.getItem(migrationKey)]).toEqual(expected)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try { expect(observer.isEnabledFor(roomJid)).toBe(mode === 'On') }
+    finally { observer.cancelPending() }
   })
 
   it.each(['On', 'room Off', 'all Off'] as const)('keeps an unowned transaction read failure from deleting newer state (%s)', async mode => {
@@ -1220,7 +1223,10 @@ describe('RoomReadMarkers', () => {
       opening.release()
       expect(await pending).toBe(false)
     } finally { vi.stubGlobal('localStorage', storage); opening.release(); next.cancelPending() }
-    expect(storage.getItem(consentKey)).toBe(expected)
+    if (mode === 'On') expect(storage.getItem(consentKey)).toBe(expected)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try { expect(observer.isEnabledFor(replayFixture.room)).toBe(true); expect(observer.isEnabledFor(roomJid)).toBe(mode === 'On') }
+    finally { observer.cancelPending() }
   })
 
   it.each(['On', 'room Off', 'all Off'] as const)('keeps unchanged opening-failure recovery protective (%s)', async mode => {
@@ -1233,6 +1239,123 @@ describe('RoomReadMarkers', () => {
     const observer = new RoomReadMarkers(dependencies, () => focused)
     try { await observer.reload(); expect(observer.isEnabledFor(roomJid)).toBe(false) }
     finally { observer.cancelPending() }
+  })
+
+  it.each((['room', 'all'] as const).flatMap(mode => ['independent edit', 'unrelated clear'].map(during => [mode, during] as const)))('keeps failed %s Off selective after an %s and blocks the outgoing marker', async (mode, during) => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    await markers.viewed(roomJid, rows[0])
+    expect(send).toHaveBeenCalledTimes(1)
+    const opening = pauseNextConsentOpen(true)
+    const pending = mode === 'all' ? markers.setEnabled(false) : markers.setRoomEnabled(roomJid, false)
+    await opening.ready
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      expect(await next.setRoomEnabled(replayFixture.room, true)).toBe(true)
+      if (during === 'unrelated clear') expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(true)
+    } finally { opening.release(); next.cancelPending() }
+    expect(await pending).toBe(false)
+    await markers.viewed(roomJid, rows[1])
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(markers.isEnabledFor(roomJid)).toBe(false)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try { expect(observer.isEnabledFor(roomJid)).toBe(false); expect(observer.isEnabledFor(replayFixture.room)).toBe(true) }
+    finally { observer.cancelPending() }
+  })
+
+  it('keeps a failed room Off locally suppressed when independent choices prevent cleanup and all revocation writes are denied', async () => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    await markers.viewed(roomJid, rows[0])
+    expect(send).toHaveBeenCalledTimes(1)
+    const opening = pauseNextConsentOpen(true)
+    const pending = markers.setRoomEnabled(roomJid, false)
+    await opening.ready
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    const storage = localStorage
+    try {
+      expect(await next.setRoomEnabled(replayFixture.room, true)).toBe(true)
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === consentKey || name === migrationKey) throw new DOMException('Storage denied', 'SecurityError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      opening.release()
+      expect(await pending).toBe(false)
+      await markers.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(markers.isEnabledFor(roomJid)).toBe(false)
+      expect(markers.isEnabledFor(replayFixture.room)).toBe(true)
+      vi.stubGlobal('localStorage', storage)
+      expect(await next.setRoomEnabled(roomJid, false)).toBe(true)
+      expect(await next.setRoomEnabled(roomJid, true)).toBe(true)
+      expect(markers.isEnabledFor(roomJid)).toBe(true)
+      await markers.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { vi.stubGlobal('localStorage', storage); opening.release(); next.cancelPending() }
+  })
+
+  it.each(['room', 'all'] as const)('keeps newer independent choices when %s Off requires a compact fallback', async mode => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    const opening = pauseNextConsentOpen()
+    const pending = mode === 'all' ? markers.setEnabled(false) : markers.setRoomEnabled(roomJid, false)
+    await opening.ready
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    const storage = localStorage
+    try {
+      expect(await next.setRoomEnabled(replayFixture.room, true)).toBe(true)
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === migrationKey && value.startsWith('{')) throw new DOMException('Quota exhausted', 'QuotaExceededError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      opening.release()
+      expect(await pending).toBe(false)
+    } finally { vi.stubGlobal('localStorage', storage); opening.release(); next.cancelPending() }
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try { expect(observer.isEnabledFor(roomJid)).toBe(false); expect(observer.isEnabledFor(replayFixture.room)).toBe(true) }
+    finally { observer.cancelPending() }
+  })
+
+  it.each((['room', 'all'] as const).flatMap(mode => [false, true].flatMap(allAccounts =>
+    ['legacy', 'converted'].flatMap(start => ['legacy overwrite', 'fresh choice'].map(after => [mode, allAccounts, start, after] as const)))))('does not let delayed %s Off touch a cleared account (full: %s, %s, %s)', async (mode, allAccounts, start, after) => {
+    if (start === 'converted') expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    else localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+    const opening = pauseNextConsentOpen()
+    const pending = mode === 'all' ? markers.setEnabled(false) : markers.setRoomEnabled(roomJid, false)
+    await opening.ready
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    let expected: Array<string | null> = []
+    const keys = ['consent', 'migration', 'watermarks'].map(kind => `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, kind])}`)
+    try {
+      expect(await clearRoomReadMarkersLocalData(jid, allAccounts)).toBe(true)
+      if (after === 'legacy overwrite') localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+      else expect(await next.setRoomEnabled(replayFixture.room, true)).toBe(true)
+      expected = keys.map(key => localStorage.getItem(key))
+    } finally { opening.release(); next.cancelPending() }
+    expect(await pending).toBe(true)
+    expect(keys.map(key => localStorage.getItem(key))).toEqual(expected)
+  })
+
+  it.each(['room', 'all'] as const)('records failed %s revocation even when a legacy overwrite already hides the room', async mode => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    const opening = pauseNextConsentOpen()
+    const delayed = markers.setRoomEnabled(roomJid, true)
+    await opening.ready
+    localStorage.setItem(consentKey, JSON.stringify({ enabled: false, rooms: [] }))
+    vi.mocked(idbConnection.openIndexedDB).mockRejectedValueOnce(new DOMException('Storage denied', 'SecurityError'))
+    try { expect(mode === 'all' ? await markers.setEnabled(false) : await markers.setRoomEnabled(roomJid, false)).toBe(false) }
+    finally { opening.release() }
+    expect(await delayed).toBe(false)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try { await observer.reload(); expect(observer.isEnabledFor(roomJid)).toBe(false) }
+    finally { observer.cancelPending() }
+  })
+
+  it.each(['room', 'all'] as const)('preserves legacy-start %s Off through an unrelated account clear', async mode => {
+    localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+    const opening = pauseNextConsentOpen()
+    const pending = mode === 'all' ? markers.setEnabled(false) : markers.setRoomEnabled(roomJid, false)
+    await opening.ready
+    try { expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(true) }
+    finally { opening.release() }
+    expect(await pending).toBe(true)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try { expect(observer.isEnabledFor(roomJid)).toBe(false) } finally { observer.cancelPending() }
   })
 
   it.each([false, true])('does not reimport a stale legacy opt-in after clearing (all accounts: %s)', async allAccounts => {

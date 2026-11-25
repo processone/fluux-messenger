@@ -111,12 +111,15 @@ function readSavedRoomConsent(account: string): SavedConsent {
   const rooms = current || (allowed && (previous || (legacy && record?.enabled === true))) ? oldRooms : []
   return {
     raw, fence, clearToken, rooms, cleared,
-    generation: current ? record.generation as string : history?.generation,
+    generation: current ? record.generation as string : history?.generation ?? JSON.stringify([account, clearToken, fenceEpoch ?? '']),
     epoch: fenceEpoch ?? (current ? record.epoch as string : ''),
     edits: { ...(history?.edits ?? (current ? record.edits as Record<string, string> : {})) },
     needsMigration: !cleared && raw !== null && !current,
     legacyChoice: allowed ? choice : undefined,
   }
+}
+function sameConsentBoundary(left: SavedConsent, right: SavedConsent) {
+  return left.generation === right.generation && left.epoch === right.epoch
 }
 function roomConsentValue(saved: SavedConsent, rooms: string[], edits = saved.edits, epoch = saved.epoch) {
   return JSON.stringify({ version: 3, generation: saved.generation ?? generateUUID(), epoch, edits, rooms })
@@ -277,7 +280,7 @@ export class RoomReadMarkers extends BaseModule {
   private accounts = new Map<string, AccountState>()
   private refusedConsent = new Set<string>()
   private migrations = new Map<string, Promise<boolean>>()
-  private consentEdits = new Map<string, symbol>()
+  private consentEdits = new Map<string, { isCurrent: () => boolean }>()
   private stateConnection: ReturnType<ModuleDependencies['getXmpp']> | undefined
   private orders = new Map<string, RoomMarkerOrder>()
   private proofs = new Map<string, DiscoveryProof>()
@@ -348,12 +351,49 @@ export class RoomReadMarkers extends BaseModule {
     return state
   }
   private readSavedConsent(account = this.account()) { return readSavedRoomConsent(account) }
-  private async writeConsent(change?: { room: string; enabled: boolean } | { allOff: true }): Promise<boolean> {
+  private async writeConsent(change?: { room: string; enabled: boolean } | { allOff: true }, captured?: SavedConsent): Promise<boolean> {
     const account = this.account()
     if (!account) return false
     let changed = false
     let transactionStarted = false
     let initial: SavedConsent | undefined
+    let attempted: SavedConsent | undefined
+    const optingOut = !!change && (!('room' in change) || !change.enabled)
+    const recoverRevocation = (mutating?: SavedConsent) => {
+      if (!optingOut || !initial || !change || this.account() !== account) return
+      let latest: SavedConsent
+      try { latest = mutating ?? this.readSavedConsent(account) } catch { return }
+      if (!sameConsentBoundary(initial, latest)) return
+      const opening = initial
+      const revoked = ('room' in change ? [change.room] : opening.rooms).filter(room =>
+        (opening.edits[room] ?? '') === (latest.edits[room] ?? ''))
+      if ('room' in change && !revoked.length) return
+      const rooms = latest.rooms.filter(room => !revoked.includes(room))
+      const edits = { ...latest.edits }
+      for (const room of revoked) edits[room] = generateUUID()
+      const epoch = 'room' in change ? latest.epoch : latest.epoch.startsWith('!') ? clearFence() : generateUUID()
+      changed = true
+      const compact = () => {
+        // A short epoch can revoke older work while a smaller preference keeps independent choices.
+        const epoch = clearFence()
+        try {
+          localStorage.setItem(storageKey(account, 'migration'), epoch)
+          localStorage.setItem(storageKey(account, 'consent'), roomConsentValue({ ...latest, generation: generateUUID() }, rooms, latest.edits, epoch))
+        } catch {
+          if (!rooms.length) {
+            try {
+              localStorage.removeItem(storageKey(account, 'consent'))
+              localStorage.setItem(storageKey(account, 'migration'), epoch)
+            } catch { /* Preserve any surviving fence when both revocation writes are denied. */ }
+          }
+        }
+      }
+      if (mutating) compact()
+      else {
+        try { persistRoomConsent(account, latest, rooms, edits, epoch) } catch { compact() }
+      }
+      this.consentRevision++
+    }
     const recoverUnchanged = (durable: boolean) => {
       if ((!changed && !change) || !initial || this.account() !== account) return
       try {
@@ -364,7 +404,7 @@ export class RoomReadMarkers extends BaseModule {
       this.failConsentSave(account, !!change, durable)
     }
     try {
-      initial = this.readSavedConsent(account)
+      initial = captured ?? this.readSavedConsent(account)
       const opening = initial
       return await withConsentStorage(() => {
         try {
@@ -376,9 +416,8 @@ export class RoomReadMarkers extends BaseModule {
               : opening.clearToken !== saved.clearToken || opening.cleared !== saved.cleared
             if (changedAccount || opening.epoch !== saved.epoch || (opening.edits[change.room] ?? '') !== (saved.edits[change.room] ?? '')) return false
           }
-          // An old Off after erasure is already effective; it must not recreate
-          // an account record. Unrelated accounts retain their saved generation.
-          if (change && !('room' in change && change.enabled) && saved.raw === null && (opening.clearToken !== saved.clearToken || opening.epoch !== saved.epoch)) return true
+          // Target erasure supersedes Off even if older code rewrites preferences afterward.
+          if (optingOut && !sameConsentBoundary(opening, saved)) return true
           let rooms = this.refusedConsent.has(account) ? [] : saved.rooms
           const edits = { ...saved.edits }
           let epoch = saved.epoch
@@ -387,6 +426,7 @@ export class RoomReadMarkers extends BaseModule {
             if (change.enabled) rooms.push(change.room)
             edits[change.room] = generateUUID()
           } else if (change) { rooms = []; epoch = saved.epoch.startsWith('!') ? clearFence() : generateUUID() }
+          attempted = saved
           changed = true
           persistRoomConsent(account, saved, rooms, edits, epoch)
           this.refusedConsent.delete(account)
@@ -395,14 +435,17 @@ export class RoomReadMarkers extends BaseModule {
           if (state) state.consent = { enabled: rooms.length > 0, rooms }
           return true
         } catch {
-          if (changed) this.failConsentSave(account, !!change)
+          if (optingOut) recoverRevocation(attempted)
+          else if (changed) this.failConsentSave(account, !!change)
           else recoverUnchanged(true)
           return false
         }
       }, () => { transactionStarted = true })
     } catch {
-      // Abort cannot roll back localStorage, and recovery must not run again outside its turn.
-      recoverUnchanged(!transactionStarted)
+      // Revocation before mutation is distinct from replaying destructive cleanup after abort.
+      if (optingOut && !changed) {
+        try { await withConsentStorage(() => recoverRevocation()) } catch { /* Local suppression survives unavailable coordination. */ }
+      } else recoverUnchanged(!transactionStarted)
       return false
     } finally {
       if (changed && account === this.account()) this.notify()
@@ -457,7 +500,12 @@ export class RoomReadMarkers extends BaseModule {
     }
     return state.consent
   }
-  isEnabledFor(roomJid: string) { return !this.consentEdits.has(this.roomKey(roomJid)) && this.getConsent().rooms.includes(roomJid) }
+  isEnabledFor(roomJid: string) {
+    const key = this.roomKey(roomJid)
+    const edit = this.consentEdits.get(key)
+    if (edit && !edit.isCurrent()) this.consentEdits.delete(key)
+    return !this.consentEdits.has(key) && this.getConsent().rooms.includes(roomJid)
+  }
   /** @deprecated Only legacy opt-out is supported; opting in requires an explicit room choice. */
   setEnabled(enabled: boolean): Promise<boolean> {
     if (enabled) return Promise.resolve(false)
@@ -468,13 +516,24 @@ export class RoomReadMarkers extends BaseModule {
   setRoomEnabled(roomJid: string, enabled: boolean): Promise<boolean> {
     if (!roomJid || getBareJid(roomJid) !== roomJid) return Promise.resolve(false)
     const key = this.roomKey(roomJid)
-    const edit = Symbol()
+    const account = this.account()
+    let boundary: SavedConsent | undefined
+    try { boundary = this.readSavedConsent(account) } catch { /* Unreadable state stays locally suppressed. */ }
+    const edit = { isCurrent: () => {
+      if (this.account() !== account) return false
+      try {
+        if (!boundary) return true
+        const latest = this.readSavedConsent(account)
+        return sameConsentBoundary(boundary, latest) && (boundary.edits[roomJid] ?? '') === (latest.edits[roomJid] ?? '')
+      } catch { return true }
+    } }
     // A save can wait behind another tab's transaction. Suppress this tab immediately,
     // rather than allowing an already-queued viewed event to publish meanwhile.
     this.consentEdits.set(key, edit)
     this.consentRevision++; this.queued.clear(); this.notify()
-    return this.writeConsent({ room: roomJid, enabled }).finally(() => {
-      if (this.consentEdits.get(key) === edit) this.consentEdits.delete(key)
+    let saved = false
+    return this.writeConsent({ room: roomJid, enabled }, boundary).then(result => { saved = result; return result }).finally(() => {
+      if (this.consentEdits.get(key) === edit && (saved || enabled)) this.consentEdits.delete(key)
       this.notify()
     })
   }
