@@ -141,8 +141,8 @@ export function useScrollContainerBinding(
         try {
           runCorrectionBody(currentScroller)
         } finally {
-          refreshDatePillsCoveredByFind(currentScroller)
           const correctionEnd = performance.now()
+          refreshDatePillsCoveredByFind(currentScroller)
           if (!slowCorrectionMonitorRef.current) {
             slowCorrectionMonitorRef.current = createSlowCorrectionMonitor()
           }
