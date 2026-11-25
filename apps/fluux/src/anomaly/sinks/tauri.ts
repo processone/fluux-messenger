@@ -12,9 +12,8 @@
  *
  * @module Anomaly/Sinks/Tauri
  */
-import { homeDir, localDataDir } from '@tauri-apps/api/path'
+import { invoke } from '@tauri-apps/api/core'
 import { writeFile } from '@tauri-apps/plugin-fs'
-import { platform } from '@tauri-apps/plugin-os'
 import type { Sink } from './sink'
 
 const MAX_CONSECUTIVE_FAILURES = 10
@@ -58,24 +57,9 @@ export function createTauriSink(writeLine: (line: string) => Promise<void>): Sin
   }
 }
 
-/**
- * Resolve the sidecar directory, mirroring the Rust log-dir logic in
- * `src-tauri/src/main.rs` so the JSONL lands beside `fluux.log` — the directory
- * already reachable from the app menu and the tray.
- *
- * `localDataDir()` off macOS rather than a hand-built path: it is the exact JS
- * counterpart of `dirs::data_local_dir()`, which means LOCAL AppData on Windows
- * (not Roaming) and `$XDG_DATA_HOME` on Linux (not a hardcoded `~/.local/share`).
- *
- * Note the Rust side hardcodes `net.processone.fluux` regardless of bundle
- * identifier, so the Dev build writes here too. That is fine: the sidecar is
- * Dev-only, so it is unambiguous even though `fluux.log` itself interleaves builds.
- */
+// Native startup owns the effective directory, including explicit overrides and disposable builds.
 async function sidecarDir(): Promise<string> {
-  if ((await platform()) === 'macos') {
-    return `${await homeDir()}/Library/Logs/net.processone.fluux`
-  }
-  return `${await localDataDir()}/net.processone.fluux/logs`
+  return invoke<string>('get_log_directory')
 }
 
 /** `anomalies.YYYY-MM-DD.jsonl`, daily-rotated to match `fluux.log`. */

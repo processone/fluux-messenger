@@ -137,7 +137,12 @@ Tests for the selector run before any selected code checks and as part of
 constant timings. The photo change also touches permissions, build scripts and
 `package.json`, so it deliberately selects broad checks, not just five fast files.
 
-Native evidence has explicit prerequisites. Signature-reader changes need macOS and
+Native evidence has explicit prerequisites. The Windows GUI Job Object fixtures
+(`scripts/native-tests/windows-gui/job.test.mjs`) require Windows Node and Windows
+PowerShell in a Windows-local checkout or exported build workspace. The selector
+marks them as Windows-native and refuses WSL/macOS Node before starting the gate;
+a Windows run is separate evidence, not a skipped portable test.
+Signature-reader changes need macOS and
 `FLUUX_MACOS_REFERENCE_APP` as an absolute path to the extracted public 0.18.1 app;
 see [the read-only signature probe](MACOS_COMMUNICATION_PROTOTYPE.md#checks-without-signing-or-installing).
 `test:ios-photos` needs macOS/Xcode
@@ -856,7 +861,8 @@ Node and the declared `@iarna/toml` dependency and rejects that opt-in. The `Rus
 job in `.github/workflows/ci.yml` also runs this guard, including for Cargo-only
 changes.
 
-Automated tests cannot prove Windows keyboard delivery. On Windows, verify that
+The native Windows GUI smoke proves in-window typing and Tab focus, not keyboard
+delivery after switching windows or restoring from the tray. On Windows, verify that
 after returning with Alt-Tab, Ctrl+K opens the switcher and plain typing reaches
 the webview without a click. Also verify that restoring from the system tray
 delivers keyboard input with no focus oscillation.

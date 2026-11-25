@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { spawn, execFileSync } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdir, readFile, writeFile, rm, lstat, realpath } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { mkdir, readFile, writeFile, rm, realpath } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { encodedPowerShell, parseOptions, psLiteral } from './common.mjs'
+import { canonicalDestination, contains, requireOutside } from './paths.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const powershell = '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
@@ -18,9 +19,18 @@ async function main() {
   const options = parseOptions(args, { '--workspace': 'path', '--evidence': 'path', '--fail-after-session': 'flag' })
   assert.ok(options['--workspace'], 'Supply --workspace on the Windows C drive, outside the checkout')
   const workspace = resolve(options['--workspace'])
-  assert.ok(isAbsolute(options['--workspace']) && workspace.startsWith('/mnt/c/'))
+  assert.ok(isAbsolute(options['--workspace']) && contains('/mnt/c', workspace), 'Use a Windows C-drive workspace')
   assert.match(basename(workspace), /^fluux-windows-gui-[a-zA-Z0-9-]+$/)
-  assert.ok(relative(root, workspace).startsWith('..'), 'Workspace must be outside the checkout')
+  assert.equal(await canonicalDestination(workspace), workspace, 'Workspace must not traverse a symlink')
+  const project = await realpath(root)
+  requireOutside(project, workspace, 'Workspace')
+  let evidence
+  if (mode === 'run') {
+    assert.ok(options['--evidence'] && isAbsolute(options['--evidence']), 'Supply an absolute --evidence directory outside the checkout')
+    evidence = await canonicalDestination(options['--evidence'])
+    requireOutside(project, evidence, 'Evidence')
+    requireOutside(workspace, evidence, 'Evidence')
+  }
   const marker = join(workspace, '.fluux-gui-workspace.json')
   if (mode === 'build') {
     assert.equal(command('git', ['-C', root, 'status', '--porcelain']), '', 'Commit the harness before building')
@@ -30,23 +40,14 @@ async function main() {
     execFileSync('git', ['-C', root, 'archive', '--format=tar', '-o', join(workspace, 'source.tar'), commit], { timeout: 120000 })
     await writeFile(join(workspace, 'source.json'), JSON.stringify({ commit }))
   }
-  assert.equal((await lstat(workspace)).isSymbolicLink(), false)
-  assert.equal(await realpath(workspace), workspace, 'Workspace must not traverse a symlink')
   assert.deepEqual(JSON.parse(await readFile(marker, 'utf8')), { kind: 'fluux-windows-gui', workspace })
   if (mode === 'clean') { await rm(workspace, { recursive: true }); return }
-  let evidence
-  if (mode === 'run') {
-    assert.ok(options['--evidence'] && isAbsolute(options['--evidence']), 'Supply an absolute --evidence directory outside the checkout')
-    evidence = resolve(options['--evidence'])
-    assert.ok(relative(root, evidence).startsWith('..'), 'Evidence must be outside the checkout')
-    assert.ok(relative(workspace, evidence).startsWith('..'), 'Evidence must be outside the disposable workspace')
-    await mkdir(evidence)
-  }
+  if (evidence) await mkdir(evidence)
   const source = JSON.parse(await readFile(join(workspace, 'source.json'), 'utf8'))
   assert.equal(source.commit, command('git', ['-C', root, 'rev-parse', 'HEAD']), 'Rebuild the workspace for the current committed version')
   // Windows Node keeps driver traffic on Windows loopback even with WSL NAT networking.
   const script = mode === 'build' ? join(root, 'scripts/native-tests/windows-gui/windows.mjs') : join(workspace, 'source/scripts/native-tests/windows-gui/windows.mjs')
-  const argv = [windows(script), mode, '--workspace', windows(workspace)]
+  const argv = [windows(script), mode, '--workspace', windows(workspace), '--commit', source.commit]
   if (evidence) argv.push('--evidence', windows(evidence))
   if (options['--fail-after-session']) argv.push('--fail-after-session')
   const child = spawn(powershell, encodedPowerShell(`$ErrorActionPreference='Stop'; & (Get-Command node.exe).Source ${argv.map(psLiteral).join(' ')}; exit $LASTEXITCODE`), { stdio: 'inherit' })

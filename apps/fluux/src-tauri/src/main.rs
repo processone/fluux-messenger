@@ -1172,6 +1172,11 @@ fn open_notification_settings() -> Result<(), String> {
     notifications::settings_pane::open()
 }
 
+#[tauri::command]
+fn get_log_directory(log_directory: tauri::State<'_, LogDirectory>) -> String {
+    log_directory.0.to_string_lossy().into_owned()
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 #[tauri::command]
 fn open_logs_folder(
@@ -1346,6 +1351,13 @@ fn main() {
     #[cfg(not(feature = "windows-gui-test"))]
     let identity_migration = identity_migration::migrate_platform_dirs(&identifier);
 
+    // Ordinary builds share diagnostics; disposable builds must retain their isolated identity.
+    let log_identity = if cfg!(feature = "windows-gui-test") {
+        identifier.as_str()
+    } else {
+        LOG_DIR_NAME
+    };
+
     // Parse CLI flags early, before tracing subscriber init
     let args: Vec<String> = std::env::args().collect();
     let clear_storage = args
@@ -1394,9 +1406,9 @@ fn main() {
         eprintln!("  -h, --help            Show this help message");
         eprintln!();
         eprintln!("Logs are always written to a daily-rotating file in:");
-        eprintln!("  macOS:   ~/Library/Logs/{LOG_DIR_NAME}/");
-        eprintln!("  Linux:   ~/.local/share/{LOG_DIR_NAME}/logs/");
-        eprintln!("  Windows: %LOCALAPPDATA%\\{LOG_DIR_NAME}\\logs\\");
+        eprintln!("  macOS:   ~/Library/Logs/{log_identity}/");
+        eprintln!("  Linux:   ~/.local/share/{log_identity}/logs/");
+        eprintln!("  Windows: %LOCALAPPDATA%\\{log_identity}\\logs\\");
         eprintln!();
         eprintln!("Environment variables:");
         eprintln!("  RUST_LOG              Override log filter (e.g. RUST_LOG=debug)");
@@ -1413,19 +1425,12 @@ fn main() {
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::path::PathBuf::from("."))
     } else {
-        // Platform log directory:
-        //   macOS:   ~/Library/Logs/net.processone.fluux/
-        //   Linux:   ~/.local/share/net.processone.fluux/logs/  (or $XDG_DATA_HOME)
-        //   Windows: %LOCALAPPDATA%\net.processone.fluux\logs\
         let base = dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-        #[cfg(feature = "windows-gui-test")]
-        let dir = base.join(&identifier).join("logs");
-        #[cfg(not(feature = "windows-gui-test"))]
-        let dir = base.join(LOG_DIR_NAME).join("logs");
+        let dir = base.join(log_identity).join("logs");
 
         #[cfg(target_os = "macos")]
         let dir = dirs::home_dir()
-            .map(|h| h.join("Library").join("Logs").join(LOG_DIR_NAME))
+            .map(|h| h.join("Library").join("Logs").join(log_identity))
             .unwrap_or(dir);
 
         dir
@@ -1603,6 +1608,7 @@ fn main() {
             mcp::bridge::mcp_respond,
             log_to_terminal,
             open_notification_settings,
+            get_log_directory,
             #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
             open_logs_folder,
             #[cfg(any(target_os = "linux", target_os = "windows"))]

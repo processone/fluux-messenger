@@ -15,6 +15,7 @@ const jobSource = fileURLToPath(new URL('./OwnedJob.cs', import.meta.url))
 async function fixture(action, hanging = false) {
   const directory = await mkdtemp(join(tmpdir(), "fluux's-job-"))
   let supervisor
+  let exit
   try {
     const worker = join(directory, 'worker.mjs')
     const child = join(directory, 'child.mjs')
@@ -28,16 +29,16 @@ async function fixture(action, hanging = false) {
     supervisor = spawn('powershell.exe', encodedPowerShell(script), { stdio: 'pipe' })
     let errors = ''
     supervisor.stderr.on('data', bytes => { errors += bytes })
-    const exit = once(supervisor, 'exit')
-    await action({ ready, cancel, exit, errors: () => errors })
+    exit = once(supervisor, 'exit')
+    await action({ ready, cancel, exit, supervisor, errors: () => errors })
     const [code] = await exit
     assert.equal(code, 0, errors)
     return JSON.parse((await readFile(result, 'utf8')).replace(/^\uFEFF/, ''))
   } finally {
-    if (supervisor?.exitCode === null) {
-      // KILL_ON_JOB_CLOSE owns the subtree even if a failing test has to end its supervisor.
-      supervisor.kill()
-      await once(supervisor, 'exit')
+    if (supervisor && exit) {
+      // Reuse the exit promise: a signal leaves exitCode null even after exit has fired.
+      if (supervisor.exitCode === null && supervisor.signalCode === null) supervisor.kill()
+      await exit
     }
     await rm(directory, { recursive: true })
   }
@@ -45,6 +46,7 @@ async function fixture(action, hanging = false) {
 
 test('Windows job stops a real orphaned descendant and preserves an unrelated process', async () => {
   const unrelated = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' })
+  const unrelatedExit = once(unrelated, 'exit')
   try {
     const result = await fixture(async () => {})
     assert.equal(result.code, 7)
@@ -53,7 +55,10 @@ test('Windows job stops a real orphaned descendant and preserves an unrelated pr
     assert.equal(result.remaining, 0)
     assert.equal(unrelated.exitCode, null)
     execFileSync('powershell.exe', encodedPowerShell(`$ErrorActionPreference='Stop'; Get-Process -Id ${unrelated.pid} | Out-Null`))
-  } finally { unrelated.kill(); await once(unrelated, 'exit') }
+  } finally {
+    if (unrelated.exitCode === null && unrelated.signalCode === null) unrelated.kill()
+    await unrelatedExit
+  }
 })
 
 test('cancellation reaches the owned job and stops its descendants', async () => {
@@ -67,4 +72,11 @@ test('cancellation reaches the owned job and stops its descendants', async () =>
   assert.equal(result.cancelled, true)
   assert.ok(result.before >= 1)
   assert.equal(result.remaining, 0)
+})
+
+test('fixture cleanup completes after its supervisor exits by signal', { timeout: 15000 }, async () => {
+  await assert.rejects(fixture(async ({ ready, supervisor }) => {
+    await until(() => readFile(ready), 'Owned child did not become ready')
+    supervisor.kill()
+  }, true), { code: 'ERR_ASSERTION' })
 })

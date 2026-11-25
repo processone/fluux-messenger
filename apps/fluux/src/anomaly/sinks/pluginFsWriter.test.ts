@@ -1,89 +1,77 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-// `vi.mock` factories are hoisted above every import and above plain `const`
-// declarations, so a factory closing over an outer `const writeFile` throws
-// "Cannot access before initialization" before the suite even loads.
-// `vi.hoisted` is the supported way to share state with a hoisted factory.
-const { writeFile, platformName } = vi.hoisted(() => ({
-  writeFile: vi.fn(async () => {}),
-  platformName: { value: 'macos' },
-}))
-
-vi.mock('@tauri-apps/plugin-fs', () => ({ writeFile }))
-vi.mock('@tauri-apps/api/path', () => ({
-  homeDir: async () => '/Users/test',
-  localDataDir: async () => '/Users/test/.local/share',
-}))
-vi.mock('@tauri-apps/plugin-os', () => ({ platform: async () => platformName.value }))
-
+import { invoke } from '@tauri-apps/api/core'
+import { writeFile } from '@tauri-apps/plugin-fs'
 import { createPluginFsWriter } from './tauri'
+import { ID } from '../values'
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
+vi.mock('@tauri-apps/plugin-fs', () => ({ writeFile: vi.fn() }))
+const nativeDirectory = '/Users/test/Library/Logs/net.processone.fluux'
+const line = JSON.stringify({ id: ID.sessionStart.s, sev: 'drift' })
 
 beforeEach(() => {
-  writeFile.mockClear()
-  platformName.value = 'macos'
+  vi.resetAllMocks()
+  vi.mocked(invoke).mockResolvedValue(nativeDirectory)
+  vi.mocked(writeFile).mockResolvedValue(undefined)
 })
 
 describe('createPluginFsWriter', () => {
-  it('appends to the daily sidecar beside fluux.log on macOS', async () => {
+  it('appends to the daily sidecar beside the resolved native log on macOS', async () => {
     const write = createPluginFsWriter(() => new Date('2026-07-29T11:47:02Z'))
-    await write('{"kind":"anomaly"}')
-
-    expect(writeFile).toHaveBeenCalledTimes(1)
-    const [path, bytes, options] = writeFile.mock.calls[0] as unknown as [
-      string,
-      Uint8Array,
-      Record<string, unknown>,
-    ]
-    expect(path).toBe('/Users/test/Library/Logs/net.processone.fluux/anomalies.2026-07-29.jsonl')
-    expect(options).toEqual({ append: true })
-    expect(new TextDecoder().decode(bytes)).toBe('{"kind":"anomaly"}\n')
+    await write(line)
+    expect(vi.mocked(writeFile).mock.calls[0][0]).toBe(
+      '/Users/test/Library/Logs/net.processone.fluux/anomalies.2026-07-29.jsonl',
+    )
   })
 
-  it('uses localDataDir off macOS, matching dirs::data_local_dir on the Rust side', async () => {
-    // Not a hand-built path: localDataDir is LOCAL AppData on Windows (not Roaming)
-    // and $XDG_DATA_HOME on Linux (not a hardcoded ~/.local/share).
-    platformName.value = 'linux'
+  it('uses the disposable Windows directory reported by native startup', async () => {
+    vi.mocked(invoke).mockResolvedValue('C:\\Temp\\fluux-gui-smoke\\logs')
     const write = createPluginFsWriter(() => new Date('2026-07-29T00:00:00Z'))
-    await write('x')
-    expect((writeFile.mock.calls[0] as unknown as [string])[0]).toBe(
-      '/Users/test/.local/share/net.processone.fluux/logs/anomalies.2026-07-29.jsonl',
+    await write(line)
+    expect(invoke).toHaveBeenCalledWith('get_log_directory')
+    expect(vi.mocked(writeFile).mock.calls[0][0]).toBe(
+      'C:\\Temp\\fluux-gui-smoke\\logs/anomalies.2026-07-29.jsonl',
     )
   })
 
   it('terminates every line so two records cannot be concatenated', async () => {
     const write = createPluginFsWriter(() => new Date('2026-07-29T00:00:00Z'))
-    await write('a')
-    await write('b')
-    const written = writeFile.mock.calls.map((c) =>
-      new TextDecoder().decode((c as unknown as [string, Uint8Array])[1]),
-    )
-    expect(written).toEqual(['a\n', 'b\n'])
+    await write(line)
+    await write(line)
+    const written = vi.mocked(writeFile).mock.calls.map((call) => call[1])
+    expect(written).toEqual([
+      new TextEncoder().encode(`${line}\n`),
+      new TextEncoder().encode(`${line}\n`),
+    ])
   })
 
   it('rolls the filename over at the day boundary', async () => {
     let clock = new Date('2026-07-29T23:59:59Z')
     const write = createPluginFsWriter(() => clock)
-    await write('before')
+    await write(line)
     clock = new Date('2026-07-30T00:00:01Z')
-    await write('after')
-
-    const paths = writeFile.mock.calls.map((c) => (c as unknown as [string])[0])
-    expect(paths[0]).toContain('anomalies.2026-07-29.jsonl')
-    expect(paths[1]).toContain('anomalies.2026-07-30.jsonl')
+    await write(line)
+    const paths = vi.mocked(writeFile).mock.calls.map((call) => call[0])
+    expect(paths).toEqual([
+      `${nativeDirectory}/anomalies.2026-07-29.jsonl`,
+      `${nativeDirectory}/anomalies.2026-07-30.jsonl`,
+    ])
   })
 
   it('always uses append, never a truncating write', async () => {
-    // A non-append write would silently discard the day's log on every record.
     const write = createPluginFsWriter(() => new Date('2026-07-29T00:00:00Z'))
-    await write('x')
-    expect((writeFile.mock.calls[0] as unknown as [string, Uint8Array, unknown])[2]).toEqual({
-      append: true,
-    })
+    await write(line)
+    expect(vi.mocked(writeFile).mock.calls[0][2]).toEqual({ append: true })
   })
 
   it('propagates a write failure so the sink can count it', async () => {
-    writeFile.mockRejectedValueOnce(new Error('ENOSPC') as never)
-    const write = createPluginFsWriter(() => new Date('2026-07-29T00:00:00Z'))
-    await expect(write('x')).rejects.toThrow('ENOSPC')
+    vi.mocked(writeFile).mockRejectedValueOnce(new Error('ENOSPC'))
+    await expect(createPluginFsWriter()(line)).rejects.toThrow('ENOSPC')
+  })
+
+  it('does not fall back to ordinary logs when native directory lookup fails', async () => {
+    vi.mocked(invoke).mockRejectedValue(new Error('Native log directory unavailable'))
+    await expect(createPluginFsWriter()(line)).rejects.toThrow('Native log directory unavailable')
+    expect(writeFile).not.toHaveBeenCalled()
   })
 })

@@ -66,8 +66,12 @@ node scripts/native-tests/windows-gui/wsl.mjs run --workspace "$WORK" \
 Choose a **new** evidence directory outside both checkout and workspace. Its
 parent must already exist. Windows writes directly through the WSL path; the
 launcher does not copy a personal profile. Preflight requires input-desktop
-access, a non-service session, the matching tools and an unaltered executable.
-The workspace must have been built from the current committed checkout.
+access on the worker's current desktop, an active non-service session, the matching
+tools and an unaltered executable whose sidecar matches the reviewed source commit.
+An active remote-desktop session is supported; a disconnected session is refused.
+The workspace and executable must both have been built from the current committed
+checkout. Canonical parent paths are checked before any workspace/evidence write
+or workspace removal; aliases cannot put evidence inside the checkout or workspace.
 Missing prerequisites and failed assertions exit nonzero, never skip as a pass.
 
 The native journey finds login, types `alex@example.org` without submitting,
@@ -104,11 +108,14 @@ stand-in for secrets only; this smoke does not qualify Windows Credential Manage
 
 A Windows Job Object owns the worker, both drivers, Fluux and their descendants.
 A separate job contains the build and its compiler/install subprocesses.
-The supervisor creates the worker suspended, assigns it before resuming, and
-uses kill-on-job-close without breakaway permission. Readiness checks verify that
+The supervisor atomically assigns the worker to its job during suspended creation,
+then resumes it and uses kill-on-job-close without breakaway permission. Readiness checks verify that
 both ports bind only loopback addresses (`127.0.0.1` or `::1`) and belong to the owned driver subtree before
 sending protocol requests. Job shutdown verifies zero active members before
-profile removal. It never selects processes by executable name.
+profile removal. Without that confirmation the launcher retains every profile and
+records its paths in `cleanup.json`. Once stopped, cleanup tries each independently
+owned directory even if another marker or removal fails. It never selects processes
+by executable name.
 
 ## Failure and cancellation
 
@@ -119,7 +126,8 @@ node scripts/native-tests/windows-gui/wsl.mjs run --workspace "$WORK" \
 
 Expect nonzero after native assertions and screenshot capture. Both success and
 failure must leave `job.json` with `remaining: 0` and `cleanup.json` without an
-error, with every owned directory removed. Protocol calls have 30-second
+error, with every owned directory removed. A nonempty `retained` or `errors` list is a
+cleanup failure, not a pass. Protocol calls have 30-second
 bounds; the supervisor allows 150 seconds for the worker and ten seconds for
 job shutdown. The WSL entry point converts SIGINT/SIGTERM to a cancellation file;
 writing an empty `cancel` file in the run's evidence directory requests the same
@@ -137,6 +145,10 @@ Remove the source export, installed test tools and compiled output when done:
 ```sh
 node scripts/native-tests/windows-gui/wsl.mjs clean --workspace "$WORK"
 ```
+
+Keep `build.log` from the workspace if diagnosing a failed build. The build worker
+captures subprocess diagnostics there explicitly and the parent replays the file
+to the WSL command's output, including when that output is redirected.
 
 Do not clean a workspace while its smoke or build is running. Evidence is kept
 outside it and survives cleanup. No source, dependency or process should be left

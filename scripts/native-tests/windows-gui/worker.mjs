@@ -3,7 +3,8 @@ import { spawn, execFileSync } from 'node:child_process'
 import { appendFile, open, readFile, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { WebDriver, until } from '../linux-gui/webdriver.mjs'
-import { encodedPowerShell } from './common.mjs'
+import { encodedPowerShell, psLiteral } from './common.mjs'
+import { fileURLToPath } from 'node:url'
 
 const config = JSON.parse(await readFile(process.argv[2], 'utf8'))
 const { app, driver, edge, evidence, driverPort, nativePort, fail } = config
@@ -63,6 +64,8 @@ async function verifyWebViewProfile() {
 }
 
 async function main() {
+  const jobSource = fileURLToPath(new URL('./OwnedJob.cs', import.meta.url))
+  execFileSync('powershell.exe', encodedPowerShell(`$ErrorActionPreference='Stop'; Add-Type -Path ${psLiteral(jobSource)}; [FluuxOwnedJob]::CheckDesktop()`), { timeout: 15000 })
   const nativeLog = await open(join(evidence, 'native.log'), 'wx')
   const client = new WebDriver(driverPort, log)
   const capture = async name => {

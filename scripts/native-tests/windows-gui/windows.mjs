@@ -4,16 +4,23 @@ import { once } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:net'
 import { mkdir, readFile, writeFile, rm, access } from 'node:fs/promises'
+import { appendFileSync, closeSync, openSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { checkBuild, driverVersion, encodedPowerShell, features, identity, parseOptions, psLiteral, sha256 } from './common.mjs'
+import { checkBuild, cleanupProfiles, driverVersion, encodedPowerShell, features, identity, parseOptions, psLiteral, sha256 } from './common.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const ps = script => execFileSync('powershell.exe', encodedPowerShell(`$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; ${script}`), { encoding: 'utf8', timeout: 30000 }).trim()
+let buildLog
 const invoke = (program, args, cwd) => {
-  const result = spawnSync(program, args, { cwd, stdio: 'inherit', timeout: 3600000, env: { ...process.env, CARGO_BUILD_JOBS: '2', FLUUX_ANOMALY: '1' } })
-  if (result.error) throw result.error
-  assert.equal(result.status, 0, `${program} failed: ${result.status}`)
+  const output = buildLog ? openSync(buildLog, 'a') : undefined
+  try {
+    // The Win32 root has no redirected console handles; give each build command its own log handle.
+    const result = spawnSync(program, args, { cwd, stdio: output === undefined ? 'inherit' : ['ignore', output, output], timeout: 3600000,
+      env: { ...process.env, CARGO_BUILD_JOBS: '2', FLUUX_ANOMALY: '1' } })
+    if (result.error) throw result.error
+    assert.equal(result.status, 0, `${program} failed: ${result.status}`)
+  } finally { if (output !== undefined) closeSync(output) }
 }
 const npm = (args, cwd) => invoke('cmd.exe', ['/d', '/s', '/c', `npm.cmd ${args.join(' ')}`], cwd)
 const runtimeVersion = () => ps(`Get-ItemProperty 'HKCU:\\Software\\Microsoft\\EdgeUpdate\\Clients\\*','HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\*' -ErrorAction SilentlyContinue | Where-Object name -Like '*WebView*' | Select-Object -First 1 -ExpandProperty pv`)
@@ -27,7 +34,7 @@ async function ownedJob({ script, args, workspace, env = process.env, cancelFile
   assert.equal(signal, null)
   const job = JSON.parse((await readFile(record, 'utf8')).replace(/^\uFEFF/, ''))
   assert.equal(job.remaining, 0, 'Owned job still contains processes')
-  return code
+  return { code, shutdownConfirmed: true }
 }
 
 async function build(workspace) {
@@ -68,9 +75,10 @@ async function build(workspace) {
   }, null, 2), { flag: 'wx' })
 }
 
-async function inventory(workspace) {
+async function inventory(workspace, expectedCommit) {
   const app = join(workspace, 'source/apps/fluux/src-tauri/target/debug/fluux.exe')
-  const build = await checkBuild(app)
+  assert.equal(JSON.parse(await readFile(join(workspace, 'source.json'), 'utf8')).commit, expectedCommit)
+  const build = await checkBuild(app, expectedCommit)
   const driver = join(workspace, 'tools/bin/tauri-driver.exe')
   const edge = join(workspace, 'tools/edge/msedgedriver.exe')
   await access(driver); await access(edge)
@@ -94,15 +102,17 @@ async function port() {
   return value
 }
 
-async function run(workspace, evidence, fail) {
-  const info = await inventory(workspace)
+async function run(workspace, evidence, fail, expectedCommit) {
+  const info = await inventory(workspace, expectedCommit)
   await writeFile(join(evidence, 'identity.json'), JSON.stringify(info, null, 2), { flag: 'wx' })
   const owned = []
   const token = randomUUID()
   const profile = join(workspace, `profile-${token}`)
   const config = join(evidence, 'run.json')
   let supervisorCode
-  let cleanupError
+  let workerMayHaveStarted = false
+  let shutdownConfirmed = false
+  let runError
   try {
     for (const path of [...info.nativeProfiles, profile]) {
       // Exclusive creation refuses existing user data, including leftovers from an interrupted run.
@@ -116,37 +126,50 @@ async function run(workspace, evidence, fail) {
     await writeFile(config, JSON.stringify({ ...info, profile, evidence, driverPort, nativePort, fail }))
     const env = { ...process.env, FLUUX_GUI_TEST_TOKEN: token, WEBVIEW2_USER_DATA_FOLDER: join(profile, 'webview') }
     // Inline commands work under Restricted script policy; no execution-policy setting is changed.
-    supervisorCode = await ownedJob({ script: join(here, 'worker.mjs'), args: [config], workspace, env,
+    workerMayHaveStarted = true
+    const result = await ownedJob({ script: join(here, 'worker.mjs'), args: [config], workspace, env,
       cancelFile: join(evidence, 'cancel'), record: join(evidence, 'job.json'), timeout: 150000 })
+    supervisorCode = result.code
+    shutdownConfirmed = result.shutdownConfirmed
     assert.equal(supervisorCode, 0, 'Windows smoke failed; inspect worker-result.json and native.log')
-  } finally {
-    const removed = []
-    for (const path of owned.reverse()) {
-      try {
-        assert.equal(await readFile(join(path, '.gui-test-owner'), 'utf8'), token)
-        await rm(path, { recursive: true })
-        removed.push(path)
-      } catch (error) { cleanupError = error; break }
-    }
-    await writeFile(join(evidence, 'cleanup.json'), JSON.stringify({ removed, owned, supervisorCode, error: cleanupError?.message ?? null }, null, 2))
-    if (cleanupError) throw cleanupError
+  } catch (error) { runError = error; throw error } finally {
+    const cleanup = await cleanupProfiles(owned, token, !workerMayHaveStarted || shutdownConfirmed)
+    await writeFile(join(evidence, 'cleanup.json'), JSON.stringify({ ...cleanup, owned, supervisorCode,
+      workerMayHaveStarted, shutdownConfirmed, error: cleanup.errors.length ? 'Some owned profiles were retained; inspect errors' : null }, null, 2))
+    if (cleanup.errors.length && !runError) throw new Error('Profile cleanup failed; inspect cleanup.json')
   }
 }
 
 async function main() {
   assert.equal(process.platform, 'win32', 'The Windows worker requires native Windows Node')
   const [mode, ...args] = process.argv.slice(2)
-  const options = parseOptions(args, { '--workspace': 'path', '--evidence': 'path', '--fail-after-session': 'flag' })
+  const options = parseOptions(args, { '--workspace': 'path', '--evidence': 'path', '--fail-after-session': 'flag', '--commit': 'value' })
   const workspace = resolve(options['--workspace'])
   if (mode === 'build') {
-    const code = await ownedJob({ script: fileURLToPath(import.meta.url), args: ['build-worker', '--workspace', workspace], workspace,
-      cancelFile: join(workspace, 'build.cancel'), record: join(workspace, 'build-job.json'), timeout: 3600000 })
-    assert.equal(code, 0, 'Windows build failed; inspect build output and build-job.json')
+    let result
+    try {
+      result = await ownedJob({ script: fileURLToPath(import.meta.url), args: ['build-worker', '--workspace', workspace], workspace,
+        cancelFile: join(workspace, 'build.cancel'), record: join(workspace, 'build-job.json'), timeout: 3600000 })
+    } finally {
+      try { process.stdout.write(await readFile(join(workspace, 'build.log'))) } catch (error) {
+        if (error.code !== 'ENOENT') throw error
+        console.error('The build worker did not create build.log')
+      }
+    }
+    assert.equal(result.code, 0, 'Windows build failed; inspect build.log and build-job.json')
     return
   }
-  if (mode === 'build-worker') return build(workspace)
-  if (mode === 'preflight') { console.log(JSON.stringify(await inventory(workspace), null, 2)); return }
+  if (mode === 'build-worker') {
+    buildLog = join(workspace, 'build.log')
+    await writeFile(buildLog, '', { flag: 'wx' })
+    return build(workspace)
+  }
+  if (mode === 'preflight') { console.log(JSON.stringify(await inventory(workspace, options['--commit']), null, 2)); return }
   assert.equal(mode, 'run')
-  await run(workspace, resolve(options['--evidence']), options['--fail-after-session'] ?? false)
+  await run(workspace, resolve(options['--evidence']), options['--fail-after-session'] ?? false, options['--commit'])
 }
-main().catch(error => { console.error(error.stack); process.exitCode = 1 })
+main().catch(error => {
+  if (buildLog) appendFileSync(buildLog, `${error.stack}\n`)
+  else console.error(error.stack)
+  process.exitCode = 1
+})

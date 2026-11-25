@@ -328,6 +328,11 @@ export function createPlan(changes, cwd = root) {
       npm('test:e2e', reason)
       continue
     }
+    if (path === 'scripts/native-tests/windows-gui/job.test.mjs' || path === 'scripts/native-tests/windows-gui/OwnedJob.cs') {
+      nodeTest('scripts/native-tests/windows-gui/job.test.mjs', reason, [], { requires: 'windows' })
+      gate(reason)
+      continue
+    }
     if (path.startsWith('scripts/') && /\.test\.mjs$/.test(path)) nodeTest(path, reason)
     gate(reason)
     if (path.startsWith(`${native}/`) || path.startsWith('.cargo/')) nativeConfig(reason)
@@ -385,6 +390,10 @@ function run(command, args, cwd, capture = false) {
 
 export function checkRequirement(requirement, cwd, env = process.env, host = process.platform) {
   if (!requirement) return
+  if (requirement === 'windows') {
+    if (host !== 'win32') throw new Error('Missing native evidence: this check requires Windows Node and Windows PowerShell; run it in a Windows-local checkout, not under WSL or macOS Node')
+    return
+  }
   if (host !== 'darwin') throw new Error(`Missing native evidence: ${requirement} requires macOS/Xcode; do not count a skipped native test as passing`)
   if (requirement === 'macos-reference') {
     const app = env.FLUUX_MACOS_REFERENCE_APP
