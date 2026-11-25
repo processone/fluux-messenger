@@ -1518,7 +1518,7 @@
         },
         "search": {
             "title": "Search Results",
-            "description": "Select a result from the sidebar to view the conversation."
+            "description": "Message previews appear here."
         }
     },
     "avatar": {

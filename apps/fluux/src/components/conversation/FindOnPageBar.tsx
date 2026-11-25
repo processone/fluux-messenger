@@ -25,7 +25,6 @@ export function FindOnPageBar({
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Auto-focus on mount
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
@@ -53,7 +52,7 @@ export function FindOnPageBar({
       : ''
 
   return (
-    <div className="absolute top-0 end-0 z-30 m-2">
+    <div className="absolute top-0 end-0 z-30 m-2 max-w-[calc(100%-1rem)]">
       <div data-find-on-page-bar className="flex items-center gap-1 px-2 py-1.5 bg-fluux-bg border border-fluux-border rounded-lg shadow-lg">
         <TextInput
           ref={inputRef}
@@ -61,8 +60,8 @@ export function FindOnPageBar({
           value={searchText}
           onChange={(e) => onSearchTextChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={t('search.findInConversation', 'Find…')}
-          className="w-40 px-1.5 py-0.5 text-sm bg-transparent border-none outline-none
+          placeholder={t('shortcuts.findInConversation', 'Find in conversation')}
+          className="w-40 min-w-0 shrink px-1.5 py-0.5 text-sm bg-transparent border-none outline-none
                      text-fluux-text placeholder-fluux-muted"
         />
         {matchLabel && (
@@ -74,8 +73,8 @@ export function FindOnPageBar({
           type="button"
           onClick={onPrev}
           disabled={totalMatches === 0}
-          className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted disabled:opacity-30"
-          title={t('search.previousMatch', 'Previous match (Shift+Enter)')}
+          className="shrink-0 p-0.5 rounded hover:bg-fluux-hover text-fluux-muted disabled:opacity-30"
+          title={`${t('shortcuts.previousMatch', 'Previous match')} (Shift+Enter)`}
         >
           <ChevronUp className="size-4" />
         </button>
@@ -83,16 +82,16 @@ export function FindOnPageBar({
           type="button"
           onClick={onNext}
           disabled={totalMatches === 0}
-          className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted disabled:opacity-30"
-          title={t('search.nextMatch', 'Next match (Enter)')}
+          className="shrink-0 p-0.5 rounded hover:bg-fluux-hover text-fluux-muted disabled:opacity-30"
+          title={`${t('shortcuts.nextMatch', 'Next match')} (Enter)`}
         >
           <ChevronDown className="size-4" />
         </button>
         <button
           type="button"
           onClick={onClose}
-          className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted"
-          title={t('common.close', 'Close (Esc)')}
+          className="shrink-0 p-0.5 rounded hover:bg-fluux-hover text-fluux-muted"
+          title={`${t('common.close', 'Close')} (Esc)`}
         >
           <X className="size-3.5" />
         </button>

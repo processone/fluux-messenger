@@ -48,6 +48,7 @@ const BASE_URL = isolatedPort !== null
 
 const SUITES = [
   { name: 'search-filters', testMatch: 'search-filters.ts' },
+  { name: 'ui-polish', testMatch: 'ui-polish.ts' },
   { name: 'sidebar-name-priority', testMatch: 'sidebar-name-priority.ts' },
   { name: 'focus-ring', testMatch: 'focus-ring.ts' },
   { name: 'account-row', testMatch: 'account-row.ts' },
