@@ -1,4 +1,3 @@
-import { waitForActions } from './harness/messageInteraction'
 import { DRAFT_SAVE_DELAY_MS } from '../apps/fluux/src/constants/ui'
 import { expect, test, type Page } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
@@ -762,6 +761,13 @@ for (const mode of ['chat-edit', 'room-edit', 'room-whisper'] as const) {
     const confirmation = page.getByRole('alertdialog', { name: 'Open draft?' })
     await expect(confirmation).toBeVisible()
     await expect(confirmation).toHaveAccessibleDescription(mode === 'room-whisper' ? /unsent private text/ : /unsaved changes to this message/)
+    const routeBeforeShortcut = await page.evaluate(() => location.hash)
+    for (const key of ['ControlOrMeta+k', 'Alt+1']) {
+      await page.keyboard.press(key)
+      await expect(page.getByRole('dialog')).toHaveCount(0)
+      expect(await page.evaluate(() => location.hash)).toBe(routeBeforeShortcut)
+      expect(await confirmation.evaluate(element => element.contains(document.activeElement))).toBe(true)
+    }
     if (process.env.FLUUX_DRAFT_PROOF) await page.screenshot({ path: test.info().outputPath(`${mode}-confirmation-desktop.png`), animations: 'disabled' })
     await confirmation.getByRole('button', { name: 'Cancel', exact: true }).press('Escape')
     await expect(confirmation).toBeHidden()
@@ -798,5 +804,47 @@ for (const mode of ['chat-edit', 'room-edit', 'room-whisper'] as const) {
     await expect(ordinaryField).toBeInViewport({ ratio: 1 })
     expect(await page.evaluate(() => (window as unknown as { __draftResumeSends: number }).__draftResumeSends)).toBe(0)
     if (process.env.FLUUX_DRAFT_PROOF) await page.screenshot({ path: test.info().outputPath(`${mode}-resumed-phone.png`), animations: 'allow' })
+  })
+}
+
+for (const exit of ['confirm', 'escape', 'banner'] as const) {
+  test(`private staged file is discarded only when leaving the whisper through ${exit}`, async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+    await bootDemo(page, '/demo.html?tutorial=false')
+    await page.evaluate(() => (window as unknown as { __demoClient: DemoClient }).__demoClient.stopAnimation())
+    await page.locator('[data-nav="rooms"]').click()
+    await page.getByRole('complementary').getByText('Team Chat', { exact: true }).click()
+    const ordinary = page.getByRole('combobox', { name: 'Message #Team Chat', exact: true })
+    await ordinary.fill('Ordinary review notes for the room.')
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }).__roomStore.getState().getDraft('team@conference.fluux.chat'))).toBe('Ordinary review notes for the room.')
+    const privateField = await enterWhisper(page)
+    await privateField.fill('Private review notes for Emma.')
+    await page.evaluate(() => (window as unknown as { __connectionStore: typeof import('@fluux/sdk/stores').connectionStore }).__connectionStore.getState().setHttpUploadService({ jid: 'upload.fluux.chat', maxFileSize: 10_000_000 }))
+    await page.locator('input[type="file"]').setInputFiles('e2e/fixtures/media/landscape-1280x720.jpg')
+    const removeFile = page.getByRole('button', { name: 'Remove attachment', exact: true })
+    await expect(removeFile).toBeVisible()
+    await page.keyboard.press('ControlOrMeta+k')
+    const picker = page.getByRole('dialog')
+    await picker.getByRole('button', { name: /^Drafts/ }).click()
+    await picker.getByRole('button', { name: /Team Chat team/ }).click()
+    const confirmation = page.getByRole('alertdialog', { name: 'Open draft?' })
+    await expect(confirmation).toBeVisible()
+    if (process.env.FLUUX_DRAFT_PROOF) await page.screenshot({ path: test.info().outputPath('private-file-confirmation.png'), animations: 'allow' })
+    await expect(confirmation).toHaveAccessibleDescription(/private text.*attached file/)
+    await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(confirmation).toBeHidden()
+    await expect(removeFile).toBeVisible()
+    await expect(privateField).toHaveText('Private review notes for Emma.')
+    await expect(privateField).toBeFocused()
+    if (exit === 'confirm') {
+      await page.keyboard.press('ControlOrMeta+k')
+      await picker.getByRole('button', { name: /^Drafts/ }).click()
+      await picker.getByRole('button', { name: /Team Chat team/ }).click()
+      await confirmation.getByRole('button', { name: 'Discard and open draft', exact: true }).click()
+    } else if (exit === 'escape') await privateField.press('Escape')
+    else await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(page.getByText('Whispering privately to Emma', { exact: true })).toHaveCount(0)
+    await expect(removeFile).toHaveCount(0)
+    await expect(ordinary).toHaveText('Ordinary review notes for the room.')
   })
 }

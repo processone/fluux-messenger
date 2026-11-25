@@ -1697,6 +1697,7 @@
         "confirmResumeTitle": "Åpne utkast?",
         "confirmResumeEdit": "Åpning av utkastet forkaster ulagrede endringer i denne meldingen.",
         "confirmResumeWhisper": "Åpning av romutkastet forkaster privat tekst som ikke er sendt.",
+        "confirmResumeWhisperFile": "Åpning av romutkastet forkaster privat tekst som ikke er sendt, og den vedlagte filen.",
         "confirmResumeAction": "Forkast og åpne utkast",
         "moreMatches": "Flere treff",
         "open": "Åpne kommandopalett",

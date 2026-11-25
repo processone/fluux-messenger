@@ -1336,10 +1336,17 @@ function ChatLayoutContent() {
       {pendingDraftResume && (
         <ConfirmDialog
           title={t('commandPalette.confirmResumeTitle')}
-          message={t(pendingDraftResume.target.mode === 'whisper' ? 'commandPalette.confirmResumeWhisper' : 'commandPalette.confirmResumeEdit')}
+          message={t(pendingDraftResume.target.mode === 'whisper' ? pendingDraftResume.target.hasAttachment ? 'commandPalette.confirmResumeWhisperFile' : 'commandPalette.confirmResumeWhisper' : 'commandPalette.confirmResumeEdit')}
           confirmLabel={t('commandPalette.confirmResumeAction')}
           descriptionId={draftResumeDescriptionId}
           panelProps={{ role: 'alertdialog', 'aria-modal': true, 'aria-label': t('commandPalette.confirmResumeTitle'), 'aria-describedby': draftResumeDescriptionId }}
+          onPanelKeyDown={(event, { close }) => {
+            event.stopPropagation()
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              close()
+            }
+          }}
           onConfirm={confirmDraftResume}
           onCancel={cancelDraftResume}
         />

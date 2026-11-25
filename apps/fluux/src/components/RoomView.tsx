@@ -298,9 +298,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     stableRoom.nickToAvatarCache !== activeRoom.nickToAvatarCache
   )) setStableRoom(activeRoom)
 
-  // Stable callback that clears any staged compose state before entering whisper
-  // mode. Whispers are text-only so a staged reply, edit, or pending attachment
-  // must be discarded to avoid showing conflicting UI (banner + attachment preview).
+  // A recipient change must not carry a staged reply, edit or file to another audience.
   const enterWhisperMode = useCallback((nick: string) => {
     setReplyingTo(null)
     setEditingMessage(null)
@@ -1847,11 +1845,11 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
   mentionRecovery.current = { references, restore: restoreReferences }
   clearReferencesRef.current = () => setReferences([])
 
-  // Discard the private buffer before restoring the room's independent ordinary draft.
-  // Private text is never converted into a public message (XEP-0045 §7.5).
+  // Private text and files must never change audience when this editor exits (XEP-0045 §7.5).
   const handleClearWhisper = () => {
     whisperDraftGeneration.current += 1
     discardDraft()
+    onRemovePendingAttachment?.()
     onClearWhisper?.()
   }
 
@@ -1869,7 +1867,7 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
       if (!restoreMessageDraft()) return false
       onCancelEdit()
       return true
-    })
+    }, !!pendingAttachment)
 
   // Slash commands (XEP-0045 moderation/subject/invite shortcuts, plus app-level
   // easter eggs). The context composes the room action hooks and the roomUiStore

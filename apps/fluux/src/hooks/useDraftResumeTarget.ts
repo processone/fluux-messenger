@@ -5,6 +5,7 @@ export interface DraftResumeTarget {
   kind: 'chat' | 'room'
   id: string
   mode: 'edit' | 'whisper'
+  hasAttachment?: boolean
   account: string | null
   resume: () => boolean
 }
@@ -18,6 +19,7 @@ export function useDraftResumeTarget(
   mode: DraftResumeTarget['mode'] | null,
   buffer: object | null,
   resume: () => boolean,
+  hasAttachment = false,
 ): void {
   const latestResume = useRef(resume)
   latestResume.current = resume
@@ -25,8 +27,8 @@ export function useDraftResumeTarget(
   // A different edited message or private recipient invalidates an open confirmation.
   useLayoutEffect(() => {
     if (!register || !mode || !buffer) return
-    return register({ kind, id, mode, account, resume: () => latestResume.current() })
-  }, [register, kind, id, mode, buffer, account])
+    return register({ kind, id, mode, account, hasAttachment, resume: () => latestResume.current() })
+  }, [register, kind, id, mode, buffer, account, hasAttachment])
 }
 
 export function canResumeDraftRequest(request: DraftResumeTarget, current: DraftResumeTarget | null): boolean {

@@ -319,8 +319,14 @@ export function MessageComposer({
   // Internal state for uncontrolled mode
   const [internalText, setInternalText] = useState('')
   const text = controlledValue !== undefined ? controlledValue : internalText
+  const editBufferVersion = useRef(0)
+  const editedRowId = editingMessage?.rowId ?? editingMessage?.id
+  useLayoutEffect(() => { editBufferVersion.current += 1 }, [editedRowId])
   const textRef = useRef(text)
-  useLayoutEffect(() => { textRef.current = text }, [text])
+  useLayoutEffect(() => {
+    if (textRef.current !== text) editBufferVersion.current += 1
+    textRef.current = text
+  }, [text])
   const mounted = useRef(false)
   useEffect(() => {
     mounted.current = true
@@ -330,6 +336,8 @@ export function MessageComposer({
   const textSetterRef = useRef({ controlled, onValueChange })
   useLayoutEffect(() => { textSetterRef.current = { controlled, onValueChange } }, [controlled, onValueChange])
   const setText = useCallback((t: string) => {
+    // An explicit restore replaces the buffer even when its text happens to match.
+    editBufferVersion.current += 1
     textRef.current = t
     const setter = textSetterRef.current
     if (setter.controlled) {
@@ -724,6 +732,8 @@ export function MessageComposer({
     submitting.current = true
     setSending(true)
     const submittedText = text
+    const submittedEditVersion = editBufferVersion.current
+    const ownsSubmittedEdit = () => mounted.current && editBufferVersion.current === submittedEditVersion
     const rollbackDraft = !editingMessage ? onConsumeDraft?.() : undefined
     if (!editingMessage) setText('')
     const restore = () => {
@@ -753,6 +763,7 @@ export function MessageComposer({
         // Edit resulted in empty message - retract it instead
         failureKey = 'chat.failedToDeleteMessage'
         await onRetractMessage(editingMessage.id)
+        if (!ownsSubmittedEdit()) return
         setText('')
         onCancelEdit?.()
         inputRef.current?.focus()
@@ -760,7 +771,7 @@ export function MessageComposer({
         // Pass the kept attachment, or undefined to remove it.
         failureKey = 'chat.failedToEditMessage'
         const handled = await onSendCorrection(editingMessage.id, withForwardQuote(trimmed, editingMessage.forwardQuote), attachmentToKeep)
-        if (handled) {
+        if (handled && ownsSubmittedEdit()) {
           setText('')
           setLaunching(true)
           onCancelEdit?.()

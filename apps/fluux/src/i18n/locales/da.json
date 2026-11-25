@@ -1697,6 +1697,7 @@
         "confirmResumeTitle": "Åbn kladde?",
         "confirmResumeEdit": "Hvis du åbner kladden, kasseres de ikke-gemte ændringer i denne besked.",
         "confirmResumeWhisper": "Hvis du åbner rummets kladde, kasseres privat tekst, der ikke er sendt.",
+        "confirmResumeWhisperFile": "Hvis du åbner rummets kladde, kasseres privat tekst, der ikke er sendt, og den vedhæftede fil.",
         "confirmResumeAction": "Kassér og åbn kladde",
         "moreMatches": "Flere resultater",
         "open": "Åbn kommandopalet",

@@ -1701,6 +1701,7 @@
         "confirmResumeTitle": "Atverti juodraštį?",
         "confirmResumeEdit": "Atvėrus juodraštį bus atmesti neišsaugoti šio pranešimo pakeitimai.",
         "confirmResumeWhisper": "Atvėrus kambario juodraštį bus atmestas neišsiųstas privatus tekstas.",
+        "confirmResumeWhisperFile": "Atvėrus kambario juodraštį bus atmestas neišsiųstas privatus tekstas ir pridėtas failas.",
         "confirmResumeAction": "Atmesti ir atverti juodraštį",
         "moreMatches": "Daugiau rezultatų",
         "open": "Atverti komandų paletę",

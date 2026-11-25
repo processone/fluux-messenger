@@ -1697,6 +1697,7 @@
         "confirmResumeTitle": "Concept openen?",
         "confirmResumeEdit": "Als je het concept opent, gaan niet-opgeslagen wijzigingen aan dit bericht verloren.",
         "confirmResumeWhisper": "Als je het kamerconcept opent, gaat niet-verzonden privétekst verloren.",
+        "confirmResumeWhisperFile": "Als je het kamerconcept opent, gaan niet-verzonden privétekst en het bijgevoegde bestand verloren.",
         "confirmResumeAction": "Verwerpen en concept openen",
         "moreMatches": "Meer resultaten",
         "open": "Opdrachtenpalet openen",

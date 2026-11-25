@@ -1697,6 +1697,7 @@
         "confirmResumeTitle": "초안을 열까요?",
         "confirmResumeEdit": "초안을 열면 이 메시지의 저장하지 않은 수정 내용이 삭제됩니다.",
         "confirmResumeWhisper": "대화방 초안을 열면 보내지 않은 비공개 텍스트가 삭제됩니다.",
+        "confirmResumeWhisperFile": "대화방 초안을 열면 보내지 않은 비공개 텍스트와 첨부 파일이 삭제됩니다.",
         "confirmResumeAction": "버리고 초안 열기",
         "moreMatches": "추가 결과",
         "open": "명령 팔레트 열기",

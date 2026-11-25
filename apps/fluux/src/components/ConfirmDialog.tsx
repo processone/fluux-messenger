@@ -5,6 +5,7 @@ import { ModalOverlay } from './ModalOverlay'
 interface ConfirmDialogProps {
   panelProps?: ComponentProps<typeof ModalOverlay>['panelProps']
   descriptionId?: string
+  onPanelKeyDown?: ComponentProps<typeof ModalOverlay>['onPanelKeyDown']
   title: string
   message: string
   confirmLabel: string
@@ -25,6 +26,7 @@ export function ConfirmDialog({
   busy = false,
   panelProps,
   descriptionId,
+  onPanelKeyDown,
 }: ConfirmDialogProps) {
   const { t } = useTranslation()
 
@@ -33,7 +35,7 @@ export function ConfirmDialog({
     : 'bg-red-500 hover:bg-red-600'
 
   return (
-    <ModalOverlay panelProps={panelProps} onClose={onCancel} dismissable={!busy} panelClassName="p-4">
+    <ModalOverlay onPanelKeyDown={onPanelKeyDown} panelProps={panelProps} onClose={onCancel} dismissable={!busy} panelClassName="p-4">
       {({ close }) => (
         <>
           <h3 className="text-lg font-semibold text-fluux-text mb-2">{title}</h3>

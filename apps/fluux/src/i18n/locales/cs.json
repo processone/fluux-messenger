@@ -1703,6 +1703,7 @@
         "confirmResumeTitle": "Otevřít koncept?",
         "confirmResumeEdit": "Otevřením konceptu zahodíte neuložené změny této zprávy.",
         "confirmResumeWhisper": "Otevřením konceptu místnosti zahodíte neodeslaný soukromý text.",
+        "confirmResumeWhisperFile": "Otevřením konceptu místnosti zahodíte neodeslaný soukromý text a přiložený soubor.",
         "confirmResumeAction": "Zahodit a otevřít koncept",
         "moreMatches": "Další výsledky",
         "open": "Otevřít příkazovou paletu",

@@ -1701,6 +1701,7 @@
         "confirmResumeTitle": "Aprire la bozza?",
         "confirmResumeEdit": "L’apertura della bozza scarterà le modifiche non salvate a questo messaggio.",
         "confirmResumeWhisper": "L’apertura della bozza della stanza scarterà il testo privato non inviato.",
+        "confirmResumeWhisperFile": "L’apertura della bozza della stanza scarterà il testo privato non inviato e il file allegato.",
         "confirmResumeAction": "Scarta e apri la bozza",
         "moreMatches": "Altri risultati",
         "open": "Apri la palette dei comandi",

@@ -1703,6 +1703,7 @@
         "confirmResumeTitle": "Odpri osnutek?",
         "confirmResumeEdit": "Z odprtjem osnutka bodo zavržene neshranjene spremembe tega sporočila.",
         "confirmResumeWhisper": "Z odprtjem osnutka sobe bo zavrženo neposlano zasebno besedilo.",
+        "confirmResumeWhisperFile": "Z odprtjem osnutka sobe bosta zavržena neposlano zasebno besedilo in priložena datoteka.",
         "confirmResumeAction": "Zavrzi in odpri osnutek",
         "moreMatches": "Več zadetkov",
         "open": "Odpri ukazno paleto",

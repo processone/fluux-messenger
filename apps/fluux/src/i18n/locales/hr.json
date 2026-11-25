@@ -1699,6 +1699,7 @@
         "confirmResumeTitle": "Otvoriti skicu?",
         "confirmResumeEdit": "Otvaranje skice odbacit će nespremljene izmjene ove poruke.",
         "confirmResumeWhisper": "Otvaranje skice sobe odbacit će neposlani privatni tekst.",
+        "confirmResumeWhisperFile": "Otvaranje skice sobe odbacit će neposlani privatni tekst i priloženu datoteku.",
         "confirmResumeAction": "Odbaci i otvori skicu",
         "moreMatches": "Više rezultata",
         "open": "Otvori paletu naredbi",

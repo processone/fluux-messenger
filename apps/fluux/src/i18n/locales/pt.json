@@ -1701,6 +1701,7 @@
         "confirmResumeTitle": "Abrir rascunho?",
         "confirmResumeEdit": "Abrir o rascunho descarta as alterações não salvas desta mensagem.",
         "confirmResumeWhisper": "Abrir o rascunho da sala descarta qualquer texto privado não enviado.",
+        "confirmResumeWhisperFile": "Abrir o rascunho da sala descarta o texto privado não enviado e o arquivo anexado.",
         "confirmResumeAction": "Descartar e abrir rascunho",
         "moreMatches": "Mais resultados",
         "open": "Abrir a paleta de comandos",
