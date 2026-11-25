@@ -40,18 +40,24 @@ never reuses a pending view; a fresh focused observation is required afterward.
 Scoped clearing removes the target account's records before attempting to convert
 unaffected preferences. Each conversion stores its self-contained choice before
 its compatibility fence, so either refused write leaves valid consent intact.
-Partial failure is reported, but legacy import still seals. The guard retains
-only the exact effective choices of unaffected accounts whose conversion was
+Refused unrelated conversion is reported without discarding its valid choices.
+Successful guard replacement permits only the exact effective choices of unaffected accounts whose conversion was
 refused; it never permits the erased account to import old consent. Those
 exceptions disappear when their account saves or clears its choice. Unknown
-older guards remain sealed. The guard contains no erased-account identifier or
-read position; the empty coordination database contains neither.
+older guards remain sealed. A refused replacement retains the existing seal or
+a writable account fence and reports incomplete cleanup. When all barrier writes
+are denied and no usable prior barrier exists, durable revocation cannot be
+guaranteed; cleanup reports failure rather than claiming completion. Successful
+cleanup leaves no target-account data in the guard; failed cleanup can retain
+protection records. The empty coordination database contains no account data.
 
 Watermark writes share the clearing transaction and merge the durable map rather
 than a cached copy. Room archive operations capture their erasure boundary once
 and carry it through cursor fallbacks, hydration, paging and queued catch-up.
-Generic chat archive work does not capture room consent. Pending publication
-rechecks its original observer's lifetime, current geometry, conversation,
+Foreground and fresh-session callers capture before loading their cache.
+Generic chat archive work does not capture room consent. Discovery retry drains
+the original observation after refreshing consent; it never creates a new view.
+Pending publication rechecks its original observer's lifetime, current geometry, conversation,
 coverage and current private read pointer after waiting for storage. The real
 transport runs preflight before synchronously saving the anchor and starting its
 write. A definitely unstarted send leaves no anchor; uncertain attempted delivery

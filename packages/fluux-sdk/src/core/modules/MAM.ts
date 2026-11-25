@@ -272,7 +272,7 @@ const PREVIEW_WALK_MAX_CONCURRENT = 2
  * @category Core
  */
 export class MAM extends BaseModule {
-  private captureRoomReplay() {
+  captureRoomReplay() {
     return this.deps.getRoomReadMarkers?.().captureReplayBoundary?.() ?? (() => false)
   }
 
@@ -1984,8 +1984,8 @@ export class MAM extends BaseModule {
   async catchUpRoomHistory(
     roomJid: string,
     messages: Array<{ timestamp?: Date; stanzaId?: string }>,
-    options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
-    replayCurrent = this.captureRoomReplay(),
+    options: { sessionStartTime?: number; stitchReadPointer?: boolean; replayCurrent?: () => boolean } = {},
+    replayCurrent = options.replayCurrent ?? this.captureRoomReplay(),
   ): Promise<void> {
     if (messages.length) void this.restorePeerMarkers(roomJid, replayCurrent).catch(() => {})
     const endUpdate = this.deps.stores?.connection?.beginUpdate?.([`room:${roomJid}`, 'rooms'])

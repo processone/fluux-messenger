@@ -1086,6 +1086,102 @@ describe('RoomReadMarkers', () => {
     expect(markers.isEnabledFor(roomJid)).toBe(true)
   })
 
+  it.each([['scoped', false], ['scoped', true], ['full', false], ['full', true]] as const)('retains an import barrier after refused %s replacement (old exception: %s)', async (kind, exception) => {
+    const captured = useCapturedSelfReading()
+    expect(await clearRoomReadMarkersLocalData(null, true)).toBe(true)
+    const prefix = ROOM_READ_MARKERS_STORAGE_KEY + ':'
+    const guard = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!)
+      .find(key => key.startsWith(prefix) && !key.slice(prefix.length).startsWith('['))!
+    localStorage.removeItem(guard)
+    const old = JSON.stringify({ enabled: true, rooms: [roomJid] })
+    localStorage.setItem(consentKey, old)
+    const storage = localStorage
+    if (exception) {
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === consentKey) throw new DOMException('Quota exhausted', 'QuotaExceededError'); target.setItem(name, value) }
+        : Reflect.get(target, key, target) }))
+      expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(false)
+      vi.stubGlobal('localStorage', storage)
+    }
+    const origin = markers.captureReplayBoundary()
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === guard || (name === `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'migration'])}` && storage.getItem(consentKey) !== null)) throw new DOMException('Quota exhausted', 'QuotaExceededError'); target.setItem(name, value) }
+      : Reflect.get(target, key, target) }))
+    const fresh = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      expect(await clearRoomReadMarkersLocalData(jid, kind === 'full')).toBe(false)
+      vi.stubGlobal('localStorage', storage)
+      for (let stale = 0; stale < 2; stale++) {
+        storage.setItem(consentKey, old)
+        await fresh.reload()
+        expect(fresh.isEnabledFor(roomJid)).toBe(false)
+      }
+      await fresh.receive(roomJid, captured.reflected, [], true, origin)
+      expect(storage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'watermarks'])}`)).toBeNull()
+      expect(origin()).toBe(false)
+      expect(await clearRoomReadMarkersLocalData(jid, kind === 'full')).toBe(true)
+      for (const entry of ['consent', 'watermarks', 'migration']) expect(storage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, entry])}`)).toBeNull()
+    } finally { fresh.cancelPending(); vi.stubGlobal('localStorage', storage) }
+  })
+
+  it.each(['scoped', 'full'] as const)('retains an existing seal when all barrier writes fail during %s clear', async kind => {
+    expect(await clearRoomReadMarkersLocalData(null, true)).toBe(true)
+    const prefix = ROOM_READ_MARKERS_STORAGE_KEY + ':'
+    const guard = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!)
+      .find(key => key.startsWith(prefix) && !key.slice(prefix.length).startsWith('['))!
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    localStorage.removeItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'migration'])}`)
+    const storage = localStorage
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) => key === 'setItem'
+      ? () => { throw new DOMException('Storage denied', 'SecurityError') }
+      : Reflect.get(target, key, target) }))
+    expect(await clearRoomReadMarkersLocalData(jid, kind === 'full')).toBe(false)
+    vi.stubGlobal('localStorage', storage)
+    storage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+    const fresh = new RoomReadMarkers(dependencies, () => focused)
+    try { await fresh.reload(); expect(fresh.isEnabledFor(roomJid)).toBe(false) }
+    finally { fresh.cancelPending() }
+  })
+
+  it.each(['scoped', 'full'] as const)('rejects opening legacy On across a refused %s guard replacement', async kind => {
+    expect(await clearRoomReadMarkersLocalData(null, true)).toBe(true)
+    const prefix = ROOM_READ_MARKERS_STORAGE_KEY + ':'
+    const guard = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!)
+      .find(key => key.startsWith(prefix) && !key.slice(prefix.length).startsWith('['))!
+    localStorage.removeItem(guard)
+    localStorage.setItem(consentKey, JSON.stringify({ enabled: false, rooms: [] }))
+    const held = pauseNextConsentOpen()
+    const pending = markers.setRoomEnabled(roomJid, true)
+    await held.ready
+    const storage = localStorage
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === guard) throw new DOMException('Quota exhausted', 'QuotaExceededError'); target.setItem(name, value) }
+      : Reflect.get(target, key, target) }))
+    try {
+      expect(await clearRoomReadMarkersLocalData(jid, kind === 'full')).toBe(false)
+      expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(true)
+    } finally { held.release() }
+    expect(await pending).toBe(false)
+    vi.stubGlobal('localStorage', storage)
+    const fresh = new RoomReadMarkers(dependencies, () => focused)
+    try { await fresh.reload(); expect(fresh.isEnabledFor(roomJid)).toBe(false); expect(fresh.isEnabledFor(replayFixture.room)).toBe(true) }
+    finally { fresh.cancelPending() }
+  })
+
+  it.each(['scoped', 'full'] as const)('reports total barrier write denial during %s erasure', async kind => {
+    const captured = useCapturedSelfReading()
+    const old = JSON.stringify({ enabled: true, rooms: [roomJid] })
+    localStorage.setItem(consentKey, old)
+    await markers.receive(roomJid, captured.reflected)
+    const storage = localStorage
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) => key === 'setItem'
+      ? () => { throw new DOMException('Storage denied', 'SecurityError') }
+      : Reflect.get(target, key, target) }))
+    expect(await clearRoomReadMarkersLocalData(jid, kind === 'full')).toBe(false)
+    expect(storage.getItem(consentKey)).toBeNull()
+    expect(storage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'watermarks'])}`)).toBeNull()
+  })
+
   it.each([0, 2])('keeps the erased account out of legacy import after partial clearing (survivor format: %s)', async format => {
     expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     const other = 'other@localhost'
@@ -1352,6 +1448,59 @@ describe('RoomReadMarkers', () => {
     await markers.viewed(roomJid, older)
     expect(cursors).toEqual([rows[1].stanzaId, firstTail])
     expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not recreate a discovery observation after an unseen durable edit and cover', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const captured = useCapturedSelfReading(replayFixture)
+    expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(true)
+    let visible = true
+    iq.mockRejectedValueOnce(new Error('Discovery timeout'))
+      .mockImplementation(async () => { visible = false; return parse(replayFixture.disco) })
+    await markers.viewed(replayFixture.room, captured.row, () => visible)
+    const peer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      expect(await peer.setRoomEnabled(fixture.room, true)).toBe(true)
+      await vi.advanceTimersToNextTimerAsync()
+      expect(send).not.toHaveBeenCalled()
+      expect(iq).toHaveBeenCalledTimes(1)
+      visible = true
+      iq.mockImplementation(async () => parse(replayFixture.disco))
+      await markers.viewed(replayFixture.room, captured.row, () => visible)
+      expect(send).toHaveBeenCalledTimes(1)
+    } finally { peer.cancelPending() }
+  })
+
+  it('accepts a fresh view after another runtime replaces the queued generation', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const captured = useCapturedSelfReading(replayFixture)
+    expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(true)
+    iq.mockRejectedValueOnce(new Error('Discovery timeout')).mockImplementation(async () => parse(replayFixture.disco))
+    await markers.viewed(replayFixture.room, captured.row, () => true)
+    localStorage.removeItem(consentKey)
+    const peer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      expect(await peer.setRoomEnabled(replayFixture.room, true)).toBe(true)
+      vi.setSystemTime(Date.now() + ROOM_MARKER_DISCOVERY_RETRY_DELAYS[0])
+      await markers.viewed(replayFixture.room, captured.row, () => true)
+      expect(send).toHaveBeenCalledTimes(1)
+    } finally { peer.cancelPending() }
+  })
+
+  it('retries the original discovery generation without recapturing it', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const captured = useCapturedSelfReading(replayFixture)
+    expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(true)
+    const boundary = vi.spyOn(markers, 'captureReplayBoundary')
+    iq.mockRejectedValueOnce(new Error('Discovery timeout')).mockImplementation(async () => parse(replayFixture.disco))
+    let published!: () => void
+    const wire = new Promise<void>(resolve => { published = resolve })
+    send.mockImplementation(async (_stanza, beforeWrite) => { beforeWrite?.(); published() })
+    await markers.viewed(replayFixture.room, captured.row, () => true)
+    await vi.advanceTimersToNextTimerAsync()
+    await wire
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(boundary).toHaveBeenCalledTimes(1)
   })
 
   it.each(['normal', 'early timer', 'backward wall clock'] as const)('retains badges and retries discovery with %s without another presence', async clock => {

@@ -3,6 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parse } from 'ltx'
 import type { Element } from '@xmpp/client'
 import { MAM } from './MAM'
+import { setupRoomSideEffects } from '../roomSideEffects'
+import { setupBackgroundSyncSideEffects } from '../backgroundSync'
+import { createMockClient, simulateFreshSession } from '../sideEffects.testHelpers'
+import { roomStore } from '../../stores/roomStore'
+import { connectionStore } from '../../stores/connectionStore'
+import { MAM_ROOM_CATCHUP_DELAY_MS } from '../../utils/mamCatchUpUtils'
 import { RoomReadMarkers, clearRoomReadMarkersLocalData, ROOM_READ_MARKERS_STORAGE_KEY, ROOM_MARKER_OCCUPANT_LIMIT } from './RoomReadMarkers'
 import fixture from './fixtures/roomReadReplay.json'
 import otherRoom from './fixtures/roomReadMarkers.json'
@@ -102,7 +108,7 @@ function harness(block?: 'discovery' | 'archive', self = false) {
 }
 
 beforeEach(() => { localStorage.clear(); setStorageScopeJid('bob@localhost') })
-afterEach(() => { setStorageScopeJid(null); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+afterEach(() => { setStorageScopeJid(null); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); roomStore.getState().reset(); connectionStore.getState().reset() })
 
 describe('room read positions after cached reconnect', () => {
   it.each(['cached preview', 'refresh preview', 'by ID', 'locate', 'cached catch-up', 'partial clear'] as const)('does not restore a self watermark from pre-clear %s work', async path => {
@@ -371,6 +377,46 @@ describe('room read positions after cached reconnect', () => {
     expect(h.archiveRequests().map(iq => iq.attrs.to)).toEqual([firstRoom.jid, fixture.room])
     expect(origin).toHaveBeenCalledTimes(1)
     expect(localStorage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify(['alice@localhost', 'watermarks'])}`)).toBeNull()
+  })
+
+  it.each([['activation', false], ['activation', true], ['join', false], ['join', true], ['fresh-session', false], ['fresh-session', true]] as const)('carries the production %s cache-read origin into own watermark intake (cleared: %s)', async (path, cleared) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    const h = harness(undefined, true)
+    roomStore.getState().reset()
+    connectionStore.getState().reset()
+    h.room.supportsMAM = true
+    roomStore.getState().addRoom(h.room)
+    const client = createMockClient()
+    if (path === 'activation') client.isConnected.mockReturnValue(false)
+    Object.assign(client.internal.mam, {
+      captureRoomReplay: h.mam.captureRoomReplay.bind(h.mam),
+      catchUpRoomHistory: h.mam.catchUpRoomHistory.bind(h.mam),
+    })
+    let release!: () => void
+    let reached!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const entered = new Promise<void>(resolve => { reached = resolve })
+    const load = roomStore.getState().loadMessagesFromCache
+    roomStore.setState({ loadMessagesFromCache: async () => { reached(); await gate; return [h.target] } })
+    if (path === 'join') roomStore.getState().setActiveRoom(fixture.room)
+    connectionStore.getState().setServerInfo({ identities: [], domain: 'localhost', features: [MAM_NS] })
+    const cleanup = path === 'fresh-session' ? setupBackgroundSyncSideEffects(client) : setupRoomSideEffects(client)
+    const replayed = h.nextReplay()
+    try {
+      simulateFreshSession(client)
+      client._emitSDK('room:joined', { roomJid: fixture.room, joined: true })
+      if (path === 'activation') roomStore.getState().setActiveRoom(fixture.room)
+      if (path === 'fresh-session') await vi.advanceTimersByTimeAsync(MAM_ROOM_CATCHUP_DELAY_MS)
+      await entered
+      if (cleared) expect(await clearRoomReadMarkersLocalData('alice@localhost')).toBe(true)
+      client.isConnected.mockReturnValue(true)
+      release()
+      await replayed
+      const saved = JSON.parse(localStorage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify(['alice@localhost', 'watermarks'])}`) ?? 'null')
+      if (cleared) expect(saved).toBeNull()
+      else expect(saved?.sent?.[fixture.room]?.archiveId).toBe(h.target.stanzaId)
+      expect(h.deps.sendStanza).not.toHaveBeenCalled()
+    } finally { release(); cleanup(); roomStore.setState({ loadMessagesFromCache: load }); h.markers.cancelPending() }
   })
 
 
