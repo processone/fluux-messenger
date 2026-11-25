@@ -18,8 +18,8 @@ export function RoomReadSharing({ markers, roomJid }: { markers: Pick<RoomReadMa
     <div className="space-y-2">
       <SettingsRow label={label} description={t('readMarkers.roomDescription')}>
         <Toggle checked={checked} aria-label={label}
-          onChange={enabled => {
-            const saved = markers.setRoomEnabled(roomJid, enabled)
+          onChange={async enabled => {
+            const saved = await markers.setRoomEnabled(roomJid, enabled)
             setSaveFailed(saved === false)
           }} />
       </SettingsRow>

@@ -41,12 +41,19 @@ async function openRoom(page: Page, width: number, scan = false, virtualized = f
       body,
       mentions: undefined, isMention: false, isEdited: false,
     })
-    scope.__demoClient.roomReadMarkers.setRoomEnabled(roomJid, true)
     await scope.__demoClient.simulateRoomDisplayed(roomJid, readers[0].occupantId!, prior.stanzaId)
     return { shortBody, prior: prior.stanzaId, id: old.id, old: old.stanzaId, next: next.stanzaId, history: rows.map(row => ({ id: row.id, stanzaId: row.stanzaId! })), self: room.occupants.get(room.nickname)!.occupantId!, names: readers.map(reader => reader.nick), actors: readers.map(reader => reader.occupantId!), actor: readers[0].occupantId! }
   }, { roomJid: LAUNCH_ROOM, body: paragraphs[0].body })
   await expect(page.locator(`[data-message-list] [data-message-row-id][data-stanza-id="${fixture.old}"]`)).toBeVisible()
   await expect(page.locator('[data-virtualizer-spacer]')).toHaveCount(virtualized ? 1 : 0)
+  await expect(page.locator('[data-read-marker-row]')).toHaveCount(0)
+  await page.getByTestId('room-info-area').getByRole('button').click()
+  const sharing = page.getByRole('switch', { name: 'Share my read position in this room', exact: true })
+  await expect(sharing).toHaveAttribute('aria-checked', 'false')
+  await sharing.focus()
+  await sharing.press('Space')
+  await expect(sharing).toHaveAttribute('aria-checked', 'true')
+  await page.keyboard.press('Escape')
   return fixture
 }
 
@@ -271,6 +278,7 @@ for (const virtualized of [false, true]) {
     await nextMarker.getByRole('button').click()
     await page.evaluate(roomJid => (window as unknown as Scope).__demoClient.roomReadMarkers.setRoomEnabled(roomJid, false), LAUNCH_ROOM)
     await expect(dialog).toHaveCount(0)
+    await expect(page.locator('[data-message-list]')).toBeFocused()
     await expect(page.locator('[data-read-marker-row]')).toHaveCount(0)
     await page.evaluate(roomJid => (window as unknown as Scope).__demoClient.roomReadMarkers.setRoomEnabled(roomJid, true), LAUNCH_ROOM)
     await expect(nextMarker).toBeVisible()

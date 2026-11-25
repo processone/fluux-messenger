@@ -17,7 +17,7 @@ function source(sharing = true) {
   return {
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     isEnabledFor: (jid: string) => rooms.includes(jid),
-    setRoomEnabled: (jid: string, enabled: boolean) => {
+    setRoomEnabled: async (jid: string, enabled: boolean) => {
       rooms = [...rooms.filter(value => value !== jid), ...(enabled ? [jid] : [])]; notify(); return true
     },
     readers: (_room: string, row: MessageRowRef) => badges.get(row.id) ?? empty,
@@ -45,7 +45,7 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ i18n: { language: 'en
 
 describe('room read-marker controls', () => {
   // Source: the approved one-switch contract. SDK tests own persistence and migration.
-  it('uses one off-by-default room switch to opt in and out', () => {
+  it('uses one off-by-default room switch to opt in and out', async () => {
     const markers = source(false)
     render(<RoomReadSharing markers={markers} roomJid={room} />)
     const picked = screen.getByRole('switch', { name: 'Share my read position in this room' })
@@ -57,11 +57,11 @@ describe('room read-marker controls', () => {
     expect(picked).toHaveAttribute('aria-checked', 'false')
   })
 
-  it('reports a failed room consent save instead of suggesting sharing is enabled', () => {
-    const markers = { ...source(false), setRoomEnabled: () => false }
+  it('reports a failed room consent save instead of suggesting sharing is enabled', async () => {
+    const markers = { ...source(false), setRoomEnabled: async () => false }
     render(<RoomReadSharing markers={markers} roomJid={room} />)
     fireEvent.click(screen.getByRole('switch', { name: 'Share my read position in this room' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('Could not save this choice. Sharing stays off.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save this choice. Sharing stays off.')
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
   })
 

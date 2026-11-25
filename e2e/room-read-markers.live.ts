@@ -1,13 +1,14 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
+import { generateKey, createMessage, encrypt } from 'openpgp'
 // @ts-expect-error @xmpp/client has no published declarations.
 import { client as xmppClient, xml } from '@xmpp/client'
 import { test, expect, type Browser, type BrowserContext, type ConsoleMessage, type Page } from '@playwright/test'
 
 // Intent: issue #1453's approved room-only contract. Two actual application
 // sessions, actual server discovery, reflected identities and archived markers.
-// The control peers provision only this disposable server; they never simulate
-// an app's read, focus, opt-out or nick-change action.
+// Control peers supply room setup, encrypted packets, private sync and occupant
+// sessions. The app still owns viewing, focus, opt-out and nickname changes.
 //
 // FLUUX_LIVE_APP=http://localhost:5173 FLUUX_LIVE_ACCOUNTS=/path/accounts.json \
 // FLUUX_LIVE_EVIDENCE=/path/evidence npx playwright test --config e2e/playwright.room-read-live.config.ts
@@ -123,17 +124,17 @@ async function peer(name: 'alice' | 'bob') {
   await client.start()
   return client
 }
-async function joinControl(client: Awaited<ReturnType<typeof peer>>, jid: string) {
+async function joinControl(client: Awaited<ReturnType<typeof peer>>, jid: string, nick = 'Setup') {
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => { client.off('stanza', handler); reject(new Error('Control room join did not complete')) }, 15_000)
     const handler = (stanza: ReturnType<typeof xml>) => {
-      if (stanza.attrs.from !== `${jid}/Setup` || !stanza.is('presence')) return
+      if (stanza.attrs.from !== `${jid}/${nick}` || !stanza.is('presence')) return
       if (stanza.attrs.type === 'error') { clearTimeout(timer); client.off('stanza', handler); reject(new Error('Control room join refused')); return }
       if (!stanza.getChild('x', `${MUC}#user`)?.getChildren('status').some((status: ReturnType<typeof xml>) => status.attrs.code === '110')) return
       clearTimeout(timer); client.off('stanza', handler); resolve()
     }
     client.on('stanza', handler)
-    void client.send(xml('presence', { to: `${jid}/Setup` }, xml('x', { xmlns: MUC }))).catch(reject)
+    void client.send(xml('presence', { to: `${jid}/${nick}` }, xml('x', { xmlns: MUC }))).catch(reject)
   })
 }
 async function bookmark(client: Awaited<ReturnType<typeof peer>>, room: string, name: string, nick: string, remove = false) {
@@ -198,6 +199,7 @@ test('two real clients share only opted-in focused reading, keep identity and re
   const publicRoom = `public-${roomId()}@conference.localhost`
   const otherRoom = `other-${roomId()}@conference.localhost`
   const clients: App[] = []
+  const crowd: Awaited<ReturnType<typeof peer>>[] = []
   try {
     await provision(owner, room, title, false)
     await provision(owner, publicRoom, publicTitle, true)
@@ -361,15 +363,89 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await expect(alice.page.getByRole('switch', { name: 'Share my read position in this room', exact: true })).toHaveAttribute('aria-checked', 'false')
     await alice.page.keyboard.press('Escape')
 
-    // Repeated room opt-out must also stop a later focused advance.
+    const archiveId = async (needle: string) => {
+      const frame = alice.received.find(frame => frame.startsWith('<message') && frame.includes(needle))
+      if (!frame) throw new Error('Expected incoming room packet was not received')
+      return alice.page.evaluate(({ frame, room }) => {
+        const packet = new DOMParser().parseFromString(frame, 'application/xml')
+        const id = Array.from(packet.getElementsByTagNameNS('urn:xmpp:sid:0', 'stanza-id'))
+          .find(item => item.getAttribute('by') === room)?.getAttribute('id')
+        if (!id) throw new Error('Expected incoming room packet has no room archive ID')
+        return id
+      }, { frame, room })
+    }
+    // These are real incoming encrypted and private-sync packets, not viewport stand-ins.
     await openRoom(alice); await roomConsent(alice, true, 'room-details-reenabled')
-    await roomConsent(alice, false)
     await openRoom(bob)
-    const stoppedAgain = displayed(alice).length
-    await say(bob, 'The room switch stops sharing again')
+    const resumedId = await archiveId(content[2])
+    await expect.poll(() => displayed(alice).some(frame => frame.includes(resumedId))).toBe(true)
+    const encryptedHeld = displayed(alice).length
+    const { publicKey } = await generateKey({ type: 'ecc', curve: 'curve25519Legacy',
+      userIDs: [{ name: 'Disposable room proof' }], format: 'object' })
+    const ciphertext = await encrypt({ message: await createMessage({ text: 'Private room reading proof' }), encryptionKeys: publicKey, format: 'binary' })
+    const encryptedId = randomUUID()
+    await joinControl(member, room, 'EncryptedSender')
+    await member.send(xml('message', { type: 'groupchat', to: room, id: encryptedId },
+      xml('body', {}, '[OpenPGP-encrypted message]'),
+      xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'urn:xmpp:openpgp:0', name: 'OpenPGP' }),
+      xml('openpgp', { xmlns: 'urn:xmpp:openpgp:0' }, Buffer.from(ciphertext).toString('base64'))))
     await alice.page.bringToFront()
-    await expect(alice.page.locator('[data-message-body]').filter({ hasText: 'The room switch stops sharing again' })).toBeInViewport()
-    await noPublication(alice, stoppedAgain, 'room-opt-out-again')
+    await expect.poll(() => alice.received.some(frame => frame.includes(encryptedId))).toBe(true)
+    const encryptedRow = alice.page.locator(`[data-stanza-id="${await archiveId(encryptedId)}"]`)
+    await expect(encryptedRow).toBeInViewport()
+    await expect(encryptedRow).toContainText(/encrypted/i)
+    await noPublication(alice, encryptedHeld, 'encrypted-row')
+    await member.send(xml('presence', { to: `${room}/EncryptedSender`, type: 'unavailable' }))
+    await expect.poll(() => alice.received.some(frame => frame.includes(`${room}/EncryptedSender`) && /type=['"]unavailable['"]/.test(frame))).toBe(true)
+
+    await openRoom(alice, otherTitle)
+    const syncHeld = displayed(alice).length
+    const syncBody = 'Another device read this private room message'
+    await bob.page.bringToFront(); await say(bob, syncBody)
+    await expect.poll(() => alice.received.some(frame => frame.includes(syncBody))).toBe(true)
+    const unread = alice.page.locator(`[data-room-jid="${room}"]`).getByRole('img', { name: /unread message/ })
+    await expect(unread).toBeVisible()
+    const mds = 'urn:xmpp:mds:displayed:0'
+    const syncId = await archiveId(syncBody)
+    await owner.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB },
+      xml('publish', { node: mds }, xml('item', { id: room }, xml('displayed', { xmlns: mds },
+        xml('stanza-id', { xmlns: 'urn:xmpp:sid:0', by: room, id: syncId })))))))
+    await expect.poll(() => alice.received.some(frame => frame.includes(mds) && frame.includes(syncId))).toBe(true)
+    await expect(unread).toHaveCount(0)
+    await noPublication(alice, syncHeld, 'incoming-private-sync')
+    await openRoom(alice)
+    await expect.poll(() => displayed(alice).some(frame => frame.includes(syncId))).toBe(true)
+
+    // Occupants are actual sessions on the disposable service; discovery must agree with the live roster.
+    for (let i = 1; i <= 17; i++) {
+      const client = await peer('alice'); crowd.push(client)
+      await joinControl(client, room, `Crowd${i}`)
+    }
+    await expect.poll(() => alice.received.some(frame => frame.includes(`${room}/Crowd17`))).toBe(true)
+    const readCount = async () => {
+      const reply = await owner.iqCaller.request(xml('iq', { type: 'get', to: room }, xml('query', { xmlns: DISCO })))
+      const count = reply.getChild('query', DISCO)?.getChild('x', DATA)?.getChildren('field')
+        .find((field: ReturnType<typeof xml>) => field.attrs.var === 'muc#roominfo_occupants')?.getChildText('value')
+      return { count: Number(count), stanza: reply.toString() }
+    }
+    const at19 = await readCount()
+    expect(at19.count).toBe(19)
+    const nineteenHeld = displayed(alice).length
+    await bob.page.bringToFront(); await say(bob, 'Nineteen occupants may share reading')
+    await alice.page.bringToFront()
+    await expect(alice.page.locator('[data-message-body]').filter({ hasText: 'Nineteen occupants may share reading' })).toBeInViewport()
+    await expect.poll(() => displayed(alice).length).toBeGreaterThan(nineteenHeld)
+    const twentieth = await peer('alice'); crowd.push(twentieth)
+    await joinControl(twentieth, room, 'Crowd18')
+    await expect.poll(() => alice.received.some(frame => frame.includes(`${room}/Crowd18`))).toBe(true)
+    const at20 = await readCount()
+    expect(at20.count).toBe(20)
+    const twentyHeld = displayed(alice).length
+    await bob.page.bringToFront(); await say(bob, 'Twenty occupants must not share reading')
+    await alice.page.bringToFront()
+    await expect(alice.page.locator('[data-message-body]').filter({ hasText: 'Twenty occupants must not share reading' })).toBeInViewport()
+    await noPublication(alice, twentyHeld, 'twenty-occupants')
+    if (evidence) writeFileSync(`${evidence}/room-read-eligibility-and-sync.json`, JSON.stringify({ at19, at20, encryptedArchiveId: await archiveId(encryptedId), privateSyncArchiveId: syncId }, null, 2))
     const disco = await owner.iqCaller.request(xml('iq', { type: 'get', to: room }, xml('query', { xmlns: DISCO })))
     const publicDisco = await owner.iqCaller.request(xml('iq', { type: 'get', to: publicRoom }, xml('query', { xmlns: DISCO })))
     if (evidence) {
@@ -380,6 +456,7 @@ test('two real clients share only opted-in focused reading, keep identity and re
       }, null, 2))
     }
   } finally {
+    await Promise.allSettled(crowd.map(client => client.stop()))
     for (const client of clients) {
       await client.context.close()
       if (videoDir && client.page.video()) {
