@@ -99,6 +99,7 @@ export const MessageToolbar = memo(function MessageToolbar({
   const { t } = useTranslation()
   const [actionFocused, setActionFocused] = useState(false)
   const [pointerPressed, setPointerPressed] = useState(false)
+  const pressedPointerId = useRef<number | null>(null)
   // A pressed control must stay visible when layout moves it away from a stationary pointer.
   useEffect(() => {
     if (!pointerPressed) return
@@ -200,6 +201,15 @@ export const MessageToolbar = memo(function MessageToolbar({
     // the surrounding padding stays inert so underlying text remains selectable.
     <div
       data-message-toolbar
+      onPointerDownCapture={event => {
+        if (event.button === 0 && event.isPrimary) pressedPointerId.current = event.pointerId
+      }}
+      onPointerCancelCapture={event => {
+        if (event.pointerId === pressedPointerId.current) {
+          pressedPointerId.current = null
+          setPointerPressed(false)
+        }
+      }}
       onMouseDownCapture={event => {
         setPointerPressed(event.button === 0)
         keyboardFocus.current = false

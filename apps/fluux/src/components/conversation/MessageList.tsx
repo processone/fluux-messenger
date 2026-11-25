@@ -76,7 +76,7 @@ import { VirtualRowSizeHistory } from './virtualRowGrowth'
 import { Loader2, ChevronUp, ChevronDown, MessageCircle } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
-import { findResidentRowIndex, lastVisibleRowId, messageRowId, messageRowKey, messageRowKeys } from './messageRowIdentity'
+import { findResidentRowIndex, lastVisibleRowId, messageRowId, messageRowKey, messageRowKeys, messageRowReceipt } from './messageRowIdentity'
 import { useArrivalJump } from './useArrivalJump'
 import { ForwardMessageProvider } from './forwardMessageContext'
 
@@ -807,6 +807,8 @@ export function MessageList<T extends BaseMessage>({
             data-message-id={msg.id}
             data-message-row-id={rowId}
             data-message-row-key={rowKeys.get(msg)}
+            data-message-from={msg.from}
+            data-message-received-at={messageRowReceipt(msg)}
             data-message-row-alias={msg.localRowRef && messageRowId(msg.localRowRef)}
             data-stanza-id={msg.stanzaId}
             data-origin-id={msg.originId}
@@ -981,6 +983,8 @@ export function MessageList<T extends BaseMessage>({
                     data-message-id={msg.id}
                     data-message-row-id={rowId}
                     data-message-row-key={rowKeys.get(msg)}
+                    data-message-from={msg.from}
+                    data-message-received-at={messageRowReceipt(msg)}
                     data-message-row-alias={msg.localRowRef && messageRowId(msg.localRowRef)}
                     data-stanza-id={msg.stanzaId}
                     data-origin-id={msg.originId}

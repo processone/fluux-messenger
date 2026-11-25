@@ -1,4 +1,5 @@
-import { findMessageRowIndex, messageRowRef, matchesMessageRowAlias, type MessageRowRef } from '@fluux/sdk'
+import { findMessageRowIndex, messageRowRef, matchesMessageRowAlias, isMessageRow, type MessageRowRef } from '@fluux/sdk'
+import type { MessageRowOccurrence } from './scrollPositionModel'
 import type { WrapIdentity } from '@/stores/wrappedCodeBlocksStore'
 
 const OCCUPANT_ROW_PREFIX = 'occupant-row:'
@@ -51,8 +52,13 @@ export function messageRowId(message: Omit<Parameters<typeof messageRowRef>[0], 
 export function messageRowKey(message: Parameters<typeof messageRowId>[0] & { timestamp?: Date; receivedAt?: Date }): string | undefined {
   const rowId = messageRowId(message)
   if (!rowId || message.type !== 'groupchat' || message.stanzaId) return rowId
+  const instant = messageRowReceipt(message)
+  return instant ? `${rowId}@${instant}` : rowId
+}
+
+export function messageRowReceipt(message: { receivedAt?: Date; timestamp?: Date }): string | undefined {
   const instant = message.receivedAt ?? message.timestamp
-  return instant ? `${rowId}@${instant.getTime()}` : rowId
+  return instant ? String(instant.getTime()) : undefined
 }
 
 /**
@@ -192,6 +198,32 @@ function cssString(value: string): string {
 /** Mount keys distinguish room occurrences that legitimately share a presentation handle. */
 export function findMessageRowByKey(root: ParentNode, key: string): HTMLElement | null {
   return root.querySelector<HTMLElement>(`[data-message-row-key=${cssString(key)}]`)
+}
+
+export function captureMessageRowOccurrence(row: HTMLElement): MessageRowOccurrence | undefined {
+  const rowId = readMessageRowId(row)
+  const { messageFrom: from, messageReceivedAt: receivedAt } = row.dataset
+  return rowId && from && receivedAt ? { rowId, from, receivedAt } : undefined
+}
+
+export function findMessageRowOccurrence(root: ParentNode, key: string, occurrence?: MessageRowOccurrence): HTMLElement | null {
+  const exact = findMessageRowByKey(root, key)
+  if (exact || !occurrence) return exact
+  const ref = messageRowRefFromRowId(occurrence.rowId)
+  const matches = (row: HTMLElement) => {
+    const rowId = readMessageRowId(row)
+    if (!rowId || row.dataset.messageReceivedAt !== occurrence.receivedAt) return false
+    const candidate = messageRowRefFromRowId(rowId)
+    const alias = row.dataset.messageRowAlias ? messageRowRefFromRowId(row.dataset.messageRowAlias) : undefined
+    const qualifiedIdentity = ref.occupantId && candidate.occupantId === ref.occupantId ||
+      ref.stanzaId && candidate.stanzaId === ref.stanzaId ||
+      matchesMessageRowAlias(alias, ref) && !!(ref.occupantId || ref.stanzaId || ref.originId)
+    if (row.dataset.messageFrom !== occurrence.from && !qualifiedIdentity) return false
+    return isMessageRow({ ...candidate, originId: candidate.originId ?? row.dataset.originId, localRowRef: alias }, ref)
+  }
+  // Archive enrichment can rename a mount key; receipt and qualified aliases must still name one occurrence.
+  const candidates = messageRowElements(root).filter(matches)
+  return candidates.length === 1 ? candidates[0] : null
 }
 
 /** Accepts a presentation handle; normalize literal IDs with {@link messageTargetRowId} first. */

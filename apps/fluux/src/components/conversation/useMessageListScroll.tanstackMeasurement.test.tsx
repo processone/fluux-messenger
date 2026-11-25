@@ -77,6 +77,7 @@ function fixture() {
   const loadOlder = vi.fn()
   const loadNewer = vi.fn()
   const liveEdgeMeasurements = vi.fn()
+  const typingBandRef = React.createRef<HTMLDivElement>()
 
   function Harness() {
     const scrollRef = React.useRef<HTMLDivElement | null>(null)
@@ -84,7 +85,7 @@ function fixture() {
     const currentApi = useMessageListScroll({
       conversationId: 'room', messageCount: rows.length,
       firstMessageId: rows[0].rowId, lastMessageId: rows.at(-1)!.rowId,
-      rowGrowthSignature: '', windowAtLiveEdge: true, virtualizer: currentVirtualizer,
+      rowGrowthSignature: '', windowAtLiveEdge: true, virtualizer: currentVirtualizer, typingBandRef,
       onScrollToTop: loadOlder, onLoadNewer: loadNewer, onLiveEdgeMeasured: liveEdgeMeasurements,
     })
     const setContainer = currentApi.setScrollContainerRef
@@ -110,7 +111,7 @@ function fixture() {
       setContainer(node)
     }, [setContainer])
     React.useLayoutEffect(() => { virtualizer = currentVirtualizer; api = currentApi })
-    return <div ref={setScroller} data-message-list onScroll={event => {
+    return <><div ref={setScroller} data-message-list onScroll={event => {
       scrollEvents.push(event.currentTarget.scrollTop)
       currentApi.handleScroll(event)
     }}>
@@ -123,14 +124,14 @@ function fixture() {
             currentVirtualizer.measureElement(node)
           }} />)}
       </div>
-    </div>
+    </div><div ref={typingBandRef} data-typing-band /></>
   }
 
   const view = render(<Harness />)
   settle()
   expect(scroller.scrollTop).toBe(4700)
   return {
-    rows, writes, scrollEvents, loadOlder, loadNewer, liveEdgeMeasurements, scroller, totalHeight,
+    rows, writes, scrollEvents, loadOlder, loadNewer, liveEdgeMeasurements, scroller, totalHeight, typingBand: typingBandRef.current!,
     get virtualizer() { return virtualizer },
     get api() { return api },
     move: (value: number, deliver = false) => {
@@ -168,6 +169,23 @@ function fixture() {
     unmount: view.unmount,
   }
 }
+
+it('measures typing space during a hold, not ordinary layout reconciliation', () => {
+  const scope = fixture()
+  const measureBand = vi.spyOn(scope.typingBand, 'getBoundingClientRect')
+  scope.resizeViewport(280)
+  scope.measure([[49, 140]], 'resize')
+  scope.mediaLoad()
+  scope.beginMediaCorrection()
+  settle()
+  expect(measureBand).not.toHaveBeenCalled()
+  act(() => { expect(scope.api.beginInteractionHold(scope.rows[48].rowId)).toBe(true) })
+  settle()
+  measureBand.mockClear()
+  scope.resizeViewport(260)
+  settle()
+  expect(measureBand).toHaveBeenCalled()
+})
 
 // Native navigation wins even when compositor pixels precede the application's scroll event.
 it('observes native movement before resuming a disengaged message hold', () => {

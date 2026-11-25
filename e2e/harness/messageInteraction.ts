@@ -261,14 +261,14 @@ export interface InteractionLayoutFrame {
 }
 
 export async function sampleInteractionLayout(page: Page, elements: {
-  row: Locator; control: Locator; tail?: Locator; panel?: Locator
+  row: Locator; control: Locator; tail?: Locator; tailText?: string; panel?: Locator
 }, action: () => Promise<unknown>): Promise<InteractionLayoutFrame[]> {
   const handles = {
     row: await elements.row.elementHandle(), control: await elements.control.elementHandle(),
     tail: await elements.tail?.elementHandle() ?? null, panel: await elements.panel?.elementHandle() ?? null,
   }
   try {
-    await page.evaluate(({ row, control, tail, panel }) => {
+    await page.evaluate(({ row, control, tail, tailText, panel }) => {
       if (!row || !control) throw new Error('Missing layout observation target')
       const list = row.closest('[data-message-list]')!
       const scope = window as Window & { __interactionLayoutFrames?: InteractionLayoutFrame[]; __interactionLayoutFrame?: number }
@@ -278,16 +278,18 @@ export async function sampleInteractionLayout(page: Page, elements: {
         return { top, bottom, left, right, width, height }
       }
       const tick = () => {
-        scope.__interactionLayoutFrames!.push({ row: box(row), control: box(control), tail: tail ? box(tail) : null,
+        const currentTail = tail?.isConnected ? tail : tailText ? [...list.querySelectorAll('.message-row')]
+          .find(candidate => candidate.querySelector('[data-msg-text]')?.textContent?.trim() === tailText) : null
+        scope.__interactionLayoutFrames!.push({ row: box(row), control: box(control), tail: currentTail ? box(currentTail) : null,
           panel: panel ? box(panel) : null, viewport: box(list),
           bandHeight: list.parentElement!.querySelector('[data-typing-band]')!.getBoundingClientRect().height,
           toolbarOpacity: Number(getComputedStyle(row.querySelector('[data-message-toolbar]')!).opacity),
           scrollTop: list.scrollTop, held: list.getAttribute('data-message-interaction'),
-          connected: row.isConnected && control.isConnected && (!tail || tail.isConnected) })
+          connected: row.isConnected && control.isConnected && (!tail || !!currentTail?.isConnected) })
         scope.__interactionLayoutFrame = requestAnimationFrame(tick)
       }
       tick()
-    }, handles)
+    }, { ...handles, tailText: elements.tailText })
     try { await action() }
     finally {
       await page.evaluate(() => {

@@ -9,7 +9,7 @@ import type { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorB
 import { deriveReachabilityForDesired } from './scrollPositionFacts'
 import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
 import { getComposedActiveElement } from '@/hooks/composedFocus'
-import { findMessageRowElement, findMessageRowByKey } from './messageRowIdentity'
+import { findMessageRowElement, findMessageRowOccurrence } from './messageRowIdentity'
 
 /** Distinguishes fixed-anchor stimuli in frame-loop diagnostics. */
 export type AnchorPreservationLoopLabel =
@@ -123,7 +123,7 @@ export class AnchorPreservationBrowserAdapter {
       const rowGrowth = rowHeightPx === undefined ? 0 : Math.max(0, row.getBoundingClientRect().height - rowHeightPx)
       let clearance = 0
       if (typingClearance && (typingClearance.currentBandHeightPx > 0 || typingClearance.currentBandHeightPx !== typingClearance.bandHeightPx)) {
-        const { controlTopPx, controlBottomPx, tailRowKey } = typingClearance
+        const { controlTopPx, controlBottomPx, tailRowKey, tailOccurrence } = typingClearance
         const bubbleTop = bubble.getBoundingClientRect().top
         const baselineTop = offsetPx - rowGrowth
         const panel = row.querySelector<HTMLElement>('[data-message-panel]')
@@ -135,7 +135,7 @@ export class AnchorPreservationBrowserAdapter {
         // The active control wins if the old tail and the control cannot fit together.
         const upper = Math.max(0, activeTop)
         clearance = Math.max(0, activeBottom - scroller.clientHeight)
-        const tail = tailRowKey ? findMessageRowByKey(scroller, tailRowKey) : null
+        const tail = tailRowKey ? findMessageRowOccurrence(scroller, tailRowKey, tailOccurrence) : null
         const tailRect = tail?.getBoundingClientRect()
         const tailBottom = tailRect ? baselineTop + tailRect.bottom - bubbleTop : null
         if (tailRect && tailRect.height <= scroller.clientHeight && tailBottom !== null && tailBottom - scroller.clientHeight <= upper) {

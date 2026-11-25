@@ -22,7 +22,7 @@ import { render } from '@testing-library/react'
 import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import type { BaseMessage, RoomMessage } from '@fluux/sdk'
 import { roomMessageFixture } from '@/test-utils/roomMessages'
-import { findMessageRowElement, findMessageRowByKey, messageRowId } from './messageRowIdentity'
+import { findMessageRowElement, findMessageRowByKey, captureMessageRowOccurrence, findMessageRowOccurrence, messageRowId } from './messageRowIdentity'
 import { scrollStateManager } from '@/utils/scrollStateManager'
 
 vi.mock('react-i18next', () => ({
@@ -268,6 +268,28 @@ describe('MessageList — row keys resilient to id-less messages', () => {
     expect(new Set(keys).size).toBe(2)
     expect(findMessageRowByKey(container, keys[1])).toBe(rows[1])
     expect(errorSpy.mock.calls.some((args) => args.some((arg) => typeof arg === 'string' && KEY_WARNING.test(arg)))).toBe(false)
+  })
+
+  it('retains the captured occurrence across archive enrichment and a qualified echo alias', () => {
+    const stamp = new Date(2024, 0, 1, 12, 0)
+    const first = roomMessageFixture({ type: 'groupchat', roomJid: 'room@example.com', from: 'room@example.com/Peer', nick: 'Peer',
+      isOutgoing: false, id: 'reused', occupantId: 'same-author', stanzaId: undefined, originId: undefined,
+      body: 'Earlier checklist', timestamp: stamp, receivedAt: stamp })
+    const last = { ...first, body: 'Captured checklist', timestamp: new Date(stamp.getTime() + 60_000), receivedAt: new Date(stamp.getTime() + 60_000) }
+    const view = render(<MessageList messages={[first, last]} conversationId={first.roomJid} renderMessage={msg => <div>{msg.body}</div>} />)
+    const original = view.getByText(last.body).closest<HTMLElement>('.message-row')!
+    const key = original.dataset.messageRowKey!
+    const occurrence = captureMessageRowOccurrence(original)!
+    const archived = { ...last, id: 'echo-id', stanzaId: 'archive-tail', from: `${last.roomJid}/Renamed peer`, nick: 'Renamed peer',
+      timestamp: new Date(last.timestamp.getTime() + 250),
+      localRowRef: { id: last.id, occupantId: last.occupantId } }
+    const newest = { ...first, body: 'Newer checklist', timestamp: new Date(stamp.getTime() + 120_000), receivedAt: new Date(stamp.getTime() + 120_000) }
+    view.rerender(<MessageList messages={[first, archived, newest]} conversationId={first.roomJid} renderMessage={msg => <div>{msg.body}</div>} />)
+    const retained = view.getByText(last.body).closest<HTMLElement>('.message-row')!
+    expect(retained).toHaveAttribute('data-stanza-id', archived.stanzaId)
+    expect(findMessageRowOccurrence(view.container, key, occurrence)).toBe(retained)
+    view.rerender(<MessageList messages={[first, newest]} conversationId={first.roomJid} renderMessage={msg => <div>{msg.body}</div>} />)
+    expect(findMessageRowOccurrence(view.container, key, occurrence)).toBeNull()
   })
 
   it.each([undefined, 'same-author'])('renders distinct archive rows with reused client IDs and occupant %s', occupantId => {

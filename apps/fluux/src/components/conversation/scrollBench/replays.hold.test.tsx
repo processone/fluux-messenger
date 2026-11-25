@@ -45,6 +45,14 @@ function press(id: string) {
   bench.scroller.frames(3)
 }
 
+function crossFabBoundary(row: HTMLElement) {
+  const fab = bench.element().parentElement!.querySelector<HTMLElement>('[data-fab="scroll-to-bottom"]')!
+  fireEvent.mouseOut(row, { relatedTarget: fab })
+  fireEvent.mouseMove(fab, { clientX: 400, clientY: 500, movementX: 1 })
+  // Scripted frames advance fake timers too; the no-selection control proves the release bridge expires here.
+  bench.scroller.frames(20)
+}
+
 it('H1 the last message keeps its bottom in view when its reactions grow it under the pointer (47861d04)', () => {
   enterAtBottom()
   const s = bench.scroller
@@ -72,11 +80,25 @@ it('H2 an ongoing text selection keeps its row while crossing jump-to-latest (fd
   s.frames(10)
   expect(bench.distanceFromEnd(), 'held: the arrival does not pull the list').toBeGreaterThan(5)
 
-  const fab = bench.element().parentElement!.querySelector<HTMLElement>('[data-fab="scroll-to-bottom"]')!
-  fireEvent.mouseOut(row, { relatedTarget: fab })
-  fireEvent.mouseMove(fab, { clientX: 400, clientY: 500, movementX: 1 })
-  s.frames(20)
+  crossFabBoundary(row)
   bench.update({ messages: makeMessages(62) })
   s.frames(10)
-  expect(bench.distanceFromEnd(), 'still held: the pointer is on the button the hold revealed').toBeGreaterThan(5)
+  expect(bench.distanceFromEnd(), 'the selection retains the row past the ordinary release delay').toBeGreaterThan(5)
+})
+
+it('H3 a press without selection releases across the same jump-to-latest boundary', () => {
+  enterAtBottom()
+  const s = bench.scroller
+  const last = bench.mountedIds().at(-1)!
+  const row = bench.element().querySelector<HTMLElement>(`[data-message-row-id="${last}"]`)!
+  press(last)
+  bench.update({ messages: makeMessages(61) })
+  s.frames(10)
+  expect(bench.distanceFromEnd()).toBeGreaterThan(5)
+  crossFabBoundary(row)
+  expect(bench.element()).not.toHaveAttribute('data-message-interaction')
+  expect(bench.distanceFromEnd()).toBeLessThan(1)
+  bench.update({ messages: makeMessages(62) })
+  s.frames(10)
+  expect(bench.distanceFromEnd()).toBeLessThan(1)
 })

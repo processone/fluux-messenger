@@ -69,7 +69,7 @@ import {
 } from './scrollPositionModel'
 import { runScrollShadowSafely } from './scrollPositionShadow'
 import { findMessageTargetElement } from './messageTargetElement'
-import { findMessageRowElement, findMessageRowByKey, messageTargetRowId, readMessageRowId } from './messageRowIdentity'
+import { findMessageRowElement, findMessageRowByKey, captureMessageRowOccurrence, messageTargetRowId, readMessageRowId } from './messageRowIdentity'
 import { VirtualRowGrowthBatcher } from './virtualRowGrowth'
 import { layoutEvents, passiveEvents, planCommit, type CommitEvent, type CommitFacts } from './commitPlan'
 
@@ -866,13 +866,16 @@ export function useMessageListScroll({
     rememberCurrentScrollSnapshot,
   })
 
-  const reconcileInteractionHold = useCallback((controlBounds?: { topPx: number; bottomPx: number }) =>
-    positioningControllerRef.current?.reconcileInteractionHold({
+  const reconcileInteractionHold = useCallback((controlBounds?: { topPx: number; bottomPx: number }) => {
+    const controller = positioningControllerRef.current
+    if (!controller?.hasInteractionHold()) return false
+    return controller.reconcileInteractionHold({
       conversationId,
       typingBandHeight: typingBandRef?.current?.getBoundingClientRect().height,
       controlBounds,
       executor: createAnchorPreservationExecutor('interaction-anchor'),
-    }) ?? false, [conversationId, typingBandRef, createAnchorPreservationExecutor])
+    })
+  }, [conversationId, typingBandRef, createAnchorPreservationExecutor])
 
   const reconcileLiveEdge = useCallback((
     trigger: string,
@@ -1280,8 +1283,8 @@ export function useMessageListScroll({
             bandHeightPx: bandHeight, currentBandHeightPx: bandHeight,
             controlTopPx: controlRect.top - viewportRect.top,
             controlBottomPx: controlRect.bottom - viewportRect.top,
-            ...(wasAtLatest && lastMessageRowKey && tailRect && tailRect.height <= viewportRect.height && tailRect.bottom <= viewportRect.bottom + 1
-              ? { tailRowKey: lastMessageRowKey } : {}),
+            ...(wasAtLatest && lastMessageRowKey && tail && tailRect && tailRect.height <= viewportRect.height && tailRect.bottom <= viewportRect.bottom + 1
+              ? { tailRowKey: lastMessageRowKey, tailOccurrence: captureMessageRowOccurrence(tail) } : {}),
           },
         },
       },

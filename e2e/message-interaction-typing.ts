@@ -41,18 +41,34 @@ for (const kind of ['chat', 'room'] as const) for (const virtualized of [false, 
       target = page.locator(`.message-row[data-message-id="${id}"]`)
     }
     const id = await target.getAttribute('data-message-id') as string
+    await list.click({ position: { x: 5, y: 5 } })
+    const composer = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
+    await expect(composer).not.toBeFocused()
     await target.locator('[data-msg-text]').hover()
     await expect(list).not.toHaveAttribute('data-message-interaction')
     await waitForActions(page, id)
     const passiveBefore = await geometry(page, id)
-    await typing(page, kind, 'one')
-    await stableFrames(page, id)
-    const passiveTyping = await geometry(page, id)
-    expect(passiveTyping.held).toBeNull()
-    if (history) expect(passiveTyping.rowTop).toBeCloseTo(passiveBefore.rowTop, 0)
-    else expect(passiveTyping.tailBottom!).toBeLessThanOrEqual(passiveTyping.viewBottom + 1)
-    await typing(page, kind, 'off')
-    await stableFrames(page, id)
+    const passiveStates = []
+    for (const state of ['one', 'two', 'off'] as const) {
+      const frames = await sampleInteractionLayout(page, { row: target,
+        control: target.getByRole('button', { name: 'More options', exact: true }),
+        tail: history ? undefined : page.locator('.message-row[data-message-id="typing-tail"]') }, async () => {
+        await typing(page, kind, state)
+        await stableFrames(page, id)
+      })
+      await keepJson(`passive-${state}-frames`, frames)
+      await expect(composer).not.toBeFocused()
+      // Passive hover keeps ordinary following animation; held actions alone require per-frame clearance.
+      for (const frame of frames) expect(frame.held).toBeNull()
+      const settled = await geometry(page, id)
+      expect(settled.held).toBeNull()
+      if (history) expect(settled.rowTop).toBeCloseTo(passiveBefore.rowTop, 0)
+      else expect(settled.tailBottom!).toBeLessThanOrEqual(settled.viewBottom + 1)
+      passiveStates.push({ state, frames, geometry: settled })
+    }
+    expect(passiveStates[0].geometry.band).toBeGreaterThan(0)
+    expect(passiveStates[1].geometry.band).toBeGreaterThan(passiveStates[0].geometry.band)
+    expect(passiveStates[2].geometry.band).toBe(0)
     await target.locator('[data-msg-text]').hover()
     await waitForActions(page, id)
     const more = target.getByRole('button', { name: 'More options', exact: true })
@@ -112,7 +128,7 @@ for (const kind of ['chat', 'room'] as const) for (const virtualized of [false, 
     await expect(list).not.toHaveAttribute('data-message-interaction')
     if (history) expect(await distance(page)).toBeGreaterThan(100)
     else await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
-    await keepJson('typing-clearance', { kind, virtualized, history, id, passiveBefore, passiveTyping, before, one, two, stopped, oneFrames, twoFrames, stopFrames, read, finalDistance: await distance(page) })
+    await keepJson('typing-clearance', { kind, virtualized, history, id, passiveBefore, passiveStates, before, one, two, stopped, oneFrames, twoFrames, stopFrames, read, finalDistance: await distance(page) })
   })
 }
 
@@ -174,6 +190,18 @@ async function pressedPointerEvents(page: Page) {
   return page.evaluate(() => (window as Window & { __pressedPointerEvents?: unknown[] }).__pressedPointerEvents)
 }
 
+async function observeMessageActionClicks(page: Page) {
+    await page.evaluate(() => {
+      const scope = window as Window & { __pressedMessageClicks?: { id: string | null; label: string | null; trusted: boolean }[] }
+      scope.__pressedMessageClicks = []
+      document.addEventListener('click', event => {
+        const button = event.composedPath().find(node => node instanceof HTMLButtonElement) as HTMLButtonElement | undefined
+        const row = event.target instanceof Element ? event.target.closest('[data-message-row-id]') : null
+        if (button && row) scope.__pressedMessageClicks!.push({ id: row.getAttribute('data-message-id'), label: button.getAttribute('aria-label'), trusted: event.isTrusted })
+      }, true)
+    })
+}
+
 const pressedActions = [
   { name: 'Reply', result: 'reply' },
   { name: 'More options', result: 'more' },
@@ -189,15 +217,7 @@ for (const kind of ['chat', 'room'] as const) for (const virtualized of [false, 
     await row.locator('[data-msg-text]').hover()
     await waitForActions(page)
     const button = row.getByRole('button', { name: action.name, exact: true })
-    await page.evaluate(() => {
-      const scope = window as Window & { __pressedMessageClicks?: { id: string | null; label: string | null; trusted: boolean }[] }
-      scope.__pressedMessageClicks = []
-      document.addEventListener('click', event => {
-        const button = event.composedPath().find(node => node instanceof HTMLButtonElement) as HTMLButtonElement | undefined
-        const row = event.target instanceof Element ? event.target.closest('[data-message-row-id]') : null
-        if (button && row) scope.__pressedMessageClicks!.push({ id: row.getAttribute('data-message-id'), label: button.getAttribute('aria-label'), trusted: event.isTrusted })
-      }, true)
-    })
+    await observeMessageActionClicks(page)
     await observePressedPointerEvents(button)
     await button.hover()
     await page.mouse.down()
@@ -231,28 +251,35 @@ for (const kind of ['chat', 'room'] as const) for (const virtualized of [false, 
   })
 }
 
-for (const kind of ['chat', 'room'] as const) for (const cancellation of ['departure', 'wheel', 'escape', 'retraction'] as const) {
-  test(`${kind}: ${cancellation} cancels the original press after typing clearance`, async ({ page }) => {
+for (const kind of ['chat', 'room'] as const) for (const virtualized of [false, true]) for (const cancellation of ['departure', 'wheel', 'escape', 'retraction', 'pointercancel'] as const) {
+  test(`${kind} ${virtualized ? 'virtualized' : 'plain'}: ${cancellation} cancels the original press after typing clearance`, async ({ page }) => {
     await page.setViewportSize({ width: 800, height: 700 })
-    const { row, list } = await setupInteraction(page, kind, false, true, ACTION_LINK_BODY)
+    const { row, list } = await setupInteraction(page, kind, false, virtualized, ACTION_LINK_BODY)
     await arrive(page, kind, ['typing-tail'])
     await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
     await row.locator('[data-msg-text]').hover()
     await waitForActions(page)
     const more = row.getByRole('button', { name: 'More options', exact: true })
-    await more.evaluate(button => {
-      const scope = window as Window & { __cancelledPressClicks?: boolean[] }
-      scope.__cancelledPressClicks = []
-      button.addEventListener('click', event => scope.__cancelledPressClicks!.push(event.isTrusted))
-    })
+    await observeMessageActionClicks(page)
     await observePressedPointerEvents(more)
     await more.hover()
     await page.mouse.down()
+    await expect(list).toHaveAttribute('data-message-interaction')
     await typing(page, kind, 'two')
     await stableFrames(page, TARGET)
     if (cancellation === 'departure') await page.mouse.move(0, 0)
     else if (cancellation === 'wheel') await page.mouse.wheel(0, -100)
     else if (cancellation === 'escape') await page.keyboard.press('Escape')
+    else if (cancellation === 'pointercancel') {
+      const pointerId = await page.evaluate(() => {
+        const events = (window as Window & { __pressedPointerEvents?: { type: string; pointerId?: number }[] }).__pressedPointerEvents
+        const id = events?.find(event => event.type === 'pointerdown')?.pointerId
+        if (typeof id !== 'number') throw new Error('The real press did not provide a pointer identity')
+        return id
+      })
+      await more.dispatchEvent('pointercancel', { pointerId, pointerType: 'mouse', isPrimary: true, button: 0 })
+      await page.mouse.move(0, 0)
+    }
     else await page.evaluate(async kind => {
       const scope = window as unknown as InteractionStores
       const jid = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
@@ -261,11 +288,15 @@ for (const kind of ['chat', 'room'] as const) for (const cancellation of ['depar
     }, kind)
     await keepJson('cancellation-pointer-events', await pressedPointerEvents(page))
     await expect(list).not.toHaveAttribute('data-message-interaction')
+    if (cancellation === 'pointercancel') {
+      try { await expect(row.locator('[data-message-toolbar]')).toHaveCSS('opacity', '0') }
+      finally { await page.screenshot({ path: test.info().outputPath('pointer-cancellation.png') }) }
+    }
     await page.mouse.up()
     await expect(page.locator('[data-message-panel]')).toHaveCount(0)
-    const clicks = await page.evaluate(() => (window as Window & { __cancelledPressClicks?: boolean[] }).__cancelledPressClicks)
+    const clicks = await page.evaluate(() => (window as Window & { __pressedMessageClicks?: unknown[] }).__pressedMessageClicks)
     expect(clicks).toEqual([])
-    await keepJson('cancelled-press-after-typing', { kind, cancellation, clicks, distance: await distance(page) })
+    await keepJson('cancelled-press-after-typing', { kind, virtualized, cancellation, clicks, distance: await distance(page) })
   })
 }
 
@@ -340,5 +371,49 @@ for (const kind of ['chat', 'room'] as const) {
       expect(Math.abs(frame.control.top - (initialControl.y - needed)), 'only the focused control may require correction when the full panel cannot fit').toBeLessThanOrEqual(1)
     }
     await expect(search).toBeFocused()
+  })
+}
+
+for (const virtualized of [false, true]) {
+  test(`room ${virtualized ? 'virtualized' : 'plain'}: archive enrichment keeps the original tail through typing wrap`, async ({ page }) => {
+    await page.setViewportSize({ width: 800, height: 700 })
+    const { row, list } = await setupInteraction(page, 'room', false, virtualized)
+    const body = 'The captured checklist remains the last visible message.'
+    await arrive(page, 'room', ['enriched-tail'], false, body)
+    const tail = page.locator('.message-row[data-message-id="enriched-tail"]')
+    await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
+    await row.locator('[data-msg-text]').hover()
+    await waitForActions(page)
+    const more = row.getByRole('button', { name: 'More options', exact: true })
+    await more.hover()
+    await page.mouse.down()
+    await expect(list).toHaveAttribute('data-message-interaction')
+    const originalKey = await tail.getAttribute('data-message-row-key')
+    const frames = await sampleInteractionLayout(page, { row, control: more, tail, tailText: body }, async () => {
+      await typing(page, 'room', 'one')
+      await stableFrames(page, TARGET)
+      await arrive(page, 'room', ['newer-than-enriched-tail'])
+      await page.evaluate(async () => {
+        const state = (window as unknown as InteractionStores).__roomStore.getState()
+        const jid = 'team@conference.fluux.chat'
+        const captured = state.messages.get(jid)?.find(message => message.id === 'enriched-tail')
+        if (!captured) throw new Error('The captured tail left the room fixture')
+        await state.updateMessage(jid, captured.id, { stanzaId: 'archive-enriched-tail',
+          receivedAt: captured.receivedAt ?? captured.timestamp,
+          timestamp: new Date(captured.timestamp.getTime() + 1),
+          localRowRef: { id: captured.id, occupantId: captured.occupantId, originId: captured.originId } })
+      })
+      await expect(tail).toHaveAttribute('data-stanza-id', 'archive-enriched-tail')
+      await typing(page, 'room', 'two')
+      await stableFrames(page, TARGET)
+      await typing(page, 'room', 'off')
+      await stableFrames(page, TARGET)
+    })
+    await keepJson('enriched-original-tail-frames', { virtualized, originalKey, currentKey: await tail.getAttribute('data-message-row-key'), frames })
+    expectTypingClearance(frames, true, (await row.getAttribute('data-message-row-id'))!)
+    const read = await readInteractionReadState(page, 'room')
+    expect(read.readId).not.toBe(read.lastId)
+    await page.mouse.up()
+    await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
   })
 }

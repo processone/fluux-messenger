@@ -54,6 +54,8 @@ export type BottomFractionAnchorPosition = {
   }
 }
 
+export type MessageRowOccurrence = { rowId: string; from: string; receivedAt: string }
+
 export type TopOffsetAnchorPosition = {
   kind: 'anchor'
   messageId: string
@@ -73,6 +75,7 @@ export type TopOffsetAnchorPosition = {
       controlTopPx: number
       controlBottomPx: number
       tailRowKey?: string
+      tailOccurrence?: MessageRowOccurrence
     }
   }
 }
