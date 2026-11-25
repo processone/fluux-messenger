@@ -88,7 +88,7 @@ function capturedRoomReading(source: typeof fixture & { archive?: readonly strin
   return { reflected, actor, author, row }
 }
 
-function pauseNextConsentOpen() {
+function pauseNextConsentOpen(fail = false) {
   const open = idbConnection.openIndexedDB
   let opened!: () => void
   let release!: () => void
@@ -98,6 +98,7 @@ function pauseNextConsentOpen() {
     const db = await open(...args)
     opened()
     await held
+    if (fail) { db.close(); throw new DOMException('Storage denied', 'SecurityError') }
     return db
   })
   return { ready, release: () => release() }
@@ -1140,6 +1141,98 @@ describe('RoomReadMarkers', () => {
     } finally { vi.stubGlobal('localStorage', storage); opening.release(); next.cancelPending() }
     expect(await delayed).toBe(false)
     expect(markers.isEnabledFor(roomJid)).toBe(false)
+  })
+
+  it.each((['On', 'room Off', 'all Off'] as const).flatMap(mode =>
+    [false, true].flatMap(allAccounts => ['cleared', 'fresh choice'].map(after => [mode, allAccounts, after] as const))))('keeps a failed opening from changing later clearing (%s, full: %s, %s)', async (mode, allAccounts, after) => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    const opening = pauseNextConsentOpen(true)
+    const pending = mode === 'all Off' ? markers.setEnabled(false) : markers.setRoomEnabled(roomJid, mode === 'On')
+    await opening.ready
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    let expected: Array<string | null> = []
+    const keys = ['consent', 'migration', 'watermarks'].map(kind => `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, kind])}`)
+    try {
+      expect(await clearRoomReadMarkersLocalData(jid, allAccounts)).toBe(true)
+      if (after === 'fresh choice') expect(await next.setRoomEnabled(replayFixture.room, true)).toBe(true)
+      expected = keys.map(key => localStorage.getItem(key))
+    } finally { opening.release(); next.cancelPending() }
+    expect(await pending).toBe(false)
+    expect(keys.map(key => localStorage.getItem(key))).toEqual(expected)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try { expect(observer.isEnabledFor(replayFixture.room)).toBe(after === 'fresh choice') }
+    finally { observer.cancelPending() }
+  })
+
+  it.each(['On', 'room Off', 'all Off'] as const)('keeps a failed opening from deleting an independent edit (%s)', async mode => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    const opening = pauseNextConsentOpen(true)
+    const pending = mode === 'all Off' ? markers.setEnabled(false) : markers.setRoomEnabled(roomJid, mode === 'On')
+    await opening.ready
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    let expected: string | null = null
+    try {
+      expect(await next.setRoomEnabled(replayFixture.room, true)).toBe(true)
+      expected = localStorage.getItem(consentKey)
+    } finally { opening.release(); next.cancelPending() }
+    expect(await pending).toBe(false)
+    expect(localStorage.getItem(consentKey)).toBe(expected)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try { expect(observer.isEnabledFor(replayFixture.room)).toBe(true) }
+    finally { observer.cancelPending() }
+  })
+
+  it.each(['On', 'room Off', 'all Off'] as const)('does not durably replay cleanup after a transaction abort (%s)', async mode => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    const expected = [localStorage.getItem(consentKey), localStorage.getItem(migrationKey)]
+    const open = idbConnection.openIndexedDB
+    vi.spyOn(idbConnection, 'openIndexedDB').mockImplementationOnce(async (...args) => {
+      const db = await open(...args)
+      const transaction = db.transaction.bind(db)
+      vi.spyOn(db, 'transaction').mockImplementation((...options) => {
+        const turn = transaction(...options)
+        turn.abort()
+        return turn
+      })
+      return db
+    })
+    expect(mode === 'all Off' ? await markers.setEnabled(false) : await markers.setRoomEnabled(roomJid, mode === 'On')).toBe(false)
+    expect([localStorage.getItem(consentKey), localStorage.getItem(migrationKey)]).toEqual(expected)
+  })
+
+  it.each(['On', 'room Off', 'all Off'] as const)('keeps an unowned transaction read failure from deleting newer state (%s)', async mode => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    const opening = pauseNextConsentOpen()
+    const pending = mode === 'all Off' ? markers.setEnabled(false) : markers.setRoomEnabled(roomJid, mode === 'On')
+    await opening.ready
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    const storage = localStorage
+    let expected: string | null = null
+    try {
+      expect(await next.setRoomEnabled(replayFixture.room, true)).toBe(true)
+      expected = storage.getItem(consentKey)
+      let deny = true
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'getItem'
+        ? (name: string) => {
+          if (deny && name === consentKey) { deny = false; throw new DOMException('Storage unavailable', 'SecurityError') }
+          return base.getItem(name)
+        } : Reflect.get(base, key, base) }))
+      opening.release()
+      expect(await pending).toBe(false)
+    } finally { vi.stubGlobal('localStorage', storage); opening.release(); next.cancelPending() }
+    expect(storage.getItem(consentKey)).toBe(expected)
+  })
+
+  it.each(['On', 'room Off', 'all Off'] as const)('keeps unchanged opening-failure recovery protective (%s)', async mode => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    const opening = pauseNextConsentOpen(true)
+    const pending = mode === 'all Off' ? markers.setEnabled(false) : markers.setRoomEnabled(roomJid, mode === 'On')
+    await opening.ready
+    opening.release()
+    expect(await pending).toBe(false)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try { await observer.reload(); expect(observer.isEnabledFor(roomJid)).toBe(false) }
+    finally { observer.cancelPending() }
   })
 
   it.each([false, true])('does not reimport a stale legacy opt-in after clearing (all accounts: %s)', async allAccounts => {

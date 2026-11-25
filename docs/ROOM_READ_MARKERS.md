@@ -53,7 +53,10 @@ guaranteed; cleanup reports failure rather than claiming completion. Successful
 cleanup leaves no target-account data in the guard; failed cleanup can retain
 protection records. Full clearing retries its shared seal after ordinary data frees
 storage, including after compacting history fences. A refused growing save
-retains a compact revocation boundary wherever storage allows it. A later fresh choice preserves the fallback epoch independently of the
+retains a compact revocation boundary wherever storage allows it. Uncoordinated
+recovery may change only the initiating unchanged storage boundary; it cannot
+recreate cleared records or erase newer choices. Transaction abort never replays
+durable cleanup outside its storage turn. A later fresh choice preserves the fallback epoch independently of the
 consent record, so an older overwrite cannot reset the erasure boundary.
 The empty coordination database contains no account data.
 

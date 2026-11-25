@@ -59,6 +59,7 @@ function pruneLegacyPermission(account: string) {
 }
 interface SavedConsent {
   raw: string | null
+  fence: string | null
   clearToken: string | null
   cleared: boolean
   rooms: string[]
@@ -109,7 +110,7 @@ function readSavedRoomConsent(account: string): SavedConsent {
   const allowed = guard.open || (choice !== undefined && guard.legacy[account] === choice)
   const rooms = current || (allowed && (previous || (legacy && record?.enabled === true))) ? oldRooms : []
   return {
-    raw, clearToken, rooms, cleared,
+    raw, fence, clearToken, rooms, cleared,
     generation: current ? record.generation as string : history?.generation,
     epoch: fenceEpoch ?? (current ? record.epoch as string : ''),
     edits: { ...(history?.edits ?? (current ? record.edits as Record<string, string> : {})) },
@@ -142,7 +143,7 @@ function readRoomWatermarks(account: string): Record<string, Position> {
   return sent
 }
 
-async function withConsentStorage<T>(action: () => T): Promise<T> {
+async function withConsentStorage<T>(action: () => T, onTransactionStart?: () => void): Promise<T> {
   const db = await openIndexedDB('fluux-room-read-coordination', 1, {
     upgrade: db => { db.createObjectStore('consent') },
     onClosed: () => {},
@@ -152,6 +153,7 @@ async function withConsentStorage<T>(action: () => T): Promise<T> {
       // Transactions order commits, not the user's earlier choice. Room edit
       // revisions reject superseded opt-ins before this synchronous commit.
       const transaction = db.transaction('consent', 'readwrite')
+      onTransactionStart?.()
       let result: T
       let failure: unknown
       transaction.objectStore('consent').get('turn').onsuccess = () => {
@@ -350,21 +352,33 @@ export class RoomReadMarkers extends BaseModule {
     const account = this.account()
     if (!account) return false
     let changed = false
+    let transactionStarted = false
+    let initial: SavedConsent | undefined
+    const recoverUnchanged = (durable: boolean) => {
+      if ((!changed && !change) || !initial || this.account() !== account) return
+      try {
+        const latest = this.readSavedConsent(account)
+        if (initial.raw !== latest.raw || initial.fence !== latest.fence || initial.clearToken !== latest.clearToken) return
+      } catch { return }
+      changed = true
+      this.failConsentSave(account, !!change, durable)
+    }
     try {
-      const initial = this.readSavedConsent(account)
+      initial = this.readSavedConsent(account)
+      const opening = initial
       return await withConsentStorage(() => {
         try {
           const saved = this.readSavedConsent(account)
           if (!change && !saved.needsMigration) return true
           if (change && 'room' in change && change.enabled) {
             if (!saved.needsMigration && saved.rooms.includes(change.room)) return true
-            const changedAccount = initial.generation ? initial.generation !== saved.generation
-              : initial.clearToken !== saved.clearToken || initial.cleared !== saved.cleared
-            if (changedAccount || initial.epoch !== saved.epoch || (initial.edits[change.room] ?? '') !== (saved.edits[change.room] ?? '')) return false
+            const changedAccount = opening.generation ? opening.generation !== saved.generation
+              : opening.clearToken !== saved.clearToken || opening.cleared !== saved.cleared
+            if (changedAccount || opening.epoch !== saved.epoch || (opening.edits[change.room] ?? '') !== (saved.edits[change.room] ?? '')) return false
           }
           // An old Off after erasure is already effective; it must not recreate
           // an account record. Unrelated accounts retain their saved generation.
-          if (change && !('room' in change && change.enabled) && saved.raw === null && (initial.clearToken !== saved.clearToken || initial.epoch !== saved.epoch)) return true
+          if (change && !('room' in change && change.enabled) && saved.raw === null && (opening.clearToken !== saved.clearToken || opening.epoch !== saved.epoch)) return true
           let rooms = this.refusedConsent.has(account) ? [] : saved.rooms
           const edits = { ...saved.edits }
           let epoch = saved.epoch
@@ -381,13 +395,14 @@ export class RoomReadMarkers extends BaseModule {
           if (state) state.consent = { enabled: rooms.length > 0, rooms }
           return true
         } catch {
-          changed = true
-          this.failConsentSave(account, !!change)
+          if (changed) this.failConsentSave(account, !!change)
+          else recoverUnchanged(true)
           return false
         }
-      })
+      }, () => { transactionStarted = true })
     } catch {
-      if (changed || change) this.failConsentSave(account, !!change)
+      // Abort cannot roll back localStorage, and recovery must not run again outside its turn.
+      recoverUnchanged(!transactionStarted)
       return false
     } finally {
       if (changed && account === this.account()) this.notify()
@@ -463,10 +478,11 @@ export class RoomReadMarkers extends BaseModule {
       this.notify()
     })
   }
-  private failConsentSave(account: string, explicitChoice = true) {
+  private failConsentSave(account: string, explicitChoice = true, durable = true) {
     if (explicitChoice) this.refusedConsent.add(account)
     const state = this.accounts.get(account)
     if (state) state.consent = { enabled: false, rooms: [] }
+    if (!durable) return
     // In particular, quota exhaustion must not leave an older opt-in ready to
     // reactivate on restart. Removing a key does not need more storage space.
     try { localStorage.removeItem(storageKey(account, 'consent')) } catch { /* The UI reports the unsaved choice. */ }
