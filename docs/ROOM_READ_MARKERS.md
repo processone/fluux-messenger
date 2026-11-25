@@ -90,7 +90,10 @@ that fails before writing leaves other confirmed choices unchanged. Refused
 new On writes also preserve the existing confirmed current-format record.
 Focused observations retain their conversion boundary through discovery and
 dispatch; another tab’s conversion requires a fresh observation even when
-account identity and effective choices do not change.
+account identity and effective choices do not change. The erasable continuity
+record advances a conversion token before preference commit without retiring
+linked input; ordinary writes retain it, so an exact older preference rewrite
+cannot restore a pre-conversion observation.
 Already-linked inputs need no duplicate exception in the shared clear guard.
 Pure migration never publishes from its first write.
 Refusal of a final On lift leaves its revocation in place without deleting other

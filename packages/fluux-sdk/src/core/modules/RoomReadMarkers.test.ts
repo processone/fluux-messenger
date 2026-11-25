@@ -1614,13 +1614,13 @@ describe('RoomReadMarkers', () => {
     const observer = new RoomReadMarkers(dependencies, () => focused)
     try {
       expect(await markers.setRoomEnabled(roomJid, false)).toBe(false)
-      const proof = storage.getItem(proofKey)
+      const proof = JSON.parse(storage.getItem(proofKey)!)
       expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(false)
       await observer.reload()
       expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
       expect(observer.isEnabledFor(roomJid)).toBe(false)
       expect(markers.isEnabledFor(replayFixture.room)).toBe(true)
-      expect(storage.getItem(proofKey)).toBe(proof)
+      expect(JSON.parse(storage.getItem(proofKey)!)).toEqual({ ...proof, conversion: expect.any(String) })
       await markers.viewed(roomJid, rows[1])
       expect(send).toHaveBeenCalledTimes(1)
     } finally { observer.cancelPending(); vi.stubGlobal('localStorage', storage) }
@@ -2091,7 +2091,7 @@ describe('RoomReadMarkers', () => {
     } finally { observer.cancelPending() }
   })
 
-  it.each([false, true].flatMap(local => (['shared', 'linked'] as const).flatMap(form => (['target', 'storage', 'discovery retry'] as const).map(held => [local, form, held] as const))))('requires a fresh confirmed view after another tab converts (local proof: %s, %s, %s)', async (local, form, held) => {
+  it.each([false, true].flatMap(local => (['shared', 'linked'] as const).flatMap(form => (['target', 'storage', 'discovery retry'] as const).flatMap(held => [false, true].map(rewrite => [local, form, held, rewrite] as const)))))('requires a fresh confirmed view after another tab converts (local proof: %s, %s, %s, legacy rewrite: %s)', async (local, form, held, rewrite) => {
     const { storage } = await prepareSharedLegacy(local)
     if (form === 'linked') {
       vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
@@ -2100,6 +2100,7 @@ describe('RoomReadMarkers', () => {
       try { expect(await markers.reload()).toBe(false) }
       finally { vi.stubGlobal('localStorage', storage) }
     }
+    const legacy = storage.getItem(consentKey)!
     markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
     const migration = pauseNextConsentOpen()
     let release!: () => void
@@ -2121,6 +2122,7 @@ describe('RoomReadMarkers', () => {
         if (held === 'storage') { publication = pauseNextConsentOpen(); release(); await publication.ready }
       } else await viewed
       expect(await peer.reload()).toBe(true)
+      if (rewrite) storage.setItem(consentKey, legacy)
       if (held !== 'discovery retry') { release(); publication?.release(); await viewed }
       else {
         await vi.advanceTimersToNextTimerAsync()
@@ -2133,6 +2135,54 @@ describe('RoomReadMarkers', () => {
       await markers.viewed(roomJid, rows[1])
       expect(send).toHaveBeenCalledTimes(2)
     } finally { release(); publication?.release(); migration.release(); await viewed; await markers.reload(); peer.cancelPending() }
+  })
+
+  it.each([false, true])('keeps compact conversion durable across a legacy rewrite (local proof: %s)', async local => {
+    const { storage, proofKey } = await prepareSharedLegacy(local, [roomJid])
+    const legacy = storage.getItem(consentKey)!
+    markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+    const migration = pauseNextConsentOpen()
+    let release!: () => void
+    const blocked = new Promise<void>(resolve => { release = resolve })
+    let reached!: () => void
+    const ready = new Promise<void>(resolve => { reached = resolve })
+    stores.room.getMessageByArchiveId = vi.fn(async (_room: string, id: string) => { reached(); await blocked; return rows.find(row => row.stanzaId === id) ?? null })
+    const viewed = markers.viewed(roomJid, rows[1])
+    const peer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      await migration.ready
+      await ready
+      let deny = true
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (deny && name === proofKey) { deny = false; throw new DOMException('First write refused', 'SecurityError') } base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      try { expect(await peer.setRoomEnabled(replayFixture.room, false)).toBe(false) }
+      finally { vi.stubGlobal('localStorage', storage) }
+      storage.setItem(consentKey, legacy)
+      release()
+      await viewed
+      expect(send).toHaveBeenCalledTimes(1)
+      migration.release()
+      await markers.reload()
+      await markers.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { vi.stubGlobal('localStorage', storage); release(); migration.release(); await viewed; await markers.reload(); peer.cancelPending() }
+  })
+
+  it.each([false, true].flatMap(local => (['normal', 'scoped'] as const).map(writer => [local, writer] as const)))('does not commit conversion when its durable boundary cannot be saved (local proof: %s, %s)', async (local, writer) => {
+    const { storage, proofKey } = await prepareSharedLegacy(local)
+    const legacy = storage.getItem(consentKey)
+    const previous = JSON.parse(storage.getItem(proofKey) ?? 'null')?.conversion
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === proofKey && JSON.parse(value).conversion !== previous) throw new DOMException('Boundary refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    try {
+      expect(await (writer === 'normal' ? markers.reload() : clearRoomReadMarkersLocalData('another@localhost'))).toBe(false)
+      expect(storage.getItem(consentKey)).toBe(legacy)
+      expect(markers.isEnabledFor(replayFixture.room)).toBe(true)
+    } finally { await markers.reload(); vi.stubGlobal('localStorage', storage) }
+    expect(await markers.reload()).toBe(true)
+    expect(markers.isEnabledFor(replayFixture.room)).toBe(true)
   })
 
   it.each(['absent', 'reserved', 'linked'] as const)('writes only needed continuity proof during scoped conversion (%s)', async state => {
@@ -2148,16 +2198,26 @@ describe('RoomReadMarkers', () => {
         else expect(await markers.setRoomEnabled(roomJid, false)).toBe(false)
       } finally { vi.stubGlobal('localStorage', storage) }
     }
+    const before = JSON.parse(storage.getItem(proofKey) ?? 'null')?.conversion
+    const legacy = storage.getItem(consentKey)
+    const inputAtCommit: unknown[] = []
     const writes: string[] = []
     vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
-      ? (name: string, value: string) => { if ([consentKey, proofKey, migrationKey].includes(name)) writes.push(name); base.setItem(name, value) }
+      ? (name: string, value: string) => { if ([consentKey, proofKey, migrationKey].includes(name)) writes.push(name); if (name === consentKey) inputAtCommit.push(JSON.parse(storage.getItem(proofKey)!).input); base.setItem(name, value) }
       : Reflect.get(base, key, base) }))
     try {
       expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(true)
-      expect(writes).toEqual(state === 'absent' ? [proofKey, consentKey, migrationKey] : state === 'reserved' ? [consentKey, migrationKey] : [consentKey, proofKey, migrationKey])
+      const converted = JSON.parse(storage.getItem(proofKey)!).conversion
+      expect(converted).toEqual(expect.any(String))
+      expect(converted).not.toBe(before)
+      expect(writes).toEqual(state === 'linked' ? [proofKey, consentKey, proofKey, migrationKey] : [proofKey, consentKey, migrationKey])
+      if (state === 'linked') expect(inputAtCommit).toEqual([legacy])
       expect(markers.isEnabledFor(replayFixture.room)).toBe(true)
       expect(markers.isEnabledFor(roomJid)).toBe(state !== 'linked')
     } finally { vi.stubGlobal('localStorage', storage) }
+    const converted = JSON.parse(storage.getItem(proofKey)!).conversion
+    expect(await markers.setRoomEnabled(replayFixture.room, false)).toBe(true)
+    expect(JSON.parse(storage.getItem(proofKey)!).conversion).toBe(converted)
   })
 
   it.each(['choice', 'revoked choice', 'migration'] as const)('does not authorize On when only its first %s write survives', async kind => {
