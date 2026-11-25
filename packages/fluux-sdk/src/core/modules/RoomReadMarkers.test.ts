@@ -1021,7 +1021,7 @@ describe('RoomReadMarkers', () => {
     expect(saved).toBe(mode === 'other room')
   })
 
-  it.each([['ordinary', 0, 'room'], ['ordinary', 0, 'other room'], ['fallback', 0, 'room'], ['fallback', 0, 'other room'], ['ordinary', 2, 'room'], ['ordinary', 2, 'other room'], ['fallback', 2, 'room'], ['fallback', 2, 'other room']] as const)('retains newer Off ordering after a legacy overwrite (%s fence, version %s, %s)', async (fence, version, target) => {
+  it.each(([['ordinary', 0, 'room'], ['ordinary', 0, 'other room'], ['fallback', 0, 'room'], ['fallback', 0, 'other room'], ['ordinary', 2, 'room'], ['ordinary', 2, 'other room'], ['fallback', 2, 'room'], ['fallback', 2, 'other room']] as const).flatMap(entry => ['unversioned', 'converted'].map(start => [...entry, start] as const)))('retains newer Off ordering after a legacy overwrite (%s fence, version %s, %s, %s start)', async (fence, version, target, start) => {
     if (fence === 'fallback') {
       localStorage.setItem(consentKey, JSON.stringify({ enabled: false, rooms: [] }))
       const storage = localStorage
@@ -1031,6 +1031,7 @@ describe('RoomReadMarkers', () => {
       try { expect(await clearRoomReadMarkersLocalData(jid)).toBe(false) }
       finally { vi.stubGlobal('localStorage', storage) }
     }
+    if (start === 'converted') expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(true)
     const opening = pauseNextConsentOpen()
     const delayed = markers.setRoomEnabled(roomJid, true)
     await opening.ready
@@ -1045,6 +1046,80 @@ describe('RoomReadMarkers', () => {
     await markers.reload()
     expect(markers.isEnabledFor(roomJid)).toBe(target === 'other room')
     if (target === 'other room') expect(markers.isEnabledFor(edited)).toBe(false)
+  })
+
+  it.each(['room', 'all'] as const)('keeps a failed %s Off durable when a growing fence is refused', async mode => {
+    localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+    const opening = pauseNextConsentOpen()
+    const delayed = markers.setRoomEnabled(roomJid, true)
+    await opening.ready
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    const storage = localStorage
+    try {
+      await next.reload()
+      expect(next.isEnabledFor(roomJid)).toBe(true)
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => {
+          if (name === migrationKey && value.length > (base.getItem(name)?.length ?? 0)) throw new DOMException('Quota exhausted', 'QuotaExceededError')
+          base.setItem(name, value)
+        } : Reflect.get(base, key, base) }))
+      expect(mode === 'room' ? await next.setRoomEnabled(roomJid, false) : await next.setEnabled(false)).toBe(false)
+    } finally { vi.stubGlobal('localStorage', storage); opening.release(); next.cancelPending() }
+    expect(await delayed).toBe(false)
+    const fresh = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      await fresh.reload()
+      expect(fresh.isEnabledFor(roomJid)).toBe(false)
+      expect(await fresh.setRoomEnabled(roomJid, true)).toBe(true)
+    } finally { fresh.cancelPending() }
+  })
+
+  it('retries full sealing after history compaction frees quota for an unlisted account', async () => {
+    const other = 'other@localhost'
+    const next = new RoomReadMarkers({ ...dependencies, getCurrentJid: () => other + '/browser' }, () => focused)
+    try { expect(await next.setRoomEnabled(roomJid, true)).toBe(true) } finally { next.cancelPending() }
+    const otherConsent = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([other, 'consent'])}`
+    const otherFence = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([other, 'migration'])}`
+    localStorage.removeItem(otherConsent)
+    const storage = localStorage
+    const usage = () => Array.from({ length: storage.length }, (_, i) => storage.key(i)!).reduce((size, key) => size + key.length + storage.getItem(key)!.length, 0)
+    const limit = usage()
+    const opening = pauseNextConsentOpen()
+    const delayed = markers.setRoomEnabled(roomJid, true)
+    await opening.ready
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => {
+        const old = base.getItem(name)
+        if (usage() + value.length - (old?.length ?? 0) + (old === null ? name.length : 0) > limit) throw new DOMException('Quota exhausted', 'QuotaExceededError')
+        base.setItem(name, value)
+      } : Reflect.get(base, key, base) }))
+    let cleared = false
+    try { cleared = await clearRoomReadMarkersLocalData(null, true) }
+    finally { vi.stubGlobal('localStorage', storage); opening.release() }
+    expect(await delayed).toBe(false)
+    expect(cleared).toBe(true)
+    expect(storage.getItem(otherFence)).toBeNull()
+  })
+
+  it('retains converted independent identity through partial conversion and legacy overwrites', async () => {
+    expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(true)
+    const opening = pauseNextConsentOpen()
+    const delayed = markers.setRoomEnabled(roomJid, true)
+    await opening.ready
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    const storage = localStorage
+    try {
+      expect(await next.setRoomEnabled(replayFixture.room, false)).toBe(true)
+      localStorage.setItem(consentKey, JSON.stringify({ enabled: false, rooms: [] }))
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === ROOM_READ_MARKERS_STORAGE_KEY + ':clear-generation') throw new DOMException('Quota exhausted', 'QuotaExceededError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(false)
+      localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [replayFixture.room] }))
+    } finally { vi.stubGlobal('localStorage', storage); opening.release(); next.cancelPending() }
+    expect(await delayed).toBe(true)
+    expect(markers.isEnabledFor(roomJid)).toBe(true)
+    expect(markers.isEnabledFor(replayFixture.room)).toBe(false)
   })
 
   it('retains newer room Off through partial unrelated conversion and legacy overwrites', async () => {

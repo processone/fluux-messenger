@@ -28,8 +28,8 @@ Consent stays under the same account-scoped local storage key, in a versioned
 format without a master flag. Account generations and per-room edit revisions
 reject an older On that arrives after a newer Off without discarding another
 room's choices. The existing migration fence also retains the epoch and per-room
-edit revisions, so an older client's preference overwrite cannot hide a newer Off
-from a waiting updated client. Browser storage transactions serialize the actual
+edit revisions and account identity, so an older client's preference overwrite cannot hide a newer Off
+from a waiting updated client or cancel an independent converted edit. Browser storage transactions serialize the actual
 commits; they do not by themselves establish the order in which people made choices. Web Locks
 support is not required.
 
@@ -52,7 +52,8 @@ are denied and no usable prior barrier exists, durable revocation cannot be
 guaranteed; cleanup reports failure rather than claiming completion. Successful
 cleanup leaves no target-account data in the guard; failed cleanup can retain
 protection records. Full clearing retries its shared seal after ordinary data frees
-storage. A later fresh choice preserves the fallback epoch independently of the
+storage, including after compacting history fences. A refused growing save
+retains a compact revocation boundary wherever storage allows it. A later fresh choice preserves the fallback epoch independently of the
 consent record, so an older overwrite cannot reset the erasure boundary.
 The empty coordination database contains no account data.
 

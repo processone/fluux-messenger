@@ -68,18 +68,19 @@ interface SavedConsent {
   needsMigration: boolean
   legacyChoice?: string
 }
-interface ConsentFence { epoch: string; edits?: Record<string, string> }
+interface ConsentFence { epoch: string; edits?: Record<string, string>; generation?: string }
 function readConsentFence(raw: string | null): ConsentFence | undefined {
   if (raw?.startsWith('!')) return { epoch: raw }
   try {
-    const value = JSON.parse(raw ?? 'null') as { version?: unknown; epoch?: unknown; edits?: unknown } | null
+    const value = JSON.parse(raw ?? 'null') as { version?: unknown; epoch?: unknown; edits?: unknown; generation?: unknown } | null
     if (value?.version === 3 && typeof value.epoch === 'string' && value.edits && typeof value.edits === 'object' && !Array.isArray(value.edits)
-      && Object.values(value.edits).every(edit => typeof edit === 'string')) return { epoch: value.epoch, edits: value.edits as Record<string, string> }
+      && Object.values(value.edits).every(edit => typeof edit === 'string')
+      && (value.generation === undefined || (typeof value.generation === 'string' && !!value.generation))) return { epoch: value.epoch, edits: value.edits as Record<string, string>, generation: value.generation as string | undefined }
   } catch { /* Unknown fences cannot supply trusted ordering history. */ }
   return undefined
 }
-function consentFenceValue(edits: Record<string, string>, epoch: string) {
-  return JSON.stringify({ version: 3, epoch, edits })
+function consentFenceValue(edits: Record<string, string>, epoch: string, generation: string) {
+  return JSON.stringify({ version: 3, epoch, edits, generation })
 }
 function readSavedRoomConsent(account: string): SavedConsent {
   const raw = localStorage.getItem(storageKey(account, 'consent'))
@@ -96,6 +97,7 @@ function readSavedRoomConsent(account: string): SavedConsent {
   const validEdits = record?.edits && typeof record.edits === 'object' && !Array.isArray(record.edits)
     && Object.values(record.edits).every(edit => typeof edit === 'string')
   const current = record?.version === 3 && validRooms && typeof record.generation === 'string' && !!record.generation
+    && (!history?.generation || record.generation === history.generation)
     && typeof record.epoch === 'string' && validEdits && (fenceEpoch === undefined || record.epoch === fenceEpoch)
     && (!history?.edits || (Object.keys(history.edits).length === Object.keys(record.edits as object).length
       && Object.entries(history.edits).every(([room, edit]) => (record.edits as Record<string, string>)[room] === edit)))
@@ -108,7 +110,7 @@ function readSavedRoomConsent(account: string): SavedConsent {
   const rooms = current || (allowed && (previous || (legacy && record?.enabled === true))) ? oldRooms : []
   return {
     raw, clearToken, rooms, cleared,
-    generation: current ? record.generation as string : undefined,
+    generation: current ? record.generation as string : history?.generation,
     epoch: fenceEpoch ?? (current ? record.epoch as string : ''),
     edits: { ...(history?.edits ?? (current ? record.edits as Record<string, string> : {})) },
     needsMigration: !cleared && raw !== null && !current,
@@ -119,13 +121,14 @@ function roomConsentValue(saved: SavedConsent, rooms: string[], edits = saved.ed
   return JSON.stringify({ version: 3, generation: saved.generation ?? generateUUID(), epoch, edits, rooms })
 }
 function persistRoomConsent(account: string, saved: SavedConsent, rooms: string[], edits = saved.edits, epoch = saved.epoch) {
+  const generation = saved.generation ?? generateUUID()
   // Ordering survives older clients replacing the consent record; neither barrier
   // is abandoned merely because the other refuses its write.
   let failed: { error: unknown } | undefined
   try { pruneLegacyPermission(account) } catch (error) { failed = { error } }
-  try { localStorage.setItem(storageKey(account, 'migration'), consentFenceValue(edits, epoch)) } catch (error) { failed = { error } }
+  try { localStorage.setItem(storageKey(account, 'migration'), consentFenceValue(edits, epoch, generation)) } catch (error) { failed = { error } }
   if (failed) throw failed.error
-  localStorage.setItem(storageKey(account, 'consent'), roomConsentValue(saved, rooms, edits, epoch))
+  localStorage.setItem(storageKey(account, 'consent'), roomConsentValue({ ...saved, generation }, rooms, edits, epoch))
 }
 function readRoomWatermarks(account: string): Record<string, Position> {
   const value = JSON.parse(localStorage.getItem(storageKey(account, 'watermarks')) ?? 'null') as Pick<AccountState, 'sent'> | null
@@ -189,8 +192,9 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           saved = readSavedRoomConsent(other)
           // Store the self-contained choice first so either refusal preserves valid consent.
           if (saved.needsMigration) {
-            localStorage.setItem(storageKey(other, 'consent'), roomConsentValue(saved, saved.rooms))
-            localStorage.setItem(storageKey(other, 'migration'), consentFenceValue(saved.edits, saved.epoch))
+            const generation = saved.generation ?? generateUUID()
+            localStorage.setItem(storageKey(other, 'consent'), roomConsentValue({ ...saved, generation }, saved.rooms))
+            localStorage.setItem(storageKey(other, 'migration'), consentFenceValue(saved.edits, saved.epoch, generation))
           }
         } catch {
           preserved = false
@@ -228,8 +232,10 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
     if (sealed) {
       for (const key of fences) localStorage.removeItem(key)
     } else {
-      for (const account of accounts) writeBarrier(storageKey(account, 'migration'), clearFence())
-      return false
+      let compacted = false
+      for (const account of accounts) compacted = writeBarrier(storageKey(account, 'migration'), clearFence()) || compacted
+      if (!compacted || !writeBarrier(CLEAR_GENERATION_KEY, generateUUID())) return false
+      for (const key of fences) localStorage.removeItem(key)
     }
     return true
   }
@@ -464,6 +470,8 @@ export class RoomReadMarkers extends BaseModule {
     // In particular, quota exhaustion must not leave an older opt-in ready to
     // reactivate on restart. Removing a key does not need more storage space.
     try { localStorage.removeItem(storageKey(account, 'consent')) } catch { /* The UI reports the unsaved choice. */ }
+    // A compact boundary can fit after deletion even when a larger room revision cannot.
+    try { localStorage.setItem(storageKey(account, 'migration'), clearFence()) } catch { /* Failed replacement is atomic; preserve the old fence on denial. */ }
   }
 
   private discover(roomJid: string): Promise<boolean> {
