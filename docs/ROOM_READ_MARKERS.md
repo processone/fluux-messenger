@@ -65,7 +65,9 @@ An independently erasable continuity proof binds the account identity to its
 preference; clearing removes both, even when the import fence cannot be replaced.
 During a partial legacy Off, the proof also binds the exact previously validated
 input, so untouched selections survive conversion refusal without authorizing a
-different replacement. Pure migration never publishes from its first write.
+different replacement. Fences link that input by an opaque identifier, never a
+copy of the preference. Scoped conversion retains existing proof until its
+preference commits. Pure migration never publishes from its first write.
 Refusal of a final On lift leaves its revocation in place without deleting other
 saved selections. Recovery advances
 ordering without changing account identity, so another room’s Off remains valid. Local room suppression survives failed saving until a fresh
@@ -73,7 +75,7 @@ choice or a new account boundary supersedes it. The legacy all-Off operation
 uses the same room-scoped guards and temporarily protects an unknown selection
 until its initial snapshot is available, including after repeated read refusal.
 Unresolved suppression becomes room-scoped when reads recover, excluding newer
-choices and retiring after target erasure. It never uses local suppression as saved consent. Pre-clear Off cannot modify
+choices and retiring after target erasure, not after an unrelated logout. It never uses local suppression as saved consent. Pre-clear Off cannot modify
 post-clear consent, even after a legacy overwrite or fresh opt-in. A later fresh choice preserves the fallback epoch independently of the
 consent record, so an older overwrite cannot reset the erasure boundary.
 The empty coordination database contains no account data.

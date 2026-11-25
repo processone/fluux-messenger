@@ -88,13 +88,21 @@ function readConsentFence(raw: string | null): ConsentFence | undefined {
 function consentFenceValue(edits: Record<string, string>, epoch: string, generation: string, revoked: string[], input?: string) {
   return JSON.stringify({ version: 3, epoch, edits, generation, revoked, input })
 }
-function readConsentContinuity(account: string): { generation: string; input?: string } | undefined {
+function readConsentContinuity(account: string): { generation: string; input?: string; inputId?: string } | undefined {
   const raw = localStorage.getItem(storageKey(account, 'continuity'))
   try {
-    const value = JSON.parse(raw ?? 'null') as { generation?: unknown; input?: unknown } | null
-    if (typeof value?.generation === 'string' && value.generation && (value.input === undefined || typeof value.input === 'string')) return value as { generation: string; input?: string }
+    const value = JSON.parse(raw ?? 'null') as { generation?: unknown; input?: unknown; inputId?: unknown } | null
+    if (typeof value?.generation === 'string' && value.generation && (value.input === undefined || typeof value.input === 'string')
+      && (value.inputId === undefined || (typeof value.inputId === 'string' && !!value.inputId))) return value as { generation: string; input?: string; inputId?: string }
   } catch { /* Invalid proof cannot establish preference continuity. */ }
   return undefined
+}
+function writeConsentContinuity(account: string, generation: string, input?: string) {
+  const previous = input === undefined ? undefined : readConsentContinuity(account)
+  const inputId = input === undefined ? undefined
+    : previous?.generation === generation && previous.input === input && previous.inputId ? previous.inputId : generateUUID()
+  localStorage.setItem(storageKey(account, 'continuity'), JSON.stringify({ generation, input, inputId }))
+  return inputId
 }
 function readSavedRoomConsent(account: string): SavedConsent {
   const raw = localStorage.getItem(storageKey(account, 'consent'))
@@ -119,7 +127,7 @@ function readSavedRoomConsent(account: string): SavedConsent {
       && Object.entries(history.edits).every(([room, edit]) => (record.edits as Record<string, string>)[room] === edit)))
   const cleared = !overlay && !!fenceEpoch && !current
   const oldRooms = validRooms ? [...new Set(record!.rooms as string[])] : []
-  const retained = !!history?.revoked?.length && raw !== null && history.input === raw
+  const retained = !!history?.revoked?.length && raw !== null && !!history.input && history.input === continuity?.inputId
     && continuity?.generation === history.generation && continuity?.input === raw
   const previous = (retained || !history?.edits) && !cleared && record?.version === 2 && validRooms
   const legacy = (retained || fence === null) && record?.version === undefined && typeof record?.enabled === 'boolean' && validRooms
@@ -149,14 +157,14 @@ function persistRoomConsent(account: string, saved: SavedConsent, rooms: string[
   const revoked = [...new Set([...saved.revoked, ...saved.rooms.filter(room => !rooms.includes(room)),
     ...Object.keys(edits).filter(room => !rooms.includes(room) && edits[room] !== saved.edits[room])])]
   const input = saved.legacyChoice && revoked.length ? saved.raw ?? undefined : undefined
-  const continuity = JSON.stringify({ generation, input })
+  let inputId: string | undefined
   // Reserve valid input before fencing it out; clearing can erase this proof without reopening import.
-  if (input !== undefined) localStorage.setItem(storageKey(account, 'continuity'), continuity)
+  if (input !== undefined) inputId = writeConsentContinuity(account, generation, input)
   let failed: { error: unknown } | undefined
   try { pruneLegacyPermission(account) } catch (error) { failed = { error } }
-  try { localStorage.setItem(storageKey(account, 'migration'), consentFenceValue(edits, epoch, generation, revoked, input)) } catch (error) { failed = { error } }
+  try { localStorage.setItem(storageKey(account, 'migration'), consentFenceValue(edits, epoch, generation, revoked, inputId)) } catch (error) { failed = { error } }
   if (failed) throw failed.error
-  if (input === undefined) localStorage.setItem(storageKey(account, 'continuity'), continuity)
+  if (input === undefined) writeConsentContinuity(account, generation)
   localStorage.setItem(storageKey(account, 'consent'), roomConsentValue({ ...saved, generation }, rooms, edits, epoch))
   const remaining = revoked.filter(room => !rooms.includes(room))
   // A revocation is lifted only after its new On exists in the permission record.
@@ -243,8 +251,8 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           if (saved.needsMigration) {
             const generation = saved.generation ?? generateUUID()
             const edits = migrationEdits(saved)
-            localStorage.setItem(storageKey(other, 'continuity'), JSON.stringify({ generation }))
             localStorage.setItem(storageKey(other, 'consent'), roomConsentValue({ ...saved, generation }, saved.rooms, edits))
+            writeConsentContinuity(other, generation)
             localStorage.setItem(storageKey(other, 'migration'), consentFenceValue(edits, saved.epoch, generation, saved.revoked))
           }
         } catch {
@@ -425,9 +433,10 @@ export class RoomReadMarkers extends BaseModule {
         try {
           const retainedEdits = Object.fromEntries(rooms.flatMap(room => latest.edits[room] ? [[room, latest.edits[room]]] : []))
           const input = latest.legacyChoice && revoked.length ? latest.raw ?? undefined : undefined
-          localStorage.setItem(storageKey(account, 'continuity'), JSON.stringify({ generation: latest.generation, input }))
-          localStorage.setItem(storageKey(account, 'migration'), '~' + JSON.stringify([latest.generation, epoch, [...new Set([...latest.revoked, ...revoked])], retainedEdits, 1, input]))
-          localStorage.setItem(storageKey(account, 'consent'), roomConsentValue(latest, rooms, retainedEdits, epoch))
+          const generation = latest.generation ?? generateUUID()
+          const inputId = writeConsentContinuity(account, generation, input)
+          localStorage.setItem(storageKey(account, 'migration'), '~' + JSON.stringify([generation, epoch, [...new Set([...latest.revoked, ...revoked])], retainedEdits, 1, inputId]))
+          localStorage.setItem(storageKey(account, 'consent'), roomConsentValue({ ...latest, generation }, rooms, retainedEdits, epoch))
         } catch {
           if (!rooms.length) removeConsentWithBarrier(account, epoch)
         }
@@ -583,7 +592,9 @@ export class RoomReadMarkers extends BaseModule {
         let rooms = latest.rooms
         if (unreadable) {
           const history = unreadable.history
-          if (history?.generation ? latest.generation !== history.generation : latest.clearToken !== unreadable.clearToken) rooms = []
+          const generation = history?.generation ?? JSON.stringify([account, unreadable.clearToken, history?.epoch ?? ''])
+          const retainedLegacy = !history?.generation && latest.fence === null && !!latest.legacyChoice
+          if (latest.generation !== generation && !retainedLegacy) rooms = []
           else rooms = rooms.filter(room => (history?.edits?.[room] ?? '') === (latest.edits[room] ?? '')
             || (!history?.edits?.[room] && latest.edits[room]?.startsWith('m:')))
         }
