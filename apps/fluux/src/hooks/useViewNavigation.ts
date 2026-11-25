@@ -15,6 +15,7 @@ import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { useRouteSync, type NavigateOptions, type SettingsNavigateOptions } from './useRouteSync'
 import { isSmallScreen } from './useIsMobileWeb'
 import type { SidebarView } from '@/components/sidebar-components/types'
+import { shouldReplaceOnSelect } from '@/utils/navigationHistory'
 
 /**
  * Per-tab memory - remembers the last active item in each tab
@@ -34,7 +35,7 @@ export interface ViewNavigationResult {
   perTabMemory: PerTabMemory
 
   // Navigation actions (with side effects)
-  navigateToView: (view: SidebarView) => void
+  navigateToView: (view: SidebarView, targetJid?: string) => void
 
   // Direct navigation functions (for session restore, without side effects)
   navigateToMessages: (jid?: string, options?: NavigateOptions) => void
@@ -69,6 +70,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
   // Get routing functions from useRouteSync
   const {
     sidebarView,
+    activeJid,
     navigateToMessages,
     navigateToRooms,
     navigateToContacts,
@@ -140,43 +142,48 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
    * Navigate to a view with per-tab memory and side effects.
    * Auto-selects the first item if no previous selection exists.
    */
-  const navigateToView = useCallback((newView: SidebarView) => {
-    // Skip if we're already on this view (prevents duplicate navigation)
-    if (sidebarView === newView) return
+  const navigateToView = useCallback((newView: SidebarView, targetJid?: string) => {
+    // Explicit item choices still navigate within the current tab.
+    if (sidebarView === newView && !targetJid) return
+    if (targetJid && sidebarView === newView && activeJid === targetJid) {
+      const pending = newView === 'messages' ? chatStore.getState() : newView === 'rooms' ? roomStore.getState() : null
+      if (pending?.activationPending && pending.activationTarget === targetJid) return
+    }
 
     // Save current tab's active content before switching
     // Read directly from stores to avoid stale hook values
     const currentConversationId = chatStore.getState().activeConversationId
     const currentRoomJid = roomStore.getState().activeRoomJid
 
-    if (sidebarView === 'messages' && currentConversationId) {
-      setLastMessagesConversation(currentConversationId)
-      // Mark conversation as read and clear new message marker when leaving messages tab
-      chatStore.getState().markAsRead(currentConversationId)
-      chatStore.getState().clearFirstNewMessageId(currentConversationId)
-    } else if (sidebarView === 'rooms' && currentRoomJid) {
-      setLastRoomsRoom(currentRoomJid)
-      // Mark room as read and clear new message marker when leaving rooms tab
-      roomStore.getState().markAsRead(currentRoomJid)
-      roomStore.getState().clearFirstNewMessageId(currentRoomJid)
-    } else if (sidebarView === 'contacts' && selectedContact) {
-      setLastDirectoryContact(selectedContact)
-    } else if (sidebarView === 'search') {
-      searchStore.getState().setPreviewResult(null)
+    if (sidebarView !== newView) {
+      if (sidebarView === 'messages' && currentConversationId) {
+        setLastMessagesConversation(currentConversationId)
+        // Mark conversation as read and clear new message marker when leaving messages tab
+        chatStore.getState().markAsRead(currentConversationId)
+        chatStore.getState().clearFirstNewMessageId(currentConversationId)
+      } else if (sidebarView === 'rooms' && currentRoomJid) {
+        setLastRoomsRoom(currentRoomJid)
+        // Mark room as read and clear new message marker when leaving rooms tab
+        roomStore.getState().markAsRead(currentRoomJid)
+        roomStore.getState().clearFirstNewMessageId(currentRoomJid)
+      } else if (sidebarView === 'contacts' && selectedContact) {
+        setLastDirectoryContact(selectedContact)
+      } else if (sidebarView === 'search') {
+        searchStore.getState().setPreviewResult(null)
+      }
     }
 
-    // Navigate to the new view via router. Tab switches PUSH a history entry
-    // (standard back stack) so Back retraces the views the user visited. The
-    // same-view early return above is the only dedup we need here.
-    // Auto-select first item if no per-tab memory exists (skip on small screens - let user choose from sidebar)
+    // Tab changes push; explicit items use the sidebar's consecutive-item deduplication.
+    // A target bypasses remembered destination restoration, but not departure bookkeeping.
     const skipAutoSelect = isSmallScreen()
 
     switch (newView) {
       case 'messages': {
-        setActiveRoom(null)
+        if (targetJid) void activateRoom(null)
+        else setActiveRoom(null)
         // Use per-tab memory, or fall back to first non-archived conversation (sorted by most recent)
         // On small screens, skip auto-selection so user sees the sidebar first
-        const targetConversation = skipAutoSelect ? lastMessagesConversation : (lastMessagesConversation ?? (() => {
+        const targetConversation = targetJid ?? (skipAutoSelect ? lastMessagesConversation : (lastMessagesConversation ?? (() => {
           const chatState = chatStore.getState()
           const conversations = chatState.conversations
           if (!conversations || typeof conversations.values !== 'function') return undefined
@@ -191,27 +198,32 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
               return bTime - aTime
             })
           return sorted[0]?.id
-        })())
+        })()))
         // Set store state AND navigate to URL
         // Always set conversation (even null) to clear any leftover archived conversation
-        void activateConversation(targetConversation ?? null)
-        navigateToMessages(targetConversation ?? undefined)
+        const pending = chatStore.getState()
+        if (!targetJid || !pending.activationPending || pending.activationTarget !== targetJid) void activateConversation(targetConversation ?? null)
+        if (targetJid) navigateToMessages(targetJid, { replace: sidebarView === newView && shouldReplaceOnSelect(targetJid, activeJid) })
+        else navigateToMessages(targetConversation ?? undefined)
         break
       }
       case 'rooms': {
-        setActiveConversation(null)
+        if (targetJid) void activateConversation(null)
+        else setActiveConversation(null)
         // Use per-tab memory, or fall back to first joined room
         // On small screens, skip auto-selection so user sees the sidebar first
-        const targetRoom = skipAutoSelect ? lastRoomsRoom : (lastRoomsRoom ?? (() => {
+        const targetRoom = targetJid ?? (skipAutoSelect ? lastRoomsRoom : (lastRoomsRoom ?? (() => {
           const roomState = roomStore.getState()
           const joinedRooms = typeof roomState.joinedRooms === 'function' ? roomState.joinedRooms() : []
           const firstRoom = joinedRooms[0]
           return firstRoom?.jid
-        })())
+        })()))
         // Set store state AND navigate to URL
         // Always set room (even null) to ensure clean state
-        void activateRoom(targetRoom ?? null)
-        navigateToRooms(targetRoom ?? undefined)
+        const pending = roomStore.getState()
+        if (!targetJid || !pending.activationPending || pending.activationTarget !== targetJid) void activateRoom(targetRoom ?? null)
+        if (targetJid) navigateToRooms(targetJid, { replace: sidebarView === newView && shouldReplaceOnSelect(targetJid, activeJid) })
+        else navigateToRooms(targetRoom ?? undefined)
         break
       }
       case 'contacts':
@@ -242,7 +254,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         navigateToSaved()
         break
     }
-  }, [sidebarView, selectedContact, lastMessagesConversation, lastRoomsRoom, lastDirectoryContact,
+  }, [sidebarView, activeJid, selectedContact, lastMessagesConversation, lastRoomsRoom, lastDirectoryContact,
       setActiveConversation, setActiveRoom, activateConversation, activateRoom,
       navigateToMessages, navigateToRooms, navigateToContacts,
       navigateToAdmin, navigateToSettings, navigateToSearch, navigateToSaved])

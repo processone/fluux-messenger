@@ -1694,6 +1694,13 @@
         }
     },
     "commandPalette": {
+        "drafts": "טיוטות",
+        "searchDrafts": "חיפוש טיוטה…",
+        "confirmResumeTitle": "פתיחת הטיוטה?",
+        "confirmResumeEdit": "פתיחת הטיוטה תבטל את השינויים שלא נשמרו בהודעה זו.",
+        "confirmResumeWhisper": "פתיחת טיוטת החדר תמחק טקסט פרטי שטרם נשלח.",
+        "confirmResumeWhisperFile": "פתיחת טיוטת החדר תמחק טקסט פרטי שטרם נשלח ואת הקובץ המצורף.",
+        "confirmResumeAction": "ויתור ופתיחת הטיוטה",
         "moreMatches": "תוצאות נוספות",
         "open": "פתיחת לוח הפקודות",
         "placeholder": "עבור אל...",

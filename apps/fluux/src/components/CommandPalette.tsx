@@ -15,6 +15,8 @@ import {
   Users,
   Search,
   Bookmark,
+  Pencil,
+  ArrowLeft,
 } from 'lucide-react'
 import { useChat, useRoom, useRoster, getLocalPart, searchStore, roomActivityTone } from '@fluux/sdk'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
@@ -73,7 +75,8 @@ interface ItemGroup {
 interface CommandPaletteProps {
   isOpen: boolean
   onClose: () => void
-  onSidebarViewChange: (view: SidebarView) => void
+  onResumeDraft?: (view: 'messages' | 'rooms', jid: string) => void
+  onSidebarViewChange: (view: SidebarView, targetJid?: string) => void
   onOpenSettings: () => void
   onToggleConsole: () => void
   onToggleShortcutHelp: () => void
@@ -249,6 +252,7 @@ export function CommandPalette(props: CommandPaletteProps) {
 function CommandPaletteContent({
   onClose,
   onSidebarViewChange,
+  onResumeDraft,
   onOpenSettings,
   onToggleConsole,
   onToggleShortcutHelp,
@@ -259,7 +263,10 @@ function CommandPaletteContent({
   detectRenderLoop('CommandPalette')
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
-  const { filterMode, searchQuery } = parseQuery(query)
+  const [draftsOnly, setDraftsOnly] = useState(false)
+  const { filterMode, searchQuery } = draftsOnly
+    ? { filterMode: 'all' as const, searchQuery: query.trim().toLowerCase() }
+    : parseQuery(query)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const selectedIndexRef = useRef(0) // Ref for synchronous access in event handlers
   const inputRef = useRef<HTMLInputElement>(null)
@@ -279,12 +286,18 @@ function CommandPaletteContent({
 
   // Data from stores
   const { conversations, archivedConversations } = useChat()
-  const { joinedRooms, bookmarkedRooms, setActiveRoom } = useRoom()
+  const { joinedRooms, bookmarkedRooms } = useRoom()
   const { contacts } = useRoster()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
-  const { setActiveConversation } = useChatStore()
-  // Hide the open conversation from suggestions, but keep it searchable.
+  const chatDrafts = useChatStore((s) => s.drafts)
+  const roomDrafts = useRoomStore((s) => s.drafts)
+  const ordinaryRoomDrafts = useRoomStore((s) => s.ordinaryDrafts)
+  const hasChatDraft = (id: string) => !!chatDrafts?.get(id)?.trim()
+  const hasRoomDraft = (jid: string) => !!ordinaryRoomDrafts?.has(jid) && !!roomDrafts?.get(jid)?.trim()
+  const hasDrafts = conversations.some((conv) => conv.type === 'chat' && hasChatDraft(conv.id))
+    || joinedRooms.some((room) => hasRoomDraft(room.jid))
+  // Drafts includes the open target so a sole unfinished composer remains reachable.
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const activeRoomJid = useRoomStore((s) => s.activeRoomJid)
   // Narrow read: only re-render on a density change. Drives the entity avatar
@@ -297,27 +310,21 @@ function CommandPaletteContent({
   const iconGlyphClass = isCompact ? '[&_svg]:size-4' : '[&_svg]:size-5'
 
   // Navigation callbacks
-  const closeAndNavigate = (view: SidebarView) => {
-    onSidebarViewChange(view)
+  const closeAndNavigate = (view: SidebarView, targetJid?: string) => {
+    if (targetJid) onSidebarViewChange(view, targetJid)
+    else onSidebarViewChange(view)
     onClose()
   }
 
-  const selectConversation = (jid: string) => {
-    // Navigate first, THEN set conversation - otherwise handleSidebarViewChange
-    // will overwrite our selection with the "last conversation" restore logic
-    // Archived conversations open in the messages tab (via the archive toggle)
-    closeAndNavigate('messages')
-    void setActiveConversation(jid)
-    void setActiveRoom(null)
+  // Item selection delegates hydration and history to the same owner for ordinary rows and drafts.
+  const selectTarget = (view: 'messages' | 'rooms', jid: string) => {
+    if (draftsOnly && onResumeDraft) {
+      onClose()
+      onResumeDraft(view, jid)
+    } else closeAndNavigate(view, jid)
   }
-
-  const selectRoom = (jid: string) => {
-    // Navigate first, THEN set room - otherwise handleSidebarViewChange
-    // will overwrite our selection with the "last room" restore logic
-    closeAndNavigate('rooms')
-    void setActiveRoom(jid)
-    void setActiveConversation(null)
-  }
+  const selectConversation = (jid: string) => selectTarget('messages', jid)
+  const selectRoom = (jid: string) => selectTarget('rooms', jid)
 
   // =============================================================================
   // Build all command items
@@ -330,7 +337,8 @@ function CommandPaletteContent({
     // 1. Conversations (contacts with active chats, sorted by recency)
     for (const conv of conversations) {
       if (conv.type !== 'chat') continue
-      if (conv.id === activeConversationId && !searchQuery) continue
+      if (draftsOnly && !hasChatDraft(conv.id)) continue
+      if (!draftsOnly && conv.id === activeConversationId && !searchQuery) continue
       const contact = contacts.find((c) => c.jid === conv.id)
       const preview = conv.lastMessage ? formatLocalizedPreview(conv.lastMessage, t) : undefined
       items.push({
@@ -338,7 +346,7 @@ function CommandPaletteContent({
         type: 'conversation',
         label: contact?.name || conv.name,
         sublabel: conv.id,
-        lastMessagePreview: preview,
+        lastMessagePreview: draftsOnly ? undefined : preview,
         lastMessageBody: conv.lastMessage?.isRetracted ? undefined : conv.lastMessage?.body,
         unreadCount: conv.unreadCount,
         sortTimestamp: conv.lastMessage?.timestamp?.getTime(),
@@ -357,7 +365,7 @@ function CommandPaletteContent({
       .filter((c) => !conversationJids.has(c.jid))
       .sort((a, b) => a.name.localeCompare(b.name))
 
-    for (const contact of otherContacts) {
+    for (const contact of draftsOnly ? [] : otherContacts) {
       const hasArchivedConversation = archivedJids.has(contact.jid)
       items.push({
         id: `contact-${contact.jid}`,
@@ -383,14 +391,15 @@ function CommandPaletteContent({
 
     // 3. Joined rooms
     for (const room of joinedRooms) {
-      if (room.jid === activeRoomJid) continue // don't propose the open room
+      if (draftsOnly && !hasRoomDraft(room.jid)) continue
+      if (!draftsOnly && room.jid === activeRoomJid) continue // don't propose the open room
       const preview = room.lastMessage ? formatLocalizedPreview(room.lastMessage, t) : undefined
       items.push({
         id: `room-${room.jid}`,
         type: 'room',
         label: room.name || getLocalPart(room.jid),
         sublabel: room.jid,
-        lastMessagePreview: preview,
+        lastMessagePreview: draftsOnly ? undefined : preview,
         lastMessageBody: room.lastMessage?.isRetracted ? undefined : room.lastMessage?.body,
         unreadCount: room.unreadCount,
         mentionsCount: room.mentionsCount,
@@ -404,7 +413,7 @@ function CommandPaletteContent({
     }
 
     // 4. Bookmarked but not joined rooms
-    for (const room of bookmarkedRooms.filter((r) => !r.joined)) {
+    for (const room of draftsOnly ? [] : bookmarkedRooms.filter((r) => !r.joined)) {
       items.push({
         id: `bookmark-${room.jid}`,
         type: 'room',
@@ -416,6 +425,8 @@ function CommandPaletteContent({
         keywords: [getLocalPart(room.jid), 'room', 'bookmark'],
       })
     }
+
+    if (draftsOnly) return items
 
     // 5. Views (navigation)
     const views: Array<{ id: string; label: string; icon: React.ReactNode; view: SidebarView; keywords: string[] }> = [
@@ -467,10 +478,16 @@ function CommandPaletteContent({
 
   const { flatItems, groupedItems, isDefaultView } = (() => {
     const allowedTypes = getTypesForMode(filterMode)
-    const isDefaultView = !searchQuery && filterMode === 'all'
+    const isDefaultView = !draftsOnly && !searchQuery && filterMode === 'all'
 
     let grouped: ItemGroup[]
-    if (isDefaultView) {
+    if (draftsOnly) {
+      const matches = allItems
+        .map(item => ({ item, rank: suggestionMatchRank(searchQuery, item.label, item.sublabel) }))
+        .filter(({ rank }) => rank < 3)
+        .sort((a, b) => a.rank - b.rank || a.item.label.localeCompare(b.item.label))
+      grouped = groupItemsByType(matches.map(({ item }) => item), t)
+    } else if (isDefaultView) {
       // Default view: unread-first grouping (Unread DMs on top, then the rest)
       grouped = buildDefaultGroups(allItems, t)
     } else if (!searchQuery) {
@@ -489,6 +506,26 @@ function CommandPaletteContent({
       }
     }
 
+    if (!draftsOnly && hasDrafts && filterMode !== 'contacts' && filterMode !== 'rooms') {
+      const draftsEntry: CommandItem = {
+        id: 'view-drafts',
+        type: 'view',
+        label: t('commandPalette.drafts'),
+        icon: <Pencil />,
+        action: () => { setDraftsOnly(true); setQuery('') },
+        keywords: ['draft', 'drafts'],
+      }
+      if (!searchQuery || Number.isFinite(itemMatchRank(draftsEntry, searchQuery))) {
+        if (isDefaultView) {
+          grouped.unshift({ key: 'drafts', type: 'view', label: t('commandPalette.drafts'), items: [draftsEntry] })
+        } else {
+          const views = grouped.find(group => group.type === 'view')
+          if (views) views.items.push(draftsEntry)
+          else grouped.push({ key: 'drafts', type: 'view', label: t('commandPalette.views'), items: [draftsEntry] })
+        }
+      }
+    }
+
     // Keep broad searches and type-only views bounded. Filtering happens first so
     // a narrower query can still find any entity, not just the first page.
     grouped = grouped.map((group) => ({
@@ -498,7 +535,7 @@ function CommandPaletteContent({
     }))
 
     // Append "Search messages" gateway when user has typed a query
-    if (searchQuery && filterMode !== 'commands') {
+    if (!draftsOnly && searchQuery && filterMode !== 'commands') {
       const gatewayItem: CommandItem = {
         id: 'search-gateway',
         type: 'action',
@@ -532,21 +569,20 @@ function CommandPaletteContent({
   // Effects
   // =============================================================================
 
-  // Content mounts when the palette opens, so on-open setup runs in mount effects.
-  // useState initial values already reset query/index/keyboard-nav; we just need
-  // to suppress mouseEnter from any stale hover and focus the input.
+  // The mount-only hover guard prevents a parked pointer from replacing the initial selection.
+  // Mode changes refocus type-to-search after pointer selection.
   useEffect(() => {
     inputRef.current?.focus()
     requestAnimationFrame(() => {
       ignoreMouseRef.current = false
     })
-  }, [])
+  }, [draftsOnly])
 
-  // Reset selection synchronously when query changes
+  // A shorter query result or mode must not leave Enter pointing at the previous index.
   useLayoutEffect(() => {
     setSelectedIndex(0)
     selectedIndexRef.current = 0
-  }, [query])
+  }, [query, draftsOnly])
 
   // Scroll selected item into view
   useEffect(() => {
@@ -568,20 +604,20 @@ function CommandPaletteContent({
 
     switch (e.key) {
       case 'ArrowDown':
+      case 'ArrowUp': {
         e.preventDefault()
-        e.stopPropagation() // Prevent global shortcuts from firing
-        setIsKeyboardNav(true) // Enter keyboard navigation mode
+        e.stopPropagation()
+        setIsKeyboardNav(true)
         markUserScrollIntent(listRef.current)
-        updateSelectedIndex((i) => Math.min(i + 1, flatItems.length - 1))
+        const focusedRow = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-command-index]') : null
+        const current = focusedRow ? Number(focusedRow.dataset.commandIndex) : selectedIndexRef.current
+        const next = current + (e.key === 'ArrowDown' ? 1 : -1)
+        inputRef.current?.focus()
+        updateSelectedIndex(Math.min(Math.max(0, next), Math.max(0, flatItems.length - 1)))
         break
-      case 'ArrowUp':
-        e.preventDefault()
-        e.stopPropagation() // Prevent global shortcuts from firing
-        setIsKeyboardNav(true) // Enter keyboard navigation mode
-        markUserScrollIntent(listRef.current)
-        updateSelectedIndex((i) => Math.max(i - 1, 0))
-        break
+      }
       case 'Enter': {
+        if (e.target !== inputRef.current) return
         e.preventDefault()
         e.stopPropagation() // Prevent global shortcuts from firing
         // Use ref for synchronous access to avoid race condition with state updates
@@ -636,6 +672,17 @@ function CommandPaletteContent({
             inner input carries `no-focus-ring` so the global 2px outline doesn't
             draw a second, tighter box around just the text field. */}
         <div className="shrink-0 p-3 border-b border-fluux-hover">
+          {draftsOnly && (
+            <button
+              type="button"
+              className="flex items-center gap-2 mb-2 text-sm text-fluux-muted hover:text-fluux-text"
+              onClick={() => { setDraftsOnly(false); setQuery(''); inputRef.current?.focus() }}
+            >
+              <ArrowLeft className="size-4" />
+              {t('common.back')}
+              <span className="text-fluux-text font-medium">{t('commandPalette.drafts')}</span>
+            </button>
+          )}
           <div className="command-search-field flex items-center gap-3 px-3 py-2 rounded-lg border border-fluux-hover bg-fluux-bg/40
             transition-[box-shadow,border-color] duration-150">
             <Search className="size-5 text-fluux-muted flex-shrink-0" />
@@ -644,7 +691,7 @@ function CommandPaletteContent({
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('commandPalette.placeholder')}
+              placeholder={t(draftsOnly ? 'commandPalette.searchDrafts' : 'commandPalette.placeholder')}
               className="flex-1 bg-transparent text-fluux-text placeholder:text-fluux-muted outline-none no-focus-ring text-base"
             />
             <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-xs text-fluux-muted bg-fluux-bg rounded border border-fluux-hover">
@@ -675,7 +722,9 @@ function CommandPaletteContent({
                       type="button"
                       key={item.id}
                       data-selected={isSelected}
+                      data-command-index={itemIndex}
                       onClick={item.action}
+                      onFocus={() => updateSelectedIndex(itemIndex)}
                       onMouseEnter={() => !ignoreMouseRef.current && !isKeyboardNav && updateSelectedIndex(itemIndex)}
                       className={`w-full flex items-center command-row px-4 text-start transition-colors
                         focus-visible:!shadow-none border-s-2
@@ -751,7 +800,7 @@ function CommandPaletteContent({
         {/* Footer */}
         <div className="shrink-0 px-4 py-2 border-t border-fluux-hover text-xs text-fluux-muted">
           <div className="flex items-center gap-3 mb-1.5">
-            {filterMode === 'all' ? (
+            {draftsOnly ? <span>{t('commandPalette.drafts')}</span> : filterMode === 'all' ? (
               <>
                 <span className="flex items-center gap-1">
                   <kbd className="px-1.5 py-0.5 bg-fluux-bg rounded border border-fluux-hover font-mono">@</kbd>

@@ -127,30 +127,33 @@ function getRoomDraftsStorageKey(jid?: string | null): string {
   return buildScopedStorageKey(ROOM_DRAFTS_STORAGE_KEY_BASE, jid)
 }
 
-/**
- * Load room drafts from localStorage.
- */
-function loadDraftsFromStorage(jid?: string | null): Map<string, string> {
+const PUBLIC_DRAFT_MARKER = 'public'
+
+function loadDraftsFromStorage(jid?: string | null): Pick<RoomState, 'drafts' | 'ordinaryDrafts'> {
   const storageKey = getRoomDraftsStorageKey(jid)
   try {
     const stored = localStorage.getItem(storageKey)
     if (stored) {
-      const entries = JSON.parse(stored) as [string, string][]
-      return new Map(entries)
+      const entries = JSON.parse(stored) as [string, string, unknown?][]
+      const drafts = new Map<string, string>()
+      const ordinaryDrafts = new Set<string>()
+      for (const [id, text, marker] of entries) {
+        drafts.set(id, text)
+        if (marker === PUBLIC_DRAFT_MARKER) ordinaryDrafts.add(id)
+        else ordinaryDrafts.delete(id)
+      }
+      return { drafts, ordinaryDrafts }
     }
   } catch {
-    // Ignore parse errors
+    // Unreadable local drafts must not prevent opening rooms.
   }
-  return new Map()
+  return { drafts: new Map(), ordinaryDrafts: new Set() }
 }
 
-/**
- * Save room drafts to localStorage.
- */
-function saveDraftsToStorage(drafts: Map<string, string>, jid?: string | null): void {
-  // Lazy: a coalesced write never pays for the stringify. Error absorption
-  // lives in the throttle.
-  schedule(getRoomDraftsStorageKey(jid), () => JSON.stringify(Array.from(drafts.entries())))
+function saveDraftsToStorage(drafts: Map<string, string>, ordinaryDrafts: Set<string>, jid?: string | null): void {
+  // The third tuple element is ignored by older Map-based readers; losing it safely withholds a draft.
+  schedule(getRoomDraftsStorageKey(jid), () => JSON.stringify(Array.from(drafts, ([id, text]) =>
+    ordinaryDrafts.has(id) ? [id, text, PUBLIC_DRAFT_MARKER] : [id, text])))
 }
 
 /**
@@ -160,7 +163,6 @@ function saveDraftsToStorage(drafts: Map<string, string>, jid?: string | null): 
  * - votedPollIds: polls the user has voted on (set by SDK after successful vote)
  * - dismissedPollIds: polls the user dismissed with X (UI preference)
  *
- * Both use the same serialization pattern as drafts: [roomJid, messageId[]][].
  */
 const ROOM_VOTED_POLLS_STORAGE_KEY_BASE = 'fluux-room-voted-polls'
 const ROOM_DISMISSED_POLLS_STORAGE_KEY_BASE = 'fluux-room-dismissed-polls'
@@ -1082,10 +1084,14 @@ export interface RoomState {
   // Lets the UI hold a neutral loading surface during the async gap instead of
   // flashing the "nothing selected" empty state on tab switch.
   activationPending: boolean
+  /** Requested room during hydration; never part of persisted room data. */
+  activationTarget: string | null
   // Easter egg animation state (ephemeral)
   activeAnimation: { roomJid: string; animation: string; senderName?: string } | null
   // Message drafts per room (persisted to localStorage separately)
   drafts: Map<string, string>
+  /** Only confirmed public text may be advertised as an ordinary draft. */
+  ordinaryDrafts: Set<string>
   // Poll state per room (persisted to localStorage separately)
   // votedPollIds: polls the local user has voted on — safety net when reactions are not yet loaded from MAM
   // dismissedPollIds: polls the user dismissed with X — UI preference
@@ -1319,7 +1325,8 @@ export interface RoomState {
   clearAnimation: () => void
 
   // Draft management
-  setDraft: (roomJid: string, text: string) => void
+  /** Unclassified restored text must not be marked ordinary without an explicit public edit. */
+  setDraft: (roomJid: string, text: string, options?: { ordinary?: boolean }) => void
   getDraft: (roomJid: string) => string
   clearDraft: (roomJid: string) => void
 
@@ -1441,14 +1448,14 @@ function flushPendingRoomOccupants(roomJid: string): void {
 }
 
 function createEmptyRoomState(
-  drafts: Map<string, string> = new Map(),
+  draftStorage: Pick<RoomState, 'drafts' | 'ordinaryDrafts'> = { drafts: new Map(), ordinaryDrafts: new Set() },
   votedPollIds: Map<string, Set<string>> = new Map(),
   dismissedPollIds: Map<string, Set<string>> = new Map(),
   roomGaps: GapMap = new Map(),
   acknowledgedNonAnonymousRooms: Set<string> = new Set(),
   roomCoverage: Map<string, CoverageRecord> = new Map(),
   pendingRetractions: Map<string, PendingRetraction[]> = new Map(),
-): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'messages' | 'lastArrivedMessage' | 'windowAtLiveEdge' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'firstNewMessageCounts' | 'interiorPlacementVersions' | 'bookmarksLoaded'> {
+): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'messages' | 'lastArrivedMessage' | 'windowAtLiveEdge' | 'activeRoomJid' | 'activationPending' | 'activationTarget' | 'activeAnimation' | 'drafts' | 'ordinaryDrafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'firstNewMessageCounts' | 'interiorPlacementVersions' | 'bookmarksLoaded'> {
   return {
     rooms: new Map(),
     roomEntities: new Map(),
@@ -1459,8 +1466,9 @@ function createEmptyRoomState(
     windowAtLiveEdge: new Map(),
     activeRoomJid: null,
     activationPending: false,
+    activationTarget: null,
     activeAnimation: null,
-    drafts,
+    ...draftStorage,
     votedPollIds,
     dismissedPollIds,
     mamQueryStates: new Map(),
@@ -2989,6 +2997,7 @@ export const roomStore = createStore<RoomState>()(
 
   activateRoom: async (roomJid) => {
     const token = ++activationToken
+    set({ activationTarget: roomJid })
     if (roomJid) {
       // Signal the hydration window so the UI can hold a neutral surface
       // instead of flashing the empty state while the cache read is in flight.
@@ -3419,11 +3428,15 @@ export const roomStore = createStore<RoomState>()(
   },
 
   // Draft management (persisted to localStorage)
-  setDraft: (roomJid, text) => {
+  setDraft: (roomJid, text, options) => {
     set((state) => {
       const newDrafts = draftState.setDraft(state.drafts, roomJid, text)
-      saveDraftsToStorage(newDrafts)
-      return { drafts: newDrafts }
+      const ordinaryDrafts = new Set(state.ordinaryDrafts)
+      if (!text.trim()) ordinaryDrafts.delete(roomJid)
+      else if (options?.ordinary) ordinaryDrafts.add(roomJid)
+      else if (state.drafts.get(roomJid) !== text) ordinaryDrafts.delete(roomJid)
+      saveDraftsToStorage(newDrafts, ordinaryDrafts)
+      return { drafts: newDrafts, ordinaryDrafts }
     })
   },
 
@@ -3434,8 +3447,10 @@ export const roomStore = createStore<RoomState>()(
   clearDraft: (roomJid) => {
     set((state) => {
       const newDrafts = draftState.clearDraft(state.drafts, roomJid)
-      saveDraftsToStorage(newDrafts)
-      return { drafts: newDrafts }
+      const ordinaryDrafts = new Set(state.ordinaryDrafts)
+      ordinaryDrafts.delete(roomJid)
+      saveDraftsToStorage(newDrafts, ordinaryDrafts)
+      return { drafts: newDrafts, ordinaryDrafts }
     })
   },
 

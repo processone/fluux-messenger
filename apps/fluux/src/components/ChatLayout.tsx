@@ -1,5 +1,5 @@
 import { ShareInbox } from './ShareInbox'
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { navDebugLog } from '@/utils/scrollDebug'
@@ -7,6 +7,8 @@ import { shouldReplaceOnSelect } from '@/utils/navigationHistory'
 import { Sidebar, type SidebarView } from './Sidebar'
 import { ChatView } from './ChatView'
 import { RoomView } from './RoomView'
+import { ConfirmDialog } from './ConfirmDialog'
+import { canResumeDraftRequest, type DraftResumeTarget, type RegisterDraftResume } from '@/hooks/useDraftResumeTarget'
 import { MemberList } from './MemberList'
 
 // Lazy-loaded views (not on critical path — preloaded after initial render)
@@ -29,7 +31,7 @@ import {
   // Vanilla stores for imperative .getState() access
   chatStore, roomStore, consoleStore, adminStore, rosterStore, searchStore,
   useRosterActions, useEvents, useBlocking, getBareJid, getLocalPart, getDomain,
-  useChatActions, useRoomActions, useXMPPContext,
+  useChatActions, useRoomActions, useXMPPContext, getStorageScopeJid,
   type Contact, type Conversation, type AdminCategory
 } from '@fluux/sdk'
 import { getActiveMessageListController } from './conversation/activeMessageListController'
@@ -176,14 +178,14 @@ function ViewLoadingFallback({ onBack }: { onBack?: () => void }) {
 }
 
 /**
- * Renders the modals ChatLayout owns (command palette + shortcut-help overlay) and
- * subscribes to their open state itself. As a sibling of the layout body, a modal
- * toggle re-renders ONLY this host, not the sidebar column (Sidebar /
- * ConversationList / MemberList). See docs/2026-06-24-render-perf-phase0-baseline.md.
+ * Keep quick-switcher and shortcut-help subscriptions out of the layout body:
+ * opening them must not re-render the sidebar column.
+ * See docs/2026-06-24-render-perf-phase0-baseline.md.
  */
 function ModalHost({
   shortcuts,
   onSidebarViewChange,
+  onResumeDraft,
   onOpenSettings,
   onToggleConsole,
   onToggleShortcutHelp,
@@ -192,7 +194,8 @@ function ModalHost({
   onStartConversation,
 }: {
   shortcuts: ReturnType<typeof useKeyboardShortcuts>
-  onSidebarViewChange: (view: SidebarView) => void
+  onResumeDraft: (view: 'messages' | 'rooms', jid: string) => void
+  onSidebarViewChange: (view: SidebarView, targetJid?: string) => void
   onOpenSettings: () => void
   onToggleConsole: () => void
   onToggleShortcutHelp: () => void
@@ -212,6 +215,7 @@ function ModalHost({
         isOpen={showCommandPalette}
         onClose={() => modalClose('commandPalette')}
         onSidebarViewChange={onSidebarViewChange}
+        onResumeDraft={onResumeDraft}
         onOpenSettings={onOpenSettings}
         onToggleConsole={onToggleConsole}
         onToggleShortcutHelp={onToggleShortcutHelp}
@@ -524,12 +528,12 @@ function ChatLayoutContent() {
     }
     if (sidebarView === 'messages') {
       const current = chatStore.getState()
-      if (activeJid !== current.activeConversationId || (!activeJid && current.activationPending)) {
+      if (current.activationPending ? current.activationTarget !== activeJid : activeJid !== current.activeConversationId) {
         void activateConversation(activeJid)
       }
     } else if (sidebarView === 'rooms') {
       const current = roomStore.getState()
-      if (activeJid !== current.activeRoomJid || (!activeJid && current.activationPending)) {
+      if (current.activationPending ? current.activationTarget !== activeJid : activeJid !== current.activeRoomJid) {
         void activateRoom(activeJid)
       }
     } else if (sidebarView === 'contacts') {
@@ -708,12 +712,12 @@ function ChatLayoutContent() {
 
   // Handle sidebar view changes - delegates to useViewNavigation hook
   // Per-tab memory and side effects now handled by the hook
-  const handleSidebarViewChange = (newView: SidebarView) => {
+  const handleSidebarViewChange = (newView: SidebarView, targetJid?: string) => {
     // Clear selected contact when switching views
     setSelectedContactJid(null)
 
     // Navigate using the hook (handles per-tab memory and mark-as-read)
-    navigateToView(newView)
+    navigateToView(newView, targetJid)
 
     // When switching to a non-admin view, close the admin panel
     if (newView !== 'admin') {
@@ -923,6 +927,52 @@ function ChatLayoutContent() {
     searchStore.getState().setSearchScope(conversationId)
     navigateToSearch()
   }
+
+  const draftResumeDescriptionId = useId()
+  const draftResumeTarget = useRef<DraftResumeTarget | null>(null)
+  const [pendingDraftResume, setPendingDraftResume] = useState<{
+    target: DraftResumeTarget; view: 'messages' | 'rooms'; jid: string;
+    fromView: SidebarView; fromJid: string | null
+  } | null>(null)
+  const focusAfterDraftResume = useRef<{ target: DraftResumeTarget; view: SidebarView; jid: string | null } | null>(null)
+  const registerDraftResume: RegisterDraftResume = useCallback(target => {
+    draftResumeTarget.current = target
+    setPendingDraftResume(current => current && current.target !== target ? null : current)
+    return () => {
+      if (draftResumeTarget.current === target) {
+        draftResumeTarget.current = null
+        setPendingDraftResume(current => current?.target === target ? null : current)
+      }
+    }
+  }, [])
+  const handleResumeDraft = (view: 'messages' | 'rooms', jid: string) => {
+    const target = draftResumeTarget.current
+    if (target && target.id === jid && target.kind === (view === 'messages' ? 'chat' : 'room')) {
+      if (canResumeDraftRequest(target, target)) setPendingDraftResume({ target, view, jid, fromView: urlSidebarView, fromJid: activeJid })
+      return
+    }
+    handleSidebarViewChange(view, jid)
+  }
+  const cancelDraftResume = () => {
+    if (pendingDraftResume) focusAfterDraftResume.current = { target: pendingDraftResume.target, view: pendingDraftResume.fromView, jid: pendingDraftResume.fromJid }
+    setPendingDraftResume(null)
+  }
+  const confirmDraftResume = () => {
+    const request = pendingDraftResume
+    setPendingDraftResume(null)
+    if (!request || !canResumeDraftRequest(request.target, draftResumeTarget.current)) return
+    if (!request.target.resume()) return
+    focusAfterDraftResume.current = { target: request.target, view: request.view, jid: request.jid }
+    handleSidebarViewChange(request.view, request.jid)
+  }
+  useEffect(() => {
+    if (pendingDraftResume || !focusAfterDraftResume.current) return
+    const wanted = focusAfterDraftResume.current
+    focusAfterDraftResume.current = null
+    if (document.querySelector('[data-modal="true"]')) return
+    const active = wanted.target.kind === 'chat' ? chatStore.getState().activeConversationId : roomStore.getState().activeRoomJid
+    if (wanted.target.account === getStorageScopeJid() && active === wanted.target.id && urlSidebarView === wanted.view && activeJid === wanted.jid) composerRef.current?.focus()
+  }, [pendingDraftResume, urlSidebarView, activeJid])
 
   // Open the Saved tab narrowed to one conversation. The main pane keeps that conversation open.
   const handleShowSavedInConversation = (conversationId: string) => {
@@ -1185,6 +1235,7 @@ function ChatLayoutContent() {
             </Suspense>
           ) : activeRoomJid ? (
             <RoomView
+              onRegisterDraftResume={registerDraftResume}
               onBack={() => mainPane.back(handleRoomBack)}
               mainContentRef={focusZoneRefs.mainContent}
               composerRef={focusZoneRefs.composer}
@@ -1204,7 +1255,7 @@ function ChatLayoutContent() {
               ) : undefined}
             />
           ) : activeConversationId ? (
-            <ChatView onBack={() => mainPane.back(handleChatBack)} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} onShowSavedInConversation={handleShowSavedInConversation} onShowProfile={handleShowProfileFromRoom} />
+            <ChatView onRegisterDraftResume={registerDraftResume} onBack={() => mainPane.back(handleChatBack)} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} onShowSavedInConversation={handleShowSavedInConversation} onShowProfile={handleShowProfileFromRoom} />
           ) : selectedContact ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <ContactProfileView
@@ -1271,6 +1322,7 @@ function ChatLayoutContent() {
       <ModalHost
         shortcuts={shortcuts}
         onSidebarViewChange={handleSidebarViewChange}
+        onResumeDraft={handleResumeDraft}
         onOpenSettings={() => navigateToSettings()}
         onToggleConsole={toggleConsole}
         onToggleShortcutHelp={toggleShortcutHelp}
@@ -1281,6 +1333,21 @@ function ChatLayoutContent() {
           if (contact) handleStartConversation(contact)
         }}
       />
+
+      {pendingDraftResume && (
+        <ConfirmDialog
+          title={t('commandPalette.confirmResumeTitle')}
+          message={t(pendingDraftResume.target.mode === 'whisper' ? pendingDraftResume.target.hasAttachment ? 'commandPalette.confirmResumeWhisperFile' : 'commandPalette.confirmResumeWhisper' : 'commandPalette.confirmResumeEdit')}
+          confirmLabel={t('commandPalette.confirmResumeAction')}
+          descriptionId={draftResumeDescriptionId}
+          panelProps={{ role: 'alertdialog', 'aria-modal': true, 'aria-label': t('commandPalette.confirmResumeTitle'), 'aria-describedby': draftResumeDescriptionId }}
+          onPanelKeyDown={(event) => {
+            if (event.key !== 'Escape') event.stopPropagation()
+          }}
+          onConfirm={confirmDraftResume}
+          onCancel={cancelDraftResume}
+        />
+      )}
 
       {/* Toast Notifications */}
       <ToastContainer />

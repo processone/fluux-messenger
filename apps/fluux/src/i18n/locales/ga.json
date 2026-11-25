@@ -1698,6 +1698,13 @@
         }
     },
     "commandPalette": {
+        "drafts": "Dréachtaí",
+        "searchDrafts": "Aimsigh dréacht…",
+        "confirmResumeTitle": "An dréacht a oscailt?",
+        "confirmResumeEdit": "Má osclaíonn tú an dréacht, caillfear na hathruithe nár sábháladh ar an teachtaireacht seo.",
+        "confirmResumeWhisper": "Má osclaíonn tú dréacht an tseomra, caillfear aon téacs príobháideach nár seoladh.",
+        "confirmResumeWhisperFile": "Má osclaíonn tú dréacht an tseomra, caillfear an téacs príobháideach nár seoladh agus an comhad ceangailte.",
+        "confirmResumeAction": "Scrios agus oscail an dréacht",
         "moreMatches": "Tuilleadh torthaí",
         "open": "Oscail an phailéad orduithe",
         "placeholder": "Téigh go...",

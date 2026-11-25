@@ -1698,6 +1698,13 @@
         }
     },
     "commandPalette": {
+        "drafts": "Wersje robocze",
+        "searchDrafts": "Znajdź wersję roboczą…",
+        "confirmResumeTitle": "Otworzyć szkic?",
+        "confirmResumeEdit": "Otwarcie szkicu odrzuci niezapisane zmiany tej wiadomości.",
+        "confirmResumeWhisper": "Otwarcie szkicu pokoju odrzuci niewysłany tekst prywatny.",
+        "confirmResumeWhisperFile": "Otwarcie szkicu pokoju odrzuci niewysłany tekst prywatny i załączony plik.",
+        "confirmResumeAction": "Odrzuć i otwórz szkic",
         "moreMatches": "Więcej wyników",
         "open": "Otwórz paletę poleceń",
         "placeholder": "Przejdź do...",

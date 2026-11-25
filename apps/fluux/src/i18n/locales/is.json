@@ -1692,6 +1692,13 @@
         }
     },
     "commandPalette": {
+        "drafts": "Drög",
+        "searchDrafts": "Finna drög…",
+        "confirmResumeTitle": "Opna uppkast?",
+        "confirmResumeEdit": "Opnun uppkastsins fleygir óvistuðum breytingum á þessum skilaboðum.",
+        "confirmResumeWhisper": "Opnun uppkasts herbergisins fleygir ósendum einkatexta.",
+        "confirmResumeWhisperFile": "Opnun uppkasts herbergisins fleygir ósendum einkatexta og meðfylgjandi skrá.",
+        "confirmResumeAction": "Fleygja og opna uppkast",
         "moreMatches": "Fleiri niðurstöður",
         "open": "Opna skipanaspjald",
         "placeholder": "Fara í...",

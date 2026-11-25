@@ -1,3 +1,4 @@
+import { DRAFT_SAVE_DELAY_MS } from '@/constants/ui'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { getStorageScopeJid, type MentionReference } from '@fluux/sdk'
 import { mergeFailedDraft } from '@/utils/mergeFailedDraft'
@@ -7,11 +8,13 @@ export interface DraftOperations {
   /** Stable backing-store identity, shared by remounted editors. */
   owner: object
   getDraft: (conversationId: string) => string
-  setDraft: (conversationId: string, text: string) => void
+  setDraft: (conversationId: string, text: string, options?: { ordinary?: boolean }) => void
+  getOrdinary?: (conversationId: string, text: string) => boolean
   clearDraft: (conversationId: string) => void
 }
 
 interface DraftSnapshot {
+  ordinary?: boolean
   text: string
   references: MentionReference[]
 }
@@ -43,11 +46,13 @@ function remove<T>(map: WeakMap<object, Map<string, T>>, owner: object, key: str
 }
 function mergeSnapshots(current: DraftSnapshot, failed: DraftSnapshot): DraftSnapshot {
   const text = mergeFailedDraft(current.text, failed.text)
+  // Recovery must not expose unclassified text by merging it into a public draft.
+  const ordinary = (!current.text.trim() || current.ordinary === true) && (!failed.text.trim() || failed.ordinary === true)
   if (current.text === failed.text) {
-    return { text, references: current.references.length ? current.references : failed.references }
+    return { text, ordinary: current.ordinary === true || failed.ordinary === true, references: current.references.length ? current.references : failed.references }
   }
   const offset = current.text ? current.text.length + 2 : 0
-  return { text, references: [...current.references, ...failed.references.map(ref => ({
+  return { text, ordinary, references: [...current.references, ...failed.references.map(ref => ({
     ...ref, begin: ref.begin + offset, end: ref.end + offset,
   }))] }
 }
@@ -65,7 +70,7 @@ export interface UseConversationDraftOptions {
   /** The edit belongs to this ID, which can lag behind navigation by a render. */
   editingConversationId?: string
   getReferences?: () => MentionReference[]
-  onDraftRecovered?: (text: string, references: MentionReference[]) => void
+  onDraftRecovered?: (text: string, references: MentionReference[], ordinary?: boolean) => void
 }
 
 /** Persist ordinary drafts; hold failed sends outside an active edit buffer. */
@@ -74,9 +79,9 @@ export function useConversationDraft({
   editingConversationId, getReferences, onDraftRecovered,
 }: UseConversationDraftOptions): [
   string, React.Dispatch<React.SetStateAction<string>>,
-  (canRecover?: () => boolean) => () => boolean, () => void,
+  (canRecover?: () => boolean) => () => boolean, () => void, () => boolean,
 ] {
-  const { owner, getDraft, setDraft, clearDraft } = draftOperations
+  const { owner, getDraft, setDraft, clearDraft, getOrdinary } = draftOperations
   const isEditing = editingConversationId === conversationId
   const account = getStorageScopeJid()
   const ownerKey = JSON.stringify([account, conversationId])
@@ -107,14 +112,16 @@ export function useConversationDraft({
     setText(next)
     if (editingRef.current) return
     messageDraftRef.current.text = next
+    messageDraftRef.current.ordinary = getOrdinary?.(conversationIdRef.current, next)
     textConversationIdRef.current = conversationIdRef.current
-  }, [cancelPendingSave])
+  }, [cancelPendingSave, getOrdinary])
 
   const persist = useCallback((id: string, snapshot: DraftSnapshot) => {
     if (getStorageScopeJid() !== account) return
     const key = JSON.stringify([account, id])
     if (snapshot.text.trim()) {
-      setDraft(id, snapshot.text)
+      if (getOrdinary) setDraft(id, snapshot.text, { ordinary: snapshot.ordinary === true })
+      else setDraft(id, snapshot.text)
       if (snapshot.references.length) put(draftMentions, owner, key, {
         text: snapshot.text, references: [...snapshot.references],
       })
@@ -123,15 +130,16 @@ export function useConversationDraft({
       clearDraft(id)
       remove(draftMentions, owner, key)
     }
-  }, [account, owner, setDraft, clearDraft])
+  }, [account, owner, setDraft, clearDraft, getOrdinary])
 
   const readMessageDraft = useCallback((id: string): DraftSnapshot => {
     const pending = deferredDrafts.get(owner)?.get(JSON.stringify([account, id]))
     if (pending) return deferredSnapshot(pending)
     if (editingRef.current || wasEditingRef.current) return messageDraftRef.current
-    return { text: composerRef.current?.getText() ?? currentTextRef.current,
+    const text = composerRef.current?.getText() ?? currentTextRef.current
+    return { text, ordinary: getOrdinary?.(id, text),
       references: callbacks.current.getReferences?.() ?? [] }
-  }, [account, owner, composerRef])
+  }, [account, owner, composerRef, getOrdinary])
 
   useEffect(() => {
     const changed = prevConversationIdRef.current !== conversationId
@@ -143,13 +151,13 @@ export function useConversationDraft({
       textConversationIdRef.current = null
       const draft = getDraft(conversationId)
       const metadata = draftMentions.get(owner)?.get(ownerKey)
-      const snapshot = { text: draft, references: metadata?.text === draft ? metadata.references : [] }
+      const snapshot = { text: draft, ordinary: getOrdinary?.(conversationId, draft), references: metadata?.text === draft ? metadata.references : [] }
       messageDraftRef.current = snapshot
       if (!editingRef.current) {
         currentTextRef.current = draft
         setText(draft)
         callbacks.current.onDraftRestored?.()
-        callbacks.current.onDraftRecovered?.(draft, snapshot.references)
+        callbacks.current.onDraftRecovered?.(draft, snapshot.references, snapshot.ordinary)
       }
       prevConversationIdRef.current = conversationId
     }
@@ -160,31 +168,35 @@ export function useConversationDraft({
       const pending = deferredDrafts.get(owner)?.get(ownerKey)
       const snapshot = pending ? deferredSnapshot(pending)
         : (editingRef.current || wasEditingRef.current) ? messageDraftRef.current
-        : { text: composer?.getText() ?? '', references: callbacks.current.getReferences?.() ?? [] }
+        : (() => {
+          const text = composer?.getText() ?? ''
+          return { text, ordinary: getOrdinary?.(conversationId, text), references: callbacks.current.getReferences?.() ?? [] }
+        })()
       if (snapshot.text.trim() || pending) persist(conversationId, snapshot)
     }
-  }, [conversationId, owner, ownerKey, getDraft, composerRef, persist, readMessageDraft, cancelPendingSave])
+  }, [conversationId, owner, ownerKey, getDraft, composerRef, persist, readMessageDraft, cancelPendingSave, getOrdinary])
 
   useEffect(() => {
     if (isEditing || wasEditingRef.current || textConversationIdRef.current !== conversationId || text !== currentTextRef.current) return
     cancelPendingSave()
     if (!text.trim()) persist(conversationId, { text, references: [] })
     else debounceTimerRef.current = setTimeout(() => persist(conversationId, {
-      text, references: callbacks.current.getReferences?.() ?? [],
-    }), 300)
+      text, ordinary: getOrdinary?.(conversationId, text), references: callbacks.current.getReferences?.() ?? [],
+    }), DRAFT_SAVE_DELAY_MS)
     return cancelPendingSave
-  }, [text, isEditing, conversationId, persist, cancelPendingSave])
+  }, [text, isEditing, conversationId, persist, cancelPendingSave, getOrdinary])
+
+  const applySnapshot = useCallback((snapshot: DraftSnapshot) => {
+    cancelPendingSave()
+    messageDraftRef.current = { ...snapshot, references: [...snapshot.references] }
+    currentTextRef.current = snapshot.text
+    callbacks.current.onDraftRecovered?.(snapshot.text, snapshot.references, snapshot.ordinary)
+    if (composerRef.current) composerRef.current.setText(snapshot.text)
+    else userSetText(snapshot.text)
+    persist(conversationId, snapshot)
+  }, [cancelPendingSave, composerRef, userSetText, persist, conversationId])
 
   useEffect(() => {
-    const apply = (snapshot: DraftSnapshot) => {
-      cancelPendingSave()
-      messageDraftRef.current = snapshot
-      currentTextRef.current = snapshot.text
-      if (composerRef.current) composerRef.current.setText(snapshot.text)
-      else userSetText(snapshot.text)
-      callbacks.current.onDraftRecovered?.(snapshot.text, snapshot.references)
-      persist(conversationId, snapshot)
-    }
     const recoverHere = (failed: FailedDraft) => {
       if (!failed.canRecover() || !failed.text.trim()) return false
       if (editingRef.current || wasEditingRef.current) {
@@ -196,7 +208,7 @@ export function useConversationDraft({
         return false
       }
       const current = readMessageDraft(conversationId)
-      apply(mergeSnapshots(current, failed))
+      applySnapshot(mergeSnapshots(current, failed))
       return !current.text
     }
     put(draftOwners, owner, ownerKey, recoverHere)
@@ -205,11 +217,12 @@ export function useConversationDraft({
       const pending = deferredDrafts.get(owner)?.get(ownerKey)
       if (pending) {
         remove(deferredDrafts, owner, ownerKey)
-        apply(deferredSnapshot(pending))
+        applySnapshot(deferredSnapshot(pending))
       } else if (wasEditingRef.current) {
         // Without a failed send, keep the existing edit-finish behavior.
+        const text = composerRef.current?.getText() ?? currentTextRef.current
         messageDraftRef.current = {
-          text: composerRef.current?.getText() ?? currentTextRef.current,
+          text, ordinary: getOrdinary?.(conversationId, text),
           references: callbacks.current.getReferences?.() ?? [],
         }
         persist(conversationId, messageDraftRef.current)
@@ -222,14 +235,15 @@ export function useConversationDraft({
         remove(draftReaders, owner, ownerKey)
       }
     }
-  }, [owner, ownerKey, conversationId, isEditing, composerRef, cancelPendingSave, userSetText, persist, readMessageDraft])
+  }, [owner, ownerKey, conversationId, isEditing, composerRef, cancelPendingSave, userSetText, persist, readMessageDraft, getOrdinary, applySnapshot])
 
   const consumeDraft = useCallback((canRecover?: () => boolean) => {
     const id = conversationId
     const scope = getStorageScopeJid()
     const key = JSON.stringify([scope, id])
+    const text = composerRef.current?.getText() ?? currentTextRef.current
     const submitted: FailedDraft = {
-      text: composerRef.current?.getText() ?? currentTextRef.current,
+      text, ordinary: getOrdinary?.(id, text),
       references: callbacks.current.getReferences?.() ?? [],
       canRecover: () => getStorageScopeJid() === scope && (canRecover?.() ?? true),
     }
@@ -246,7 +260,7 @@ export function useConversationDraft({
         const saved = getDraft(id)
         const metadata = draftMentions.get(owner)?.get(key)
         const pending = deferredDrafts.get(owner)?.get(key) ?? {
-          base: { text: saved, references: metadata?.text === saved ? metadata.references : [] }, failures: [],
+          base: { text: saved, ordinary: getOrdinary?.(id, saved), references: metadata?.text === saved ? metadata.references : [] }, failures: [],
         }
         pending.failures.push(submitted)
         put(deferredDrafts, owner, key, pending)
@@ -254,7 +268,7 @@ export function useConversationDraft({
       }
       return false
     }
-  }, [conversationId, owner, composerRef, cancelPendingSave, clearDraft, getDraft, persist])
+  }, [conversationId, owner, composerRef, cancelPendingSave, clearDraft, getDraft, persist, getOrdinary])
 
   const discardDraft = useCallback(() => {
     remove(deferredDrafts, owner, ownerKey)
@@ -264,7 +278,24 @@ export function useConversationDraft({
     persist(conversationId, messageDraftRef.current)
   }, [owner, ownerKey, userSetText, persist, conversationId])
 
-  return [text, userSetText, consumeDraft, discardDraft]
+  const restoreMessageDraft = useCallback(() => {
+    if (getStorageScopeJid() !== account) return false
+    const pending = deferredDrafts.get(owner)?.get(ownerKey)
+    let snapshot = pending ? deferredSnapshot(pending) : messageDraftRef.current
+    if (!snapshot.text.trim()) {
+      const saved = getDraft(conversationId)
+      const metadata = draftMentions.get(owner)?.get(ownerKey)
+      snapshot = { text: saved, ordinary: getOrdinary?.(conversationId, saved), references: metadata?.text === saved ? metadata.references : [] }
+    }
+    if (!snapshot.text.trim()) return false
+    remove(deferredDrafts, owner, ownerKey)
+    wasEditingRef.current = false
+    textConversationIdRef.current = conversationId
+    applySnapshot({ ...snapshot, references: [...snapshot.references] })
+    return true
+  }, [account, owner, ownerKey, conversationId, getDraft, getOrdinary, applySnapshot])
+
+  return [text, userSetText, consumeDraft, discardDraft, restoreMessageDraft]
 }
 
 /**

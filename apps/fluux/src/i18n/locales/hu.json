@@ -1692,6 +1692,13 @@
         }
     },
     "commandPalette": {
+        "drafts": "Piszkozatok",
+        "searchDrafts": "Piszkozat keresése…",
+        "confirmResumeTitle": "Piszkozat megnyitása?",
+        "confirmResumeEdit": "A piszkozat megnyitása elveti az üzenet nem mentett módosításait.",
+        "confirmResumeWhisper": "A szoba piszkozatának megnyitása elveti az el nem küldött privát szöveget.",
+        "confirmResumeWhisperFile": "A szoba piszkozatának megnyitása elveti az el nem küldött privát szöveget és a csatolt fájlt.",
+        "confirmResumeAction": "Elvetés és piszkozat megnyitása",
         "moreMatches": "További találatok",
         "open": "Parancspaletta megnyitása",
         "placeholder": "Ugrás...",

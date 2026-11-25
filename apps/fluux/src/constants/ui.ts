@@ -9,6 +9,8 @@ import type { PresenceStatus } from '@fluux/sdk'
 /** Maximum rows per searchable suggestion group; filter before applying this limit. */
 export const MAX_SUGGESTIONS = 50
 
+export const DRAFT_SAVE_DELAY_MS = 300
+
 /**
  * Shared colour and shape classes for presence indicators.
  */
