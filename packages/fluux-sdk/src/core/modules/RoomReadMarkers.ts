@@ -86,6 +86,9 @@ interface SavedConsent {
   linkedInput: boolean
   localIdentity?: string
 }
+function hasConfirmedLegacyInput(saved: SavedConsent | undefined) {
+  return !!saved?.legacyChoice && (saved.linkedInput || !!saved.revoked.length || saved.sharedPermission?.choice === saved.legacyChoice)
+}
 interface ConsentFence { epoch: string; edits?: Record<string, string>; generation?: string; revoked?: string[]; input?: string }
 function readConsentFence(raw: string | null): ConsentFence | undefined {
   if (raw?.startsWith('!')) return { epoch: raw }
@@ -146,7 +149,7 @@ function readSavedRoomConsent(account: string): SavedConsent {
       && Object.entries(history.edits).every(([room, edit]) => (record.edits as Record<string, string>)[room] === edit)))
   const cleared = !overlay && !!fenceEpoch && !current
   const oldRooms = validRooms ? [...new Set(record!.rooms as string[])] : []
-  const retained = !!history?.revoked?.length && raw !== null && !!history.input && history.input === continuity?.inputId
+  const retained = history?.revoked !== undefined && raw !== null && !!history.input && history.input === continuity?.inputId
     && continuity?.generation === history.generation && continuity?.input === raw
   const previous = (retained || !history?.edits) && !cleared && record?.version === 2 && validRooms
   const legacy = (retained || fence === null) && record?.version === undefined && typeof record?.enabled === 'boolean' && validRooms
@@ -190,7 +193,7 @@ function persistRoomConsent(account: string, saved: SavedConsent, rooms: string[
   const generation = saved.generation ?? generateUUID()
   const revoked = [...new Set([...saved.revoked, ...saved.rooms.filter(room => !rooms.includes(room)),
     ...Object.keys(edits).filter(room => !rooms.includes(room) && edits[room] !== saved.edits[room])])]
-  const input = saved.legacyChoice && revoked.length ? saved.raw ?? undefined : undefined
+  const input = saved.legacyChoice && (revoked.length || hasConfirmedLegacyInput(saved)) ? saved.raw ?? undefined : undefined
   let inputId: string | undefined
   // Reserve valid input before fencing it out; clearing can erase this proof without reopening import.
   if (input !== undefined) inputId = writeConsentContinuity(account, generation, input).inputId
@@ -473,7 +476,7 @@ export class RoomReadMarkers extends BaseModule {
         const compactEpoch = clearFence()
         try {
           const retainedEdits = Object.fromEntries(rooms.flatMap(room => latest.edits[room] ? [[room, latest.edits[room]]] : []))
-          const input = latest.legacyChoice && revoked.length ? latest.raw ?? undefined : undefined
+          const input = latest.legacyChoice && (revoked.length || hasConfirmedLegacyInput(latest)) ? latest.raw ?? undefined : undefined
           const generation = latest.generation ?? generateUUID()
           const inputId = writeConsentContinuity(account, generation, input).inputId
           localStorage.setItem(storageKey(account, 'migration'), '~' + JSON.stringify([generation, compactEpoch, [...new Set([...latest.revoked, ...revoked])], retainedEdits, 1, inputId]))
@@ -490,6 +493,8 @@ export class RoomReadMarkers extends BaseModule {
     }
     const recoverUnchanged = (durable: boolean) => {
       if ((!changed && !change) || !initial || this.account() !== account) return
+      // A new On that never wrote cannot invalidate another room’s confirmed permission.
+      if (!changed && change && 'room' in change && change.enabled && !initial.rooms.includes(change.room)) return
       try {
         const latest = this.readSavedConsent(account)
         if (initial.raw !== latest.raw || initial.fence !== latest.fence || initial.clearToken !== latest.clearToken
@@ -534,8 +539,8 @@ export class RoomReadMarkers extends BaseModule {
         } catch {
           if (optingOut) recoverRevocation(attempted)
           else if (changed) {
-            // Retained revocations protect untouched choices without authorizing a failed new On.
-            if (!attempted?.legacyChoice || !attempted.revoked.length || (change && 'room' in change && attempted.rooms.includes(change.room))) this.failConsentSave(account, !!change)
+            // Confirmed input protects untouched choices without authorizing a failed new On.
+            if (!attempted || !hasConfirmedLegacyInput(attempted) || (change && 'room' in change && attempted.rooms.includes(change.room))) this.failConsentSave(account, !!change)
             else {
               // Refused replacement must not leave newly reserved identity in a non-erasable shared fallback.
               tryRevokeLegacy(account, attempted, [], attempted.edits, attempted.epoch)
@@ -594,7 +599,7 @@ export class RoomReadMarkers extends BaseModule {
       try {
         const saved = this.readSavedConsent()
         if (saved.needsMigration) void this.migrateConsent()
-        if (!saved.needsMigration || (saved.revoked.length && saved.legacyChoice)) consent = { enabled: saved.rooms.length > 0, rooms: saved.rooms }
+        if (!saved.needsMigration || hasConfirmedLegacyInput(saved)) consent = { enabled: saved.rooms.length > 0, rooms: saved.rooms }
       } catch { /* A read failure hides sharing without discarding durable choices. */ }
     }
     const unknown = this.consentEdits.get(this.roomKey(''))

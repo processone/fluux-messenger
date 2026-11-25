@@ -84,7 +84,9 @@ scoped conversion retains that exception’s revocations and ordering. Migration
 retires shared authority only after a linked replacement is saved, and delayed
 failure cleanup checks the account’s shared protection as well as its token.
 A retained exception links newly reserved local proof even when replacement
-is refused.
+is refused. Exact confirmed shared or linked input survives replacement even
+without a prior revocation; it never grants the proposed unsaved On. A new On
+that fails before writing leaves other confirmed choices unchanged.
 Already-linked inputs need no duplicate exception in the shared clear guard.
 Pure migration never publishes from its first write.
 Refusal of a final On lift leaves its revocation in place without deleting other

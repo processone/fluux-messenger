@@ -1430,7 +1430,7 @@ describe('RoomReadMarkers', () => {
     expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     const backend = globalThis.indexedDB
     vi.stubGlobal('indexedDB', undefined)
-    try { expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(false) }
+    try { expect(await markers.setRoomEnabled(roomJid, true)).toBe(false) }
     finally { vi.stubGlobal('indexedDB', backend) }
     const next = new RoomReadMarkers(dependencies, () => focused)
     try { expect(await next.setRoomEnabled(replayFixture.room, true)).toBe(true) }
@@ -1873,13 +1873,13 @@ describe('RoomReadMarkers', () => {
     } finally { other.cancelPending() }
   })
 
-  async function prepareSharedRevocation(local: boolean, hold?: 'on' | 'open' | 'read', orderingOnly = false) {
+  async function prepareSharedLegacy(local: boolean, rooms = [roomJid, replayFixture.room]) {
     expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     await markers.viewed(roomJid, rows[0])
     expect(send).toHaveBeenCalledTimes(1)
     const storage = localStorage
     const proofKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'continuity'])}`
-    const legacy = JSON.stringify({ enabled: true, rooms: [roomJid, replayFixture.room] })
+    const legacy = JSON.stringify({ enabled: true, rooms })
     if (local) await keepLocalIdentityAfterRefusedConversion(legacy)
     else {
       storage.setItem(consentKey, legacy)
@@ -1891,6 +1891,11 @@ describe('RoomReadMarkers', () => {
       try { expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(false) }
       finally { vi.stubGlobal('localStorage', storage) }
     }
+    return { storage, proofKey }
+  }
+
+  async function prepareSharedRevocation(local: boolean, hold?: 'on' | 'open' | 'read', orderingOnly = false) {
+    const { storage, proofKey } = await prepareSharedLegacy(local)
     const revoke = async () => {
       const next = new RoomReadMarkers(dependencies, () => focused)
       vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
@@ -1986,6 +1991,64 @@ describe('RoomReadMarkers', () => {
       : Reflect.get(base, key, base) }))
     try { opening!.release(); expect(await pending).toBe(false) }
     finally { vi.stubGlobal('localStorage', storage); opening!.release() }
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      await observer.reload()
+      expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(await observer.setRoomEnabled(roomJid, true)).toBe(true)
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { observer.cancelPending() }
+  })
+
+  it.each([false, true].flatMap(local => (['migration', 'On'] as const).flatMap(mode => (['fence', 'preference'] as const).map(refused => [local, mode, refused] as const))))('preserves unrevoked shared input through refused replacement (local proof: %s, %s, %s)', async (local, mode, refused) => {
+    const { storage } = await prepareSharedLegacy(local, [replayFixture.room])
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === (refused === 'fence' ? migrationKey : consentKey)) throw new DOMException('Replacement refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      try {
+        expect(await (mode === 'migration' ? markers.reload() : markers.setRoomEnabled(roomJid, true))).toBe(false)
+        expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
+        observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+        await observer.viewed(roomJid, rows[1])
+        expect(send).toHaveBeenCalledTimes(1)
+      } finally { await observer.reload(); vi.stubGlobal('localStorage', storage) }
+      await observer.reload()
+      expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(await observer.setRoomEnabled(roomJid, true)).toBe(true)
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { observer.cancelPending(); vi.stubGlobal('localStorage', storage) }
+  })
+
+  it.each([false, true].flatMap(local => (['shared', 'linked', 'current'] as const).flatMap(form => (['open', 'read'] as const).map(mode => [local, form, mode] as const))))('preserves unchanged confirmed choices when new On fails before writing (local proof: %s, %s, %s)', async (local, form, mode) => {
+    const { storage, proofKey } = await prepareSharedRevocation(local)
+    if (form === 'linked') {
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === consentKey) throw new DOMException('Preference refused', 'SecurityError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      try { expect(await markers.reload()).toBe(false) }
+      finally { vi.stubGlobal('localStorage', storage) }
+    } else if (form === 'current') expect(await markers.reload()).toBe(true)
+    const keys = [consentKey, migrationKey, proofKey, ROOM_READ_MARKERS_STORAGE_KEY + ':clear-generation']
+    const before = keys.map(key => storage.getItem(key))
+    const opening = pauseNextConsentOpen(mode === 'open')
+    const pending = markers.setRoomEnabled(roomJid, true)
+    await opening.ready
+    let deny = mode === 'read'
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'getItem'
+      ? (name: string) => { if (deny && name === consentKey) { deny = false; throw new DOMException('Read refused', 'SecurityError') } return base.getItem(name) }
+      : Reflect.get(base, key, base) }))
+    try { opening.release(); expect(await pending).toBe(false) }
+    finally { vi.stubGlobal('localStorage', storage); opening.release() }
+    expect(keys.map(key => storage.getItem(key))).toEqual(before)
     const observer = new RoomReadMarkers(dependencies, () => focused)
     try {
       await observer.reload()
