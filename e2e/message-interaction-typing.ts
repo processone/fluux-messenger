@@ -52,19 +52,37 @@ for (const kind of ['chat', 'room'] as const) for (const virtualized of [false, 
     for (const state of ['one', 'two', 'off'] as const) {
       const frames = await sampleInteractionLayout(page, { row: target,
         control: target.getByRole('button', { name: 'More options', exact: true }),
-        tail: history ? undefined : page.locator('.message-row[data-message-id="typing-tail"]') }, async () => {
-        await typing(page, kind, state)
+        tail: history ? undefined : page.locator('.message-row[data-message-id="typing-tail"]'), afterRendering: true }, async () => {
+        await typing(page, kind, state, true)
         await stableFrames(page, id)
       })
       await keepJson(`passive-${state}-frames`, frames)
       await expect(composer).not.toBeFocused()
-      // Passive hover keeps ordinary following animation; held actions alone require per-frame clearance.
-      for (const frame of frames) expect(frame.held).toBeNull()
+      for (const [index, frame] of frames.entries()) {
+        expect(frame.held).toBeNull()
+        expect(frame.viewport.width, 'only the typing slot changes width').toBe(frames[0].viewport.width)
+        if (!history) expect(frame.tail!.height, 'typing wrap must not reflow the original message').toBe(frames[0].tail!.height)
+        if (index === 0) expect(frame.phase).toBe('baseline')
+        else {
+          expect(['after-rendering', 'pending-resize-delivery']).toContain(frame.phase)
+          if (frame.phase === 'pending-resize-delivery') {
+            expect(frame.bandHeight !== frame.deliveredBandHeight || frame.viewport.height !== frame.deliveredViewportHeight).toBe(true)
+            continue
+          }
+          expect(frame.resizeEpoch).toBeGreaterThan(0)
+          expect(frame.deliveredBandHeight).toBe(frame.bandHeight)
+          expect(frame.deliveredViewportHeight).toBe(frame.viewport.height)
+        }
+        if (history) expect(frame.row.top).toBeCloseTo(passiveBefore.rowTop, 0)
+        else expect(frame.tail!.bottom, 'the original tail stays whole on rendered typing frames').toBeLessThanOrEqual(frame.viewport.bottom + 1)
+      }
       const settled = await geometry(page, id)
       expect(settled.held).toBeNull()
       if (history) expect(settled.rowTop).toBeCloseTo(passiveBefore.rowTop, 0)
       else expect(settled.tailBottom!).toBeLessThanOrEqual(settled.viewBottom + 1)
-      passiveStates.push({ state, frames, geometry: settled })
+      const firstRendered = frames.find(frame => frame.phase === 'after-rendering' && frame.bandHeight === settled.band)
+      expect(firstRendered, 'the changed typing band must reach a rendered-frame observation').toBeDefined()
+      passiveStates.push({ state, frames, firstRendered, geometry: settled })
     }
     expect(passiveStates[0].geometry.band).toBeGreaterThan(0)
     expect(passiveStates[1].geometry.band).toBeGreaterThan(passiveStates[0].geometry.band)
@@ -173,7 +191,7 @@ async function observePressedPointerEvents(button: Locator) {
       const scope = window as Window & { __pressedPointerEvents?: unknown[] }
       scope.__pressedPointerEvents = []
       let pointerId = -1
-      for (const type of ['pointerdown', 'gotpointercapture', 'pointermove', 'pointerout', 'pointerup', 'lostpointercapture', 'mousedown', 'mousemove', 'mouseup', 'click']) {
+      for (const type of ['pointerdown', 'gotpointercapture', 'pointermove', 'pointerout', 'pointerup', 'pointercancel', 'lostpointercapture', 'mousedown', 'mousemove', 'mouseup', 'click']) {
         document.addEventListener(type, event => {
           const pointer = event as PointerEvent
           if (type === 'pointerdown') pointerId = pointer.pointerId
@@ -277,8 +295,19 @@ for (const kind of ['chat', 'room'] as const) for (const virtualized of [false, 
         if (typeof id !== 'number') throw new Error('The real press did not provide a pointer identity')
         return id
       })
-      await more.dispatchEvent('pointercancel', { pointerId, pointerType: 'mouse', isPrimary: true, button: 0 })
       await page.mouse.move(0, 0)
+      await expect.poll(() => more.evaluate((button, id) => button.hasPointerCapture(id), pointerId)).toBe(false)
+      // WebKit processes the pending capture release on the next real pointer event.
+      await page.mouse.move(1, 1)
+      const outsideMove = await page.evaluate(() => {
+        const events = (window as Window & { __pressedPointerEvents?: { type: string; x?: number; y?: number; capture?: boolean; trusted: boolean; target: string | null }[] }).__pressedPointerEvents
+        return events?.filter(event => event.type === 'pointermove').at(-1)
+      })
+      expect(outsideMove).toMatchObject({ x: 1, y: 1, capture: false, trusted: true, target: null })
+      await expect.poll(() => row.evaluate(element => element.matches(':hover'))).toBe(false)
+      await expect(list).not.toHaveAttribute('data-message-interaction')
+      await expect(row.locator('[data-message-toolbar]')).toHaveCSS('opacity', '1')
+      await page.locator('body').dispatchEvent('pointercancel', { pointerId, pointerType: 'mouse', isPrimary: true, button: 0 })
     }
     else await page.evaluate(async kind => {
       const scope = window as unknown as InteractionStores

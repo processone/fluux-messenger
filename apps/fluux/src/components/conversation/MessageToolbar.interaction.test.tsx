@@ -59,19 +59,19 @@ describe('held toolbar actions', () => {
     expect(container.querySelector('[data-message-toolbar]')).toHaveClass('opacity-0')
   })
 
-  it('clears only the canceled pointer press without waiting for a compatibility mouseup', () => {
+  it('clears a matching pointer canceled outside the toolbar without a compatibility mouseup', () => {
     const original = props()
     const { container, rerender } = render(<MessageToolbar {...original} />)
     const quick = screen.getAllByLabelText('chat.reactWith')[0]
-    const pointer = (type: string, pointerId: number, isPrimary = true) => fireEvent(quick,
+    const pointer = (type: string, pointerId: number, isPrimary = true, target = quick) => fireEvent(target,
       Object.assign(new Event(type, { bubbles: true }), { pointerId, pointerType: 'pen', isPrimary, button: 0 }))
     pointer('pointerdown', 7)
     fireEvent.mouseDown(quick, { button: 0 })
     pointer('pointerdown', 8, false)
     rerender(<MessageToolbar {...original} isHovered={false} />)
-    pointer('pointercancel', 8, false)
+    pointer('pointercancel', 8, false, document.body)
     expect(container.querySelector('[data-message-toolbar]')).toHaveClass('opacity-100')
-    pointer('pointercancel', 7)
+    pointer('pointercancel', 7, true, document.body)
     expect(container.querySelector('[data-message-toolbar]')).toHaveClass('opacity-0')
     expect(original.onReaction).not.toHaveBeenCalled()
   })

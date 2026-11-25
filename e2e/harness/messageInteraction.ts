@@ -211,18 +211,28 @@ export async function findAndRevealInteractionText(page: Page, query: string) {
 }
 
 
-export async function setInteractionTyping(page: Page, kind: ConversationKind, state: 'one' | 'two' | 'off') {
-  await page.evaluate(({ kind, jid, state }) => {
+export async function setInteractionTyping(page: Page, kind: ConversationKind, state: 'one' | 'two' | 'off', isolateBand = false) {
+  await page.evaluate(({ kind, jid, state, isolateBand }) => {
     const client = (window as unknown as Demo).__demoClient
     const name = state === 'two' ? 'Emmanuelle Catherine Wilson – International infrastructure coordination' : 'Emma Wilson'
+    let width = document.getElementById('interaction-typing-width')
+    if (isolateBand) {
+      if (!width) {
+        width = document.createElement('style')
+        width.id = 'interaction-typing-width'
+        document.head.append(width)
+      }
+      // Only the typing slot changes width; contact names and message-row layout remain fixed.
+      width.textContent = `[data-typing-pill] { max-width: ${state === 'two' ? 120 : 400}px; }`
+    } else width?.remove()
     if (kind === 'chat') {
-      client.emitSDK('contacts:contact-updated', { jid, updates: { name } })
+      if (!isolateBand) client.emitSDK('contacts:contact-updated', { jid, updates: { name } })
       client.emitSDK('chat:typing', { conversationId: jid, jid, isTyping: state !== 'off' })
     } else {
-      client.emitSDK('room:typing', { roomJid: jid, nick: 'Adrien', isTyping: state === 'one' })
-      client.emitSDK('room:typing', { roomJid: jid, nick: 'Emmanuelle Catherine Wilson – International infrastructure coordination', isTyping: state === 'two' })
+      client.emitSDK('room:typing', { roomJid: jid, nick: 'Adrien', isTyping: isolateBand ? state !== 'off' : state === 'one' })
+      client.emitSDK('room:typing', { roomJid: jid, nick: 'Emmanuelle Catherine Wilson – International infrastructure coordination', isTyping: !isolateBand && state === 'two' })
     }
-  }, { kind, jid: jidFor(kind), state })
+  }, { kind, jid: jidFor(kind), state, isolateBand })
   await expect(page.locator('[data-typing-pill]')).toHaveCount(state === 'off' ? 0 : 1)
 }
 
@@ -248,6 +258,11 @@ export async function tabOutOfMessageActions(page: Page) {
 
 type LayoutRect = { top: number; bottom: number; left: number; right: number; width: number; height: number }
 export interface InteractionLayoutFrame {
+  phase?: 'baseline' | 'after-rendering' | 'pending-resize-delivery' | 'raf'
+  deliveredBandHeight?: number | null
+  deliveredViewportHeight?: number | null
+  atMs?: number
+  resizeEpoch?: number
   row: LayoutRect
   control: LayoutRect
   tail: LayoutRect | null
@@ -261,40 +276,78 @@ export interface InteractionLayoutFrame {
 }
 
 export async function sampleInteractionLayout(page: Page, elements: {
-  row: Locator; control: Locator; tail?: Locator; tailText?: string; panel?: Locator
+  row: Locator; control: Locator; tail?: Locator; tailText?: string; panel?: Locator; afterRendering?: boolean
 }, action: () => Promise<unknown>): Promise<InteractionLayoutFrame[]> {
   const handles = {
     row: await elements.row.elementHandle(), control: await elements.control.elementHandle(),
     tail: await elements.tail?.elementHandle() ?? null, panel: await elements.panel?.elementHandle() ?? null,
   }
   try {
-    await page.evaluate(({ row, control, tail, tailText, panel }) => {
+    await page.evaluate(({ row, control, tail, tailText, panel, afterRendering }) => {
       if (!row || !control) throw new Error('Missing layout observation target')
       const list = row.closest('[data-message-list]')!
-      const scope = window as Window & { __interactionLayoutFrames?: InteractionLayoutFrame[]; __interactionLayoutFrame?: number }
+      const scope = window as Window & { __interactionLayoutFrames?: InteractionLayoutFrame[]; __interactionLayoutFrame?: number; __interactionLayoutTimer?: number; __interactionLayoutObserver?: ResizeObserver }
       scope.__interactionLayoutFrames = []
       const box = (element: Element): LayoutRect => {
         const { top, bottom, left, right, width, height } = element.getBoundingClientRect()
         return { top, bottom, left, right, width, height }
       }
-      const tick = () => {
+      let resizeEpoch = 0
+      let deliveredBandHeight: number | null = null
+      let deliveredViewport: LayoutRect | null = null
+      const read = (phase: 'baseline' | 'after-rendering' | 'raf') => {
         const currentTail = tail?.isConnected ? tail : tailText ? [...list.querySelectorAll('.message-row')]
           .find(candidate => candidate.querySelector('[data-msg-text]')?.textContent?.trim() === tailText) : null
-        scope.__interactionLayoutFrames!.push({ row: box(row), control: box(control), tail: currentTail ? box(currentTail) : null,
-          panel: panel ? box(panel) : null, viewport: box(list),
-          bandHeight: list.parentElement!.querySelector('[data-typing-band]')!.getBoundingClientRect().height,
+        const rowBounds = box(row), controlBounds = box(control)
+        const tailBounds = currentTail ? box(currentTail) : null, panelBounds = panel ? box(panel) : null
+        const viewport = box(list)
+        const bandHeight = list.parentElement!.querySelector('[data-typing-band]')!.getBoundingClientRect().height
+        const pendingResize = afterRendering && phase === 'after-rendering' &&
+          (bandHeight !== deliveredBandHeight || viewport.height !== deliveredViewport?.height || viewport.width !== deliveredViewport?.width)
+        scope.__interactionLayoutFrames!.push({ row: rowBounds, control: controlBounds, tail: tailBounds,
+          panel: panelBounds, viewport,
+          bandHeight,
           toolbarOpacity: Number(getComputedStyle(row.querySelector('[data-message-toolbar]')!).opacity),
+          ...(afterRendering ? { phase: pendingResize ? 'pending-resize-delivery' : phase, atMs: performance.now(), resizeEpoch,
+            deliveredBandHeight, deliveredViewportHeight: deliveredViewport?.height ?? null } : {}),
           scrollTop: list.scrollTop, held: list.getAttribute('data-message-interaction'),
           connected: row.isConnected && control.isConnected && (!tail || !!currentTail?.isConnected) })
+      }
+      const afterFrame = () => {
+        if (scope.__interactionLayoutTimer !== undefined) return
+        // Another task can mutate layout before this runs; the delivered dimensions distinguish that from a rendered resize.
+        scope.__interactionLayoutTimer = window.setTimeout(() => {
+          scope.__interactionLayoutTimer = undefined
+          read('after-rendering')
+        }, 0)
+      }
+      const tick = () => {
+        if (afterRendering) afterFrame()
+        else read('raf')
         scope.__interactionLayoutFrame = requestAnimationFrame(tick)
       }
-      tick()
-    }, { ...handles, tailText: elements.tailText })
+      if (afterRendering) {
+        scope.__interactionLayoutObserver = new ResizeObserver(() => {
+          resizeEpoch++
+          deliveredViewport = box(list)
+          deliveredBandHeight = list.parentElement!.querySelector('[data-typing-band]')!.getBoundingClientRect().height
+          afterFrame()
+        })
+        scope.__interactionLayoutObserver.observe(list)
+        scope.__interactionLayoutObserver.observe(list.parentElement!.querySelector('[data-typing-band]')!)
+      }
+      read('baseline')
+      scope.__interactionLayoutFrame = requestAnimationFrame(tick)
+    }, { ...handles, tailText: elements.tailText, afterRendering: elements.afterRendering })
     try { await action() }
     finally {
       await page.evaluate(() => {
-        const scope = window as Window & { __interactionLayoutFrame?: number }
+        const scope = window as Window & { __interactionLayoutFrame?: number; __interactionLayoutTimer?: number; __interactionLayoutObserver?: ResizeObserver }
         if (scope.__interactionLayoutFrame !== undefined) cancelAnimationFrame(scope.__interactionLayoutFrame)
+        if (scope.__interactionLayoutTimer !== undefined) clearTimeout(scope.__interactionLayoutTimer)
+        scope.__interactionLayoutTimer = undefined
+        scope.__interactionLayoutObserver?.disconnect()
+        scope.__interactionLayoutObserver = undefined
       })
     }
     const frames = await page.evaluate(() => (window as Window & { __interactionLayoutFrames?: InteractionLayoutFrame[] }).__interactionLayoutFrames!)

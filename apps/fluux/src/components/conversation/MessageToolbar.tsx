@@ -104,13 +104,19 @@ export const MessageToolbar = memo(function MessageToolbar({
   useEffect(() => {
     if (!pointerPressed) return
     let releaseTimer: ReturnType<typeof setTimeout> | undefined
-    const clear = () => setPointerPressed(false)
+    const clear = () => { pressedPointerId.current = null; setPointerPressed(false) }
+    const onPointerCancel = (event: PointerEvent) => {
+      if (event.pointerId === pressedPointerId.current) clear()
+    }
     const afterMouseUp = () => { releaseTimer = setTimeout(clear, 0) }
     document.addEventListener('mouseup', afterMouseUp, true)
+    // Departure can release capture before cancellation, leaving the event outside this toolbar.
+    document.addEventListener('pointercancel', onPointerCancel, true)
     window.addEventListener('blur', clear)
     return () => {
       clearTimeout(releaseTimer)
       document.removeEventListener('mouseup', afterMouseUp, true)
+      document.removeEventListener('pointercancel', onPointerCancel, true)
       window.removeEventListener('blur', clear)
     }
   }, [pointerPressed])
@@ -203,12 +209,6 @@ export const MessageToolbar = memo(function MessageToolbar({
       data-message-toolbar
       onPointerDownCapture={event => {
         if (event.button === 0 && event.isPrimary) pressedPointerId.current = event.pointerId
-      }}
-      onPointerCancelCapture={event => {
-        if (event.pointerId === pressedPointerId.current) {
-          pressedPointerId.current = null
-          setPointerPressed(false)
-        }
       }}
       onMouseDownCapture={event => {
         setPointerPressed(event.button === 0)
