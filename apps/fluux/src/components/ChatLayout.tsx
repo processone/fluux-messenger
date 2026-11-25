@@ -1340,12 +1340,8 @@ function ChatLayoutContent() {
           confirmLabel={t('commandPalette.confirmResumeAction')}
           descriptionId={draftResumeDescriptionId}
           panelProps={{ role: 'alertdialog', 'aria-modal': true, 'aria-label': t('commandPalette.confirmResumeTitle'), 'aria-describedby': draftResumeDescriptionId }}
-          onPanelKeyDown={(event, { close }) => {
-            event.stopPropagation()
-            if (event.key === 'Escape') {
-              event.preventDefault()
-              close()
-            }
+          onPanelKeyDown={(event) => {
+            if (event.key !== 'Escape') event.stopPropagation()
           }}
           onConfirm={confirmDraftResume}
           onCancel={cancelDraftResume}

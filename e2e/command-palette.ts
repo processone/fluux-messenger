@@ -762,10 +762,10 @@ for (const mode of ['chat-edit', 'room-edit', 'room-whisper'] as const) {
     await expect(confirmation).toBeVisible()
     await expect(confirmation).toHaveAccessibleDescription(mode === 'room-whisper' ? /unsent private text/ : /unsaved changes to this message/)
     const routeBeforeShortcut = await page.evaluate(() => location.hash)
-    for (const key of ['ControlOrMeta+k', 'Alt+1']) {
+    for (const key of [kind === 'chat' ? 'Alt+2' : 'Alt+1', 'ControlOrMeta+k']) {
       await page.keyboard.press(key)
-      await expect(page.getByRole('dialog')).toHaveCount(0)
       expect(await page.evaluate(() => location.hash)).toBe(routeBeforeShortcut)
+      await expect(page.getByRole('dialog')).toHaveCount(0)
       expect(await confirmation.evaluate(element => element.contains(document.activeElement))).toBe(true)
     }
     if (process.env.FLUUX_DRAFT_PROOF) await page.screenshot({ path: test.info().outputPath(`${mode}-confirmation-desktop.png`), animations: 'disabled' })
