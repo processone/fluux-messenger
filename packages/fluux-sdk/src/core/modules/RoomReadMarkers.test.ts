@@ -1049,7 +1049,7 @@ describe('RoomReadMarkers', () => {
     if (target === 'other room') expect(markers.isEnabledFor(edited)).toBe(false)
   })
 
-  it.each(['room', 'all'] as const)('keeps a failed %s Off durable when a growing fence is refused', async mode => {
+  it.each(['room', 'all'] as const)('keeps a failed %s Off durable when history replacement is refused', async mode => {
     localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
     const opening = pauseNextConsentOpen()
     const delayed = markers.setRoomEnabled(roomJid, true)
@@ -1061,7 +1061,7 @@ describe('RoomReadMarkers', () => {
       expect(next.isEnabledFor(roomJid)).toBe(true)
       vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
         ? (name: string, value: string) => {
-          if (name === migrationKey && value.length > (base.getItem(name)?.length ?? 0)) throw new DOMException('Quota exhausted', 'QuotaExceededError')
+          if (name === migrationKey && value.startsWith('{')) throw new DOMException('History write denied', 'SecurityError')
           base.setItem(name, value)
         } : Reflect.get(base, key, base) }))
       expect(mode === 'room' ? await next.setRoomEnabled(roomJid, false) : await next.setEnabled(false)).toBe(false)
@@ -1329,6 +1329,110 @@ describe('RoomReadMarkers', () => {
     } finally { opening.release(); next.cancelPending() }
     expect(await pending).toBe(true)
     expect(keys.map(key => localStorage.getItem(key))).toEqual(expected)
+  })
+
+  it.each([false, true])('keeps both independent Off requests through compact recovery (second opening fails: %s)', async fail => {
+    const first = capturedRoomReading(replayFixture)
+    const second = capturedRoomReading({ ...replayFixture, message: replayFixture.newest })
+    const bRows = [first.row, second.row]
+    const b = createMockRoom(replayFixture.room, { nickname: 'Alice', joined: true, isJoining: false, isPrivate: true,
+      occupants: new Map([
+        ['Alice', { nick: 'Alice', occupantId: first.actor, role: 'participant', affiliation: 'member' }],
+        ['Bob', { nick: 'Bob', occupantId: first.author, role: 'participant', affiliation: 'member' }],
+      ]) })
+    b.readPointer = makeReadPointer(second.row, 'room')
+    stores.room.getRoom.mockImplementation(id => id === roomJid ? room : id === b.jid ? b : undefined)
+    stores.room.getAllRoomMessages.mockImplementation(() => [{ jid: roomJid, messages: rows }, { jid: b.jid, messages: bRows }])
+    stores.room.getMessageByArchiveId.mockImplementation(async (_room, id) => [...rows, ...bRows].find(row => row.stanzaId === id) ?? null)
+    iq.mockImplementation(async request => request.attrs.to === b.jid ? parse(replayFixture.disco) : disco())
+    markers.recordArchiveOrder(b.jid, bRows.map(row => row.stanzaId!))
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    expect(await markers.setRoomEnabled(b.jid, true)).toBe(true)
+    await markers.viewed(roomJid, rows[0])
+    await markers.viewed(b.jid, first.row)
+    expect(send).toHaveBeenCalledTimes(2)
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    next.recordArchiveOrder(b.jid, bRows.map(row => row.stanzaId!))
+    const opening = pauseNextConsentOpen(fail)
+    const pending = next.setRoomEnabled(b.jid, false)
+    await opening.ready
+    const storage = localStorage
+    try {
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === migrationKey && value.startsWith('{')) throw new DOMException('History write denied', 'SecurityError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      expect(await markers.setRoomEnabled(roomJid, false)).toBe(false)
+      await next.viewed(b.jid, second.row)
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { vi.stubGlobal('localStorage', storage); opening.release() }
+    try {
+      expect(await pending).toBe(!fail)
+      await markers.viewed(roomJid, rows[1])
+      await next.viewed(b.jid, second.row)
+      expect(send).toHaveBeenCalledTimes(2)
+      expect(markers.isEnabledFor(roomJid)).toBe(false)
+      expect(next.isEnabledFor(b.jid)).toBe(false)
+      const observer = new RoomReadMarkers(dependencies, () => focused)
+      try { expect(observer.isEnabledFor(roomJid)).toBe(false); expect(observer.isEnabledFor(b.jid)).toBe(false) }
+      finally { observer.cancelPending() }
+    } finally { next.cancelPending() }
+  })
+
+  it.each(['normal', 'compact'] as const)('preserves independent consent when the %s fence succeeds but its consent write is refused', async kind => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(true)
+    await markers.viewed(roomJid, rows[0])
+    expect(send).toHaveBeenCalledTimes(1)
+    const storage = localStorage
+    const original = storage.getItem(consentKey)
+    try {
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => {
+          if (name === consentKey || (name === migrationKey && (kind === 'compact' ? value.startsWith('{') : value.startsWith('~')))) throw new DOMException('Write denied', 'SecurityError')
+          base.setItem(name, value)
+        } : Reflect.get(base, key, base) }))
+      expect(await markers.setRoomEnabled(roomJid, false)).toBe(false)
+      expect(storage.getItem(consentKey)).toBe(original)
+      const observer = new RoomReadMarkers(dependencies, () => focused)
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      try {
+        await observer.reload()
+        expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
+        expect(observer.isEnabledFor(roomJid)).toBe(false)
+        await observer.viewed(roomJid, rows[1])
+        expect(send).toHaveBeenCalledTimes(1)
+      } finally { observer.cancelPending() }
+    } finally { vi.stubGlobal('localStorage', storage) }
+  })
+
+  it.each(['clear', 'selective recovery'] as const)('retires all-Off suppression after %s and preserves newer consent on the next initiating edit', async kind => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    const opening = pauseNextConsentOpen(kind === 'selective recovery')
+    const pending = markers.setEnabled(false)
+    await opening.ready
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      if (kind === 'clear') expect(await clearRoomReadMarkersLocalData(jid)).toBe(true)
+      expect(await next.setRoomEnabled(replayFixture.room, true)).toBe(true)
+    } finally { opening.release(); next.cancelPending() }
+    expect(await pending).toBe(kind === 'clear')
+    expect(markers.getConsent().rooms).toEqual([replayFixture.room])
+    expect(markers.isEnabledFor(replayFixture.room)).toBe(true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    expect(markers.getConsent().rooms).toEqual([replayFixture.room, roomJid])
+  })
+
+  it('merges stored independent choices rather than local failure suppression on a subsequent edit', async () => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    const backend = globalThis.indexedDB
+    vi.stubGlobal('indexedDB', undefined)
+    try { expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(false) }
+    finally { vi.stubGlobal('indexedDB', backend) }
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    try { expect(await next.setRoomEnabled(replayFixture.room, true)).toBe(true) }
+    finally { next.cancelPending() }
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    expect(markers.getConsent().rooms).toEqual([replayFixture.room, roomJid])
   })
 
   it.each(['room', 'all'] as const)('records failed %s revocation even when a legacy overwrite already hides the room', async mode => {
