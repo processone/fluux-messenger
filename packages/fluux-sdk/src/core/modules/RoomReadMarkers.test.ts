@@ -1021,6 +1021,52 @@ describe('RoomReadMarkers', () => {
     expect(saved).toBe(mode === 'other room')
   })
 
+  it.each([['ordinary', 0, 'room'], ['ordinary', 0, 'other room'], ['fallback', 0, 'room'], ['fallback', 0, 'other room'], ['ordinary', 2, 'room'], ['ordinary', 2, 'other room'], ['fallback', 2, 'room'], ['fallback', 2, 'other room']] as const)('retains newer Off ordering after a legacy overwrite (%s fence, version %s, %s)', async (fence, version, target) => {
+    if (fence === 'fallback') {
+      localStorage.setItem(consentKey, JSON.stringify({ enabled: false, rooms: [] }))
+      const storage = localStorage
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === ROOM_READ_MARKERS_STORAGE_KEY + ':clear-generation') throw new DOMException('Quota exhausted', 'QuotaExceededError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      try { expect(await clearRoomReadMarkersLocalData(jid)).toBe(false) }
+      finally { vi.stubGlobal('localStorage', storage) }
+    }
+    const opening = pauseNextConsentOpen()
+    const delayed = markers.setRoomEnabled(roomJid, true)
+    await opening.ready
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    const edited = target === 'room' ? roomJid : replayFixture.room
+    try {
+      expect(await next.setRoomEnabled(edited, true)).toBe(true)
+      expect(await next.setRoomEnabled(edited, false)).toBe(true)
+      localStorage.setItem(consentKey, JSON.stringify(version === 2 ? { version: 2, rooms: [roomJid] } : { enabled: false, rooms: [] }))
+    } finally { opening.release(); next.cancelPending() }
+    expect(await delayed).toBe(target === 'other room')
+    await markers.reload()
+    expect(markers.isEnabledFor(roomJid)).toBe(target === 'other room')
+    if (target === 'other room') expect(markers.isEnabledFor(edited)).toBe(false)
+  })
+
+  it('retains newer room Off through partial unrelated conversion and legacy overwrites', async () => {
+    const opening = pauseNextConsentOpen()
+    const delayed = markers.setRoomEnabled(roomJid, true)
+    await opening.ready
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    const storage = localStorage
+    try {
+      expect(await next.setRoomEnabled(roomJid, true)).toBe(true)
+      expect(await next.setRoomEnabled(roomJid, false)).toBe(true)
+      localStorage.setItem(consentKey, JSON.stringify({ enabled: false, rooms: [] }))
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === ROOM_READ_MARKERS_STORAGE_KEY + ':clear-generation') throw new DOMException('Quota exhausted', 'QuotaExceededError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(false)
+      localStorage.setItem(consentKey, JSON.stringify({ enabled: false, rooms: [] }))
+    } finally { vi.stubGlobal('localStorage', storage); opening.release(); next.cancelPending() }
+    expect(await delayed).toBe(false)
+    expect(markers.isEnabledFor(roomJid)).toBe(false)
+  })
+
   it.each([false, true])('does not reimport a stale legacy opt-in after clearing (all accounts: %s)', async allAccounts => {
     expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     expect(await clearRoomReadMarkersLocalData(jid, allAccounts)).toBe(true)

@@ -27,8 +27,10 @@ not publish a marker or reset the last-sent positions.
 Consent stays under the same account-scoped local storage key, in a versioned
 format without a master flag. Account generations and per-room edit revisions
 reject an older On that arrives after a newer Off without discarding another
-room's choices. Browser storage transactions serialize the actual commits; they
-do not by themselves establish the order in which people made choices. Web Locks
+room's choices. The existing migration fence also retains the epoch and per-room
+edit revisions, so an older client's preference overwrite cannot hide a newer Off
+from a waiting updated client. Browser storage transactions serialize the actual
+commits; they do not by themselves establish the order in which people made choices. Web Locks
 support is not required.
 
 Pending sends recheck durable consent. Choosing Off stops publication in this tab
