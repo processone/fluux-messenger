@@ -1,4 +1,4 @@
-import { createServer, transformWithEsbuild } from 'vite'
+import { createServer, transformWithOxc } from 'vite'
 import { chromium, webkit } from 'playwright'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -31,7 +31,7 @@ const server = await createServer({
       if (importer === virtual) return this.resolve(source, resolve(root, 'packages/fluux-sdk/src/utils/searchIndex.ts'), { skipSelf: true })
     },
     async load(id) {
-      if (id === virtual) return transformWithEsbuild(historicalSource, 'searchIndex-v5.ts', { loader: 'ts' })
+      if (id === virtual) return transformWithOxc(historicalSource, 'searchIndex-v5.ts', { lang: 'ts' })
     },
   }],
 })

@@ -219,6 +219,15 @@ let mamRsmCursor: string | undefined
 /** AbortController for paging search */
 let pagingAbortController: AbortController | null = null
 
+function supersedeArchiveSearch(): number {
+  const controller = pagingAbortController
+  pagingAbortController = null
+  // Invalidate before aborting: abort listeners may observe or replace the active search.
+  const generation = ++mamSearchGeneration
+  controller?.abort()
+  return generation
+}
+
 /** Locale numeric dates in the query are read in (`05/03/2024`); the runtime's when unset. */
 let searchLocale: string | undefined
 
@@ -801,7 +810,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
   const query = state.query
   if ((!query && !state.pickedFilters.length) || !clientRef) return
 
-  const generation = ++mamSearchGeneration
+  const generation = supersedeArchiveSearch()
   const isCurrent = searchSnapshot()
   const scope = state.searchScope
   const supportsFulltext = connectionStore.getState().mamFulltextSearch
@@ -823,12 +832,6 @@ async function executeMAMSearch(append: boolean): Promise<void> {
   if (!text && (filterGroups.length === 0 || !scope || scopeIsRoom)) {
     searchStore.setState({ isSearchingMAM: false, mamError: 'The server archive needs words to search' })
     return
-  }
-
-  // Cancel any ongoing paging search
-  if (pagingAbortController) {
-    pagingAbortController.abort()
-    pagingAbortController = null
   }
 
   searchStore.setState({
@@ -1004,19 +1007,15 @@ export const searchStore = createStore<SearchState>((set, get) => ({
   filtersBuilding: false,
 
   search: (query: string) => {
+    supersedeArchiveSearch()
     if (debounceTimer) {
       clearTimeout(debounceTimer)
       debounceTimer = null
     }
 
-    if (pagingAbortController) {
-      pagingAbortController.abort()
-      pagingAbortController = null
-    }
     const trimmed = query.trim()
     if (!trimmed && !get().pickedFilters.length) {
       set({ filtersIncomplete: false, filtersUnavailable: null, query: '', mamSearched: false, isSearchingMAM: false, isSearching: false, results: [], error: null, mamResults: [], mamError: null, hasMoreMAMResults: false, searchFilter: 'all', inPrefixSuggestions: [], isInPrefixActive: false, filtersBuilding: false })
-      mamSearchGeneration++  // Cancel any in-flight MAM search
       return
     }
 
@@ -1025,7 +1024,6 @@ export const searchStore = createStore<SearchState>((set, get) => ({
     if (inParsed && !inParsed.rest) {
       // User is still typing the in: scope — show suggestions, don't search
       const suggestions = getInPrefixSuggestions(inParsed.inTerm)
-      mamSearchGeneration++
       mamRsmCursor = undefined
       set({
         query,
@@ -1062,7 +1060,6 @@ export const searchStore = createStore<SearchState>((set, get) => ({
     if (prev.mamResults.length > 0) patch.mamResults = []
     if (prev.resultContext.size > 0) patch.resultContext = new Map()
     set(patch)
-    mamSearchGeneration++  // Cancel any in-flight MAM search
     mamRsmCursor = undefined
 
     debounceTimer = setTimeout(() => {
@@ -1072,16 +1069,12 @@ export const searchStore = createStore<SearchState>((set, get) => ({
   },
 
   clearSearch: () => {
+    supersedeArchiveSearch()
     if (debounceTimer) {
       clearTimeout(debounceTimer)
       debounceTimer = null
     }
-    mamSearchGeneration++
     mamRsmCursor = undefined
-    if (pagingAbortController) {
-      pagingAbortController.abort()
-      pagingAbortController = null
-    }
     set({
       query: '',
       pickedFilters: [],
@@ -1117,6 +1110,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
   },
 
   setSearchScope: (conversationId: string | null) => {
+    supersedeArchiveSearch()
     const state = searchStore.getState()
     set({
       searchScope: conversationId,
@@ -1127,7 +1121,6 @@ export const searchStore = createStore<SearchState>((set, get) => ({
       mamError: null,
       hasMoreMAMResults: false,
     })
-    mamSearchGeneration++
     mamRsmCursor = undefined
     // Re-run local search with new scope if there's an active query
     if (state.query || state.pickedFilters.length) {
@@ -1137,6 +1130,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
   },
 
   setSearchFilter: (filter: SearchFilterType) => {
+    supersedeArchiveSearch()
     const state = searchStore.getState()
     set({
       searchFilter: filter,
@@ -1147,7 +1141,6 @@ export const searchStore = createStore<SearchState>((set, get) => ({
       mamError: null,
       hasMoreMAMResults: false,
     })
-    mamSearchGeneration++
     mamRsmCursor = undefined
     // Re-run local search with new filter if there's an active query
     if (state.query.trim() || state.pickedFilters.length) {
@@ -1157,6 +1150,7 @@ export const searchStore = createStore<SearchState>((set, get) => ({
   },
 
   selectInPrefixSuggestion: (suggestion: InPrefixSuggestion) => {
+    supersedeArchiveSearch()
     const state = searchStore.getState()
     const inParsed = parseInPrefix(state.query.trim())
     const restQuery = inParsed?.rest || ''
@@ -1174,7 +1168,6 @@ export const searchStore = createStore<SearchState>((set, get) => ({
       mamError: null,
       hasMoreMAMResults: false,
     })
-    mamSearchGeneration++
     mamRsmCursor = undefined
 
     if (restQuery.trim() || state.pickedFilters.length) {

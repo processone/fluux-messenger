@@ -194,4 +194,29 @@ describe('filter store with the persisted index', () => {
     expect(searchStore.getState().results.map(row => row.messageId)).toEqual(['photo'])
   })
 
+  it.each([
+    ['another chat', () => searchStore.getState().setSearchScope('bob@example.test')],
+    ['scope removal', () => searchStore.getState().setSearchScope(null)],
+    ['conversation-kind tab', () => searchStore.getState().setSearchFilter('rooms')],
+    ['scope suggestion', () => searchStore.getState().selectInPrefixSuggestion({ id: 'bob@example.test', name: 'Bob', isRoom: false })],
+    ['new words', () => searchStore.getState().search('updated')],
+    ['clear', () => searchStore.getState().clearSearch()],
+  ] as const)('aborts archive paging on %s and ignores its late response', async (_name, supersede) => {
+    let finish!: (value: { messages: Message[]; complete: boolean; page: { first: string } }) => void
+    const response = new Promise<{ messages: Message[]; complete: boolean; page: { first: string } }>(resolve => { finish = resolve })
+    const request = vi.fn().mockReturnValue(response)
+    setSearchClient({ messages: { searchConversationHistory: request } } as unknown as XMPPClient)
+    connectionStore.getState().setMAMFulltextSearch(false)
+    searchStore.setState({ query: 'has:image', searchScope: photo.conversationId })
+    searchStore.getState().searchMAM()
+    expect(request.mock.calls[0][1].aborted).toBe(false)
+    supersede()
+    expect(request.mock.calls[0][1].aborted).toBe(true)
+    finish({ messages: [photo], complete: false, page: { first: 'stale' } })
+    await vi.runAllTimersAsync()
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(searchStore.getState().mamResults).toEqual([])
+    expect(searchStore.getState().isSearchingMAM).toBe(false)
+  })
+
 })

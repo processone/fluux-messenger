@@ -42,4 +42,4 @@ The measurement records word-only median/p95 for both implementations, candidate
 
 The helpers in `packages/fluux-sdk/src/utils/fixtures/searchHistory.ts` also generate disposable archive history for service qualification. The historical seeder writes the explicit version-5 schema, not a stripped candidate database. These browser fixtures do not establish server behavior: qualify actual archive paging separately against a disposable XMPP service, with server full-text enabled and disabled, including an empty filtered first page and unchanged timeline coverage.
 
-The panel, notices and preparation messages are localized in all 34 supported languages. Existing localized chip labels remain unchanged.
+The panel, notices and preparation messages are localized in all 34 supported languages.

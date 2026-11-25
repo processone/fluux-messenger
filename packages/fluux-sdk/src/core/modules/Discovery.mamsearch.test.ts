@@ -246,4 +246,18 @@ describe('Discovery MAM Search Capability', () => {
     expect(next.page.first).toBe('archive-middle')
   })
 
+  it('sends no further archive request when cancelled during the inter-page pause', async () => {
+    await connect()
+    const mam = getInternalSurfaceForTesting(xmppClient).mam
+    const controller = new AbortController()
+    const read = vi.spyOn(mam, 'searchArchive').mockResolvedValue({ messages: [], complete: false, page: { first: 'older-page' } })
+    const pending = mam.searchConversationByPaging({ query: 'design', with: 'alice@example.com', maxPages: 20 }, controller.signal)
+    await vi.advanceTimersByTimeAsync(99)
+    expect(read).toHaveBeenCalledTimes(1)
+    controller.abort()
+    await vi.advanceTimersByTimeAsync(1)
+    expect((await pending).messages).toEqual([])
+    expect(read).toHaveBeenCalledTimes(1)
+  })
+
 })
