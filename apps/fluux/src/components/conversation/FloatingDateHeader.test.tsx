@@ -110,6 +110,9 @@ describe('FloatingDateHeader', () => {
 
     rerender(<Host getTopDate={() => '2026-06-28'} suppressed={false} />)
     expect(overlayOf(container).className).toContain('opacity-100')
+    // The approved unread-pill priority must take effect before the opacity fade ends.
+    rerender(<Host getTopDate={() => '2026-06-28'} suppressed />)
+    expect(overlayOf(container)).not.toBeVisible()
   })
 
   it('stays hidden when getTopDate returns null (topmost is a separator)', () => {

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type Locator } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { bootDemo } from './harness/demoBoot'
@@ -7,7 +7,10 @@ import { activateChat, navigateToStressRoom, settle } from './harness/scrollHarn
 // Approved day-pill plan: exercise the real picker and timeline, with the existing
 // disposable demo histories. These browser checks do not qualify native phone pickers.
 type Kind = 'chat' | 'room'
-test.use({ colorScheme: 'dark' })
+test.use({ colorScheme: 'dark', timezoneId: 'Europe/Paris' })
+const TODAY = '2026-03-02'
+const HISTORY_DAY = '2026-03-01'
+const ABSENT_DAY = '2024-02-29'
 const thread = (page: Page) => page.locator('[data-conversation-thread]:not([inert])')
 const actions = (page: Page) => thread(page).locator('[data-header-overflow-trigger]')
 const list = (page: Page) => thread(page).locator('[data-message-list]')
@@ -16,6 +19,7 @@ const separator = (page: Page) => thread(page).locator('[data-date-separator] [d
 const floating = (page: Page) => thread(page).locator('[data-floating-date] [data-date-pill]')
 
 async function setup(page: Page, kind: Kind) {
+  await page.clock.setFixedTime(new Date('2026-03-02T00:30:00Z'))
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
   await bootDemo(page, '/demo.html?tutorial=false&virt=1')
   await page.evaluate(() => {
@@ -46,6 +50,15 @@ async function pickerReady(page: Page) {
   await dialog(page).evaluate(async el => { await Promise.all(el.getAnimations().map(animation => animation.finished)) })
 }
 
+// Traverse the application's real zone route rather than directly focusing a pill.
+async function tabTo(page: Page, target: Locator) {
+  for (let step = 0; step < 40; step++) {
+    if (await target.evaluate(el => el === document.activeElement)) return
+    await page.keyboard.press('Tab')
+  }
+  await expect(target).toBeFocused()
+}
+
 async function openMenu(page: Page) {
   await actions(page).click()
   await page.getByRole('menuitem', { name: 'Jump to date', exact: true })
@@ -65,14 +78,13 @@ async function showFloating(page: Page) {
 for (const kind of ['chat', 'room'] as const) {
   test(`${kind}: separator, floating pill and menu keep their date and keyboard focus`, async ({ page, browserName }) => {
     await setup(page, kind)
-    const day = await separator(page).evaluate(el => el.closest<HTMLElement>('[data-date-separator]')!.dataset.dateSeparator!)
     const top = await list(page).evaluate(el => el.scrollTop)
-    await separator(page).focus()
+    await tabTo(page, separator(page))
     await expect(separator(page)).toHaveAttribute('aria-haspopup', 'dialog')
     await expect(separator(page).locator('svg')).toHaveAttribute('aria-hidden', 'true')
     await shot(page, `after-${browserName}-${kind}-separator`)
     await page.keyboard.press('Enter')
-    await expect(dialog(page).getByLabel('Date', { exact: true })).toHaveValue(day)
+    await expect(dialog(page).getByLabel('Date', { exact: true })).toHaveValue(HISTORY_DAY)
     await expect(dialog(page).getByLabel('Date', { exact: true })).toBeFocused()
     // Native date inputs have internal segments; the trap still treats the input as one tab stop.
     await page.keyboard.press('Shift+Tab')
@@ -85,22 +97,33 @@ for (const kind of ['chat', 'room'] as const) {
     await expect(separator(page)).toBeFocused()
     expect(await list(page).evaluate(el => el.scrollTop)).toBe(top)
 
-    await showFloating(page)
+    // Today's first message is known from the demo fixture; park just inside it,
+    // not on its separator, so the floating opener has a different day.
+    await list(page).evaluate((el, id) => {
+      const row = el.querySelector<HTMLElement>(`[data-message-id="${id}"]`)!
+      el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top + 4
+      el.dispatchEvent(new Event('scroll'))
+    }, kind === 'chat' ? 'demo-emma-1' : 'demo-room-5')
+    await expect(thread(page).locator('[data-floating-date]')).toHaveAttribute('aria-hidden', 'false')
+    await settle(page)
     const label = await floating(page).getAttribute('aria-label')
-    await floating(page).focus()
+    await tabTo(page, floating(page))
     await shot(page, `after-${browserName}-${kind}-floating`)
     await page.keyboard.press('Space')
     await expect(dialog(page)).toBeVisible()
     expect(label).toContain('Jump to date')
+    await expect(dialog(page).getByLabel('Date', { exact: true })).toHaveValue(TODAY)
     await page.keyboard.press('Escape')
     await expect(dialog(page)).toHaveCount(0)
     await expect(floating(page)).toBeFocused()
-    await openMenu(page)
-    const today = await page.evaluate(() => {
-      const now = new Date()
-      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    })
-    await expect(dialog(page).getByLabel('Date', { exact: true })).toHaveValue(today)
+    // Crossing midnight must not make the menu inherit either pill's saved day.
+    await page.clock.setFixedTime(new Date('2026-03-03T00:30:00Z'))
+    await tabTo(page, actions(page))
+    await page.keyboard.press('Space')
+    await tabTo(page, page.getByRole('menuitem', { name: 'Jump to date', exact: true }))
+    await page.keyboard.press('Enter')
+    await pickerReady(page)
+    await expect(dialog(page).getByLabel('Date', { exact: true })).toHaveValue('2026-03-03')
     await page.keyboard.press('Escape')
     await expect(dialog(page)).toHaveCount(0)
     await expect(actions(page)).toBeFocused()
@@ -132,7 +155,7 @@ for (const kind of ['chat', 'room'] as const) {
 
   test(`${kind}: touch controls fit 320 and 390 pixel screens`, async ({ browser, browserName }) => {
     for (const width of [320, 390]) {
-      const context = await browser.newContext({ viewport: { width, height: 844 }, hasTouch: true, isMobile: true, colorScheme: 'dark' })
+      const context = await browser.newContext({ viewport: { width, height: 844 }, hasTouch: true, isMobile: true, colorScheme: 'dark', timezoneId: 'Europe/Paris' })
       try {
         const page = await context.newPage()
         await setup(page, kind)
@@ -151,9 +174,15 @@ for (const kind of ['chat', 'room'] as const) {
         if (browserName === 'chromium') {
           const session = await context.newCDPSession(page)
           try {
-            await session.send('Input.synthesizeScrollGesture', {
-              x: row.x + 4, y: pillBox.y + pillBox.height / 2, yDistance: -150, speed: 400, gestureSourceType: 'touch',
-            })
+            const scroller = (await list(page).boundingBox())!
+            const x = row.x + 4
+            const y = scroller.y + scroller.height * 0.75
+            await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] })
+            for (let step = 1; step <= 12; step++) {
+              await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - step * 12 }] })
+              await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())))
+            }
+            await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
             await expect.poll(() => list(page).evaluate(el => el.scrollTop)).toBeGreaterThan(0)
           } finally { await session.detach() }
           await list(page).evaluate(el => { el.scrollTop = 0 })
@@ -194,8 +223,7 @@ for (const kind of ['chat', 'room'] as const) {
         ? Promise.reject(new Error('Archive unavailable in isolated demo check')) : original(options)
     }, kind)
     await openMenu(page)
-    const value = await dialog(page).getByLabel('Date', { exact: true }).inputValue()
-    const absentDay = `${Number(value.slice(0, 4)) - 1}${value.slice(4)}`
+    const absentDay = ABSENT_DAY
     await dialog(page).getByLabel('Date', { exact: true }).fill(absentDay)
     await dialog(page).getByRole('button', { name: 'Go', exact: true }).click()
     await expect(dialog(page).getByRole('alert')).toHaveText('Could not reach the message archive. Try again once you are online.')
@@ -243,6 +271,60 @@ for (const kind of ['chat', 'room'] as const) {
     await expect(page.getByRole('alert')).toHaveCount(0)
   })
 
+  for (const outcome of ['cancel', 'foreground'] as const) {
+    test(`${kind}: pending lookup retains focus and respects ${outcome}`, async ({ page }) => {
+      await setup(page, kind)
+      // Delay the demo archive, then release its real answer rather than inventing a landing row.
+      await page.evaluate(kind => {
+        const scope = window as unknown as {
+          __demoClient: { messages: Record<string, (options: Record<string, unknown>) => Promise<unknown>> }
+          __dateRelease: () => void
+          __datePending: boolean
+          __dateRequests: number
+        }
+        const method = kind === 'chat' ? 'queryMAM' : 'queryRoomMAM'
+        const original = scope.__demoClient.messages[method].bind(scope.__demoClient.messages)
+        let hold = true
+        scope.__dateRequests = 0
+        scope.__demoClient.messages[method] = options => {
+          if (!options.dateLookup) return original(options)
+          scope.__dateRequests++
+          if (!hold) return original(options)
+          hold = false
+          scope.__datePending = true
+          return new Promise((resolve, reject) => { scope.__dateRelease = () => { void original(options).then(resolve, reject) } })
+        }
+      }, kind)
+      await openMenu(page)
+      const input = dialog(page).getByLabel('Date', { exact: true })
+      await input.fill(ABSENT_DAY)
+      await input.press('Enter')
+      await page.waitForFunction(() => (window as unknown as { __datePending: boolean }).__datePending)
+      await expect(input).toBeFocused()
+      await page.keyboard.press('Tab')
+      const go = dialog(page).getByRole('button', { name: 'Searching...', exact: true })
+      await expect(go).toBeFocused()
+      await page.keyboard.press('Enter')
+      expect(await page.evaluate(() => (window as unknown as { __dateRequests: number }).__dateRequests)).toBe(1)
+      const top = await list(page).evaluate(el => el.scrollTop)
+      if (outcome === 'cancel') await page.keyboard.press('Escape')
+      else {
+        await page.keyboard.press('ControlOrMeta+k')
+        await expect(page.getByPlaceholder('Go to...', { exact: true })).toBeFocused()
+      }
+      await page.evaluate(() => (window as unknown as { __dateRelease: () => void }).__dateRelease())
+      await expect(dialog(page)).toHaveCount(0)
+      if (outcome === 'cancel') {
+        await expect(actions(page)).toBeFocused()
+        expect(await list(page).evaluate(el => el.scrollTop)).toBe(top)
+      } else {
+        await expect(page.getByPlaceholder('Go to...', { exact: true })).toBeFocused()
+        await page.keyboard.press('Escape')
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      }
+    })
+  }
+
   test(`${kind}: larger text preserves the reader and completed jumps focus messages`, async ({ page }) => {
     await setup(page, kind)
     await showFloating(page)
@@ -251,22 +333,41 @@ for (const kind of ['chat', 'room'] as const) {
       const row = [...el.querySelectorAll<HTMLElement>('[data-message-id]')].find(row => row.getBoundingClientRect().top >= bounds.top)
       return { id: row!.dataset.messageId!, top: row!.getBoundingClientRect().top }
     })
-    await page.addStyleTag({ content: '[data-date-pill] { font-size: 150% } [data-date-pill] > span { font-size: inherit; white-space: normal }' })
+    const dateRow = thread(page).locator('[data-date-separator]').first()
+    const dateHeight = (await dateRow.boundingBox())!.height
+    await page.addStyleTag({ content: '[data-date-pill] { font-size: 200%; line-height: 1.5 } [data-date-pill] > span { font-size: inherit; line-height: inherit; white-space: normal }' })
     await settle(page)
+    expect((await dateRow.boundingBox())!.height).toBeGreaterThan(dateHeight)
     const currentTop = await page.locator(`[data-message-id="${anchor.id}"]`).first().evaluate(el => el.getBoundingClientRect().top)
     expect(Math.abs(currentTop - anchor.top)).toBeLessThanOrEqual(2)
     await openMenu(page)
     const input = dialog(page).getByLabel('Date', { exact: true })
-    await input.fill(await page.evaluate(() => {
-      const now = new Date()
-      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    }))
+    await input.fill(TODAY)
+    await page.evaluate(() => {
+      const target = document.querySelector<HTMLElement>('[data-conversation-thread]:not([inert]) [data-date-focus-target]')!
+      const focus = target.focus.bind(target)
+      target.focus = options => {
+        const scroller = target.querySelector('[data-message-list]')!
+        const before = scroller.scrollTop
+        focus(options)
+        ;(window as unknown as { __dateFocusScroll: { before: number; after: number } }).__dateFocusScroll = { before, after: scroller.scrollTop }
+      }
+    })
+    // At 01:30 Paris time, Emma's first current-day message is 45 minutes old;
+    // the team's first current-day message is its 1.5-hour-old deployment report.
+    const expectedId = kind === 'chat' ? 'demo-emma-1' : 'demo-room-5'
+    const landed = list(page).locator(`[data-message-row-id][data-message-id="${expectedId}"]`)
     await dialog(page).getByRole('button', { name: 'Go', exact: true }).click()
     await expect(dialog(page)).toHaveCount(0)
+    await expect(landed).toHaveClass(/message-highlight/)
     await expect(thread(page).locator('[data-date-focus-target]')).toBeFocused()
     await settle(page)
-    const top = await list(page).evaluate(el => el.scrollTop)
-    await settle(page)
-    expect(await list(page).evaluate(el => el.scrollTop)).toBe(top)
+    const focusScroll = await page.evaluate(() => (window as unknown as { __dateFocusScroll: { before: number; after: number } }).__dateFocusScroll)
+    expect(focusScroll.after).toBe(focusScroll.before)
+    await expect(landed).toBeVisible()
+    const bounds = (await list(page).boundingBox())!
+    const row = (await landed.boundingBox())!
+    expect(row.y).toBeGreaterThanOrEqual(bounds.y)
+    expect(row.y).toBeLessThan(bounds.y + bounds.height)
   })
 }

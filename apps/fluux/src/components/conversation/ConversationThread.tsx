@@ -48,6 +48,9 @@ export function ConversationThread({
     const root = rootRef.current
     // An old dialog's cleanup must not focus a conversation opened in the meantime.
     if (!root?.isConnected || root.dataset.conversationThread !== id || root.closest('[inert], [aria-hidden="true"]')) return
+    // A foreground modal owns focus even if this lookup finishes behind it.
+    const focusedModal = document.activeElement?.closest('[data-modal="true"]')
+    if (focusedModal && !focusedModal.querySelector('#jump-to-date')) return
     if (jumped) root.querySelector<HTMLElement>('[data-date-focus-target]')?.focus({ preventScroll: true })
     else if (opener?.matches('[data-date-pill]') && root.contains(opener) && isDatePillVisible(opener)) opener.focus({ preventScroll: true })
     else focusConversationActions(root)

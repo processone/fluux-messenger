@@ -67,6 +67,7 @@ export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded,
   const close = () => { closed.current = true; restoreRequested.current = true; onClose() }
 
   const jump = async (day: string) => {
+    if (busy || closed.current) return
     const bounds = localDayBounds(day)
     if (!bounds || day > today) { setError(t('chat.jumpToDate.invalid')); return }
     const lang = i18n.language.split('-')[0]
@@ -107,7 +108,7 @@ export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded,
   }
 
   return (
-    <ModalShell title={t('chat.jumpToDate.title')} dialogLabel={t('chat.jumpToDate.title')} onClose={close} align="top" restoreFocus={onRestoreFocus ? restoreFocus : undefined}>
+    <ModalShell title={t('chat.jumpToDate.title')} dialogLabel={t('chat.jumpToDate.title')} onClose={close} onDismissRequest={() => { closed.current = true }} align="top" restoreFocus={onRestoreFocus ? restoreFocus : undefined}>
       <form onSubmit={(e) => { e.preventDefault(); void jump(value) }} className="p-4 space-y-3">
         <label htmlFor="jump-to-date" className="block text-xs font-semibold text-fluux-muted uppercase">
           {t('chat.jumpToDate.date')}
@@ -121,14 +122,16 @@ export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded,
             max={today}
             required
             onChange={(e) => setValue(e.target.value)}
-            disabled={busy}
+            readOnly={busy}
+            aria-busy={busy}
             aria-describedby={error ? 'jump-to-date-error' : undefined}
-            className="tap-target flex-1 basis-48 min-w-0 w-full max-w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded border border-transparent disabled:opacity-50"
+            className="tap-target flex-1 basis-48 min-w-0 w-full max-w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded border border-transparent aria-busy:opacity-50"
           />
           <button
             type="submit"
-            disabled={busy || !value}
-            className="tap-target px-4 py-2 text-fluux-text-on-accent bg-fluux-brand rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            disabled={!value}
+            aria-disabled={busy}
+            className="tap-target px-4 py-2 text-fluux-text-on-accent bg-fluux-brand rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:cursor-not-allowed transition-colors"
           >
             {busy ? t('chat.jumpToDate.searching') : t('chat.jumpToDate.go')}
           </button>
@@ -138,9 +141,9 @@ export function JumpToDateDialog({ kind, conversationId, initialDay, readLoaded,
             <button
               key={key}
               type="button"
-              disabled={busy}
-              onClick={() => { const day = preset(days, months); setValue(day); void jump(day) }}
-              className="tap-target px-3 py-1 text-sm rounded-full bg-fluux-bg text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover disabled:opacity-50 transition-colors"
+              aria-disabled={busy}
+              onClick={() => { if (busy) return; const day = preset(days, months); setValue(day); void jump(day) }}
+              className="tap-target px-3 py-1 text-sm rounded-full bg-fluux-bg text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover aria-disabled:opacity-50 transition-colors"
             >
               {t(`chat.jumpToDate.${key}`)}
             </button>

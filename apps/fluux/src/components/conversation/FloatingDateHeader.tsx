@@ -90,6 +90,7 @@ export function FloatingDateHeader({ scrollerRef, getTopDate, suppressed = false
       ref={overlayRef}
       data-floating-date
       inert={!visible || undefined}
+      style={suppressed ? { visibility: 'hidden' } : undefined}
       onFocusCapture={() => { heldFocus.current = true }}
       onBlurCapture={() => { heldFocus.current = false }}
       className={`absolute top-3 inset-x-0 z-30 flex justify-center pointer-events-none transition-opacity duration-200 ${

@@ -25,6 +25,8 @@ interface ModalOverlayProps {
   /** Dismiss the modal. Backdrop click and Escape route through the exit
    *  transition, then invoke this. */
   onClose: () => void
+  /** Cancel in-flight work before the dismiss animation starts. */
+  onDismissRequest?: () => void
   /** Vertical placement: 'center' (default) or 'top' (drops in from ~15vh,
    *  used by the command palette). */
   align?: 'center' | 'top'
@@ -37,7 +39,7 @@ interface ModalOverlayProps {
   /** Focus target restored when the OS window refocuses; defaults to the panel.
    *  See useRestoreFocus for the rationale. */
   focusRef?: RefObject<HTMLElement | null>
-  /** Picker-specific restoration when its opener may have left the visible timeline. */
+  /** Replaces opener restoration on effect cleanup, including unmount and StrictMode probes. */
   restoreFocus?: (opener: HTMLElement | null) => void
   /** Where focus lands when the modal opens (ignored when `focusRef` is set):
    *  - `'auto'` (default): the first focusable child, so form modals focus their
@@ -93,6 +95,7 @@ const ALIGN_CLASS = {
  */
 export function ModalOverlay({
   onClose,
+  onDismissRequest,
   align = 'center',
   width = 'max-w-sm',
   panelClassName,
@@ -117,7 +120,10 @@ export function ModalOverlay({
   // The transition-aware dismiss. Always closes when invoked (e.g. an explicit
   // Cancel / X button via the children render-prop) — `dismissable` gates only
   // the implicit backdrop-click and Escape affordances below, not this.
-  const close = useCallback(() => requestClose(onClose), [requestClose, onClose])
+  const close = useCallback(() => {
+    onDismissRequest?.()
+    requestClose(onClose)
+  }, [requestClose, onClose, onDismissRequest])
 
   // Trap Tab focus inside the panel and return focus to the opener on close.
   // `focusRef` wins; otherwise `initialFocus='panel'` lands on the container so a

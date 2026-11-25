@@ -747,6 +747,33 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
       } finally { document.documentElement.removeAttribute('data-motion') }
     })
 
+    // Approved stacked-dialog contract: a completed lookup cannot steal foreground focus.
+    it('leaves focus in a modal opened above a pending date lookup', async () => {
+      document.documentElement.setAttribute('data-motion', 'reduced')
+      let resolve!: (result: unknown) => void
+      h.findFirstMessageOfDay.mockReturnValueOnce(new Promise(done => { resolve = done }))
+      kind.mount()
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      fireEvent.submit(screen.getByLabelText('chat.jumpToDate.date').closest('form')!)
+      const foreground = document.createElement('div')
+      foreground.dataset.modal = 'true'
+      const input = document.createElement('input')
+      foreground.append(input)
+      document.body.append(foreground)
+      const focusMessages = vi.spyOn(document.querySelector<HTMLElement>('[data-date-focus-target]')!, 'focus')
+      try {
+        input.focus()
+        await act(async () => resolve({ kind: 'found', message: kind.messages()[0], source: 'archive' }))
+        expect(screen.queryByRole('dialog')).toBeNull()
+        expect(input).toHaveFocus()
+        expect(focusMessages).not.toHaveBeenCalled()
+        expect(kind.storeSpies.setTargetMessageId).toHaveBeenCalled()
+      } finally {
+        foreground.remove()
+        document.documentElement.removeAttribute('data-motion')
+      }
+    })
+
     it('does not restore old-dialog focus after a conversation switch', () => {
       const { rerender } = kind.mount()
       const actions = screen.getByRole('button', { name: 'Conversation actions' })

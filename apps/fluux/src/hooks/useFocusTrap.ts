@@ -11,7 +11,7 @@ interface FocusTrapOptions {
   /** Preferred element to focus on open; falls back to the first focusable
    *  element, then the container itself. */
   initialFocusRef?: RefObject<HTMLElement | null>
-  /** Override restoration when the opener can disappear or an action changes the focus destination. */
+  /** Replaces default opener restoration on every effect cleanup, including StrictMode probes. */
   restoreFocus?: (opener: HTMLElement | null) => void
   /** Gate the trap (e.g. an overlay's `open`/`isOpen` flag). Default true. */
   active?: boolean
@@ -26,7 +26,8 @@ interface FocusTrapOptions {
  * - moves focus into the container when it opens,
  * - cycles Tab / Shift+Tab within the container so focus never reaches the UI
  *   beneath it,
- * - returns focus to the element that was focused before it opened, on close.
+ * - restores the opener on cleanup by default, or calls the custom restorer;
+ *   the caller decides whether that cleanup should move focus.
  *
  * The keydown listener is attached to the container (not `document`), so a
  * stacked overlay wins automatically: the lower overlay's container never

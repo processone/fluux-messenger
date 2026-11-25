@@ -30,7 +30,7 @@ export function DatePill({ date, label, className = '', onSelect, tabIndex }: {
       data-date-pill
       onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); onSelect(date) }}
       onKeyDown={(event) => {
-        // Keep native button activation out of the timeline's message-selection keys.
+        // Enter must not select a message, and Space must not trigger type-to-focus.
         if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
       }}
       tabIndex={tabIndex}
