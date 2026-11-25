@@ -30,8 +30,16 @@ export function useSavedMessageAction(message: BaseMessage) {
     if (!state.save(entry)) addToast('error', t('saved.full', { count: state.limit ?? 0 }))
   }, [row, addToast, t])
 
+  const remove = useCallback(() => {
+    const state = savedStore.getState()
+    const entry = buildSavedMessage(row, connectionStore.getState().jid ?? '')
+    const existing = findSavedEntry(state.entries, entry)
+    if (existing) state.remove(existing.id)
+  }, [row])
+
   return {
     isSaved: !!savedEntry,
+    onRemoveSaved: remove,
     onToggleSaved: savedEntry || saveable ? toggle : undefined,
   }
 }
