@@ -319,7 +319,6 @@ export function useTheme() {
     // 6. Sync native iOS views drawn over the app
     setIosAppearance(mode === 'system' ? null : resolved)
 
-    // 7. Native web view behind the keyboard corners
     syncKeyboardBackdrop()
   }, [mode, activeThemeId, getActiveTheme, accentPreset])
 

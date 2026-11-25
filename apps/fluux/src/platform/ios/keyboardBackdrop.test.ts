@@ -14,6 +14,11 @@ describe('visibleColor', () => {
     // Half white over #212535 is what the screen shows, not either color alone.
     expect(visibleColor(['rgba(255, 255, 255, 0.5)', 'rgb(33, 37, 53)'], read)).toEqual([144, 146, 154])
   })
+  it('never reads layers below the first opaque one', () => {
+    const seen: string[] = []
+    visibleColor((function* () { yield 'rgba(0, 0, 0, 0)'; yield 'rgb(33, 37, 53)'; yield 'rgb(1, 2, 3)' })(), css => { seen.push(css); return read(css) })
+    expect(seen).toEqual(['rgba(0, 0, 0, 0)', 'rgb(33, 37, 53)'])
+  })
   it('returns null when nothing is opaque', () => {
     expect(visibleColor(['rgba(0, 0, 0, 0)'], read)).toBeNull()
   })

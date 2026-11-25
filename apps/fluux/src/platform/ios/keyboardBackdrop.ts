@@ -13,14 +13,20 @@ type Rgba = readonly [number, number, number, number]
 /**
  * The color the page shows at a point: the first opaque layer from the top of the element
  * stack down, with the translucent layers above it blended on top, nearest layer last.
+ * Layers are read lazily, so nothing below the first opaque one is ever evaluated.
  */
-export function visibleColor(stack: readonly string[], read: (css: string) => Rgba): readonly [number, number, number] | null {
-  const layers = stack.map(read)
-  const base = layers.findIndex(layer => layer[3] === 255)
-  if (base < 0) return null
-  let [r, g, b] = layers[base]
-  for (let i = base - 1; i >= 0; i--) {
-    const [lr, lg, lb, la] = layers[i]
+export function visibleColor(stack: Iterable<string>, read: (css: string) => Rgba): readonly [number, number, number] | null {
+  const above: Rgba[] = []
+  let base: Rgba | null = null
+  for (const css of stack) {
+    const layer = read(css)
+    if (layer[3] === 255) { base = layer; break }
+    above.push(layer)
+  }
+  if (!base) return null
+  let [r, g, b] = base
+  for (let i = above.length - 1; i >= 0; i--) {
+    const [lr, lg, lb, la] = above[i]
     const alpha = la / 255
     r = lr * alpha + r * (1 - alpha)
     g = lg * alpha + g * (1 - alpha)
@@ -29,11 +35,13 @@ export function visibleColor(stack: readonly string[], read: (css: string) => Rg
   return [Math.round(r), Math.round(g), Math.round(b)]
 }
 
+let reader: ((css: string) => Rgba) | null = null
 function readThroughCanvas(): (css: string) => Rgba {
+  if (reader) return reader
   const canvas = document.createElement('canvas')
   canvas.width = canvas.height = 1
   const context = canvas.getContext('2d', { willReadFrequently: true })
-  return css => {
+  reader = css => {
     if (!context) return [0, 0, 0, 0]
     context.clearRect(0, 0, 1, 1)
     context.fillStyle = '#000'
@@ -42,6 +50,7 @@ function readThroughCanvas(): (css: string) => Rgba {
     const d = context.getImageData(0, 0, 1, 1).data
     return [d[0], d[1], d[2], d[3]]
   }
+  return reader
 }
 
 let painted = ''
@@ -54,12 +63,13 @@ function sample(): void {
   // Layout coordinates of the last visible row: the visual viewport has been panned by the keyboard.
   const bottom = Math.min(Math.floor((viewport ? viewport.offsetTop + viewport.height : window.innerHeight) - 1), window.innerHeight - 1)
   const stack = document.elementsFromPoint(Math.floor(window.innerWidth / 2), Math.max(bottom, 0))
-  const color = visibleColor(stack.map(element => getComputedStyle(element).backgroundColor), readThroughCanvas())
+  const backgrounds = function* () { for (const element of stack) yield getComputedStyle(element).backgroundColor }
+  const color = visibleColor(backgrounds(), readThroughCanvas())
   if (!color) return
   const hex = `#${color.map(channel => channel.toString(16).padStart(2, '0')).join('')}`
   if (hex === painted) return
-  painted = hex
-  setIosBackdrop(hex)
+  // Cached only once native confirmed it, so a failed paint is retried by the next dock or viewport event.
+  void setIosBackdrop(hex).then(applied => { if (applied) painted = hex })
 }
 
 /**

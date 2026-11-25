@@ -32,23 +32,28 @@ class IOSFeedbackPlugin: Plugin {
             }
             DispatchQueue.main.async {
                 self.privacy?.appearance = style
-                if let background = args.background { self.paintBehindKeyboard(background) }
+                // Rejecting lets the page retry a color that nothing was there to paint.
+                if let background = args.background, !self.paintBehindKeyboard(background) {
+                    invoke.reject("Backdrop not applied")
+                    return
+                }
                 invoke.resolve()
             }
         } catch { invoke.reject("Invalid appearance") }
     }
     /// WebKit pans the page up by the keyboard's height, so the strip behind the keyboard's rounded
     /// corners is the web view and its root view, not document content. `#rrggbb` only.
-    private func paintBehindKeyboard(_ hex: String) {
-        guard hex.count == 7, hex.hasPrefix("#"), let value = UInt32(hex.dropFirst(), radix: 16) else { return }
+    private func paintBehindKeyboard(_ hex: String) -> Bool {
+        guard hex.count == 7, hex.hasPrefix("#"), let value = UInt32(hex.dropFirst(), radix: 16), let webView else { return false }
         let color = UIColor(
             red: CGFloat((value >> 16) & 0xFF) / 255,
             green: CGFloat((value >> 8) & 0xFF) / 255,
             blue: CGFloat(value & 0xFF) / 255,
             alpha: 1
         )
-        webView?.backgroundColor = color
-        webView?.window?.rootViewController?.view.backgroundColor = color
+        webView.backgroundColor = color
+        webView.window?.rootViewController?.view.backgroundColor = color
+        return true
     }
     @objc public func haptic(_ invoke: Invoke) {
         do {

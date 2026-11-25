@@ -1323,16 +1323,26 @@ test.describe('iOS keyboard backdrop color', () => {
       await page.emulateMedia({ colorScheme: scheme === 'dark' ? 'light' : 'dark' })
       await page.emulateMedia({ colorScheme: scheme })
       await expect(page.locator('textarea').first()).toBeVisible()
-      await page.evaluate(() => { document.documentElement.dataset.keyboardDocked = 'true' })
+      const card = page.locator('.composer-card')
+      await expect(card).toBeVisible()
 
-      const sentBackground = () => page.evaluate(() => {
+      // Paints the whole page one color, standing in for different content showing at the bottom.
+      const paintPage = (color: string) => page.evaluate(value => {
+        let style = document.getElementById('backdrop-test-paint')
+        if (!style) { style = document.createElement('style'); style.id = 'backdrop-test-paint'; document.head.appendChild(style) }
+        style.textContent = `* { background-color: ${value} !important; background-image: none !important; box-shadow: none !important }`
+      }, color)
+      // Colors sent since the last mark. Sends made before an action cannot satisfy its assertion.
+      const mark = () => page.evaluate(() => { (window as any).__appearanceCalls.length = 0 })
+      const freshBackground = () => page.evaluate(() => {
         const calls = (window as any).__appearanceCalls as { background?: string }[]
         return calls.map(call => call.background).filter(Boolean).at(-1) ?? null
       })
-      // Empty conversation background between the last message and the composer; the composer's own
-      // shadow darkens the bottom edge, which is not the screen color.
-      const pixelAboveKeyboard = async () => {
-        const png = await page.screenshot({ clip: { x: 385, y: 628, width: 1, height: 1 } })
+      // The conversation surface just above the composer. The composer's own shadow darkens the
+      // bottom edge of the page, which is not the screen color.
+      const screenAboveComposer = async () => {
+        const box = (await card.boundingBox())!
+        const png = await page.screenshot({ clip: { x: box.x + box.width + 6, y: box.y - 9, width: 1, height: 1 } })
         return page.evaluate(async base64 => {
           const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob())
           const canvas = document.createElement('canvas')
@@ -1343,12 +1353,23 @@ test.describe('iOS keyboard backdrop color', () => {
           return `#${[r, g, b].map(channel => channel.toString(16).padStart(2, '0')).join('')}`
         }, png.toString('base64'))
       }
-      await expect.poll(sentBackground).toBe(await pixelAboveKeyboard())
 
-      // A visual viewport update after the dock notification must not leave a stale color.
-      await page.evaluate(() => { document.documentElement.classList.toggle('light') })
-      await page.evaluate(() => { document.documentElement.dataset.keyboardDocked = 'false'; document.documentElement.dataset.keyboardDocked = 'true' })
-      await expect.poll(sentBackground).toBe(await pixelAboveKeyboard())
+      // With the theme's real styles, the color sent is the screen color above the composer.
+      await expect.poll(freshBackground).toBe(await screenAboveComposer())
+
+      // Docking sends the color of the screen above the keyboard.
+      await paintPage('rgb(12, 40, 60)')
+      await mark()
+      await page.evaluate(() => { document.documentElement.dataset.keyboardDocked = 'true' })
+      await expect.poll(freshBackground).toBe(await screenAboveComposer())
+
+      // WebKit moves the page after the dock notification. With the flag unchanged, a viewport
+      // resize over different content must send the new color.
+      await paintPage('rgb(10, 60, 40)')
+      await mark()
+      await page.setViewportSize({ width: 390, height: 640 })
+      await expect.poll(async () => (await freshBackground()) === (await screenAboveComposer())).toBe(true)
+      expect(await freshBackground()).toBe('#0a3c28')
     })
   }
 })
