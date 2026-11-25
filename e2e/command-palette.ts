@@ -130,7 +130,8 @@ for (const width of [1280, 390]) {
     await palette.getByRole('button', { name: /^Drafts/ }).click()
     await expect(input).toBeFocused()
     await input.fill('emma')
-    await input.press('Enter')
+    await palette.getByRole('button', { name: /Emma Wilson emma/ }).focus()
+    await page.keyboard.press('Enter')
     await expect(palette).toBeHidden()
     await expect(chatField).toHaveValue('I can bring the revised drawings on Thursday.')
     const restoredChat = await chatField.inputValue()
@@ -430,6 +431,13 @@ test('older room text stays saved but only a public edit qualifies it for Drafts
     const demo = window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }
     return demo.__roomStore.getState().ordinaryDrafts.has('team@conference.fluux.chat')
   })).toBe(false)
+  await publicField.focus()
+  await page.keyboard.press('End')
+  await page.locator('[class~="[grid-area:emoji]"] > button').click()
+  await page.locator('em-emoji-picker').getByRole('button', { name: '😀', exact: true }).first().click()
+  await expect(publicField).toContainText('😀')
+  await expect(publicField).toContainText('Older text whose recipient was not recorded.')
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }).__roomStore.getState().ordinaryDrafts.has('team@conference.fluux.chat'))).toBe(true)
   await page.clock.install()
   await publicField.fill('A new public agenda for the whole room.')
   await page.clock.runFor(DRAFT_SAVE_DELAY_MS + 1)
@@ -509,6 +517,11 @@ for (const kind of ['chat', 'room'] as const) {
     await palette.getByRole('button', { name: /^Drafts/ }).click()
     await palette.getByRole('button', { name: kind === 'chat' ? /Olivia Park olivia/ : /Design Review design/ }).click()
     await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/${tab}/${encodeURIComponent(target)}`)
+    await page.keyboard.press('ControlOrMeta+k')
+    await expect(palette).toBeVisible()
+    await palette.getByRole('button', { name: /^Drafts/ }).click()
+    await palette.getByRole('button', { name: kind === 'chat' ? /Olivia Park olivia/ : /Design Review design/ }).click()
+    expect(await page.evaluate(() => (window as unknown as { draftReadCalls: number }).draftReadCalls)).toBe(1)
     await page.goBack()
     await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/${tab}/${encodeURIComponent(initial)}`)
     await expect(source).toBeVisible()
@@ -552,5 +565,55 @@ for (const sourceTab of ['messages', 'rooms', 'contacts'] as const) {
     await page.locator(`[data-nav="${sourceTab}"]`).click()
     await expect(source).toBeVisible()
     await test.info().attach('sidebar-return-result', { body: JSON.stringify({ sourceTab, route: await page.evaluate(() => location.hash) }), contentType: 'application/json' })
+  })
+}
+
+for (const ordinary of [false, true]) {
+  test(`${ordinary ? 'qualified public' : 'unclassified older'} room text keeps its qualification after failed-send recovery into a remounted editor`, async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+    await bootDemo(page, '/demo.html?tutorial=false')
+    await page.evaluate(({ ordinary }) => {
+      const demo = window as unknown as { __demoClient: DemoClient; __roomStore: typeof import('@fluux/sdk/stores').roomStore; rejectDraftSend: () => void }
+      demo.__demoClient.stopAnimation()
+      demo.__roomStore.getState().setDraft('team@conference.fluux.chat', 'Notes for the next review.', { ordinary })
+      const messages = demo.__demoClient.messages
+      const send = messages.sendMessage.bind(messages)
+      let reject!: (reason: Error) => void
+      const pending = new Promise<void>((_resolve, rejectPromise) => { reject = rejectPromise })
+      messages.sendMessage = async (...args) => {
+        if (args[0] !== 'team@conference.fluux.chat') return send(...args)
+        await pending
+        throw new Error('The isolated send was rejected')
+      }
+      demo.rejectDraftSend = () => {
+        messages.sendMessage = send
+        reject(new Error('The isolated send was rejected'))
+      }
+    }, { ordinary })
+    await page.locator('[data-nav="rooms"]').click()
+    await page.getByRole('complementary').getByText('Team Chat', { exact: true }).click()
+    const field = page.getByRole('combobox', { name: 'Message #Team Chat', exact: true })
+    await expect(field).toHaveText('Notes for the next review.')
+    await field.press('Enter')
+    await expect(field).toHaveText('')
+    await page.getByRole('complementary').getByText('Design Review', { exact: true }).click()
+    await expect(page.getByRole('combobox', { name: 'Message #Design Review', exact: true })).toBeVisible()
+    await page.getByRole('complementary').getByText('Team Chat', { exact: true }).click()
+    await expect(field).toHaveText('')
+    await page.evaluate(() => (window as unknown as { rejectDraftSend: () => void }).rejectDraftSend())
+    await expect(field).toHaveText('Notes for the next review.')
+    const recovered = await page.evaluate(() => {
+      const state = (window as unknown as { __roomStore: typeof import('@fluux/sdk/stores').roomStore }).__roomStore.getState()
+      return { text: state.getDraft('team@conference.fluux.chat'), ordinary: state.ordinaryDrafts.has('team@conference.fluux.chat') }
+    })
+    expect(recovered).toEqual({ text: 'Notes for the next review.', ordinary })
+    await page.keyboard.press('ControlOrMeta+k')
+    const palette = page.getByRole('dialog')
+    await expect(palette).toBeVisible()
+    if (ordinary) {
+      await palette.getByRole('button', { name: /^Drafts/ }).click()
+      await expect(palette.getByRole('button', { name: /Team Chat team/ })).toBeVisible()
+    } else await expect(palette.getByRole('button', { name: /^Drafts/ })).toHaveCount(0)
+    await test.info().attach('recovered-room-provenance', { body: JSON.stringify(recovered), contentType: 'application/json' })
   })
 }

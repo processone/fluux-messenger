@@ -669,10 +669,6 @@ function CommandPaletteContent({
               type="button"
               className="flex items-center gap-2 mb-2 text-sm text-fluux-muted hover:text-fluux-text"
               onClick={() => { setDraftsOnly(false); setQuery(''); inputRef.current?.focus() }}
-              onKeyDown={(event) => {
-                // Enter on Back must activate this button, not the selected result.
-                if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
-              }}
             >
               <ArrowLeft className="size-4" />
               {t('common.back')}

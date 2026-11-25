@@ -1744,15 +1744,18 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
   const occupants = roomStore.getState().getRoom(roomJid)?.occupants ?? EMPTY_OCCUPANTS
   // Draft actions are stable function refs — read non-reactively from the store.
   const { setDraft, getDraft, clearDraft, clearFirstNewMessageId } = roomStore.getState()
-  const ordinaryDraftOrigin = useRef({
-    account: getStorageScopeJid(),
-    // An initially empty public editor cannot contain an ambiguous older draft.
-    confirmed: !!roomStore.getState().ordinaryDrafts?.has(roomJid) || !getDraft(roomJid)?.trim(),
-  })
-  const savePublicDraft = useCallback((jid: string, text: string) => {
+  const ordinaryDraftOrigin = useRef({ account: getStorageScopeJid(), text: getDraft(roomJid), confirmed: !!roomStore.getState().ordinaryDrafts?.has(roomJid) })
+  const getOrdinaryDraft = useCallback((jid: string, text: string) => {
     const origin = ordinaryDraftOrigin.current
-    setDraft(jid, text, { ordinary: origin.account === getStorageScopeJid() && origin.confirmed })
-  }, [setDraft])
+    if (origin.account === getStorageScopeJid() && origin.text === text) return origin.confirmed
+    const state = roomStore.getState()
+    return state.getDraft(jid) === text && state.ordinaryDrafts?.has(jid) === true
+  }, [])
+  const markPublicEdit = (text: string) => {
+    if (!whisperTarget && editingMessage?.roomJid !== roomJid) {
+      ordinaryDraftOrigin.current = { account: getStorageScopeJid(), text, confirmed: true }
+    }
+  }
   const addToast = useToastStore((s) => s.addToast)
   const [showPollCreator, setShowPollCreator] = useState(false)
 
@@ -1819,12 +1822,15 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
   // The current mounted room owns both recovered text and its mention metadata.
   const [text, setText, consumeDraft, discardDraft] = useConversationDraft({
     conversationId: roomJid,
-    draftOperations: whisperTarget ? whisperDraftOperations : { owner: roomStore, getDraft, setDraft: savePublicDraft, clearDraft },
+    draftOperations: whisperTarget ? whisperDraftOperations : { owner: roomStore, getDraft, setDraft, clearDraft, getOrdinary: getOrdinaryDraft },
     composerRef,
     onDraftRestored: handleDraftRestored,
     editingConversationId: editingMessage?.roomJid,
     getReferences: () => mentionRecovery.current.references,
-    onDraftRecovered: (text, references) => mentionRecovery.current.restore(text, references),
+    onDraftRecovered: (text, references, ordinary) => {
+      ordinaryDraftOrigin.current = { account: getStorageScopeJid(), text, confirmed: ordinary === true }
+      mentionRecovery.current.restore(text, references)
+    },
   })
 
   // External writes (including Send clearing the box) end the typing session.
@@ -1895,6 +1901,7 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
   // Handle mention selection
   const handleMentionSelect = (index: number) => {
     const { newText, newCursorPosition, reference } = selectMatch(index)
+    markPublicEdit(newText)
     insertMention(newText, reference)
     // Restores focus, drops the caret after the mention rather than at the end
     // of the message, and reports the new position back for the next lookup.
@@ -2229,10 +2236,7 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
         ariaProps={inputAriaProps}
         mergedRef={mergedRef}
         onEdit={(text, references) => {
-          // Restoration uses the editor's external-update path; only an actual public edit qualifies old text.
-          if (!whisperTarget && editingMessage?.roomJid !== roomJid) {
-            ordinaryDraftOrigin.current = { account: getStorageScopeJid(), confirmed: true }
-          }
+          markPublicEdit(text)
           handleEditorEdit(text, references)
         }}
         onChange={(e) => {
@@ -2310,6 +2314,7 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
         />
       )}
       <MessageComposer
+        onExplicitTextEdit={markPublicEdit}
         ref={composerRef}
         textareaRef={textareaRef}
         placeholder={whisperTarget ? t('rooms.whisperPlaceholder', { nick: whisperTarget.nick }) : t('chat.messageRoom', { name: roomName })}

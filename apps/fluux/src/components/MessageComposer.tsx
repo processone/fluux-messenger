@@ -152,6 +152,7 @@ export type { ComposerChangeEvent, ComposerInputElement, ComposerSelectEvent }
 export type { PendingAttachment }
 
 interface MessageComposerProps {
+  onExplicitTextEdit?: (text: string) => void
   /** Ref for the textarea element (for focus zones) */
   textareaRef?: React.RefObject<ComposerInputElement | null>
   /** Placeholder text for the input */
@@ -283,6 +284,7 @@ export function MessageComposer({
   hasExternalOverlay = false,
   value: controlledValue,
   onValueChange,
+  onExplicitTextEdit,
   onSelectionChange,
   onFileSelect,
   uploadState,
@@ -648,6 +650,7 @@ export function MessageComposer({
       ? null
       : emojiAutocomplete.completeClosedShortcode(e.target.value, e.target.selectionStart)
     if (closedShortcode) {
+      onExplicitTextEdit?.(closedShortcode.newText)
       setText(closedShortcode.newText)
       updateCaret(closedShortcode.newText, closedShortcode.newCursorPosition)
       restoreTextareaCursor(inputRef, closedShortcode.newText, closedShortcode.newCursorPosition)
@@ -787,6 +790,7 @@ export function MessageComposer({
 
   const selectEmoji = (index: number) => {
     const { newText, newCursorPosition } = emojiAutocomplete.selectMatch(index)
+    onExplicitTextEdit?.(newText)
     setText(newText)
     updateCaret(newText, newCursorPosition)
     emojiAutocomplete.dismiss()
@@ -937,6 +941,7 @@ export function MessageComposer({
 
     const cursorPos = inputRef.current.selectionStart ?? text.length
     const newText = text.slice(0, cursorPos) + emoji + text.slice(cursorPos)
+    onExplicitTextEdit?.(newText)
     setText(newText)
     setShowEmojiPicker(false)
 

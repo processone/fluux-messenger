@@ -70,6 +70,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
   // Get routing functions from useRouteSync
   const {
     sidebarView,
+    activeJid,
     navigateToMessages,
     navigateToRooms,
     navigateToContacts,
@@ -144,6 +145,10 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
   const navigateToView = useCallback((newView: SidebarView, targetJid?: string) => {
     // Explicit item choices still navigate within the current tab.
     if (sidebarView === newView && !targetJid) return
+    if (targetJid && sidebarView === newView && activeJid === targetJid) {
+      const pending = newView === 'messages' ? chatStore.getState() : newView === 'rooms' ? roomStore.getState() : null
+      if (pending?.activationPending && pending.activationTarget === targetJid) return
+    }
 
     // Save current tab's active content before switching
     // Read directly from stores to avoid stale hook values
@@ -196,8 +201,9 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         })()))
         // Set store state AND navigate to URL
         // Always set conversation (even null) to clear any leftover archived conversation
-        void activateConversation(targetConversation ?? null)
-        if (targetJid) navigateToMessages(targetJid, { replace: shouldReplaceOnSelect(targetJid, currentConversationId) })
+        const pending = chatStore.getState()
+        if (!targetJid || !pending.activationPending || pending.activationTarget !== targetJid) void activateConversation(targetConversation ?? null)
+        if (targetJid) navigateToMessages(targetJid, { replace: shouldReplaceOnSelect(targetJid, sidebarView === newView ? activeJid : currentConversationId) })
         else navigateToMessages(targetConversation ?? undefined)
         break
       }
@@ -214,8 +220,9 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         })()))
         // Set store state AND navigate to URL
         // Always set room (even null) to ensure clean state
-        void activateRoom(targetRoom ?? null)
-        if (targetJid) navigateToRooms(targetJid, { replace: shouldReplaceOnSelect(targetJid, currentRoomJid) })
+        const pending = roomStore.getState()
+        if (!targetJid || !pending.activationPending || pending.activationTarget !== targetJid) void activateRoom(targetRoom ?? null)
+        if (targetJid) navigateToRooms(targetJid, { replace: shouldReplaceOnSelect(targetJid, sidebarView === newView ? activeJid : currentRoomJid) })
         else navigateToRooms(targetRoom ?? undefined)
         break
       }
@@ -247,7 +254,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         navigateToSaved()
         break
     }
-  }, [sidebarView, selectedContact, lastMessagesConversation, lastRoomsRoom, lastDirectoryContact,
+  }, [sidebarView, activeJid, selectedContact, lastMessagesConversation, lastRoomsRoom, lastDirectoryContact,
       setActiveConversation, setActiveRoom, activateConversation, activateRoom,
       navigateToMessages, navigateToRooms, navigateToContacts,
       navigateToAdmin, navigateToSettings, navigateToSearch, navigateToSaved])

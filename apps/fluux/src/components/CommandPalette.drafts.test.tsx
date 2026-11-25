@@ -41,7 +41,7 @@ describe('accepted local draft finder scope', () => {
     roomStore.getState().setDraft('design@conference.example.test', 'Review on Thursday', { ordinary: true })
     roomStore.getState().setActiveRoom('design@conference.example.test')
     roomStore.getState().addRoom({ jid: 'left@conference.example.test', name: 'Left room', joined: false, nickname: 'You', isBookmarked: true, unreadCount: 0, mentionsCount: 0, typingUsers: new Set(), occupants: new Map() })
-    roomStore.getState().setDraft('left@conference.example.test', 'Do not list')
+    roomStore.getState().setDraft('left@conference.example.test', 'Do not list', { ordinary: true })
     chatStore.getState().addConversation({ id: 'archived@example.test', name: 'Archived', type: 'chat', unreadCount: 0 })
     chatStore.getState().setDraft('archived@example.test', 'Do not list')
     chatStore.getState().archiveConversation('archived@example.test')
