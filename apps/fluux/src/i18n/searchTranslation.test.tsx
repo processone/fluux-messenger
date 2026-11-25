@@ -228,6 +228,14 @@ describe('search tab translation', () => {
     expect(screen.getByRole('button', { name: 'Anwenden' })).toBeVisible()
   })
 
+  it('localizes the preparation retry action in English and French', async () => {
+    Object.assign(searchState, { query: 'has:image', filtersUnavailable: 'Quota exceeded' })
+    renderTranslated(<SearchView />)
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeVisible()
+    await changeLanguage('fr')
+    expect(screen.getByRole('button', { name: 'Réessayer' })).toBeVisible()
+  })
+
   it('keeps preparation wording plain for picked filters in English and French', async () => {
     Object.assign(searchState, { pickedFilters: ['has:image'], filtersBuilding: true })
     renderTranslated(<SearchView />)

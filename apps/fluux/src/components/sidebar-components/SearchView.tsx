@@ -412,7 +412,7 @@ export function SearchView() {
         {!isSearching && filtersIncomplete && <p role="status" className="mx-2 my-3 text-xs text-fluux-muted">{t('search.panel.incomplete')}</p>}
         {!isSearching && filtersUnavailable && <div role="alert" className="mx-2 my-3 text-sm text-fluux-error">
           <p>{t('search.panel.unavailable')}</p><p>{filtersUnavailable}</p>
-          <button type="button" className="underline py-2" onClick={retryFilters}>{t('common.retry')}</button>
+          <button type="button" className="underline py-2" onClick={retryFilters}>{t('chat.retry')}</button>
         </div>}
         {!isSearching && invalidFilters && <p role="alert" className="mx-2 my-3 text-sm text-fluux-error">{t('search.panel.invalidFilters')}</p>}
 
