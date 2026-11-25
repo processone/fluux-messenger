@@ -27,8 +27,9 @@ async function capture(page: Page, name: string) {
   }
 }
 
-async function findGeometry(input: Locator) {
-  expect(await input.evaluate(el => {
+async function findGeometry(input: Locator, singleRow = false) {
+  await expect(input).toBeFocused()
+  expect(await input.evaluate((el, singleRow) => {
     const container = el.closest('[data-find-on-page-bar]')!
     const bar = container.getBoundingClientRect()
     const pane = container.parentElement!.parentElement!.getBoundingClientRect()
@@ -36,15 +37,17 @@ async function findGeometry(input: Locator) {
     const style = getComputedStyle(el)
     const ring = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset)
     const font = parseFloat(getComputedStyle(document.documentElement).fontSize)
-    return field.width >= 4 * font && field.left - ring >= pane.left && field.right + ring <= pane.right &&
+    return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0 &&
+      field.width >= 4 * font && field.left - ring >= pane.left && field.right + ring <= pane.right &&
       field.top - ring >= bar.top && field.bottom + ring <= bar.bottom &&
       bar.left >= pane.left && bar.right <= pane.right &&
       Array.from(container.querySelectorAll('button, span')).every(control => {
         const rect = control.getBoundingClientRect()
         return rect.left >= bar.left && rect.right <= bar.right && rect.top >= bar.top && rect.bottom <= bar.bottom &&
-          control.scrollWidth <= control.clientWidth && control.scrollHeight <= control.clientHeight
+          control.scrollWidth <= control.clientWidth && control.scrollHeight <= control.clientHeight &&
+          (!singleRow || Math.abs((rect.top + rect.bottom) / 2 - (field.top + field.bottom) / 2) <= 1)
       })
-  })).toBe(true)
+  }, singleRow)).toBe(true)
 }
 
 async function fullDescription(description: Locator) {
@@ -84,7 +87,7 @@ for (const lang of ['en', 'fr'] as const) {
               await expect(bar.getByTitle(`${words.shortcuts.nextMatch} (Enter)`)).toBeDisabled()
             }
             if (query === 'the') await expect(bar.locator('span')).toHaveText(/\d+\/\d+/)
-            await findGeometry(input)
+            await findGeometry(input, width >= 375)
             if (query === 'quartzbadger') {
               if (width >= 375) {
                 expect(await bar.locator('span').evaluate(el => el.clientHeight)).toBe(
@@ -119,6 +122,40 @@ for (const lang of ['en', 'fr'] as const) {
         await page.evaluate(() => (window as any).__settingsStore.getState().setFontSize(100))
         await expect(page.locator('html')).toHaveCSS('font-size', `${baseFont}px`)
       }
+    })
+
+    test(`${lang} ${mode}: Find fits beside docked Members and a wide sidebar`, async ({ page }) => {
+      await page.setViewportSize({ width: 1024, height: 812 })
+      await boot(page, lang, mode)
+      await navigateToStressRoom(page, false, ROOM_JID)
+      await page.getByRole('button', { name: words.rooms.showMembers, exact: true }).click()
+      await expect(page.getByRole('heading', { name: words.rooms.members, exact: true })).toBeVisible()
+      const sidebar = page.locator('.chrome-sidebar')
+      const handle = sidebar.locator('[role="separator"][aria-orientation="vertical"]')
+      const box = await handle.boundingBox()
+      expect(box).not.toBeNull()
+      await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(400, box!.y + box!.height / 2)
+      await page.mouse.up()
+      await expect(sidebar).toHaveCSS('width', '400px')
+      const baseFont = await page.locator('html').evaluate(el => parseFloat(getComputedStyle(el).fontSize))
+      await page.evaluate(() => (window as any).__settingsStore.getState().setFontSize(150))
+      await expect(page.locator('html')).toHaveCSS('font-size', `${baseFont * 1.5}px`)
+      await page.keyboard.press('Control+f')
+      const bar = page.locator('[data-find-on-page-bar]')
+      const input = bar.locator('input')
+      // WebKit updates rem-based panel widths a frame after reporting the new root font size.
+      await expect.poll(() => bar.evaluate(el => el.parentElement!.parentElement!.getBoundingClientRect().width)).toBeLessThan(250)
+      for (const query of ['', 'the', 'quartzbadger']) {
+        await input.fill(query)
+        if (query === 'the') await expect(bar.locator('span')).toHaveText(/\d+\/\d+/)
+        if (query === 'quartzbadger') await expect(bar.locator('span')).toHaveText(words.search.noResults)
+        await findGeometry(input)
+        await capture(page, `find-docked-${lang}-${mode}-${query || 'empty'}`)
+      }
+      await input.press('Escape')
+      await expect(bar).toHaveCount(0)
     })
 
     test(`${lang} ${mode}: compact settings show full descriptions`, async ({ page }) => {
