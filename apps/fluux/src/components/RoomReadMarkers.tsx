@@ -8,24 +8,23 @@ import { SettingsRow } from './ui/SettingsRow'
 import { Toggle } from './ui/Toggle'
 import { RowLayoutContext } from './conversation/rowLayoutContext'
 
-/** Same persisted account-scoped choice in Privacy and in each room's details. */
-export function RoomReadSharing({ markers, roomJid }: { markers: Pick<RoomReadMarkers, 'subscribe' | 'getConsent' | 'setEnabled' | 'setRoomEnabled'>; roomJid?: string }) {
+export function RoomReadSharing({ markers, roomJid }: { markers: Pick<RoomReadMarkers, 'subscribe' | 'isEnabledFor' | 'setRoomEnabled'>; roomJid: string }) {
   const { t } = useTranslation()
-  const consent = useSyncExternalStore(markers.subscribe, markers.getConsent)
+  const read = useCallback(() => markers.isEnabledFor(roomJid), [markers, roomJid])
+  const checked = useSyncExternalStore(markers.subscribe, read)
   const [saveFailed, setSaveFailed] = useState(false)
-  const label = roomJid ? t('readMarkers.shareInRoom') : t('readMarkers.master')
-  const checked = roomJid ? consent.rooms.includes(roomJid) : consent.enabled
+  const label = t('readMarkers.shareInRoom')
   return (
     <div className="space-y-2">
-      <SettingsRow label={label} description={roomJid ? t('readMarkers.roomDescription') : t('readMarkers.description')}>
+      <SettingsRow label={label} description={t('readMarkers.roomDescription')}>
         <Toggle checked={checked} aria-label={label}
           onChange={enabled => {
-            const saved = roomJid ? markers.setRoomEnabled(roomJid, enabled) : markers.setEnabled(enabled)
+            const saved = markers.setRoomEnabled(roomJid, enabled)
             setSaveFailed(saved === false)
           }} />
       </SettingsRow>
       {saveFailed && <p role="alert" className="px-4 text-xs text-fluux-error">{t('readMarkers.saveFailed')}</p>}
-      {roomJid && !consent.enabled && <p className="px-4 text-xs text-fluux-muted">{t('readMarkers.masterOff')}</p>}
+      <p className="px-4 text-xs text-fluux-muted">{t('readMarkers.offHidesReaders')}</p>
       <p className="px-4 text-xs text-fluux-muted">{t('readMarkers.metadata')}</p>
     </div>
   )

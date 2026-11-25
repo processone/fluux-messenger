@@ -223,16 +223,14 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await alice.page.bringToFront()
     await privacy(alice)
     if (before) {
-      await expect(alice.page.getByRole('switch', { name: 'Share room read positions', exact: true })).toHaveCount(0)
+      await expect(alice.page.getByRole('switch', { name: 'Share room read positions', exact: true })).toHaveAttribute('aria-checked', 'false')
       await shot(alice.page, 'privacy')
       await openRoom(alice)
       await alice.page.getByTestId('room-info-area').getByRole('button').click()
       await shot(alice.page, 'room-details')
       return
     }
-    const master = alice.page.getByRole('switch', { name: 'Share room read positions', exact: true })
-    await expect(master).toHaveAttribute('aria-checked', 'false')
-    await master.click()
+    await expect(alice.page.getByRole('switch', { name: 'Share room read positions', exact: true })).toHaveCount(0)
     await shot(alice.page, 'privacy')
     await openRoom(alice)
     mark(bob, 'reading-focus')
@@ -242,7 +240,7 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await bob.page.bringToFront()
     const readerNames = bob.page.locator('[data-read-marker-names]').filter({ hasText: /^Alice$/ })
     await privacy(bob)
-    await bob.page.getByRole('switch', { name: 'Share room read positions', exact: true }).click()
+    await expect(bob.page.getByRole('switch', { name: 'Share room read positions', exact: true })).toHaveCount(0)
     await openRoom(bob)
     await roomConsent(bob, true)
     // A short list is now plain text. The demo browser suite owns overflow
@@ -363,16 +361,15 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await expect(alice.page.getByRole('switch', { name: 'Share my read position in this room', exact: true })).toHaveAttribute('aria-checked', 'false')
     await alice.page.keyboard.press('Escape')
 
-    // The master switch also stops a room whose own choice remains enabled.
+    // Repeated room opt-out must also stop a later focused advance.
     await openRoom(alice); await roomConsent(alice, true, 'room-details-reenabled')
-    await privacy(alice)
-    await alice.page.getByRole('switch', { name: 'Share room read positions', exact: true }).click()
-    await openRoom(alice); await openRoom(bob)
-    const masterStopped = displayed(alice).length
-    await say(bob, 'The master switch stops every chosen room')
+    await roomConsent(alice, false)
+    await openRoom(bob)
+    const stoppedAgain = displayed(alice).length
+    await say(bob, 'The room switch stops sharing again')
     await alice.page.bringToFront()
-    await expect(alice.page.locator('[data-message-body]').filter({ hasText: 'The master switch stops every chosen room' })).toBeInViewport()
-    await noPublication(alice, masterStopped, 'master-opt-out')
+    await expect(alice.page.locator('[data-message-body]').filter({ hasText: 'The room switch stops sharing again' })).toBeInViewport()
+    await noPublication(alice, stoppedAgain, 'room-opt-out-again')
     const disco = await owner.iqCaller.request(xml('iq', { type: 'get', to: room }, xml('query', { xmlns: DISCO })))
     const publicDisco = await owner.iqCaller.request(xml('iq', { type: 'get', to: publicRoom }, xml('query', { xmlns: DISCO })))
     if (evidence) {

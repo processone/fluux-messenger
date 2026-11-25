@@ -30,8 +30,8 @@ encrypted before it is uploaded to your XMPP server.
 
 ## Optional room read positions
 
-Room read-position sharing starts off for each account on this device. Enable
-the Privacy master switch and then choose each room separately in its details.
+Room read-position sharing starts off for each account on this device. Choose
+each room separately in its details; no additional Privacy switch is needed.
 Only focused viewing of incoming unencrypted messages in verified, unlisted,
 members-only, non-anonymous rooms with fewer than 20 occupants can share a
 position. Direct chats and private messages to a room occupant do not share

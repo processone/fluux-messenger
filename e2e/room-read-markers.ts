@@ -41,7 +41,6 @@ async function openRoom(page: Page, width: number, scan = false, virtualized = f
       body,
       mentions: undefined, isMention: false, isEdited: false,
     })
-    scope.__demoClient.roomReadMarkers.setEnabled(true)
     scope.__demoClient.roomReadMarkers.setRoomEnabled(roomJid, true)
     await scope.__demoClient.simulateRoomDisplayed(roomJid, readers[0].occupantId!, prior.stanzaId)
     return { shortBody, prior: prior.stanzaId, id: old.id, old: old.stanzaId, next: next.stanzaId, history: rows.map(row => ({ id: row.id, stanzaId: row.stanzaId! })), self: room.occupants.get(room.nickname)!.occupantId!, names: readers.map(reader => reader.nick), actors: readers.map(reader => reader.occupantId!), actor: readers[0].occupantId! }
@@ -179,6 +178,12 @@ for (const width of [1280, 320]) {
 for (const virtualized of [false, true]) {
   test(`room read lines keep exact lists, privacy and render isolation with virtualization ${virtualized}`, async ({ page }) => {
     const fixture = await openRoom(page, 1280, true, virtualized)
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.getByRole('button', { name: 'Privacy', exact: true }).click()
+    await expect(page.getByRole('switch', { name: 'Share room read positions', exact: true })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Rooms', exact: true }).first().click()
+    await page.evaluate(jid => { location.hash = '#/rooms/' + encodeURIComponent(jid) }, LAUNCH_ROOM)
+    await expect(page.locator(`[data-message-row-id][data-stanza-id="${fixture.old}"]`)).toBeVisible()
     const oldMarker = page.locator(`[data-read-marker-row="${fixture.old}"]`)
     const nextMarker = page.locator(`[data-read-marker-row="${fixture.next}"]`)
     await showReaders(page, fixture.actors.slice(0, 2), fixture.old)
@@ -270,7 +275,10 @@ for (const virtualized of [false, true]) {
     await page.evaluate(roomJid => (window as unknown as Scope).__demoClient.roomReadMarkers.setRoomEnabled(roomJid, true), LAUNCH_ROOM)
     await expect(nextMarker).toBeVisible()
     await expect(dialog).toHaveCount(0)
-    await page.evaluate(() => (window as unknown as Scope).__demoClient.roomReadMarkers.setEnabled(false))
+    await page.getByTestId('room-info-area').getByRole('button').click()
+    await page.getByRole('switch', { name: 'Share my read position in this room', exact: true }).click()
+    await expect(page.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
+    await page.keyboard.press('Escape')
     await expect(page.locator('[data-read-marker-row]')).toHaveCount(0)
     await test.info().attach('room-marker-render-and-access', { body: JSON.stringify({ result, ring, shield }, null, 2), contentType: 'application/json' })
   })

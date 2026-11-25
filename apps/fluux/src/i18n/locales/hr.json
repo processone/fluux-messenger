@@ -2024,11 +2024,9 @@
         "reload": "Ponovno učitaj"
     },
     "readMarkers": {
-        "master": "Dijeli položaje čitanja u sobama",
-        "description": "Isključeno prema zadanim postavkama. Nakon uključivanja odaberite svaku sobu zasebno u njezinim pojedinostima.",
         "shareInRoom": "Dijeli moj položaj čitanja u ovoj sobi",
         "roomDescription": "Šalji samo u provjerenim, neuvrštenim, neanonimnim sobama samo za članove, s manje od 20 prisutnih sa stalnim identitetima u sobi. Šifrirane poruke su isključene.",
-        "masterOff": "Glavni prekidač u Privatnosti je isključen. Soba neće dijeliti vaš položaj čitanja dok ga ne uključite.",
+        "offHidesReaders": "Isključivanje dijeljenja skriva i položaje čitanja drugih u ovoj sobi.",
         "metadata": "Soba i prisutni mogu vidjeti vašu aktivnost čitanja. Arhiva može zadržati te metapodatke. Isključivanje zaustavlja buduća ažuriranja, ali ne uklanja pohranjene oznake.",
         "readThroughHere": "Pročitano dovde:",
         "others_one": "+{{count}} druga osoba",

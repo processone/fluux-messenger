@@ -10,7 +10,11 @@ import { exactPosition, isAfterBoundary } from '../../stores/shared/readState'
 import { getRoomModerationId, messageRowRef } from '../../utils/roomStanzaId'
 import { roomSelf, isOwnRoomMessage } from '../../utils/roomSelf'
 
-export interface RoomReadConsent { enabled: boolean; rooms: string[] }
+export interface RoomReadConsent {
+  /** @deprecated Compatibility summary only: true when at least one room is selected, not a master consent. */
+  enabled: boolean
+  rooms: string[]
+}
 export interface RoomReader { occupantId: string; nick: string; avatar?: string }
 interface Position { row: MessageRowRef; archiveId: string }
 interface DiscoveryProof { features: string[]; count: number; epoch: number; connection: ReturnType<ModuleDependencies['getXmpp']> }
@@ -24,14 +28,14 @@ const REQUEST_RETRY_MS = ROOM_MARKER_DISCOVERY_RETRY_DELAYS[0]
 export const ROOM_MARKER_ORDER_PAGE_LIMIT = 20
 export const ROOM_READ_MARKERS_STORAGE_KEY = 'fluux-room-read-markers'
 const STORAGE_PREFIX = ROOM_READ_MARKERS_STORAGE_KEY + ':'
-const storageKey = (account: string, kind: 'consent' | 'watermarks') => STORAGE_PREFIX + JSON.stringify([account, kind])
+const storageKey = (account: string, kind: 'consent' | 'watermarks' | 'migration') => STORAGE_PREFIX + JSON.stringify([account, kind])
 let storageRevision = 0
 /** Remove consent and published-position references with the account's local data. */
 export function clearRoomReadMarkersLocalData(account: string | null, allAccounts = false) {
   storageRevision++
   try {
     if (!allAccounts) {
-      if (account) for (const kind of ['consent', 'watermarks'] as const) localStorage.removeItem(storageKey(getBareJid(account), kind))
+      if (account) for (const kind of ['consent', 'watermarks', 'migration'] as const) localStorage.removeItem(storageKey(getBareJid(account), kind))
       return
     }
     const keys: string[] = []
@@ -88,7 +92,7 @@ export class RoomReadMarkers extends BaseModule {
 
   constructor(deps: ModuleDependencies, private focused = () => typeof document !== 'undefined' && document.visibilityState === 'visible' && document.hasFocus()) { super(deps) }
   private onStorage = (event: StorageEvent) => {
-    if (event.key === null || event.key === this.storageKey('consent') || event.key === this.storageKey('watermarks')) this.reload()
+    if (event.key === null || event.key === this.storageKey('consent') || event.key === this.storageKey('watermarks') || event.key === this.storageKey('migration')) this.reload()
   }
 
   private capture() {
@@ -126,18 +130,14 @@ export class RoomReadMarkers extends BaseModule {
     return account
   }
   private roomKey(roomJid: string) { return JSON.stringify([this.account(), roomJid]) }
-  private storageKey(kind: 'consent' | 'watermarks') { return storageKey(this.account(), kind) }
+  private storageKey(kind: 'consent' | 'watermarks' | 'migration') { return storageKey(this.account(), kind) }
   private state(): AccountState {
     const account = this.account()
     let state = this.accounts.get(account)
     if (!state) {
       state = { consent: { enabled: false, rooms: [] }, sent: {} }
       try {
-        const consent = JSON.parse(localStorage.getItem(this.storageKey('consent')) ?? 'null') as RoomReadConsent | null
         const watermarks = JSON.parse(localStorage.getItem(this.storageKey('watermarks')) ?? 'null') as Pick<AccountState, 'sent'> | null
-        if (consent && typeof consent.enabled === 'boolean' && Array.isArray(consent.rooms)) {
-          state.consent = { enabled: consent.enabled, rooms: consent.rooms.filter(room => typeof room === 'string' && getBareJid(room) === room) }
-        }
         if (watermarks !== null) {
           if (!watermarks.sent || typeof watermarks.sent !== 'object' || Array.isArray(watermarks.sent)) throw new Error('Invalid room watermark storage')
           for (const [room, position] of Object.entries(watermarks.sent)) {
@@ -150,10 +150,40 @@ export class RoomReadMarkers extends BaseModule {
     }
     return state
   }
+  private readConsent(): RoomReadConsent {
+    const off: RoomReadConsent = { enabled: false, rooms: [] }
+    if (!this.account()) return off
+    try {
+      const raw = localStorage.getItem(this.storageKey('consent'))
+      let value: unknown = null
+      try { value = JSON.parse(raw ?? 'null') } catch { /* Malformed preferences migrate to off, never to consent. */ }
+      const migrated = localStorage.getItem(this.storageKey('migration'))
+      const record = value && typeof value === 'object' ? value as Record<string, unknown> : null
+      const validRooms = Array.isArray(record?.rooms) && record.rooms.every(room =>
+        typeof room === 'string' && !!room && getBareJid(room) === room)
+      const current = record?.version === 2 && validRooms
+      const legacy = migrated === null && record?.version === undefined && typeof record?.enabled === 'boolean' && validRooms
+      const rooms = current || (legacy && record?.enabled === true) ? [...new Set(record!.rooms as string[])] : []
+      if (migrated !== '2' || !current) {
+        // Write the fence first: an interrupted conversion or stale older tab
+        // must never make a legacy opt-in eligible for migration a second time.
+        localStorage.setItem(this.storageKey('migration'), '2')
+        localStorage.setItem(this.storageKey('consent'), JSON.stringify({ version: 2, rooms }))
+      }
+      return { enabled: rooms.length > 0, rooms }
+    } catch {
+      this.refusedConsent.add(this.account())
+      return off
+    }
+  }
   private persist(kind: 'consent' | 'watermarks' = 'watermarks'): boolean {
     if (!this.account()) return false
     const state = this.state()
-    try { localStorage.setItem(this.storageKey(kind), JSON.stringify(kind === 'consent' ? state.consent : { sent: state.sent })); return true } catch { return false }
+    try {
+      if (kind === 'consent') localStorage.setItem(this.storageKey('migration'), '2')
+      localStorage.setItem(this.storageKey(kind), JSON.stringify(kind === 'consent' ? { version: 2, rooms: state.consent.rooms } : { sent: state.sent }))
+      return true
+    } catch { return false }
   }
   /** Re-read this account's durable choices/watermarks, without creating a viewed event. */
   reload() { this.consentRevision++; this.queued.clear(); this.accounts.delete(this.account()); this.notify() }
@@ -174,24 +204,20 @@ export class RoomReadMarkers extends BaseModule {
     }
     // Recheck the durable choice at the send boundary too: a storage event can
     // still be queued when this tab takes the connection back.
-    let consent: RoomReadConsent = { enabled: false, rooms: [] }
-    try {
-      const value = JSON.parse(localStorage.getItem(this.storageKey('consent')) ?? 'null') as RoomReadConsent | null
-      if (typeof value?.enabled === 'boolean' && Array.isArray(value.rooms)) {
-        consent = { enabled: value.enabled, rooms: value.rooms.filter(room => typeof room === 'string' && getBareJid(room) === room) }
-      }
-    } catch { /* Storage uncertainty cannot enable sharing. */ }
+    const consent = this.readConsent()
     if (JSON.stringify(consent) !== JSON.stringify(state.consent)) {
       this.consentRevision++
       state.consent = consent
     }
     return state.consent
   }
-  isEnabledFor(roomJid: string) { const consent = this.getConsent(); return consent.enabled && consent.rooms.includes(roomJid) }
+  isEnabledFor(roomJid: string) { return this.getConsent().rooms.includes(roomJid) }
+  /** @deprecated Only legacy opt-out is supported; opting in requires an explicit room choice. */
   setEnabled(enabled: boolean) {
+    if (enabled) return false
     this.consentRevision++
     const state = this.state()
-    state.consent = { ...state.consent, enabled }
+    state.consent = { enabled: false, rooms: [] }
     const saved = this.persist('consent')
     if (!saved) this.failConsentSave(state)
     else this.refusedConsent.delete(this.account())
@@ -201,9 +227,11 @@ export class RoomReadMarkers extends BaseModule {
   setRoomEnabled(roomJid: string, enabled: boolean) {
     this.consentRevision++
     if (!roomJid || getBareJid(roomJid) !== roomJid) return
+    const latest = this.getConsent()
     const state = this.state()
-    const rooms = state.consent.rooms.filter(room => room !== roomJid)
-    state.consent = { ...state.consent, rooms: enabled ? [...rooms, roomJid] : rooms }
+    const rooms = latest.rooms.filter(room => room !== roomJid)
+    const selected = enabled ? [...rooms, roomJid] : rooms
+    state.consent = { enabled: selected.length > 0, rooms: selected }
     const saved = this.persist('consent')
     if (!saved) this.failConsentSave(state)
     else this.refusedConsent.delete(this.account())

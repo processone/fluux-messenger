@@ -6,16 +6,36 @@ receipts and not proof that someone understood a message.
 
 ## Privacy and controls
 
-Sharing starts off. Enable **Share room read positions** in Privacy, then enable
-**Share my read position in this room** in each room's details. Both choices are
-saved for the account on this device. Enabling one room never enables another.
-The master switch stops all sending without forgetting the selected rooms.
+Sharing starts off. Enable **Share my read position in this room** in the room's
+details. This is the only consent needed for sharing and showing room positions.
+Each room choice is saved for the account on this device. Enabling one room never
+enables another. There is no room read-position control in Privacy.
 
 The room and its occupants can see this metadata, and the room archive may retain
 it. Opting out stops future updates; it cannot retract previously stored markers.
-Fluux hides other people’s positions while either your master switch or this
-room’s sharing choice is off. This visibility choice does not delete received
-markers or change what the room has already stored.
+Fluux hides other people’s positions and closes their reader list while this
+room’s sharing choice is off. This does not delete received markers or change
+what the room has already stored.
+
+### Upgrading and older clients
+
+An upgrade preserves sharing only where both the old Privacy switch and the old
+room choice were on. Rooms paused by Privacy Off remain off until you choose each
+one again. Missing, invalid or unreadable preferences remain off. Conversion does
+not publish a marker or reset the last-sent positions.
+
+Consent stays under the same account-scoped local storage key, in a versioned
+format without a master flag. A separate account-scoped migration fence prevents
+legacy writes from being migrated again after an older tab overwrites that key.
+Such writes reset consent to off; they never restore paused rooms. Each room edit
+reads the latest durable choices, and pending sends recheck consent. An older
+client reads the new format as off. Explicitly enabling both old switches in an
+older client is a new action by that client; an upgrade cannot change older code.
+Failed saves stop sharing and report the failure. Clearing account-local data
+also removes the migration fence.
+
+Direct-chat read positions remain separate planned work in issue #5. They will
+need their own Privacy preference and fresh consent, never copied from rooms.
 
 ## Eligibility
 

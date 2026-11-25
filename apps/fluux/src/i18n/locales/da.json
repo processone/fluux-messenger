@@ -2022,11 +2022,9 @@
         "reload": "Genindlæs"
     },
     "readMarkers": {
-        "master": "Del læsepositioner i rum",
-        "description": "Slået fra som standard. Vælg hvert rum særskilt i dets oplysninger, når du har slået dette til.",
         "shareInRoom": "Del min læseposition i dette rum",
         "roomDescription": "Send kun i bekræftede, ikke-opførte, ikke-anonyme rum kun for medlemmer med færre end 20 tilstedeværende med stabile rumidentiteter. Krypterede beskeder er udelukket.",
-        "masterOff": "Hovedkontakten under Privatliv er slået fra. Rummet deler ikke din læseposition, før du slår den til.",
+        "offHidesReaders": "Når deling slås fra, skjules også andres læsepositioner i dette rum.",
         "metadata": "Rummet og de tilstedeværende kan se din læseaktivitet. Arkivet kan gemme disse metadata. Deaktivering stopper fremtidige opdateringer, men fjerner ikke gemte markører.",
         "readThroughHere": "Læst hertil:",
         "others_one": "+{{count}} anden",

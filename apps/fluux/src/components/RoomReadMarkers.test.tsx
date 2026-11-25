@@ -1,7 +1,7 @@
 import { Profiler } from 'react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { MessageRowRef, RoomReadConsent, RoomReader } from '@fluux/sdk'
+import type { MessageRowRef, RoomReader } from '@fluux/sdk'
 import { RoomReadBadge, RoomReadSharing } from './RoomReadMarkers'
 import { RowLayoutContext } from './conversation/rowLayoutContext'
 
@@ -11,15 +11,14 @@ const room = 'reading@conference.localhost'
 const empty: readonly RoomReader[] = []
 function source(sharing = true) {
   const listeners = new Set<() => void>()
-  let consent: RoomReadConsent = { enabled: sharing, rooms: sharing ? [room] : [] }
+  let rooms = sharing ? [room] : []
   const badges = new Map<string, readonly RoomReader[]>()
   const notify = () => { for (const listener of listeners) listener() }
   return {
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
-    getConsent: () => consent,
-    setEnabled: (enabled: boolean) => { consent = { ...consent, enabled }; notify(); return true },
+    isEnabledFor: (jid: string) => rooms.includes(jid),
     setRoomEnabled: (jid: string, enabled: boolean) => {
-      consent = { ...consent, rooms: [...consent.rooms.filter(value => value !== jid), ...(enabled ? [jid] : [])] }; notify(); return true
+      rooms = [...rooms.filter(value => value !== jid), ...(enabled ? [jid] : [])]; notify(); return true
     },
     readers: (_room: string, row: MessageRowRef) => badges.get(row.id) ?? empty,
     setReaders: (rows: Record<string, readonly RoomReader[]>) => { for (const [row, readers] of Object.entries(rows)) badges.set(row, readers); notify() },
@@ -33,8 +32,8 @@ const people: readonly RoomReader[] = [
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ i18n: { language: 'en', dir: () => 'ltr' }, t: (key: string, values?: { names?: string; count?: number }) => {
   const labels: Record<string, string> = {
-    'readMarkers.master': 'Share room read positions', 'readMarkers.shareInRoom': 'Share my read position in this room',
-    'readMarkers.readThrough': 'Read through this message', 'readMarkers.masterOff': 'The Privacy master switch is off.',
+    'readMarkers.shareInRoom': 'Share my read position in this room',
+    'readMarkers.readThrough': 'Read through this message',
     'readMarkers.saveFailed': 'Could not save this choice. Sharing stays off.',
     'readMarkers.readers': `Read through this message: ${values?.names ?? ''}`,
     'readMarkers.readThroughHere': 'Read through here:',
@@ -45,27 +44,23 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ i18n: { language: 'en
 } }) }))
 
 describe('room read-marker controls', () => {
-  it('shows two off-by-default switches and leaves the master off when choosing a room', () => {
+  // Source: the approved one-switch contract. SDK tests own persistence and migration.
+  it('uses one off-by-default room switch to opt in and out', () => {
     const markers = source(false)
-    render(<><RoomReadSharing markers={markers} /><RoomReadSharing markers={markers} roomJid={room} /></>)
-    const master = screen.getByRole('switch', { name: 'Share room read positions' })
+    render(<RoomReadSharing markers={markers} roomJid={room} />)
     const picked = screen.getByRole('switch', { name: 'Share my read position in this room' })
-    expect(master).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getAllByRole('switch')).toHaveLength(1)
     expect(picked).toHaveAttribute('aria-checked', 'false')
     fireEvent.click(picked)
     expect(picked).toHaveAttribute('aria-checked', 'true')
-    expect(master).toHaveAttribute('aria-checked', 'false')
-    expect(markers.getConsent().rooms).toEqual([room])
-    fireEvent.click(master)
-    expect(master).toHaveAttribute('aria-checked', 'true')
-    fireEvent.click(master)
-    expect(master).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(picked)
+    expect(picked).toHaveAttribute('aria-checked', 'false')
   })
 
-  it('reports a failed consent save instead of suggesting sharing is enabled', () => {
-    const markers = { ...source(false), setEnabled: () => false }
-    render(<RoomReadSharing markers={markers} />)
-    fireEvent.click(screen.getByRole('switch', { name: 'Share room read positions' }))
+  it('reports a failed room consent save instead of suggesting sharing is enabled', () => {
+    const markers = { ...source(false), setRoomEnabled: () => false }
+    render(<RoomReadSharing markers={markers} roomJid={room} />)
+    fireEvent.click(screen.getByRole('switch', { name: 'Share my read position in this room' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Could not save this choice. Sharing stays off.')
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
   })

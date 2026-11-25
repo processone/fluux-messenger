@@ -2025,11 +2025,9 @@
         "reload": "Recharger"
     },
     "readMarkers": {
-        "master": "Partager ma position de lecture dans les salons",
-        "description": "Désactivé par défaut. Après avoir activé ce réglage, choisissez chaque salon séparément dans ses informations.",
         "shareInRoom": "Partager ma position de lecture dans ce salon",
         "roomDescription": "Envoi uniquement dans les salons vérifiés, non répertoriés, réservés aux membres et non anonymes, avec moins de 20 occupants et des identités stables. Les messages chiffrés sont exclus.",
-        "masterOff": "Le réglage général de confidentialité est désactivé. Ce salon ne partagera pas votre position de lecture tant que vous ne l’aurez pas activé.",
+        "offHidesReaders": "Désactiver le partage masque aussi les positions de lecture des autres dans ce salon.",
         "metadata": "Le salon et ses occupants peuvent voir votre activité de lecture. Ses archives peuvent conserver ces métadonnées. Désactiver le partage arrête les nouvelles mises à jour sans effacer les marqueurs enregistrés.",
         "readThroughHere": "Lu jusqu’ici :",
         "others_one": "+{{count}} autre",

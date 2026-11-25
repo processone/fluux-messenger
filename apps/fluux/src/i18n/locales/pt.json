@@ -2026,11 +2026,9 @@
         "reload": "Recarregar"
     },
     "readMarkers": {
-        "master": "Partilhar posições de leitura nas salas",
-        "description": "Desativado por predefinição. Após ativar, escolha cada sala separadamente nos respetivos detalhes.",
         "shareInRoom": "Partilhar a minha posição de leitura nesta sala",
         "roomDescription": "Enviar apenas em salas verificadas, não listadas, não anónimas e só para membros, com menos de 20 ocupantes com identidades estáveis na sala. As mensagens encriptadas são excluídas.",
-        "masterOff": "O interruptor geral em Privacidade está desativado. Esta sala não partilhará a sua posição de leitura até o ativar.",
+        "offHidesReaders": "Desativar a partilha também oculta as posições de leitura das outras pessoas nesta sala.",
         "metadata": "A sala e os seus ocupantes podem ver a sua atividade de leitura. O arquivo pode guardar estes metadados. Desativar interrompe as atualizações futuras, mas não elimina os marcadores guardados.",
         "readThroughHere": "Lido até aqui:",
         "others_one": "+{{count}} outra pessoa",

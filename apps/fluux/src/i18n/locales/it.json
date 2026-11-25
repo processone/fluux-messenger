@@ -2026,11 +2026,9 @@
         "reload": "Ricarica"
     },
     "readMarkers": {
-        "master": "Condividi le posizioni di lettura nelle stanze",
-        "description": "Disattivato per impostazione predefinita. Dopo l'attivazione, scegli ogni stanza separatamente nei suoi dettagli.",
         "shareInRoom": "Condividi la mia posizione di lettura in questa stanza",
         "roomDescription": "Invia solo in stanze verificate, non elencate, non anonime e riservate ai membri, con meno di 20 presenti con identità stabili nella stanza. I messaggi cifrati sono esclusi.",
-        "masterOff": "L'interruttore generale in Privacy è disattivato. Questa stanza non condividerà la tua posizione di lettura finché non lo attivi.",
+        "offHidesReaders": "Disattivare la condivisione nasconde anche le posizioni di lettura degli altri in questa stanza.",
         "metadata": "La stanza e i presenti possono vedere la tua attività di lettura. L'archivio può conservare questi metadati. Disattivare la condivisione interrompe gli aggiornamenti futuri, ma non rimuove i marcatori salvati.",
         "readThroughHere": "Letto fino a qui:",
         "others_one": "+{{count}} altra persona",
