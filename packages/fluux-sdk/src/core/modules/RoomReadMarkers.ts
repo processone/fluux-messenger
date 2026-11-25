@@ -69,6 +69,7 @@ interface SavedConsent {
   revoked: string[]
   needsMigration: boolean
   legacyChoice?: string
+  linkedInput: boolean
 }
 interface ConsentFence { epoch: string; edits?: Record<string, string>; generation?: string; revoked?: string[]; input?: string }
 function readConsentFence(raw: string | null): ConsentFence | undefined {
@@ -138,12 +139,13 @@ function readSavedRoomConsent(account: string): SavedConsent {
     raw, fence, clearToken, rooms, cleared,
     generation: current ? record.generation as string : history?.generation
       ? raw !== null && continuity?.generation === history.generation ? history.generation : 'absent:' + history.generation
-      : JSON.stringify([account, clearToken, fenceEpoch ?? '']),
+      : choice !== undefined && allowed && continuity ? continuity.generation : JSON.stringify([account, clearToken, fenceEpoch ?? '']),
     epoch: fenceEpoch ?? (current ? record.epoch as string : ''),
     edits: { ...(history?.edits ?? (current ? record.edits as Record<string, string> : {})) },
     revoked: history?.revoked ?? [],
     needsMigration: !cleared && raw !== null && !current,
     legacyChoice: allowed ? choice : undefined,
+    linkedInput: retained,
   }
 }
 function sameConsentBoundary(left: SavedConsent, right: SavedConsent) {
@@ -251,6 +253,8 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           if (saved.needsMigration) {
             const generation = saved.generation ?? generateUUID()
             const edits = migrationEdits(saved)
+            // Reserve identity without replacing a linked input needed if conversion is refused.
+            if (!readConsentContinuity(other)) writeConsentContinuity(other, generation)
             localStorage.setItem(storageKey(other, 'consent'), roomConsentValue({ ...saved, generation }, saved.rooms, edits))
             writeConsentContinuity(other, generation)
             localStorage.setItem(storageKey(other, 'migration'), consentFenceValue(edits, saved.epoch, generation, saved.revoked))
@@ -258,7 +262,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         } catch {
           preserved = false
           // Only unchanged, previously valid surviving choices may bypass sealing.
-          if (saved?.legacyChoice && saved.rooms.length && localStorage.getItem(storageKey(other, 'consent')) === saved.raw) legacy[other] = saved.legacyChoice
+          if (saved?.legacyChoice && !saved.linkedInput && saved.rooms.length && localStorage.getItem(storageKey(other, 'consent')) === saved.raw) legacy[other] = saved.legacyChoice
         }
       }
       if (!writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: generateUUID(), legacy }))) return false
