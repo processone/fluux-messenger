@@ -408,6 +408,16 @@ const {
 } = useRoom()
 ```
 
+Room draft text remains a `Map<string, string>`. The direct
+`roomStore.getState().setDraft(jid, text, { ordinary: true })` setter can qualify
+text from a confirmed public editor; `roomStore.getState().ordinaryDrafts`
+contains those room IDs. Do not qualify unclassified restored text merely by
+opening or resaving it. Older untyped drafts remain stored but are withheld from
+Fluux's Drafts finder until an explicit public edit. Qualification uses an optional
+third array-entry element in the existing local storage record, so older
+Map-based readers still read the text; an older writer dropping that metadata
+safely removes qualification rather than text.
+
 For moderator-removal IDs and legacy-cache compatibility, see
 [Message Identifiers](../../docs/MESSAGE_IDENTIFIERS.md#2-stanzaid-is-authoritative-only-relative-to-an-archive).
 

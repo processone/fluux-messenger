@@ -38,7 +38,7 @@ describe('accepted local draft finder scope', () => {
     chatStore.getState().setDraft('oliver@example.test', ' \n ')
     chatStore.getState().setDraft('missing@example.test', 'No conversation')
     chatStore.getState().setActiveConversation('emma@example.test')
-    roomStore.getState().setDraft('design@conference.example.test', 'Review on Thursday')
+    roomStore.getState().setDraft('design@conference.example.test', 'Review on Thursday', { ordinary: true })
     roomStore.getState().setActiveRoom('design@conference.example.test')
     roomStore.getState().addRoom({ jid: 'left@conference.example.test', name: 'Left room', joined: false, nickname: 'You', isBookmarked: true, unreadCount: 0, mentionsCount: 0, typingUsers: new Set(), occupants: new Map() })
     roomStore.getState().setDraft('left@conference.example.test', 'Do not list')
@@ -72,7 +72,7 @@ describe('accepted local draft finder scope', () => {
     expect(screen.getByText('No results found')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: /Back/ }))
     expect(screen.queryByRole('button', { name: /^Drafts/ })).not.toBeInTheDocument()
-    act(() => roomStore.getState().setDraft('design@conference.example.test', 'Next design review'))
+    act(() => roomStore.getState().setDraft('design@conference.example.test', 'Next design review', { ordinary: true }))
     expect(screen.getByRole('button', { name: /^Drafts/ })).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: /^Drafts/ }))
     localStorage.setItem('xmpp-chat-storage:second@example.test', JSON.stringify({ state: {
@@ -105,7 +105,7 @@ describe('accepted local draft finder scope', () => {
 
   it('reserves indexed Enter for the search input instead of focused result buttons', () => {
     chatStore.getState().setDraft('emma@example.test', 'Continue later')
-    roomStore.getState().setDraft('design@conference.example.test', 'Review on Thursday')
+    roomStore.getState().setDraft('design@conference.example.test', 'Review on Thursday', { ordinary: true })
     openPalette()
     fireEvent.click(screen.getByRole('button', { name: /^Drafts/ }))
     const room = screen.getByRole('button', { name: /Design design/ })

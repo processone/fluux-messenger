@@ -290,8 +290,9 @@ function CommandPaletteContent({
   const forceOffline = connectionStatus !== 'online'
   const chatDrafts = useChatStore((s) => s.drafts)
   const roomDrafts = useRoomStore((s) => s.drafts)
+  const ordinaryRoomDrafts = useRoomStore((s) => s.ordinaryDrafts)
   const hasChatDraft = (id: string) => !!chatDrafts?.get(id)?.trim()
-  const hasRoomDraft = (jid: string) => !!roomDrafts?.get(jid)?.trim()
+  const hasRoomDraft = (jid: string) => !!ordinaryRoomDrafts?.has(jid) && !!roomDrafts?.get(jid)?.trim()
   const hasDrafts = conversations.some((conv) => conv.type === 'chat' && hasChatDraft(conv.id))
     || joinedRooms.some((room) => hasRoomDraft(room.jid))
   // Drafts includes the open target so a sole unfinished composer remains reachable.
@@ -595,19 +596,18 @@ function CommandPaletteContent({
 
     switch (e.key) {
       case 'ArrowDown':
+      case 'ArrowUp': {
         e.preventDefault()
-        e.stopPropagation() // Prevent global shortcuts from firing
-        setIsKeyboardNav(true) // Enter keyboard navigation mode
+        e.stopPropagation()
+        setIsKeyboardNav(true)
         markUserScrollIntent(listRef.current)
-        updateSelectedIndex((i) => Math.min(i + 1, flatItems.length - 1))
+        const focusedRow = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-command-index]') : null
+        const current = focusedRow ? Number(focusedRow.dataset.commandIndex) : selectedIndexRef.current
+        const next = current + (e.key === 'ArrowDown' ? 1 : -1)
+        inputRef.current?.focus()
+        updateSelectedIndex(Math.min(Math.max(0, next), Math.max(0, flatItems.length - 1)))
         break
-      case 'ArrowUp':
-        e.preventDefault()
-        e.stopPropagation() // Prevent global shortcuts from firing
-        setIsKeyboardNav(true) // Enter keyboard navigation mode
-        markUserScrollIntent(listRef.current)
-        updateSelectedIndex((i) => Math.max(i - 1, 0))
-        break
+      }
       case 'Enter': {
         if (e.target !== inputRef.current) return
         e.preventDefault()
@@ -718,7 +718,9 @@ function CommandPaletteContent({
                       type="button"
                       key={item.id}
                       data-selected={isSelected}
+                      data-command-index={itemIndex}
                       onClick={item.action}
+                      onFocus={() => updateSelectedIndex(itemIndex)}
                       onMouseEnter={() => !ignoreMouseRef.current && !isKeyboardNav && updateSelectedIndex(itemIndex)}
                       className={`w-full flex items-center command-row px-4 text-start transition-colors
                         focus-visible:!shadow-none border-s-2

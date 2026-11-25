@@ -524,12 +524,12 @@ function ChatLayoutContent() {
     }
     if (sidebarView === 'messages') {
       const current = chatStore.getState()
-      if (activeJid !== current.activeConversationId || (!activeJid && current.activationPending)) {
+      if (current.activationPending ? current.activationTarget !== activeJid : activeJid !== current.activeConversationId) {
         void activateConversation(activeJid)
       }
     } else if (sidebarView === 'rooms') {
       const current = roomStore.getState()
-      if (activeJid !== current.activeRoomJid || (!activeJid && current.activationPending)) {
+      if (current.activationPending ? current.activationTarget !== activeJid : activeJid !== current.activeRoomJid) {
         void activateRoom(activeJid)
       }
     } else if (sidebarView === 'contacts') {
@@ -708,12 +708,12 @@ function ChatLayoutContent() {
 
   // Handle sidebar view changes - delegates to useViewNavigation hook
   // Per-tab memory and side effects now handled by the hook
-  const handleSidebarViewChange = (newView: SidebarView) => {
+  const handleSidebarViewChange = (newView: SidebarView, targetJid?: string) => {
     // Clear selected contact when switching views
     setSelectedContactJid(null)
 
     // Navigate using the hook (handles per-tab memory and mark-as-read)
-    navigateToView(newView)
+    navigateToView(newView, targetJid)
 
     // When switching to a non-admin view, close the admin panel
     if (newView !== 'admin') {
@@ -1270,27 +1270,7 @@ function ChatLayoutContent() {
           subscription, so a toggle re-renders only the host, not the sidebar column. */}
       <ModalHost
         shortcuts={shortcuts}
-        onSidebarViewChange={(view, targetJid) => {
-          if (!targetJid || (view !== 'messages' && view !== 'rooms')) {
-            handleSidebarViewChange(view)
-            return
-          }
-          setSelectedContactJid(null)
-          clearAdminSession()
-          setAdminCategory(null)
-          // An explicit item must not compete with the tab's remembered-target hydration.
-          if (view === 'messages') {
-            const current = chatStore.getState().activeConversationId
-            void activateRoom(null)
-            void activateConversation(targetJid)
-            navigateToMessages(targetJid, { replace: shouldReplaceOnSelect(targetJid, current) })
-          } else {
-            const current = roomStore.getState().activeRoomJid
-            void activateConversation(null)
-            void activateRoom(targetJid)
-            navigateToRooms(targetJid, { replace: shouldReplaceOnSelect(targetJid, current) })
-          }
-        }}
+        onSidebarViewChange={handleSidebarViewChange}
         onOpenSettings={() => navigateToSettings()}
         onToggleConsole={toggleConsole}
         onToggleShortcutHelp={toggleShortcutHelp}

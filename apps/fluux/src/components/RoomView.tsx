@@ -245,6 +245,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Carries the counterpart's occupant-id (captured at entry) so presence checks
   // bind to the person, not just the nick (XEP-0045 §7.5, XEP-0421).
   const [whisperTarget, setWhisperTarget] = useState<WhisperTarget | null>(null)
+  const focusAfterWhisperCancel = useRef<string | null>(null)
   // setAffiliation and setRole are now from useRoomActive() to avoid subscribing
   // to list-level selectors that cause render loops when other rooms update
   const addToast = useToastStore((s) => s.addToast)
@@ -336,7 +337,17 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   // Stable callback to clear whisper target (name avoids clash with the
   // composer-internal handleClearWhisper defined inside RoomMessageInput).
-  const handleClearWhisperTarget = useCallback(() => setWhisperTarget(null), [])
+  const handleClearWhisperTarget = useCallback(() => {
+    focusAfterWhisperCancel.current = activeRoomRef.current?.jid ?? null
+    setWhisperTarget(null)
+  }, [])
+
+  useLayoutEffect(() => {
+    if (whisperTarget || !focusAfterWhisperCancel.current) return
+    const roomJid = focusAfterWhisperCancel.current
+    focusAfterWhisperCancel.current = null
+    if (activeRoom?.jid === roomJid) composerHandleRef.current?.focus()
+  }, [whisperTarget, activeRoom?.jid, composerHandleRef])
 
   if (!activeRoom) return null
 
@@ -1660,7 +1671,10 @@ interface RoomMessageInputProps {
 
 export const RoomMessageInput = memo(function RoomMessageInput(props: RoomMessageInputProps & { ref?: React.Ref<MessageComposerHandle> }) {
   // Public and private editors cannot share a buffer or a late failed-send recovery owner.
-  const identity = JSON.stringify([props.roomJid, props.whisperTarget?.occupantId ?? props.whisperTarget?.nick ?? null])
+  const recipient = props.whisperTarget
+  const identity = JSON.stringify([props.roomJid, recipient
+    ? recipient.occupantId ? ['occupant-id', recipient.occupantId] : ['nickname', recipient.nick]
+    : ['public']])
   return <RoomMessageInputContent key={identity} {...props} />
 })
 
@@ -1730,6 +1744,15 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
   const occupants = roomStore.getState().getRoom(roomJid)?.occupants ?? EMPTY_OCCUPANTS
   // Draft actions are stable function refs — read non-reactively from the store.
   const { setDraft, getDraft, clearDraft, clearFirstNewMessageId } = roomStore.getState()
+  const ordinaryDraftOrigin = useRef({
+    account: getStorageScopeJid(),
+    // An initially empty public editor cannot contain an ambiguous older draft.
+    confirmed: !!roomStore.getState().ordinaryDrafts?.has(roomJid) || !getDraft(roomJid)?.trim(),
+  })
+  const savePublicDraft = useCallback((jid: string, text: string) => {
+    const origin = ordinaryDraftOrigin.current
+    setDraft(jid, text, { ordinary: origin.account === getStorageScopeJid() && origin.confirmed })
+  }, [setDraft])
   const addToast = useToastStore((s) => s.addToast)
   const [showPollCreator, setShowPollCreator] = useState(false)
 
@@ -1796,7 +1819,7 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
   // The current mounted room owns both recovered text and its mention metadata.
   const [text, setText, consumeDraft, discardDraft] = useConversationDraft({
     conversationId: roomJid,
-    draftOperations: whisperTarget ? whisperDraftOperations : { owner: roomStore, getDraft, setDraft, clearDraft },
+    draftOperations: whisperTarget ? whisperDraftOperations : { owner: roomStore, getDraft, setDraft: savePublicDraft, clearDraft },
     composerRef,
     onDraftRestored: handleDraftRestored,
     editingConversationId: editingMessage?.roomJid,
@@ -2205,7 +2228,13 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
         placeholder={placeholder}
         ariaProps={inputAriaProps}
         mergedRef={mergedRef}
-        onEdit={handleEditorEdit}
+        onEdit={(text, references) => {
+          // Restoration uses the editor's external-update path; only an actual public edit qualifies old text.
+          if (!whisperTarget && editingMessage?.roomJid !== roomJid) {
+            ordinaryDraftOrigin.current = { account: getStorageScopeJid(), confirmed: true }
+          }
+          handleEditorEdit(text, references)
+        }}
         onChange={(e) => {
           setMentionInput({ text: e.target.value, position: e.target.selectionStart })
           onChange(e)
@@ -2230,6 +2259,7 @@ const RoomMessageInputContent = memo(function RoomMessageInputContent({
     <div
       onKeyDownCapture={(e) => {
         if (whisperTarget && e.key === 'Escape' && !attachmentWarning) {
+          e.preventDefault()
           e.stopPropagation()
           handleClearWhisper()
         }

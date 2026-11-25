@@ -1,3 +1,4 @@
+import { DRAFT_SAVE_DELAY_MS } from '@/constants/ui'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { getStorageScopeJid, type MentionReference } from '@fluux/sdk'
 import { mergeFailedDraft } from '@/utils/mergeFailedDraft'
@@ -171,7 +172,7 @@ export function useConversationDraft({
     if (!text.trim()) persist(conversationId, { text, references: [] })
     else debounceTimerRef.current = setTimeout(() => persist(conversationId, {
       text, references: callbacks.current.getReferences?.() ?? [],
-    }), 300)
+    }), DRAFT_SAVE_DELAY_MS)
     return cancelPendingSave
   }, [text, isEditing, conversationId, persist, cancelPendingSave])
 
