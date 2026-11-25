@@ -1518,7 +1518,7 @@
         },
         "search": {
             "title": "搜索结果",
-            "description": "从侧边栏选择一个结果即可查看对话。"
+            "description": "消息预览显示在这里。"
         }
     },
     "avatar": {

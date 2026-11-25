@@ -1518,7 +1518,7 @@
         },
         "search": {
             "title": "Hakutulokset",
-            "description": "Valitse tulos sivupalkista nähdäksesi keskustelun."
+            "description": "Viestien esikatselut näkyvät tässä."
         }
     },
     "avatar": {

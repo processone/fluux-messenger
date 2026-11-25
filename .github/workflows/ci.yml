@@ -373,14 +373,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # WebKit is the slow engine (~20 min unsharded), hence 3 shards against Chromium's 2.
+        # Four WebKit shards keep its slower journeys within the 30-minute job budget.
         # Every shard is a blocking check.
         include:
           - { browser: chromium, shard: 1, shards: 2 }
           - { browser: chromium, shard: 2, shards: 2 }
-          - { browser: webkit, shard: 1, shards: 3 }
-          - { browser: webkit, shard: 2, shards: 3 }
-          - { browser: webkit, shard: 3, shards: 3 }
+          - { browser: webkit, shard: 1, shards: 4 }
+          - { browser: webkit, shard: 2, shards: 4 }
+          - { browser: webkit, shard: 3, shards: 4 }
+          - { browser: webkit, shard: 4, shards: 4 }
 
     steps:
       - name: Checkout

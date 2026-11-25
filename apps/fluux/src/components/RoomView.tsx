@@ -508,7 +508,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             aria-hidden="true"
             tabIndex={-1}
             onClick={handleCloseOccupants}
-            className="fixed-below-titlebar z-30 bg-black/50 lg:hidden"
+            className="fixed-below-titlebar z-[32] bg-black/50 lg:hidden"
           />
           <div className="fixed bottom-0 top-[var(--fluux-window-titlebar-height)] end-0 z-40 flex shadow-xl animate-drawer-in lg:static lg:z-auto lg:shadow-none">
             <RegionErrorBoundary region="occupants" variant="panel" resetKey={activeRoom.jid}>
