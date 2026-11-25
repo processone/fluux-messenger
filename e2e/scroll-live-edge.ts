@@ -737,18 +737,20 @@ test.describe('Ambient re-pin re-arms follow-live from geometry', () => {
     ).toBeLessThanOrEqual(PIN_TOLERANCE_PX)
   })
 
-  // FLM-229's approved "did not scroll" condition and FLM-245 I1: a real hover hold
-  // changes the initial policy. Native takeover keeps that reading position, even inside the band.
+  // An explicit hold changes takeover policy: native movement inside the near-bottom band
+  // keeps the reader in history.
   test('a held message yields to near-bottom native scrolling without re-pinning', async ({ page }, testInfo) => {
     await enterAtBottom(page)
     const list = page.locator('[data-message-list]').first()
     await page.mouse.move(0, 0)
     await hoverList(page)
+    await page.mouse.down()
     await expect(list).toHaveAttribute('data-message-interaction', /.+/)
     const held = await list.getAttribute('data-message-interaction')
     // Scroll while the hold is active, not after a no-movement boundary release.
     await page.mouse.wheel(0, -100)
     await expect(list).not.toHaveAttribute('data-message-interaction')
+    await page.mouse.up()
     await expect.poll(async () => (await readGeometry(page)).distFromBottom).toBeGreaterThan(PIN_TOLERANCE_PX)
     await settle(page)
     const before = await readGeometry(page)
@@ -1325,6 +1327,7 @@ test.describe('Typing indicator never covers message text', () => {
       expect(retargeted.dist).toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
       if (interaction === 'held') {
         await list.locator('.message-row[data-message-id="after-target-resize"]').hover({ position: { x: 100, y: 12 } })
+        await page.mouse.down()
         await expect(list).toHaveAttribute('data-message-interaction')
       }
       const interactionBeforeWheel = await list.getAttribute('data-message-interaction')
@@ -2739,19 +2742,31 @@ test.describe('Incoming reaction under a stationary pointer', () => {
           if (mode === 'focus-transfer') {
             await page.keyboard.press('Shift')
             await priorRow.getByRole('button', { name: 'More reactions', exact: true }).focus()
-          } else await priorRow.locator('[data-message-body]').first().hover()
+          } else {
+            await priorRow.locator('[data-message-body]').first().hover()
+            await page.mouse.down()
+          }
           await expect(list).toHaveAttribute('data-message-interaction', await priorRow.getAttribute('data-message-row-id') as string)
           expect(await list.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThanOrEqual(1)
           if (mode === 'focus-transfer') await row.getByRole('button', { name: 'More reactions', exact: true }).focus()
-          else await row.locator('[data-message-body]').first().hover()
+          else {
+            await page.mouse.up()
+            await row.locator('[data-message-body]').first().hover()
+            await page.mouse.down()
+          }
         } else if (mode === 'tall') {
           expect((await row.boundingBox())!.height).toBeGreaterThan((await list.boundingBox())!.height)
           const box = (await row.boundingBox())!
           const bounds = (await list.boundingBox())!
           await page.mouse.move(box.x + 100, Math.min(box.y + box.height - 15, bounds.y + bounds.height - 20))
-        } else await row.locator('[data-message-body]').first().hover()
+          await page.mouse.down()
+        } else {
+          await row.locator('[data-message-body]').first().hover()
+          await page.mouse.down()
+        }
         await expect(list).toHaveAttribute('data-message-interaction', await row.getAttribute('data-message-row-id') as string)
         if (mode === 'shrink') {
+          await page.mouse.up()
           await row.getByRole('button', { name: 'More reactions', exact: true }).click()
           await expect(row.locator('[data-message-panel="reactions"]')).toBeVisible()
           const baseline = await row.evaluate(el => ({ top: el.getBoundingClientRect().top, height: el.getBoundingClientRect().height }))

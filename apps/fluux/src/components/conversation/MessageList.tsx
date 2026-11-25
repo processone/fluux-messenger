@@ -533,6 +533,7 @@ export function MessageList<T extends BaseMessage>({
     [groupedMessages, gaps, onCatchUpHistory],
   )
 
+  const typingBandRef = useRef<HTMLDivElement>(null)
   const cancelInteractionRef = useRef<() => void>(() => {})
   const {
     beginInteractionHold,
@@ -557,7 +558,6 @@ export function MessageList<T extends BaseMessage>({
     lastUserInputAt,
     observeKeyboardNavigation,
     isAtBottom,
-    isFollowingLatest,
     assumeAwayFromBottomForKeyboard,
     reassertUnreadMarker,
   } = useMessageListScroll({
@@ -581,6 +581,7 @@ export function MessageList<T extends BaseMessage>({
     isHistoryComplete,
     rowGrowthSignature,
     hasTypingIndicator: typingUsers.length > 0,
+    typingBandRef,
     lastMessageIsOutgoing: lastMessage?.isOutgoing ?? false,
     lastMessageId,
     staticMode,
@@ -592,12 +593,11 @@ export function MessageList<T extends BaseMessage>({
     conversationId,
     enabled: !staticMode,
     begin: beginInteractionHold,
-    isFollowing: isFollowingLatest,
     release: releaseInteractionHold,
     menuChanged: setInteractionMenuOpen,
   })
   useLayoutEffect(() => { cancelInteractionRef.current = interaction.cancel }, [interaction.cancel])
-  // A reader at the live edge who makes a row taller (Wrap lines) stays at the edge. The hover
+  // A reader at the live edge who makes a row taller (Wrap lines) stays at the edge. The action
   // hold would otherwise keep the clicked control in place and leave the reader above the grown row.
   const runKeepingLiveEdge = useCallback<RunKeepingLiveEdge>((grow) => {
     const el = scrollContainerRef.current
@@ -1051,16 +1051,16 @@ export function MessageList<T extends BaseMessage>({
           Longer labels are clipped so the band cannot take more space from the message area.
           max-w keeps it clear of the bottom-end FAB, which still floats at its own bottom-4 and so
           does not move when the band appears. */}
-      {typingUsers.length > 0 && (
-        <div className="shrink-0 px-4 pt-0.5 pb-3.5 pointer-events-none">
+      <div ref={typingBandRef} data-typing-band className={typingUsers.length > 0 ? "shrink-0 px-4 pt-0.5 pb-3.5 pointer-events-none" : "shrink-0"}>
+        {typingUsers.length > 0 && (
           <div
             data-typing-pill
             className="inline-block max-w-[calc(100%-4rem)] rounded-full bg-fluux-float border border-fluux-border shadow-lg px-3 py-1.5 animate-toast-in"
           >
             <TypingIndicator typingUsers={typingUsers} formatUser={formatTypingUser} variant="compact" maxLines={2} />
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Scroll to bottom FAB with spring animation */}
       <div

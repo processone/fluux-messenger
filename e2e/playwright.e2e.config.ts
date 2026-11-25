@@ -76,6 +76,7 @@ const SUITES = [
   { name: 'scroll-media-boxes', testMatch: 'scroll-media-boxes.ts' },
   { name: 'scroll-touch-start', testMatch: 'scroll-touch-start.ts' },
   { name: 'message-hover', testMatch: 'message-hover.ts' },
+  { name: 'message-interaction-typing', testMatch: 'message-interaction-typing.ts' },
   { name: 'reply-quote', testMatch: 'reply-quote.ts' },
   { name: 'message-code-wrap', testMatch: 'message-code-wrap.ts' },
   { name: 'composer', testMatch: ['composer-geometry.ts', 'composer-transition.ts'] },

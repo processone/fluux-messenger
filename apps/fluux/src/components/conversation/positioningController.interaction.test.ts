@@ -53,6 +53,24 @@ describe('interaction position ownership', () => {
     expect(position).toHaveBeenCalledOnce()
     expect(controller.snapshot().active?.request.generation).toBe(request.generation)
   })
+  it('updates measured typing clearance without replacing the held message or generation', () => {
+    const { controller } = setup()
+    const heldDesired = {
+      ...desired, placement: { ...desired.placement, offsetPx: pixelOffset(342), typingClearance: {
+        bandHeightPx: 0, currentBandHeightPx: 0, controlTopPx: 313, controlBottomPx: 341, tailMessageId: 'typing-tail',
+      } },
+    }
+    const request = controller.beginInteractionHold({ conversationId, desired: heldDesired, executor: anchor() })!
+    controller.reconcileInteractionHold({ conversationId, typingBandHeight: 46, executor: anchor() })
+    const active = controller.snapshot().active!.request
+    expect(active.generation).toBe(request.generation)
+    expect(active.desired).toEqual({ ...heldDesired, placement: {
+      ...heldDesired.placement, typingClearance: { ...heldDesired.placement.typingClearance, currentBandHeightPx: 46 },
+    } })
+    controller.reconcileInteractionHold({ conversationId, typingBandHeight: 0, executor: anchor() })
+    expect(controller.snapshot().active!.request.desired).toEqual(heldDesired)
+  })
+
   it('corrects a new layout before paint even while the previous operation is still settling', () => {
     const { controller } = setup()
     const position = vi.fn()

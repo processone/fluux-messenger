@@ -14,7 +14,7 @@
  */
 
 import type { MessageRowRef } from '@fluux/sdk'
-import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useLayoutEffect, useState, useCallback, type RefObject } from 'react'
 import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
 import { platform } from '@/platform'
 import type { ControllerFrameLoopRegistration } from './controllerFrameLoop'
@@ -214,6 +214,7 @@ export interface UseMessageListScrollOptions {
    *  row, gated on live geometry (see the typing effect) so it never fires for a reader scrolled up
    *  into history — the #918 "fight" was a stale isAtBottomRef latch. */
   hasTypingIndicator?: boolean
+  typingBandRef?: RefObject<HTMLElement | null>
   /** Whether the newest message is the local user's own (outgoing). When a NEW such message
    *  appears we scroll to the bottom regardless of position — you always want to see what you
    *  just sent — whereas an incoming message only auto-follows when already near the bottom. */
@@ -249,7 +250,7 @@ export interface UseMessageListScrollOptions {
 }
 
 export interface UseMessageListScrollResult {
-  beginInteractionHold: (rowId: string) => boolean
+  beginInteractionHold: (rowId: string, control?: HTMLElement) => boolean
   releaseInteractionHold: (resume: boolean) => void
   setInteractionMenuOpen: (open: boolean) => void
   interactionMenuOpen: boolean
@@ -364,6 +365,7 @@ export function useMessageListScroll({
   isHistoryComplete,
   rowGrowthSignature,
   hasTypingIndicator = false,
+  typingBandRef,
   lastMessageIsOutgoing = false,
   lastMessageId,
   staticMode = false,
@@ -1222,7 +1224,7 @@ export function useMessageListScroll({
     createAnchorPreservationExecutor,
   })
 
-  const beginInteractionHold = (rowId: string): boolean => {
+  const beginInteractionHold = (rowId: string, control?: HTMLElement): boolean => {
     const scroller = scrollerRef.current
     const row = scroller && findMessageRowElement(scroller, rowId)
     const bubble = row?.querySelector<HTMLElement>('[data-message-body]') ?? row
@@ -1236,6 +1238,14 @@ export function useMessageListScroll({
     if (!flow.interactionSpace) flow.interactionSpace = { conversationId, scroller, padding: scroller.style.paddingBottom }
     const viewportRect = scroller.getBoundingClientRect()
     const rowRect = row.getBoundingClientRect()
+    const active = document.activeElement
+    const activeControl = control ?? (row.contains(active) ? active : null) ??
+      row.querySelector<HTMLElement>('[data-message-toolbar]')
+    const controlRect = (activeControl ?? bubble).getBoundingClientRect()
+    const tail = lastMessageId ? findMessageRowElement(scroller, lastMessageId) : null
+    const tailRect = tail?.getBoundingClientRect()
+    const wasAtLatest = windowAtLiveEdge !== false && getDistanceFromBottom(scroller) <= 1
+    const bandHeight = typingBandRef?.current?.getBoundingClientRect().height ?? 0
     // Acquisition clears the bottom ref, so transfers must read the unchanged live geometry.
     // Include the same one-pixel endpoint as the interaction FAB: fractional WebKit layout can
     // leave a pinned view there. A long row may extend above the scrollport while its bottom fits.
@@ -1248,6 +1258,13 @@ export function useMessageListScroll({
         placement: {
           kind: 'top-offset', offsetPx: pixelOffset(bubble.getBoundingClientRect().top - viewportRect.top),
           ...(keepTailVisible ? { rowHeightPx: pixelOffset(rowRect.height) } : {}),
+          typingClearance: {
+            bandHeightPx: bandHeight, currentBandHeightPx: bandHeight,
+            controlTopPx: controlRect.top - viewportRect.top,
+            controlBottomPx: controlRect.bottom - viewportRect.top,
+            ...(wasAtLatest && tailRect && tailRect.height <= viewportRect.height && tailRect.bottom <= viewportRect.bottom + 1
+              ? { tailMessageId: lastMessageId } : {}),
+          },
         },
       },
       executor: createAnchorPreservationExecutor('interaction-anchor'),
@@ -1264,6 +1281,24 @@ export function useMessageListScroll({
     live.onLiveEdgeMeasured?.(false)
     return true
   }
+
+  const reconcileTypingBand = useStableCallback(() => {
+    if (staticMode) return false
+    return positioningControllerRef.current?.reconcileInteractionHold({
+      conversationId,
+      typingBandHeight: typingBandRef?.current?.getBoundingClientRect().height,
+      executor: createAnchorPreservationExecutor('interaction-anchor'),
+    }) ?? false
+  })
+
+  useLayoutEffect(() => {
+    const band = typingBandRef?.current
+    if (!band || staticMode) return
+    // Commit events cover mounting/removal; measured wrapping can arrive without a React commit.
+    const observer = new ResizeObserver(reconcileTypingBand)
+    observer.observe(band)
+    return () => observer.disconnect()
+  }, [conversationId, staticMode, typingBandRef, reconcileTypingBand])
 
   const releaseInteractionHold = useStableCallback((resume: boolean) => {
     // Compositor movement may precede its scroll callback and pointer departure. Consume it before
@@ -2449,6 +2484,7 @@ export function useMessageListScroll({
   // the latchable isAtBottomRef) and a same-conversation check. Only the false→true edge re-pins;
   // typing stopping GROWS the scroller back, which the browser clamps scrollTop for on its own.
   const typingIndicator = ({ sameConversation, hadTypingIndicator }: { sameConversation: boolean; hadTypingIndicator: boolean }) => {
+    if (typingBandRef && reconcileTypingBand()) return
     const scroller = scrollerRef.current
     const decision = decideTypingIndicator({
       staticMode,
@@ -2514,7 +2550,7 @@ export function useMessageListScroll({
   // Reconcile each committed layout, including arrivals that intentionally skip live-follow.
   const refreshInteractionHold = () => {
     if (!staticMode && positioningControllerRef.current?.hasInteractionHold()) {
-      reconcileMessageTargetAfterResize()
+      reconcileTypingBand()
       refreshScrollToBottomFab()
     }
   }

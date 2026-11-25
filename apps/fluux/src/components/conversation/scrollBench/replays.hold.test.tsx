@@ -16,7 +16,7 @@ vi.mock('@/hooks', () => ({
   })),
 }))
 
-// A mouse: the interaction hold only starts on a device that hovers.
+// Primary mouse presses hold; native touch remains outside this desktop replay.
 beforeEach(() => {
   window.matchMedia = ((query: string) => ({
     matches: query.includes('hover: hover'), media: query, onchange: null,
@@ -25,7 +25,7 @@ beforeEach(() => {
 })
 
 let bench: Bench
-afterEach(() => { bench?.unmount(); bench?.scroller.uninstall() })
+afterEach(() => { document.getSelection()?.removeAllRanges(); bench?.unmount(); bench?.scroller.uninstall() })
 
 /** A row with the hover toolbar the interaction hold looks for. */
 const renderMessage = (message: { body: string }) => (
@@ -39,9 +39,9 @@ function enterAtBottom(): Bench {
   return bench
 }
 
-function hover(id: string) {
+function press(id: string) {
   const row = bench.element().querySelector<HTMLElement>(`[data-message-row-id="${id}"]`)!
-  fireEvent.mouseMove(row, { clientX: 20, clientY: 20, movementX: 1 })
+  fireEvent.mouseDown(row, { button: 0, buttons: 1, clientX: 20, clientY: 20 })
   bench.scroller.frames(3)
 }
 
@@ -50,18 +50,24 @@ it('H1 the last message keeps its bottom in view when its reactions grow it unde
   const s = bench.scroller
   expect(bench.distanceFromEnd()).toBeLessThan(1)
   const last = bench.mountedIds().at(-1)!
-  hover(last)
+  press(last)
   s.setRowHeight(last, s.rowHeight(last) + 60)
   s.frames(10)
   expect(bench.distanceFromEnd()).toBeLessThan(2)
 })
 
-it('H2 resting on the jump-to-latest button keeps the hold of the row it appeared under (fd9af96b)', () => {
+it('H2 an ongoing text selection keeps its row while crossing jump-to-latest (fd9af96b)', () => {
   enterAtBottom()
   const s = bench.scroller
   const last = bench.mountedIds().at(-1)!
   const row = bench.element().querySelector<HTMLElement>(`[data-message-row-id="${last}"]`)!
-  hover(last)
+  press(last)
+  const selection = document.getSelection()!
+  const range = document.createRange()
+  range.selectNodeContents(row.querySelector('[data-message-body]')!)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  fireEvent(document, new Event('selectionchange'))
   bench.update({ messages: makeMessages(61) })
   s.frames(10)
   expect(bench.distanceFromEnd(), 'held: the arrival does not pull the list').toBeGreaterThan(5)

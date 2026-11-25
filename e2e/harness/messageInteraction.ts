@@ -34,11 +34,11 @@ export async function arrive(page: Page, kind: ConversationKind, ids: string[], 
   }, { kind, ids, own })
 }
 
-export async function setupInteraction(page: Page, kind: ConversationKind, restingPointer = false) {
+export async function setupInteraction(page: Page, kind: ConversationKind, restingPointer = false, virtualized = true) {
   if (process.env.FLUUX_INTERACTION_TRACE) page.on('console', message => {
     if (/\[Scroll\]|\[Interaction\]/.test(message.text())) console.log(message.text())
   })
-  await bootDemo(page, '/demo.html?tutorial=false&virt=1')
+  await bootDemo(page, `/demo.html?tutorial=false&virt=${virtualized ? 1 : 0}`)
   if (process.env.FLUUX_INTERACTION_TRACE) await page.evaluate(() => (window as any).__fluuxScrollDebug?.(true))
   await page.mouse.move(restingPointer ? 500 : 0, restingPointer ? 300 : 0)
   await page.evaluate(async kind => {
