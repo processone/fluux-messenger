@@ -83,6 +83,7 @@ describe('useFocusTrap', () => {
     conversation.innerHTML = '<div tabindex="0" data-date-focus-target></div><div data-modal="true"><input id="jump-to-date"><button>Go</button></div>'
     document.body.append(conversation)
     const messages = conversation.querySelector<HTMLElement>('[data-date-focus-target]')!
+    const focusMessages = vi.spyOn(messages, 'focus')
     const picker = conversation.querySelector<HTMLElement>('[data-modal]')!
     picker.querySelector('button')!.focus()
     const { unmount, getByText } = render(<Trap />)
@@ -99,7 +100,10 @@ describe('useFocusTrap', () => {
     }
     unmount()
     if (state === 'active') expect(messages).toHaveFocus()
-    else expect(messages).not.toHaveFocus()
+    else {
+      expect(messages).not.toHaveFocus()
+      expect(focusMessages).not.toHaveBeenCalled()
+    }
     if (state === 'foreground') expect(foreground.querySelector('input')).toHaveFocus()
     foreground.remove()
     conversation.remove()
