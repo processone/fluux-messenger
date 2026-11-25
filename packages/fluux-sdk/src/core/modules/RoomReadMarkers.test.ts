@@ -1626,26 +1626,30 @@ describe('RoomReadMarkers', () => {
     } finally { observer.cancelPending(); vi.stubGlobal('localStorage', storage) }
   })
 
-  it.each([false, true].flatMap(refused => [false, true].map(erased => [refused, erased] as const)))('keeps unreadable legacy all-Off after another account’s logout (conversion refused: %s, target erased: %s)', async (refusedConversion, erased) => {
+  it.each([false, true].flatMap(refused => [false, true].flatMap(erased => (refused ? ['before Off', 'after Off'] : ['after Off']).map(order => [refused, erased, order] as const))))('keeps unreadable legacy all-Off after another account’s logout (conversion refused: %s, target erased: %s, reservation: %s)', async (refusedConversion, erased, order) => {
     expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     await markers.viewed(roomJid, rows[0])
     expect(send).toHaveBeenCalledTimes(1)
     localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
     localStorage.removeItem(migrationKey)
     localStorage.removeItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'continuity'])}`)
-    const unknown = new RoomReadMarkers(dependencies, () => focused)
     const storage = localStorage
+    const logoutOther = async () => {
+      if (refusedConversion) vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === consentKey) throw new DOMException('Conversion refused', 'SecurityError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      try { expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(!refusedConversion) }
+      finally { vi.stubGlobal('localStorage', storage) }
+    }
+    if (order === 'before Off') await logoutOther()
+    const unknown = new RoomReadMarkers(dependencies, () => focused)
     let remaining = 2
     vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'getItem'
       ? (name: string) => { if (name === consentKey && remaining > 0) { remaining--; throw new DOMException('Read refused', 'SecurityError') }; return base.getItem(name) }
       : Reflect.get(base, key, base) }))
     try { expect(await unknown.setEnabled(false)).toBe(false) }
     finally { vi.stubGlobal('localStorage', storage) }
-    if (refusedConversion) vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
-      ? (name: string, value: string) => { if (name === consentKey) throw new DOMException('Conversion refused', 'SecurityError'); base.setItem(name, value) }
-      : Reflect.get(base, key, base) }))
-    try { expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(!refusedConversion) }
-    finally { vi.stubGlobal('localStorage', storage) }
+    if (order === 'after Off') await logoutOther()
     const converter = new RoomReadMarkers(dependencies, () => focused)
     try { await converter.reload() } finally { converter.cancelPending() }
     if (erased) { expect(await clearRoomReadMarkersLocalData(jid)).toBe(true); expect(await markers.setRoomEnabled(roomJid, true)).toBe(true) }
@@ -1690,8 +1694,33 @@ describe('RoomReadMarkers', () => {
       expect(storage.getItem(migrationKey)).toBe(fence)
       storage.setItem(consentKey, legacy)
       const fresh = new RoomReadMarkers(dependencies, () => focused)
-      try { expect(fresh.isEnabledFor(roomJid)).toBe(false); expect(fresh.isEnabledFor(replayFixture.room)).toBe(false) }
+      try { expect(fresh.isEnabledFor(roomJid)).toBe(false); expect(fresh.isEnabledFor(replayFixture.room)).toBe(false); await fresh.reload() }
       finally { fresh.cancelPending() }
+    } finally { vi.stubGlobal('localStorage', storage) }
+  })
+
+  it.each(['absent', 'reserved', 'linked'] as const)('writes only needed continuity proof during scoped conversion (%s)', async state => {
+    const storage = localStorage
+    const proofKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'continuity'])}`
+    localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid, replayFixture.room] }))
+    if (state !== 'absent') {
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === consentKey) throw new DOMException('Preference refused', 'SecurityError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      try {
+        if (state === 'reserved') expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(false)
+        else expect(await markers.setRoomEnabled(roomJid, false)).toBe(false)
+      } finally { vi.stubGlobal('localStorage', storage) }
+    }
+    const writes: string[] = []
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if ([consentKey, proofKey, migrationKey].includes(name)) writes.push(name); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    try {
+      expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(true)
+      expect(writes).toEqual(state === 'absent' ? [proofKey, consentKey, migrationKey] : state === 'reserved' ? [consentKey, migrationKey] : [consentKey, proofKey, migrationKey])
+      expect(markers.isEnabledFor(replayFixture.room)).toBe(true)
+      expect(markers.isEnabledFor(roomJid)).toBe(state !== 'linked')
     } finally { vi.stubGlobal('localStorage', storage) }
   })
 

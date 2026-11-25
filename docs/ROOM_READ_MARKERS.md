@@ -68,7 +68,10 @@ input, so untouched selections survive conversion refusal without authorizing a
 different replacement. Fences link that input by an opaque identifier, never a
 copy of the preference. Scoped conversion retains existing proof until its
 preference commits. Unconverted legacy ownership is reserved independently of
-the shared token, so another tab’s later conversion cannot release a failed Off.
+the shared token, so another tab’s later conversion cannot release a failed Off,
+including when its two reads fail after that reservation already exists.
+Scoped conversion reserves missing identity once; only existing input proof
+waits for preference commit before replacement.
 Already-linked inputs need no duplicate exception in the shared clear guard.
 Pure migration never publishes from its first write.
 Refusal of a final On lift leaves its revocation in place without deleting other

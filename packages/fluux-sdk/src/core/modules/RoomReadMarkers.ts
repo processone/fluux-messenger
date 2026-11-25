@@ -249,14 +249,14 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         let saved: SavedConsent | undefined
         try {
           saved = readSavedRoomConsent(other)
-          // Store the self-contained choice first so either refusal preserves valid consent.
           if (saved.needsMigration) {
             const generation = saved.generation ?? generateUUID()
             const edits = migrationEdits(saved)
-            // Reserve identity without replacing a linked input needed if conversion is refused.
-            if (!readConsentContinuity(other)) writeConsentContinuity(other, generation)
+            // Linked input stays valid until preference commit; a missing identity is reserved once.
+            const continuity = readConsentContinuity(other)
+            if (!continuity) writeConsentContinuity(other, generation)
             localStorage.setItem(storageKey(other, 'consent'), roomConsentValue({ ...saved, generation }, saved.rooms, edits))
-            writeConsentContinuity(other, generation)
+            if (continuity && (continuity.generation !== generation || continuity.input !== undefined)) writeConsentContinuity(other, generation)
             localStorage.setItem(storageKey(other, 'migration'), consentFenceValue(edits, saved.epoch, generation, saved.revoked))
           }
         } catch {
@@ -583,9 +583,9 @@ export class RoomReadMarkers extends BaseModule {
     let boundary: SavedConsent | undefined
     try { boundary = this.readSavedConsent(account) } catch { /* Selected rooms are unknown until the operation captures them. */ }
     const unknownKey = this.roomKey('')
-    let unreadable: { history?: ConsentFence; clearToken: string | null } | undefined
+    let unreadable: { history?: ConsentFence; generation?: string; clearToken: string | null } | undefined
     if (!boundary) {
-      try { unreadable = { history: readConsentFence(localStorage.getItem(storageKey(account, 'migration'))), clearToken: readClearGuard().generation } }
+      try { unreadable = { history: readConsentFence(localStorage.getItem(storageKey(account, 'migration'))), generation: readConsentContinuity(account)?.generation, clearToken: readClearGuard().generation } }
       catch { /* No readable ownership means suppression cannot yet be retired as superseded. */ }
     }
     let edits = (boundary?.rooms ?? []).map(room => this.beginConsentEdit(room, account, boundary))
@@ -596,7 +596,7 @@ export class RoomReadMarkers extends BaseModule {
         let rooms = latest.rooms
         if (unreadable) {
           const history = unreadable.history
-          const generation = history?.generation ?? JSON.stringify([account, unreadable.clearToken, history?.epoch ?? ''])
+          const generation = history?.generation ?? unreadable.generation ?? JSON.stringify([account, unreadable.clearToken, history?.epoch ?? ''])
           const retainedLegacy = !history?.generation && latest.fence === null && !!latest.legacyChoice
           if (latest.generation !== generation && !retainedLegacy) rooms = []
           else rooms = rooms.filter(room => (history?.edits?.[room] ?? '') === (latest.edits[room] ?? '')
