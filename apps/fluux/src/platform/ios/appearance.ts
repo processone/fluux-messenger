@@ -37,9 +37,14 @@ export function setIosAppearance(next: 'light' | 'dark' | null): void {
   void send()
 }
 
-/** Paints the native web view behind the keyboard (`#rrggbb`); true once native confirmed that color. */
+/**
+ * Paints the native web view behind the keyboard (`#rrggbb`); true once native confirmed that color.
+ * The latest request is recorded before deciding whether a write is needed: an idle writer that already
+ * holds this color skips it, while a write in flight is followed by one for the latest color.
+ */
 export async function setIosBackdrop(color: string): Promise<boolean> {
   background = color
+  if (!draining && acknowledged === color) return true
   await send()
   return acknowledged === color
 }

@@ -11,8 +11,9 @@ type Rgba = readonly [number, number, number, number]
  */
 
 /**
- * The color the page shows at a point: the first opaque layer from the top of the element
- * stack down, with the translucent layers above it blended on top, nearest layer last.
+ * An estimate of the color the page shows at a point from flat backgrounds: the first opaque layer
+ * from the top of the element stack down, with the translucent layers above it blended on top,
+ * nearest layer last. Shadows, gradients, images and filters are not part of it.
  * Layers are read lazily, so nothing below the first opaque one is ever evaluated.
  */
 export function visibleColor(stack: Iterable<string>, read: (css: string) => Rgba): readonly [number, number, number] | null {
@@ -53,7 +54,6 @@ function readThroughCanvas(): (css: string) => Rgba {
   return reader
 }
 
-let painted = ''
 let frame = 0
 let watching = false
 
@@ -67,9 +67,8 @@ function sample(): void {
   const color = visibleColor(backgrounds(), readThroughCanvas())
   if (!color) return
   const hex = `#${color.map(channel => channel.toString(16).padStart(2, '0')).join('')}`
-  if (hex === painted) return
-  // Cached only once native confirmed it, so a failed paint is retried by the next dock or viewport event.
-  void setIosBackdrop(hex).then(applied => { if (applied) painted = hex })
+  // The writer skips a color it already holds and retries one native did not confirm on the next event.
+  void setIosBackdrop(hex)
 }
 
 /**

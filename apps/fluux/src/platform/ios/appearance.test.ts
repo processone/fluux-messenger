@@ -35,6 +35,21 @@ describe('native appearance boundary', () => {
     expect(invoke).toHaveBeenCalledTimes(2)
     expect(invoke).toHaveBeenLastCalledWith('plugin:ios-feedback|set_appearance', { style: 'dark', background: '#333333' })
   })
+  it('sends the latest color again when the viewport returns to an acknowledged color while another is pending', async () => {
+    restore = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    expect(await setIosBackdrop('#aaaaaa')).toBe(true)
+    invoke.mockClear()
+    expect(await setIosBackdrop('#aaaaaa')).toBe(true)
+    expect(invoke).not.toHaveBeenCalled()
+    let release = () => {}
+    invoke.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve }))
+    const toB = setIosBackdrop('#bbbbbb')
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(1))
+    const backToA = setIosBackdrop('#aaaaaa')
+    release()
+    expect(await Promise.all([toB, backToA])).toEqual([false, true])
+    expect(invoke).toHaveBeenLastCalledWith('plugin:ios-feedback|set_appearance', expect.objectContaining({ background: '#aaaaaa' }))
+  })
   it('reports a rejected paint as not applied and sends the same color again later', async () => {
     restore = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
     invoke.mockRejectedValueOnce(new Error('Backdrop not applied'))
