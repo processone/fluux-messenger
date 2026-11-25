@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { Profiler, useRef, useSyncExternalStore } from 'react'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent, act, within } from '@testing-library/react'
 import { AccountMenu, DEGRADED_STATUS_GRACE_MS } from './AccountMenu'
 import { EscapeModal } from '@/test-utils/escapeModal'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
@@ -94,6 +94,24 @@ vi.mock('../Tooltip', () => ({
 
 const row = () => screen.getByTestId('account-row')
 
+function expectAccountMenuOrder(menu: HTMLElement, onPhone: boolean) {
+  const { getByRole } = within(menu)
+  expect(Array.from(menu.querySelectorAll('button, a[href], input'))).toEqual([
+    getByRole('menuitem', { name: 'menu.whatsNew' }),
+    ...(onPhone ? [] : [getByRole('menuitem', { name: 'menu.keyboardShortcuts' })]),
+    getByRole('menuitem', { name: 'menu.reportIssue' }),
+    getByRole('menuitem', { name: 'menu.about' }),
+    getByRole('menuitem', { name: 'sidebar.viewProfile' }),
+    getByRole('menuitemradio', { name: 'presence.online' }),
+    getByRole('menuitemradio', { name: 'presence.away' }),
+    getByRole('menuitemradio', { name: 'presence.dnd' }),
+    getByRole('textbox', { name: 'presence.statusMessage' }),
+    getByRole('button', { name: 'common.save' }),
+    getByRole('button', { name: 'common.clear' }),
+    getByRole('menuitem', { name: 'menu.logOut' }),
+  ])
+}
+
 beforeEach(() => {
   mobile = false
   consoleIsOpen = false
@@ -126,19 +144,11 @@ describe('AccountMenu row and menu', () => {
     expect(row()).toHaveAccessibleName('Mickaël, In a meeting')
   })
 
-  it('opens one menu with presence, status message, profile, general items and log out', () => {
+  it('opens one menu with help first and the status message below presence', () => {
+    statusMessage = 'In a meeting'
     render(<AccountMenu onLogout={vi.fn()} onOpenProfile={vi.fn()} />)
     fireEvent.click(row())
-    expect(screen.getByRole('menu')).toBeInTheDocument()
-    expect(screen.getAllByRole('menuitemradio').map((e) => e.textContent)).toEqual([
-      'presence.online',
-      'presence.away',
-      'presence.dnd',
-    ])
-    expect(screen.getByText('presence.statusMessage')).toBeInTheDocument()
-    for (const key of ['sidebar.viewProfile', 'menu.whatsNew', 'menu.keyboardShortcuts', 'menu.reportIssue', 'menu.about', 'menu.logOut']) {
-      expect(screen.getByRole('menuitem', { name: key })).toBeInTheDocument()
-    }
+    expectAccountMenuOrder(screen.getByRole('menu'), false)
   })
 
   it('loads the What\'s New window when it is chosen from the menu', async () => {
@@ -168,6 +178,12 @@ describe('AccountMenu row and menu', () => {
     fireEvent.keyDown(away, { key: 'ArrowUp' })
     expect(document.activeElement).toBe(online)
     fireEvent.keyDown(online, { key: 'ArrowUp' })
+    const profile = screen.getByRole('menuitem', { name: 'sidebar.viewProfile' })
+    expect(document.activeElement).toBe(profile)
+    fireEvent.keyDown(profile, { key: 'Home' })
+    const whatsNew = screen.getByRole('menuitem', { name: 'menu.whatsNew' })
+    expect(document.activeElement).toBe(whatsNew)
+    fireEvent.keyDown(whatsNew, { key: 'ArrowUp' })
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'menu.logOut' }))
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
@@ -212,13 +228,11 @@ describe('AccountMenu row and menu', () => {
 
   it('opens as a bottom sheet on a phone, without console and shortcut entries', () => {
     mobile = true
+    statusMessage = 'In a meeting'
     useAdvancedModeStore.getState().setAdvancedMode(true)
     render(<AccountMenu onLogout={vi.fn()} onOpenProfile={vi.fn()} />)
     fireEvent.click(row())
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'menu.logOut' })).toBeInTheDocument()
-    expect(screen.queryByText('menu.keyboardShortcuts')).not.toBeInTheDocument()
-    expect(screen.queryByText('menu.showConsole')).not.toBeInTheDocument()
+    expectAccountMenuOrder(within(screen.getByRole('dialog')).getByRole('menu'), true)
   })
 })
 
