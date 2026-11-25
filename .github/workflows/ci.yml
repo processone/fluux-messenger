@@ -200,7 +200,7 @@ jobs:
         run: npm run test:tauri-features
 
       - name: Windows GUI harness provenance contracts
-        run: node --test scripts/native-tests/windows-gui/common.test.mjs scripts/native-tests/windows-gui/paths.test.mjs scripts/native-tests/windows-gui/workspace.test.mjs scripts/native-tests/windows-gui/launcher.test.mjs scripts/test-local-windows.test.mjs
+        run: node --test scripts/native-tests/windows-gui/common.test.mjs scripts/native-tests/windows-gui/paths.test.mjs scripts/native-tests/windows-gui/workspace.test.mjs scripts/native-tests/windows-gui/launcher.test.mjs scripts/native-tests/linux-gui/webdriver.test.mjs scripts/test-local-windows.test.mjs
 
       - name: Run SDK tests
         run: npm run test:run --workspace=@fluux/sdk

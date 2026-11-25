@@ -105,7 +105,10 @@ no frontend filesystem permission is widened.
 The launcher exclusively creates the test identity directories under Windows'
 actual roaming/local application-data folders. It refuses any existing directory,
 including leftovers, instead of reading or deleting it. WebView2 receives its own
-fresh `WEBVIEW2_USER_DATA_FOLDER`. The worker also reads only its own WebView2
+fresh `WEBVIEW2_USER_DATA_FOLDER`, and the session explicitly supplies that same
+path as `webviewOptions.userDataFolder`. Edge WebDriver otherwise overrides the
+environment with a separate temporary folder outside the owned roots. The worker
+records observed paths before checking containment and reads only its own WebView2
 process command lines and rejects user-data directories outside the owned roots.
 Cleanup checks ownership tokens and removes
 only the directories this invocation created. The compile-time backend is a

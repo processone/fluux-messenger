@@ -54,11 +54,11 @@ async function verifyWebViewProfile() {
     const path = commandLine.match(/(?:"--user-data-dir=([^"]+)"|--user-data-dir="([^"]+)"|--user-data-dir=(\S+))/)
     if (path) paths.add(resolve(path[1] ?? path[2] ?? path[3]))
   }
+  log({ webviewProfiles: [...paths] })
   assert.ok(paths.size, 'No owned WebView2 user-data directory was observable')
   for (const path of paths) {
     assert.ok([config.profile, ...config.nativeProfiles].some(base => contains(base, path)), 'WebView2 storage escaped the owned disposable directories')
   }
-  log({ webviewProfiles: [...paths] })
 }
 
 async function main() {
@@ -80,7 +80,8 @@ async function main() {
       await listenersOwned(native.pid)
       assert.equal((await client.command('GET', '/status')).ready, true)
     }, 'Windows driver readiness failed')
-    await client.session(app)
+    // Edge otherwise substitutes its own temporary folder, overriding the inherited WebView environment.
+    await client.session(app, { userDataFolder: join(config.profile, 'webview') })
     const jid = await until(() => client.element('#jid'), 'Windows login field did not appear')
     await verifyWebViewProfile()
     await client.command('POST', `/session/${client.id}/element/${jid}/click`, {})

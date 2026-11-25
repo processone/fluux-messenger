@@ -29,9 +29,11 @@ export class WebDriver {
     return data.value
   }
 
-  async session(application) {
+  async session(application, webviewOptions) {
+    const options = { application }
+    if (webviewOptions !== undefined) options.webviewOptions = webviewOptions
     const value = await this.command('POST', '/session', {
-      capabilities: { alwaysMatch: { 'tauri:options': { application } } },
+      capabilities: { alwaysMatch: { 'tauri:options': options } },
     })
     this.id = value.sessionId
     if (!this.id) throw new Error('Native driver returned no session ID')
