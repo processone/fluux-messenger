@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { setPlatformForTesting } from '@/platform'
-import { setIosAppearance } from './appearance'
+import { setIosAppearance, setIosBackdrop } from './appearance'
 const invoke = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 vi.mock('@tauri-apps/api/core', () => ({ invoke }))
 let restore = () => {}
@@ -10,6 +10,12 @@ describe('native appearance boundary', () => {
     restore = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
     setIosAppearance(style)
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledExactlyOnceWith('plugin:ios-feedback|set_appearance', { style }))
+  })
+  it('keeps the chosen style when only the backdrop changes', async () => {
+    restore = setPlatformForTesting({ shell: 'mobile', os: 'ios' })
+    setIosAppearance('light')
+    setIosBackdrop('#f4f4f5')
+    await vi.waitFor(() => expect(invoke).toHaveBeenLastCalledWith('plugin:ios-feedback|set_appearance', { style: 'light', background: '#f4f4f5' }))
   })
   it.each([{ shell: 'web', os: 'ios' }, { shell: 'mobile', os: 'android' }, { shell: 'desktop', os: 'macos' }] as const)('does nothing on $shell/$os', async host => {
     restore = setPlatformForTesting(host)

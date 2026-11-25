@@ -1,15 +1,35 @@
 import { platform } from '@/platform'
+import { setIosBackdrop } from './appearance'
 
-type Rgb = readonly [number, number, number]
-
-let lastPainted = ''
+type Rgba = readonly [number, number, number, number]
 
 /**
- * WebKit pans the page up by the keyboard height, so the strip behind the keyboard's
- * rounded top corners lies outside the document and shows the web view's own
- * background (black or white by system mode). Only the web view can paint it.
+ * While a field has focus WebKit pans the page up by the keyboard height, so the strip
+ * behind the keyboard's rounded top corners is outside the document and shows the native
+ * web view and its root view (black or white by system mode, whatever the theme). Document
+ * backgrounds cannot reach it; the native side paints it with the color sampled here.
  */
-function readThroughCanvas(): (css: string) => readonly [number, number, number, number] {
+
+/**
+ * The color the page shows at a point: the first opaque layer from the top of the element
+ * stack down, with the translucent layers above it blended on top, nearest layer last.
+ */
+export function visibleColor(stack: readonly string[], read: (css: string) => Rgba): readonly [number, number, number] | null {
+  const layers = stack.map(read)
+  const base = layers.findIndex(layer => layer[3] === 255)
+  if (base < 0) return null
+  let [r, g, b] = layers[base]
+  for (let i = base - 1; i >= 0; i--) {
+    const [lr, lg, lb, la] = layers[i]
+    const alpha = la / 255
+    r = lr * alpha + r * (1 - alpha)
+    g = lg * alpha + g * (1 - alpha)
+    b = lb * alpha + b * (1 - alpha)
+  }
+  return [Math.round(r), Math.round(g), Math.round(b)]
+}
+
+function readThroughCanvas(): (css: string) => Rgba {
   const canvas = document.createElement('canvas')
   canvas.width = canvas.height = 1
   const context = canvas.getContext('2d', { willReadFrequently: true })
@@ -24,35 +44,38 @@ function readThroughCanvas(): (css: string) => readonly [number, number, number,
   }
 }
 
-/** The first opaque color from the top of the element stack down. */
-export function firstOpaque(stack: readonly string[], read: (css: string) => readonly [number, number, number, number]): Rgb | null {
-  for (const css of stack) {
-    const [r, g, b, a] = read(css)
-    if (a === 255) return [r, g, b]
-  }
-  return null
+let painted = ''
+let frame = 0
+let watching = false
+
+function sample(): void {
+  frame = 0
+  const viewport = window.visualViewport
+  // Layout coordinates of the last visible row: the visual viewport has been panned by the keyboard.
+  const bottom = Math.min(Math.floor((viewport ? viewport.offsetTop + viewport.height : window.innerHeight) - 1), window.innerHeight - 1)
+  const stack = document.elementsFromPoint(Math.floor(window.innerWidth / 2), Math.max(bottom, 0))
+  const color = visibleColor(stack.map(element => getComputedStyle(element).backgroundColor), readThroughCanvas())
+  if (!color) return
+  const hex = `#${color.map(channel => channel.toString(16).padStart(2, '0')).join('')}`
+  if (hex === painted) return
+  painted = hex
+  setIosBackdrop(hex)
 }
 
-/** Paints the web view behind the keyboard in the color of the screen just above it. */
+/**
+ * The one owner of the backdrop: any number of callers share a single sample per frame.
+ * The native dock notification fires before WebKit has panned the page, and the page moves on
+ * later viewport resize and scroll events, so those resample while the keyboard is docked.
+ */
 export function syncKeyboardBackdrop(): void {
   if (!platform().syncsNativeAppearance) return
-  const viewport = window.visualViewport
-  const bottom = Math.floor((viewport ? viewport.offsetTop + viewport.height : window.innerHeight) - 1)
-  const stack = document.elementsFromPoint(Math.floor(window.innerWidth / 2), Math.min(bottom, window.innerHeight - 1))
-  const color = firstOpaque(stack.map(element => getComputedStyle(element).backgroundColor), readThroughCanvas())
-  if (!color) return
-  const key = color.join(',')
-  if (key === lastPainted) return
-  lastPainted = key
-  void import('@tauri-apps/api/webview')
-    .then(({ getCurrentWebview }) => getCurrentWebview().setBackgroundColor([color[0], color[1], color[2], 255]))
-    .catch(() => { lastPainted = '' })
-}
-
-/** Repaints whenever the keyboard docks or undocks; theme changes call syncKeyboardBackdrop directly. */
-export function watchKeyboardBackdrop(): () => void {
-  if (!platform().syncsNativeAppearance) return () => {}
-  const observer = new MutationObserver(syncKeyboardBackdrop)
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-keyboard-docked'] })
-  return () => observer.disconnect()
+  if (!watching) {
+    watching = true
+    const root = document.documentElement
+    new MutationObserver(syncKeyboardBackdrop).observe(root, { attributes: true, attributeFilter: ['data-keyboard-docked'] })
+    const whileDocked = () => { if (root.dataset.keyboardDocked === 'true') syncKeyboardBackdrop() }
+    window.visualViewport?.addEventListener('resize', whileDocked)
+    window.visualViewport?.addEventListener('scroll', whileDocked)
+  }
+  if (!frame) frame = requestAnimationFrame(sample)
 }

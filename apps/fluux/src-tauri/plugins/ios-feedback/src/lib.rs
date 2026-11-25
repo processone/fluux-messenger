@@ -27,15 +27,17 @@ mod platform {
     #[derive(serde::Serialize)]
     struct Appearance {
         style: Option<AppearanceStyle>,
+        background: Option<String>,
     }
     #[tauri::command]
     async fn set_appearance<R: Runtime>(
         app: tauri::AppHandle<R>,
         style: Option<AppearanceStyle>,
+        background: Option<String>,
     ) -> Result<(), String> {
         app.state::<Feedback<R>>()
             .0
-            .run_mobile_plugin_async("setAppearance", Appearance { style })
+            .run_mobile_plugin_async("setAppearance", Appearance { style, background })
             .await
             .map_err(|e| e.to_string())
     }

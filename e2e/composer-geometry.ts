@@ -1294,3 +1294,61 @@ test.describe('native docked-keyboard composer spacing', () => {
     })
   }
 })
+
+// The web view behind the iOS keyboard's rounded corners is native, so only the color Fluux
+// sends can be read here. The rendered page is the reference: the sent color must be the pixel
+// the page shows just above the keyboard. Only native IPC is replaced.
+test.describe('iOS keyboard backdrop color', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 700 } })
+
+  for (const scheme of ['dark', 'light'] as const) {
+    test(`sends the screen color above the keyboard in ${scheme} mode`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme })
+      await bootDemo(page, DEMO_URL)
+      // The demo's own iOS host stand-in answers every native command; only the outgoing
+      // appearance arguments are recorded here.
+      await page.evaluate(() => {
+        const w = window as any
+        w.__installNotificationSettingsFixture('granted', 'disabled', { shell: 'mobile', os: 'ios' })
+        w.__appearanceCalls = []
+        const invoke = w.__TAURI_INTERNALS__.invoke
+        w.__TAURI_INTERNALS__.invoke = (command: string, args: unknown, ...rest: unknown[]) => {
+          if (command === 'plugin:ios-feedback|set_appearance') w.__appearanceCalls.push(args)
+          return invoke(command, args, ...rest)
+        }
+        w.__demoClient.stopAnimation()
+        location.hash = '#/messages/ava%40fluux.chat'
+      })
+      // A system theme change is what first reaches the iOS backdrop in a page that booted as iOS.
+      await page.emulateMedia({ colorScheme: scheme === 'dark' ? 'light' : 'dark' })
+      await page.emulateMedia({ colorScheme: scheme })
+      await expect(page.locator('textarea').first()).toBeVisible()
+      await page.evaluate(() => { document.documentElement.dataset.keyboardDocked = 'true' })
+
+      const sentBackground = () => page.evaluate(() => {
+        const calls = (window as any).__appearanceCalls as { background?: string }[]
+        return calls.map(call => call.background).filter(Boolean).at(-1) ?? null
+      })
+      // Empty conversation background between the last message and the composer; the composer's own
+      // shadow darkens the bottom edge, which is not the screen color.
+      const pixelAboveKeyboard = async () => {
+        const png = await page.screenshot({ clip: { x: 385, y: 628, width: 1, height: 1 } })
+        return page.evaluate(async base64 => {
+          const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob())
+          const canvas = document.createElement('canvas')
+          canvas.width = canvas.height = 1
+          const context = canvas.getContext('2d')!
+          context.drawImage(bitmap, 0, 0)
+          const [r, g, b] = context.getImageData(0, 0, 1, 1).data
+          return `#${[r, g, b].map(channel => channel.toString(16).padStart(2, '0')).join('')}`
+        }, png.toString('base64'))
+      }
+      await expect.poll(sentBackground).toBe(await pixelAboveKeyboard())
+
+      // A visual viewport update after the dock notification must not leave a stale color.
+      await page.evaluate(() => { document.documentElement.classList.toggle('light') })
+      await page.evaluate(() => { document.documentElement.dataset.keyboardDocked = 'false'; document.documentElement.dataset.keyboardDocked = 'true' })
+      await expect.poll(sentBackground).toBe(await pixelAboveKeyboard())
+    })
+  }
+})
