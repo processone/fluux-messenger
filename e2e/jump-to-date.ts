@@ -18,17 +18,17 @@ const dialog = (page: Page) => page.getByRole('dialog', { name: 'Jump to date', 
 const separator = (page: Page) => thread(page).locator('[data-date-separator] [data-date-pill]').first()
 const floating = (page: Page) => thread(page).locator('[data-floating-date] [data-date-pill]')
 
-async function setup(page: Page, kind: Kind) {
+async function setup(page: Page, kind: Kind, virtualized = true) {
   await page.clock.setFixedTime(new Date('2026-03-02T00:30:00Z'))
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
-  await bootDemo(page, '/demo.html?tutorial=false&virt=1')
+  await bootDemo(page, `/demo.html?tutorial=false&virt=${virtualized ? 1 : 0}`)
   await page.evaluate(() => {
     const scope = window as unknown as { __demoClient: { stopAnimation(): void }; __toastStore: { setState(value: { toasts: never[] }): void } }
     scope.__demoClient.stopAnimation()
     scope.__toastStore.setState({ toasts: [] })
   })
   if (kind === 'chat') await activateChat(page, 'emma@fluux.chat')
-  else await navigateToStressRoom(page, true, 'team@conference.fluux.chat')
+  else await navigateToStressRoom(page, virtualized, 'team@conference.fluux.chat')
   await list(page).evaluate(el => { el.scrollTop = 0 })
   await settle(page)
   // Initial inactive-conversation notices can be queued during activation; dismiss them
@@ -483,5 +483,85 @@ for (const kind of ['chat', 'room'] as const) {
       await expect(separator(page)).toBeFocused()
       await test.info().attach('find-covered-date-controls', { body: JSON.stringify({ kind, width, coverage, floatingName, separatorName }), contentType: 'application/json' })
     })
+  }
+}
+
+// Reader text spacing can move a separator without changing the pill or the viewport.
+for (const kind of ['chat', 'room'] as const) {
+  for (const virtualized of [true, false]) {
+    for (const direction of ['reveal', 'cover'] as const) {
+      test(`${kind}: Find ${direction}s a separator after fixed-scroll reflow in the ${virtualized ? 'virtual' : 'plain'} list`, async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 })
+        await setup(page, kind, virtualized)
+        await page.keyboard.press('ControlOrMeta+f')
+        // Larger Find text leaves part of the preceding message visible, so that
+        // message's reflow moves the separator rather than an offscreen anchor.
+        await page.addStyleTag({ content: '[data-find-on-page-bar] input { font-size: 200%; line-height: 1.5 }' })
+        const pill = thread(page).locator(`[data-date-separator="${MESSAGE_DAY}"] [data-date-pill]`)
+        await expect(pill).toBeAttached()
+        const rowId = await pill.evaluate(element => {
+          const scroller = element.closest<HTMLElement>('[data-message-list]')!
+          // This fixture isolates coverage from the browser's independent anchor policy.
+          scroller.style.overflowAnchor = 'none'
+          const row = [...scroller.querySelectorAll<HTMLElement>('[data-message-row-id]')]
+            .filter(candidate => candidate.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING).at(-1)!
+          return row.dataset.messageRowId!
+        })
+        const escapedRowId = await page.evaluate(value => CSS.escape(value), rowId)
+        const row = list(page).locator(`[data-message-row-id="${escapedRowId}"]`)
+        const text = row.locator('[data-msg-text]')
+        const body = await text.count() ? text : row.getByTitle('Scroll to original poll', { exact: true })
+        const originalSpacing = await body.evaluate(element => (element as HTMLElement).style.lineHeight)
+        if (direction === 'cover') await body.evaluate(element => { (element as HTMLElement).style.lineHeight = '1.75' })
+        await settle(page)
+        await pill.evaluate((element, reveal) => {
+          const scroller = element.closest<HTMLElement>('[data-message-list]')!
+          const bar = element.closest('[data-conversation-thread]')!.querySelector('[data-find-on-page-bar]')!
+          scroller.scrollTop += element.getBoundingClientRect().bottom - bar.getBoundingClientRect().bottom + (reveal ? 1 : -1)
+        }, direction === 'reveal')
+        await settle(page)
+        if (!virtualized) {
+          // An existing toolbar focus hold keeps this row's top, not a later reading anchor.
+          await page.keyboard.press('Shift')
+          await row.getByRole('button', { name: 'More options', exact: true }).evaluate(element => (element as HTMLElement).focus({ preventScroll: true }))
+          await expect(list(page)).toHaveAttribute('data-message-interaction', rowId)
+          await settle(page)
+        }
+        const read = async () => pill.evaluate((element, previousId) => {
+          const scroller = element.closest<HTMLElement>('[data-message-list]')!
+          const previous = [...scroller.querySelectorAll<HTMLElement>('[data-message-row-id]')].find(row => row.dataset.messageRowId === previousId)!
+          const bar = element.closest('[data-conversation-thread]')!.querySelector('[data-find-on-page-bar]')!
+          return { scroll: scroller.scrollTop, pill: element.getBoundingClientRect().toJSON(), previous: previous.getBoundingClientRect().toJSON(), viewport: scroller.getBoundingClientRect().toJSON(), find: bar.getBoundingClientRect().toJSON(), hidden: element.hasAttribute('data-find-covered') }
+        }, rowId)
+        const before = await read()
+        expect(before.previous.bottom).toBeGreaterThan(before.viewport.top)
+        if (direction === 'reveal') await expect(pill).not.toBeVisible()
+        else await expect(pill).toBeVisible()
+        await body.evaluate((element, value) => { (element as HTMLElement).style.lineHeight = value }, direction === 'reveal' ? '1.75' : originalSpacing)
+        await settle(page)
+        const changed = await read()
+        expect(changed.scroll).toBe(before.scroll)
+        expect(changed.pill.height).toBe(before.pill.height)
+        expect(changed.find).toEqual(before.find)
+        if (direction === 'reveal') {
+          expect(changed.previous.height).toBeGreaterThan(before.previous.height)
+          expect(changed.pill.top).toBeGreaterThan(before.pill.top)
+        } else {
+          expect(changed.previous.height).toBeLessThan(before.previous.height)
+          expect(changed.pill.top).toBeLessThan(before.pill.top)
+        }
+        await test.info().attach('find-row-reflow', { body: JSON.stringify({ kind, virtualized, direction, rowId, originalSpacing, before, changed }), contentType: 'application/json' })
+        if (direction === 'reveal') {
+          await expect(pill).toBeVisible()
+          await expect(pill).not.toHaveAttribute('inert')
+        } else {
+          await expect(pill).not.toBeVisible()
+          await expect(pill).toHaveAttribute('inert')
+          await expect(pill).toHaveAttribute('aria-hidden', 'true')
+        }
+        const name = (await pill.getAttribute('aria-label'))!
+        await expect(thread(page).getByRole('button', { name, exact: true }).and(pill)).toHaveCount(direction === 'reveal' ? 1 : 0)
+      })
+    }
   }
 }

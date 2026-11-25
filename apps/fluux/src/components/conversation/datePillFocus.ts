@@ -1,3 +1,5 @@
+const findCoverageUpdates = new WeakMap<HTMLElement, () => void>()
+
 /** A date opener must still be visible, including inside the clipped timeline. */
 export function isDatePillVisible(opener: HTMLElement | null): opener is HTMLElement {
   if (!opener?.isConnected || opener.closest('[inert], [aria-hidden="true"]')) return false
@@ -17,6 +19,11 @@ export function focusConversationActions(from: HTMLElement | null) {
   const root = from?.closest('[data-conversation-thread]')
   if (root?.closest('[inert], [aria-hidden="true"]')) return
   root?.querySelector<HTMLElement>('[data-header-overflow-trigger]')?.focus({ preventScroll: true })
+}
+
+export function refreshDatePillsCoveredByFind(from: HTMLElement | null) {
+  const root = from?.closest<HTMLElement>('[data-conversation-thread]')
+  if (root) findCoverageUpdates.get(root)?.()
 }
 
 export function isDatePillCoveredByFind(pill: HTMLElement, find = pill.closest('[data-conversation-thread]')?.querySelector<HTMLElement>('[data-find-on-page-bar]')) {
@@ -58,12 +65,14 @@ export function observeDatePillsCoveredByFind(root: HTMLElement) {
   }
   const resize = new ResizeObserver(update)
   const mutations = new MutationObserver(update)
+  findCoverageUpdates.set(root, update)
   resize.observe(root)
   resize.observe(find)
   mutations.observe(root, { childList: true, subtree: true })
   root.addEventListener('scroll', update, true)
   update()
   return () => {
+    findCoverageUpdates.delete(root)
     resize.disconnect()
     mutations.disconnect()
     root.removeEventListener('scroll', update, true)

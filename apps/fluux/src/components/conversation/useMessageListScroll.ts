@@ -42,6 +42,7 @@ import { decideTypingIndicator } from './typingIndicatorDecision'
 import { shouldShowScrollToBottomFab } from './fabVisibility'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
+import { refreshDatePillsCoveredByFind } from './datePillFocus'
 import { ViewportSession, type ViewportGeometry } from './viewportSession'
 import { ScrollPersistenceAdapter } from './scrollPersistenceAdapter'
 import {
@@ -1374,11 +1375,15 @@ export function useMessageListScroll({
   }
   const handleRowLayoutChange = useStableCallback(() => {
     if (latestRef.current.staticMode || live.virtualizer) return
-    const wasAtBottom = isAtBottomRef.current
-    if (reconcileContentLayout()) return
-    const scroller = scrollerRef.current
-    if (wasAtBottom && scroller && getDistanceFromBottom(scroller) > 1) {
-      live.reconcileLiveEdge('row-layout', wasAtBottom)
+    try {
+      const wasAtBottom = isAtBottomRef.current
+      if (reconcileContentLayout()) return
+      const scroller = scrollerRef.current
+      if (wasAtBottom && scroller && getDistanceFromBottom(scroller) > 1) {
+        live.reconcileLiveEdge('row-layout', wasAtBottom)
+      }
+    } finally {
+      refreshDatePillsCoveredByFind(scrollerRef.current)
     }
   })
   live.writeObserver = write => {
