@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
+import { syncEngineGeometry } from './harness/compositorSync'
 import { activateChat, navigateToStressRoom } from './harness/scrollHarness'
 import { ROOM_JID } from '../apps/fluux/src/demo/constants'
 
@@ -29,6 +30,7 @@ async function capture(page: Page, name: string) {
 
 async function findGeometry(input: Locator, singleRow = false) {
   await expect(input).toBeFocused()
+  await syncEngineGeometry(input.page())
   expect(await input.evaluate((el, singleRow) => {
     const container = el.closest('[data-find-on-page-bar]')!
     const bar = container.getBoundingClientRect()
@@ -37,13 +39,19 @@ async function findGeometry(input: Locator, singleRow = false) {
     const style = getComputedStyle(el)
     const ring = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset)
     const font = parseFloat(getComputedStyle(document.documentElement).fontSize)
-    return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0 &&
+    const uncovered = (target: Element) => {
+      const rect = target.getBoundingClientRect()
+      return [0.25, 0.5, 0.75].every(fraction => target.contains(
+        document.elementFromPoint(rect.left + rect.width * fraction, rect.top + rect.height / 2),
+      ))
+    }
+    return uncovered(el) && style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0 &&
       field.width >= 4 * font && field.left - ring >= pane.left && field.right + ring <= pane.right &&
       field.top - ring >= bar.top && field.bottom + ring <= bar.bottom &&
       bar.left >= pane.left && bar.right <= pane.right &&
       Array.from(container.querySelectorAll('button, span')).every(control => {
         const rect = control.getBoundingClientRect()
-        return rect.left >= bar.left && rect.right <= bar.right && rect.top >= bar.top && rect.bottom <= bar.bottom &&
+        return uncovered(control) && rect.left >= bar.left && rect.right <= bar.right && rect.top >= bar.top && rect.bottom <= bar.bottom &&
           control.scrollWidth <= control.clientWidth && control.scrollHeight <= control.clientHeight &&
           (!singleRow || Math.abs((rect.top + rect.bottom) / 2 - (field.top + field.bottom) / 2) <= 1)
       })
