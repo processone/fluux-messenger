@@ -1,4 +1,4 @@
-import { test, expect, type Locator, type Page } from '@playwright/test'
+import { test, expect, devices, type Locator, type Page } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
 
 // These unwrapped lines overflow a phone but fit a wide desktop panel, exposing
@@ -57,11 +57,20 @@ async function openCode(page: Page) {
   }
 }
 
-for (const mode of ['phone', 'desktop', 'narrow-desktop'] as const) {
-  const phone = mode === 'phone'
-  const narrow = mode !== 'desktop'
+for (const mode of ['phone', 'phone-mouse', 'desktop', 'narrow-desktop', 'touch-desktop'] as const) {
+  const phone = mode === 'phone' || mode === 'phone-mouse'
+  const narrow = phone || mode === 'narrow-desktop'
   test.describe(mode, () => {
-    test.use({ hasTouch: phone, isMobile: phone, deviceScaleFactor: phone ? 3 : 1 })
+    test.use({
+      hasTouch: mode === 'phone' || mode === 'touch-desktop',
+      isMobile: phone,
+      deviceScaleFactor: phone ? 3 : 1,
+      userAgent: async ({ browserName }, use) => {
+        const device = phone ? 'iPhone 16 Pro Max'
+          : mode === 'touch-desktop' || browserName === 'chromium' ? 'Desktop Edge' : 'Desktop Safari'
+        await use(devices[device].userAgent)
+      },
+    })
     test('code opening and controls', async ({ page, browserName }, testInfo) => {
       const portrait = narrow ? { width: 440, height: 956 } : { width: 1280, height: 800 }
       await page.setViewportSize(portrait)
@@ -131,6 +140,17 @@ for (const mode of ['phone', 'desktop', 'narrow-desktop'] as const) {
           expect.soft(box.right).toBeLessThanOrEqual(956 - (cdp ? 62 : 0))
           expect.soft(box.bottom).toBeLessThanOrEqual(440 - (cdp ? 21 : 0))
         }
+        await close.click()
+        await expect(modal).toHaveCount(0)
+        await expect(page.locator('[data-message-id="fullscreen-code"] pre').first()).toHaveCSS('white-space', 'pre')
+        await expand.click()
+        await expect(wrap).toHaveAttribute('aria-pressed', 'true')
+        await expect(pre).toHaveCSS('white-space', 'pre-wrap')
+        const freshLandscape = await capture('fresh-landscape')
+        expect(freshLandscape.code.text).toBe(CODE)
+        expect(freshLandscape.code.scrollWidth).toBeLessThanOrEqual(freshLandscape.code.width + 1)
+        await wrap.click()
+        await expect(wrap).toHaveAttribute('aria-pressed', 'false')
       }
       await wrap.click()
       await expect(wrap).toHaveAttribute('aria-pressed', 'true')
@@ -144,6 +164,9 @@ for (const mode of ['phone', 'desktop', 'narrow-desktop'] as const) {
       }
       if (browserName === 'chromium') {
         await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+        const previousClipboard = `Code viewer clipboard fixture: ${mode}`
+        await page.evaluate(text => navigator.clipboard.writeText(text), previousClipboard)
+        expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(previousClipboard)
         await copy.click()
         expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(CODE)
       }

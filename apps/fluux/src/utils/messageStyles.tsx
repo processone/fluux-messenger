@@ -24,8 +24,7 @@ import { useTranslation } from 'react-i18next'
 import { useWrappedCodeBlocksStore, type WrapIdentity } from '../stores/wrappedCodeBlocksStore'
 import { LiveEdgeGrowthContext } from '../components/conversation/liveEdgeGrowthContext'
 import { ModalShell } from '../components/ModalShell'
-import { useIsTouch } from '../hooks/useHasHover'
-import { platform } from '../platform'
+import { isMobileDevice } from '../platform'
 import { useHighlighter } from './codeHighlight'
 import { getConsistentTextColor } from '../components/Avatar'
 import { MessageLink } from '../components/conversation/MessageLink'
@@ -434,7 +433,7 @@ function WrapButton({ wrapped, onToggle }: { wrapped: boolean; onToggle: () => v
   )
 }
 
-/** Expanded code modal — fullscreen on mobile, large centered panel on desktop */
+/** Panel shape follows viewport width, not the device identity used for safe areas and wrapping. */
 function CodeExpandModal({
   code,
   language,
@@ -450,7 +449,7 @@ function CodeExpandModal({
   onToggleWrap: () => void
   onClose: () => void
 }) {
-  const mobile = useIsTouch() && platform().shell !== 'desktop'
+  const mobile = isMobileDevice()
   // A phone's full-screen reading default must not change the inline block's
   // session preference or the desktop view of that block.
   const [mobileWrapped, setMobileWrapped] = useState(true)
