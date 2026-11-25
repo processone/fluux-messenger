@@ -969,6 +969,7 @@ function ChatLayoutContent() {
     if (pendingDraftResume || !focusAfterDraftResume.current) return
     const wanted = focusAfterDraftResume.current
     focusAfterDraftResume.current = null
+    if (document.querySelector('[data-modal="true"]')) return
     const active = wanted.target.kind === 'chat' ? chatStore.getState().activeConversationId : roomStore.getState().activeRoomJid
     if (wanted.target.account === getStorageScopeJid() && active === wanted.target.id && urlSidebarView === wanted.view && activeJid === wanted.jid) composerRef.current?.focus()
   }, [pendingDraftResume, urlSidebarView, activeJid])

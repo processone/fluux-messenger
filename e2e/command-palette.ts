@@ -848,3 +848,67 @@ for (const exit of ['confirm', 'escape', 'banner'] as const) {
     await expect(ordinary).toHaveText('Ordinary review notes for the room.')
   })
 }
+
+// Closing a nested confirmation must not move keyboard focus behind a surviving dialog.
+for (const mode of ['chat-edit', 'room-edit', 'room-whisper'] as const) {
+  for (const action of ['Cancel', 'Discard and open draft'] as const) {
+    test(`draft confirmation preserves the surviving date picker over ${mode} using ${action}`, async ({ page }) => {
+      await page.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+      await bootDemo(page, '/demo.html?tutorial=false')
+      await page.evaluate(() => (window as unknown as { __demoClient: DemoClient }).__demoClient.stopAnimation())
+      const kind = mode === 'chat-edit' ? 'chat' : 'room'
+      await page.locator(`[data-nav="${kind === 'chat' ? 'messages' : 'rooms'}"]`).click()
+      await page.getByRole('complementary').getByText(kind === 'chat' ? 'Emma Wilson' : 'Team Chat', { exact: true }).click()
+      const ordinary = kind === 'chat'
+        ? page.getByPlaceholder('Message Emma Wilson', { exact: true })
+        : page.getByRole('combobox', { name: 'Message #Team Chat', exact: true })
+      await expect(ordinary).toBeVisible()
+      if (mode !== 'room-whisper') {
+        await ordinary.fill('Sent calendar-context message.')
+        await ordinary.press('Enter')
+        await expect(page.locator('[data-message-body]').filter({ hasText: 'Sent calendar-context message.' })).toBeVisible()
+        if (kind === 'chat') await expect(ordinary).toHaveValue('')
+        else await expect(ordinary).toHaveText('')
+      }
+      await ordinary.fill('Ordinary draft beneath the calendar.')
+      await expect.poll(() => page.evaluate(kind => {
+        const demo = window as unknown as { __chatStore: typeof import('@fluux/sdk/stores').chatStore; __roomStore: typeof import('@fluux/sdk/stores').roomStore }
+        return kind === 'chat' ? demo.__chatStore.getState().getDraft('emma@fluux.chat') : demo.__roomStore.getState().getDraft('team@conference.fluux.chat')
+      }, kind)).toBe('Ordinary draft beneath the calendar.')
+      let current = ordinary
+      if (mode === 'room-whisper') current = await enterWhisper(page)
+      else {
+        await page.locator('[data-message-body]').filter({ hasText: 'Sent calendar-context message.' }).click({ button: 'right' })
+        await page.getByRole('menu', { name: 'More options' }).getByRole('button', { name: 'Edit message', exact: true }).click()
+        await expect(page.getByText('Editing message', { exact: true })).toBeVisible()
+      }
+      await current.fill('Unfinished calendar-context buffer.')
+      await page.getByRole('button', { name: kind === 'chat' ? 'More actions' : 'Room actions', exact: true }).click()
+      await page.getByRole('menuitem', { name: 'Jump to date', exact: true }).click()
+      const datePicker = page.locator('[data-modal="true"]').filter({ has: page.getByRole('heading', { name: 'Jump to date', exact: true }) })
+      await expect(datePicker.getByLabel('Date', { exact: true })).toBeFocused()
+      await page.keyboard.press('ControlOrMeta+k')
+      const switcher = page.getByRole('dialog').filter({ has: page.getByPlaceholder('Go to...', { exact: true }).or(page.getByPlaceholder('Find a draft…', { exact: true })) })
+      await switcher.getByRole('button', { name: /^Drafts/ }).click()
+      await switcher.getByRole('button', { name: kind === 'chat' ? /Emma Wilson emma/ : /Team Chat team/ }).click()
+      const confirmation = page.getByRole('alertdialog', { name: 'Open draft?', exact: true })
+      await confirmation.getByRole('button', { name: action, exact: true }).click()
+      await expect(confirmation).toBeHidden()
+      await expect(datePicker).toBeVisible()
+      if (process.env.FLUUX_DRAFT_PROOF) await page.screenshot({ path: test.info().outputPath(`${mode}-${action === 'Cancel' ? 'cancel' : 'confirm'}-date-focus.png`), animations: 'allow' })
+      const focusAfterDecision = await datePicker.evaluate(element => element.contains(document.activeElement))
+      await page.keyboard.press('Tab')
+      const focusAfterTab = await datePicker.evaluate(element => element.contains(document.activeElement))
+      const expected = action === 'Cancel' ? 'Unfinished calendar-context buffer.' : 'Ordinary draft beneath the calendar.'
+      const field = action === 'Cancel' ? current : ordinary
+      if (kind === 'chat') await expect(field).toHaveValue(expected)
+      else await expect(field).toHaveText(expected)
+      await test.info().attach('surviving-modal-focus', {
+        body: JSON.stringify({ mode, action, focusAfterDecision, focusAfterTab, text: await field.evaluate(element => element instanceof HTMLTextAreaElement ? element.value : element.textContent) }),
+        contentType: 'application/json',
+      })
+      expect(focusAfterDecision).toBe(true)
+      expect(focusAfterTab).toBe(true)
+    })
+  }
+}

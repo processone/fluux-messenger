@@ -346,6 +346,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     if (whisperTarget || !focusAfterWhisperCancel.current) return
     const roomJid = focusAfterWhisperCancel.current
     focusAfterWhisperCancel.current = null
+    if (document.querySelector('[data-modal="true"]')) return
     if (activeRoom?.jid === roomJid) composerHandleRef.current?.focus()
   }, [whisperTarget, activeRoom?.jid, composerHandleRef])
 
