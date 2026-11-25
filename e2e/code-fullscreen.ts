@@ -168,7 +168,7 @@ for (const mode of ['phone', 'phone-mouse', 'desktop', 'narrow-desktop', 'touch-
         await page.evaluate(text => navigator.clipboard.writeText(text), previousClipboard)
         expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(previousClipboard)
         await copy.click()
-        expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(CODE)
+        await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: 5000 }).toBe(CODE)
       }
       await close.click()
       await expect(modal).toHaveCount(0)
