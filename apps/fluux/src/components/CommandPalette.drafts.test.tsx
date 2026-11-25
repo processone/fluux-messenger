@@ -13,9 +13,9 @@ vi.unmock('@fluux/sdk/react')
 
 const client = new XMPPClient()
 
-function openPalette() {
+function openPalette(onSidebarViewChange = vi.fn()) {
   return render(<XMPPProvider client={client}>
-    <CommandPalette isOpen onClose={vi.fn()} onSidebarViewChange={vi.fn()}
+    <CommandPalette isOpen onClose={vi.fn()} onSidebarViewChange={onSidebarViewChange}
       onOpenSettings={vi.fn()} onToggleConsole={vi.fn()} onToggleShortcutHelp={vi.fn()}
       onCreateQuickChat={vi.fn()} onAddContact={vi.fn()} onStartConversation={vi.fn()} />
   </XMPPProvider>)
@@ -88,4 +88,33 @@ describe('accepted local draft finder scope', () => {
     expect(screen.queryByRole('button', { name: /Emma emma/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /New account colleague/ })).toBeVisible()
   })
+
+  it('owns typed entity priority when its name overlaps the Drafts entry', () => {
+    chatStore.getState().setDraft('emma@example.test', 'Continue later')
+    chatStore.getState().addConversation({ id: 'dragan@example.test', name: 'Dragan', type: 'chat', unreadCount: 0 })
+    const navigate = vi.fn()
+    openPalette(navigate)
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'dra' } })
+    expect(screen.getAllByRole('button')[0]).toHaveTextContent('Dragan')
+    expect(screen.getByRole('button', { name: /^Drafts/ })).toBeVisible()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(navigate).toHaveBeenCalledWith('messages', 'dragan@example.test')
+    expect(input).toHaveAttribute('placeholder', 'Go to...')
+  })
+
+  it('reserves indexed Enter for the search input instead of focused result buttons', () => {
+    chatStore.getState().setDraft('emma@example.test', 'Continue later')
+    roomStore.getState().setDraft('design@conference.example.test', 'Review on Thursday')
+    openPalette()
+    fireEvent.click(screen.getByRole('button', { name: /^Drafts/ }))
+    const room = screen.getByRole('button', { name: /Design design/ })
+    room.focus()
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    expect(room.dispatchEvent(enter)).toBe(true)
+    expect(enter.defaultPrevented).toBe(false)
+    expect(chatStore.getState().activeConversationId).toBeNull()
+    expect(roomStore.getState().activeRoomJid).toBeNull()
+  })
+
 })

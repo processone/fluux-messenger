@@ -1271,10 +1271,25 @@ function ChatLayoutContent() {
       <ModalHost
         shortcuts={shortcuts}
         onSidebarViewChange={(view, targetJid) => {
-          handleSidebarViewChange(view)
-          // On narrow screens the destination route, not just the active store, opens the composer.
-          if (targetJid && view === 'messages') navigateToMessages(targetJid, { replace: true })
-          if (targetJid && view === 'rooms') navigateToRooms(targetJid, { replace: true })
+          if (!targetJid || (view !== 'messages' && view !== 'rooms')) {
+            handleSidebarViewChange(view)
+            return
+          }
+          setSelectedContactJid(null)
+          clearAdminSession()
+          setAdminCategory(null)
+          // An explicit item must not compete with the tab's remembered-target hydration.
+          if (view === 'messages') {
+            const current = chatStore.getState().activeConversationId
+            void activateRoom(null)
+            void activateConversation(targetJid)
+            navigateToMessages(targetJid, { replace: shouldReplaceOnSelect(targetJid, current) })
+          } else {
+            const current = roomStore.getState().activeRoomJid
+            void activateConversation(null)
+            void activateRoom(targetJid)
+            navigateToRooms(targetJid, { replace: shouldReplaceOnSelect(targetJid, current) })
+          }
         }}
         onOpenSettings={() => navigateToSettings()}
         onToggleConsole={toggleConsole}

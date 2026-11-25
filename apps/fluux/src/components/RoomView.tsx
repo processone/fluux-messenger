@@ -1658,7 +1658,13 @@ interface RoomMessageInputProps {
   isDarkMode?: boolean
 }
 
-export const RoomMessageInput = memo(function RoomMessageInput({
+export const RoomMessageInput = memo(function RoomMessageInput(props: RoomMessageInputProps & { ref?: React.Ref<MessageComposerHandle> }) {
+  // Public and private editors cannot share a buffer or a late failed-send recovery owner.
+  const identity = JSON.stringify([props.roomJid, props.whisperTarget?.occupantId ?? props.whisperTarget?.nick ?? null])
+  return <RoomMessageInputContent key={identity} {...props} />
+})
+
+const RoomMessageInputContent = memo(function RoomMessageInputContent({
   roomJid,
   textareaRef,
   sendMessage,
@@ -1779,10 +1785,18 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     restore: (text: string, references: MentionReference[]) => void
   }>({ references: [], restore: () => {} })
 
+  // A reopened room has no private recipient; its private buffer has no durable draft operations.
+  const whisperDraftOperations = useMemo(() => ({
+    owner: {},
+    getDraft: (_roomJid: string) => '',
+    setDraft: (_roomJid: string, _text: string) => {},
+    clearDraft: (_roomJid: string) => {},
+  }), [])
+
   // The current mounted room owns both recovered text and its mention metadata.
   const [text, setText, consumeDraft, discardDraft] = useConversationDraft({
     conversationId: roomJid,
-    draftOperations: { owner: roomStore, getDraft, setDraft, clearDraft },
+    draftOperations: whisperTarget ? whisperDraftOperations : { owner: roomStore, getDraft, setDraft, clearDraft },
     composerRef,
     onDraftRestored: handleDraftRestored,
     editingConversationId: editingMessage?.roomJid,
@@ -1799,10 +1813,8 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   mentionRecovery.current = { references, restore: restoreReferences }
   clearReferencesRef.current = () => setReferences([])
 
-  // Exit whisper mode AND discard the typed text. The composer draft is keyed only
-  // by room JID, so a private whisper draft would otherwise survive into the public
-  // composer and could be sent to the whole room. Discarding upholds the invariant:
-  // private text is never converted into a public message (XEP-0045 §7.5).
+  // Discard the private buffer before restoring the room's independent ordinary draft.
+  // Private text is never converted into a public message (XEP-0045 §7.5).
   const handleClearWhisper = () => {
     whisperDraftGeneration.current += 1
     discardDraft()

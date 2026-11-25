@@ -45,41 +45,37 @@ let mockActiveRoomJid: string | null = null
 // Mock SDK hooks
 const mockSearchFn = vi.fn()
 
-vi.mock('@fluux/sdk', () => ({
-  useChat: () => ({
-    conversations: mockConversations,
-    archivedConversations: mockArchivedConversations,
-    isArchived: (jid: string) => mockIsArchived(jid),
-  }),
-  useRoom: () => ({
-    joinedRooms: mockRooms,
-    bookmarkedRooms: mockBookmarkedRooms,
-    setActiveRoom: mockSetActiveRoom,
-  }),
-  useRoster: () => ({
-    contacts: mockContacts,
-  }),
-  // JID utilities moved from app to SDK
-  getLocalPart: (jid: string) => jid.split('@')[0],
-  matchNameOrJid: (name: string, jid: string, query: string) => {
-    const lowerQuery = query.toLowerCase()
-    const nameMatch = name.toLowerCase().includes(lowerQuery)
-    const usernameMatch = jid.split('@')[0].toLowerCase().includes(lowerQuery)
-    return nameMatch || usernameMatch
-  },
-  formatMessagePreview: (msg: { body?: string }) => msg?.body || '',
-  searchStore: { getState: () => ({ search: mockSearchFn }) },
-  // Entity rows now render <Avatar>, which derives its fallback color from this.
-  generateConsistentColorHexSync: () => '#888888',
-  // Faithful copy of the SDK selector — keep in sync with roomSelectors.ts roomActivityTone().
-  roomActivityTone: (room: { joined?: boolean; muted?: boolean; unreadCount?: number; mentionsCount?: number; notifyAll?: boolean; notifyAllPersistent?: boolean }) => {
-    if (!room.joined || room.muted) return 'none'
-    const notifyAll = room.notifyAll || room.notifyAllPersistent
-    if ((room.mentionsCount ?? 0) > 0 || (notifyAll && (room.unreadCount ?? 0) > 0)) return 'accent'
-    if ((room.unreadCount ?? 0) > 0) return 'neutral'
-    return 'none'
-  },
-}))
+vi.mock('@fluux/sdk', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@fluux/sdk')>()
+  return {
+    useChat: () => ({
+      conversations: mockConversations,
+      archivedConversations: mockArchivedConversations,
+      isArchived: (jid: string) => mockIsArchived(jid),
+    }),
+    useRoom: () => ({
+      joinedRooms: mockRooms,
+      bookmarkedRooms: mockBookmarkedRooms,
+      setActiveRoom: mockSetActiveRoom,
+    }),
+    useRoster: () => ({
+      contacts: mockContacts,
+    }),
+    // JID utilities moved from app to SDK
+    getLocalPart: (jid: string) => jid.split('@')[0],
+    matchNameOrJid: (name: string, jid: string, query: string) => {
+      const lowerQuery = query.toLowerCase()
+      const nameMatch = name.toLowerCase().includes(lowerQuery)
+      const usernameMatch = jid.split('@')[0].toLowerCase().includes(lowerQuery)
+      return nameMatch || usernameMatch
+    },
+    formatMessagePreview: (msg: { body?: string }) => msg?.body || '',
+    searchStore: { getState: () => ({ search: mockSearchFn }) },
+    // Entity rows now render <Avatar>, which derives its fallback color from this.
+    generateConsistentColorHexSync: () => '#888888',
+    roomActivityTone: actual.roomActivityTone,
+  }
+})
 
 // Mock React store hooks (from @fluux/sdk/react)
 vi.mock('@fluux/sdk/react', () => {
@@ -551,13 +547,10 @@ describe('CommandPalette', () => {
 
     it('should execute action on Enter', () => {
       render(<CommandPalette {...defaultProps} />)
-      const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      fireEvent.keyDown(container!, { key: 'Enter' })
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
-      // First item is Announcements (mention room, leading the Needs attention group),
-      // should set active room
-      expect(mockSetActiveRoom).toHaveBeenCalledWith('announce@conference.example.com')
+      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('rooms', 'announce@conference.example.com')
       expect(defaultProps.onClose).toHaveBeenCalled()
     })
 
@@ -600,7 +593,7 @@ describe('CommandPalette', () => {
       const bobItem = screen.getByText('Bob Jones').closest('button')
       fireEvent.click(bobItem!)
 
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
+      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'bob@example.com')
       expect(defaultProps.onClose).toHaveBeenCalled()
     })
 
@@ -638,9 +631,9 @@ describe('CommandPalette', () => {
       const devRoom = screen.getByText('Development').closest('button')
       fireEvent.click(devRoom!)
 
-      expect(mockSetActiveRoom).toHaveBeenCalledWith('dev@conference.example.com')
-      expect(mockSetActiveConversation).toHaveBeenCalledWith(null)
-      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('rooms')
+      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('rooms', 'dev@conference.example.com')
+      expect(mockSetActiveConversation).not.toHaveBeenCalled()
+      expect(mockSetActiveRoom).not.toHaveBeenCalled()
       expect(defaultProps.onClose).toHaveBeenCalled()
     })
 
@@ -781,19 +774,18 @@ describe('CommandPalette', () => {
       expect(aliceItem).toHaveAttribute('data-selected', 'true')
 
       // Press Enter - should select Alice, not Bob
-      fireEvent.keyDown(container!, { key: 'Enter' })
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
-      expect(mockSetActiveConversation).not.toHaveBeenCalledWith('bob@example.com')
+      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'alice@example.com')
+      expect(defaultProps.onSidebarViewChange).not.toHaveBeenCalledWith('messages', 'bob@example.com')
     })
 
     it('should work correctly on consecutive selections after reopening', () => {
       const { rerender } = render(<CommandPalette {...defaultProps} />)
-      const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
       // First selection: Announcements (first item, leading the Needs attention group)
-      fireEvent.keyDown(container!, { key: 'Enter' })
-      expect(mockSetActiveRoom).toHaveBeenLastCalledWith('announce@conference.example.com')
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
+      expect(defaultProps.onSidebarViewChange).toHaveBeenLastCalledWith('rooms', 'announce@conference.example.com')
 
       vi.clearAllMocks()
 
@@ -805,15 +797,14 @@ describe('CommandPalette', () => {
 
       // Navigate to Bob (index 1) and select
       fireEvent.keyDown(container2!, { key: 'ArrowDown' })
-      fireEvent.keyDown(container2!, { key: 'Enter' })
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
-      expect(mockSetActiveConversation).toHaveBeenLastCalledWith('bob@example.com')
+      expect(defaultProps.onSidebarViewChange).toHaveBeenLastCalledWith('messages', 'bob@example.com')
     })
 
     it('should select correct item after filtering and navigating', () => {
       render(<CommandPalette {...defaultProps} />)
       const input = screen.getByPlaceholderText('Go to...')
-      const container = input.closest('div')?.parentElement
 
       // Filter to show rooms
       fireEvent.change(input, { target: { value: 'dev' } })
@@ -823,15 +814,14 @@ describe('CommandPalette', () => {
       expect(devRoom).toHaveAttribute('data-selected', 'true')
 
       // Press Enter
-      fireEvent.keyDown(container!, { key: 'Enter' })
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
-      expect(mockSetActiveRoom).toHaveBeenCalledWith('dev@conference.example.com')
+      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('rooms', 'dev@conference.example.com')
     })
 
     it('should select correct item after multiple filter changes', () => {
       render(<CommandPalette {...defaultProps} />)
       const input = screen.getByPlaceholderText('Go to...')
-      const container = input.closest('div')?.parentElement
 
       // First filter
       fireEvent.change(input, { target: { value: 'alice' } })
@@ -846,9 +836,9 @@ describe('CommandPalette', () => {
       expect(bobItem).toHaveAttribute('data-selected', 'true')
 
       // Press Enter
-      fireEvent.keyDown(container!, { key: 'Enter' })
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
+      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'bob@example.com')
     })
 
     it('should maintain correct selection after multiple arrow key presses', () => {
@@ -866,9 +856,9 @@ describe('CommandPalette', () => {
       const aliceItem = screen.getByText('Alice Smith').closest('button')
       expect(aliceItem).toHaveAttribute('data-selected', 'true')
 
-      fireEvent.keyDown(container!, { key: 'Enter' })
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
+      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'alice@example.com')
     })
 
     it('should work correctly with rapid consecutive selections', () => {
@@ -883,9 +873,9 @@ describe('CommandPalette', () => {
         // Navigate down to the second item (Bob, still in the Needs attention group)
         // then select — exercises index-tracking under rapid reopen, not just Enter-on-first.
         fireEvent.keyDown(container!, { key: 'ArrowDown' })
-        fireEvent.keyDown(container!, { key: 'Enter' })
+        fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
-        expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
+        expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'bob@example.com')
 
         // Close and reopen
         rerender(<CommandPalette {...defaultProps} isOpen={false} />)
@@ -895,7 +885,6 @@ describe('CommandPalette', () => {
 
     it('should select highlighted item correctly when using mouse then keyboard', async () => {
       render(<CommandPalette {...defaultProps} />)
-      const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
       // Wait for the mouse guard to be cleared (requestAnimationFrame)
       await act(async () => {
@@ -909,9 +898,9 @@ describe('CommandPalette', () => {
       expect(bobItem).toHaveAttribute('data-selected', 'true')
 
       // Press Enter - should select Bob (the hovered item)
-      fireEvent.keyDown(container!, { key: 'Enter' })
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
+      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'bob@example.com')
     })
   })
 
@@ -951,14 +940,13 @@ describe('CommandPalette', () => {
     it('should not crash when pressing Enter with no results', () => {
       render(<CommandPalette {...defaultProps} />)
       const input = screen.getByPlaceholderText('Go to...')
-      const container = input.closest('div')?.parentElement
 
       // Use commands filter prefix to get truly no results (no search gateway)
       fireEvent.change(input, { target: { value: '>xyznonexistent123' } })
       expect(screen.getByText('No results found')).toBeInTheDocument()
 
       // Should not crash or call any action
-      fireEvent.keyDown(container!, { key: 'Enter' })
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
       expect(mockSetActiveConversation).not.toHaveBeenCalled()
       expect(mockSetActiveRoom).not.toHaveBeenCalled()
@@ -983,7 +971,6 @@ describe('CommandPalette', () => {
     it('should handle switching between filter modes correctly', () => {
       render(<CommandPalette {...defaultProps} />)
       const input = screen.getByPlaceholderText('Go to...')
-      const container = input.closest('div')?.parentElement
 
       // Start with @ filter
       fireEvent.change(input, { target: { value: '@' } })
@@ -1000,8 +987,8 @@ describe('CommandPalette', () => {
       expect(devRoom).toHaveAttribute('data-selected', 'true')
 
       // Select it
-      fireEvent.keyDown(container!, { key: 'Enter' })
-      expect(mockSetActiveRoom).toHaveBeenCalledWith('dev@conference.example.com')
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
+      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('rooms', 'dev@conference.example.com')
     })
 
     it('should clear filter mode indicator when clearing query', () => {
@@ -1163,7 +1150,6 @@ describe('CommandPalette', () => {
       it('should allow selecting filtered items with Enter', () => {
         render(<CommandPalette {...defaultProps} />)
         const input = screen.getByPlaceholderText('Go to...')
-        const container = input.closest('div')?.parentElement
 
         fireEvent.change(input, { target: { value: '@bob' } })
 
@@ -1171,9 +1157,9 @@ describe('CommandPalette', () => {
         const bobItem = screen.getByText('Bob Jones').closest('button')
         expect(bobItem).toHaveAttribute('data-selected', 'true')
 
-        fireEvent.keyDown(container!, { key: 'Enter' })
+        fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
-        expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
+        expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'bob@example.com')
       })
 
       it('should allow navigating filtered results with arrow keys', () => {
@@ -1195,59 +1181,35 @@ describe('CommandPalette', () => {
     })
   })
 
-  describe('Call Order (regression tests for view restore bug)', () => {
-    // These tests ensure that onSidebarViewChange is called BEFORE setActiveConversation/setActiveRoom.
-    // Previously, the order was reversed which caused handleSidebarViewChange's "restore last content"
-    // logic to overwrite the user's selection from the command palette.
-
-    it('should call onSidebarViewChange before setActiveConversation when selecting a conversation', () => {
+  describe('single-owner item navigation', () => {
+    it('delegates conversation hydration before closing without another store writer', () => {
       const callOrder: string[] = []
-
       const trackingProps = {
         ...defaultProps,
-        onSidebarViewChange: vi.fn(() => callOrder.push('onSidebarViewChange')),
-        onClose: vi.fn(() => callOrder.push('onClose')),
+        onSidebarViewChange: vi.fn(() => callOrder.push('navigate')),
+        onClose: vi.fn(() => callOrder.push('close')),
       }
-
-      // Override the mock to track call order
-      mockSetActiveConversation.mockImplementation(() => callOrder.push('setActiveConversation'))
-
       render(<CommandPalette {...trackingProps} />)
-
-      // Click on a conversation (Alice)
-      const aliceItem = screen.getByText('Alice Smith').closest('button')
-      fireEvent.click(aliceItem!)
-
-      // Verify the order: navigate first, then set conversation
-      expect(callOrder).toEqual(['onSidebarViewChange', 'onClose', 'setActiveConversation'])
-      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages')
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
+      fireEvent.click(screen.getByText('Alice Smith').closest('button')!)
+      expect(callOrder).toEqual(['navigate', 'close'])
+      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'alice@example.com')
+      expect(mockSetActiveConversation).not.toHaveBeenCalled()
+      expect(mockSetActiveRoom).not.toHaveBeenCalled()
     })
 
-    it('should call onSidebarViewChange before setActiveRoom when selecting a room', () => {
+    it('delegates room hydration before closing without another store writer', () => {
       const callOrder: string[] = []
-
       const trackingProps = {
         ...defaultProps,
-        onSidebarViewChange: vi.fn(() => callOrder.push('onSidebarViewChange')),
-        onClose: vi.fn(() => callOrder.push('onClose')),
+        onSidebarViewChange: vi.fn(() => callOrder.push('navigate')),
+        onClose: vi.fn(() => callOrder.push('close')),
       }
-
-      // Override mocks to track call order
-      mockSetActiveRoom.mockImplementation(() => callOrder.push('setActiveRoom'))
-      mockSetActiveConversation.mockImplementation(() => callOrder.push('setActiveConversation'))
-
       render(<CommandPalette {...trackingProps} />)
-
-      // Click on a room (Development)
-      const devRoom = screen.getByText('Development').closest('button')
-      fireEvent.click(devRoom!)
-
-      // Verify the order: navigate first, then set room, then clear conversation
-      expect(callOrder).toEqual(['onSidebarViewChange', 'onClose', 'setActiveRoom', 'setActiveConversation'])
-      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('rooms')
-      expect(mockSetActiveRoom).toHaveBeenCalledWith('dev@conference.example.com')
-      expect(mockSetActiveConversation).toHaveBeenCalledWith(null)
+      fireEvent.click(screen.getByText('Development').closest('button')!)
+      expect(callOrder).toEqual(['navigate', 'close'])
+      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('rooms', 'dev@conference.example.com')
+      expect(mockSetActiveConversation).not.toHaveBeenCalled()
+      expect(mockSetActiveRoom).not.toHaveBeenCalled()
     })
 
     it('should select the correct conversation after navigating with arrow keys', () => {
@@ -1259,7 +1221,6 @@ describe('CommandPalette', () => {
         onClose: vi.fn(() => callOrder.push('onClose')),
       }
 
-      mockSetActiveConversation.mockImplementation(() => callOrder.push('setActiveConversation'))
 
       render(<CommandPalette {...trackingProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
@@ -1275,11 +1236,11 @@ describe('CommandPalette', () => {
       expect(screen.getByText('Bob Jones').closest('button')).toHaveAttribute('data-selected', 'true')
 
       // Press Enter
-      fireEvent.keyDown(container!, { key: 'Enter' })
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
       // Should select Bob, not Alice
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
-      expect(callOrder).toEqual(['onSidebarViewChange', 'onClose', 'setActiveConversation'])
+      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'bob@example.com')
+      expect(callOrder).toEqual(['onSidebarViewChange', 'onClose'])
     })
 
     it('should select the correct room after navigating with arrow keys', () => {
@@ -1291,8 +1252,6 @@ describe('CommandPalette', () => {
         onClose: vi.fn(() => callOrder.push('onClose')),
       }
 
-      mockSetActiveRoom.mockImplementation(() => callOrder.push('setActiveRoom'))
-      mockSetActiveConversation.mockImplementation(() => callOrder.push('setActiveConversation'))
 
       render(<CommandPalette {...trackingProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
@@ -1308,11 +1267,11 @@ describe('CommandPalette', () => {
       expect(screen.getByText('General Chat').closest('button')).toHaveAttribute('data-selected', 'true')
 
       // Press Enter
-      fireEvent.keyDown(container!, { key: 'Enter' })
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
       // Should select General Chat, not Development
-      expect(mockSetActiveRoom).toHaveBeenCalledWith('general@conference.example.com')
-      expect(callOrder).toEqual(['onSidebarViewChange', 'onClose', 'setActiveRoom', 'setActiveConversation'])
+      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('rooms', 'general@conference.example.com')
+      expect(callOrder).toEqual(['onSidebarViewChange', 'onClose'])
     })
   })
 
@@ -1507,7 +1466,7 @@ describe('CommandPalette', () => {
       expect(screen.getAllByText('person42@example.test')).toHaveLength(1)
       expect(screen.getByText('Babette Dupont').closest('button')!.parentElement).toHaveTextContent('Contacts')
       fireEvent.keyDown(screen.getByPlaceholderText('Go to...'), { key: 'Enter' })
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('person42@example.test')
+      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'person42@example.test')
     })
 
     it.each(['person42', '@PERSON42'])('still finds contacts by JID username for %s', query => {
@@ -1560,8 +1519,7 @@ describe('CommandPalette', () => {
       const bobItem = screen.getByText('Bob Jones').closest('button')
       fireEvent.click(bobItem!)
 
-      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages')
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
+      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'bob@example.com')
     })
 
     it('should navigate to messages view when selecting a non-archived conversation', () => {
@@ -1577,8 +1535,7 @@ describe('CommandPalette', () => {
       const aliceItem = screen.getByText('Alice Smith').closest('button')
       fireEvent.click(aliceItem!)
 
-      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages')
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
+      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'alice@example.com')
     })
 
     it('should navigate to messages view when pressing Enter on an archived conversation', () => {
@@ -1596,10 +1553,9 @@ describe('CommandPalette', () => {
       // Announcements and Bob lead the Needs attention group; Alice is third (Messages section).
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
-      fireEvent.keyDown(container!, { key: 'Enter' })
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
 
-      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages')
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
+      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'alice@example.com')
     })
 
     it('should open archived conversation in messages view when selecting a contact with archived history', () => {
@@ -1625,8 +1581,7 @@ describe('CommandPalette', () => {
       fireEvent.click(charlieItem!)
 
       // Should navigate to messages view (archive rail is gone) and open the archived conversation
-      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages')
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('charlie@example.com')
+      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages', 'charlie@example.com')
       // Should NOT call onStartConversation (no new conversation created)
       expect(trackingProps.onStartConversation).not.toHaveBeenCalled()
     })

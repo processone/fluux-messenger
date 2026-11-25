@@ -284,11 +284,10 @@ function CommandPaletteContent({
 
   // Data from stores
   const { conversations, archivedConversations } = useChat()
-  const { joinedRooms, bookmarkedRooms, setActiveRoom } = useRoom()
+  const { joinedRooms, bookmarkedRooms } = useRoom()
   const { contacts } = useRoster()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
-  const { setActiveConversation } = useChatStore()
   const chatDrafts = useChatStore((s) => s.drafts)
   const roomDrafts = useRoomStore((s) => s.drafts)
   const hasChatDraft = (id: string) => !!chatDrafts?.get(id)?.trim()
@@ -314,22 +313,9 @@ function CommandPaletteContent({
     onClose()
   }
 
-  const selectConversation = (jid: string) => {
-    // Navigate first, THEN set conversation - otherwise handleSidebarViewChange
-    // will overwrite our selection with the "last conversation" restore logic
-    // Archived conversations open in the messages tab (via the archive toggle)
-    closeAndNavigate('messages', draftsOnly ? jid : undefined)
-    void setActiveConversation(jid)
-    void setActiveRoom(null)
-  }
-
-  const selectRoom = (jid: string) => {
-    // Navigate first, THEN set room - otherwise handleSidebarViewChange
-    // will overwrite our selection with the "last room" restore logic
-    closeAndNavigate('rooms', draftsOnly ? jid : undefined)
-    void setActiveRoom(jid)
-    void setActiveConversation(null)
-  }
+  // Item selection delegates hydration and history to the same owner for ordinary rows and drafts.
+  const selectConversation = (jid: string) => closeAndNavigate('messages', jid)
+  const selectRoom = (jid: string) => closeAndNavigate('rooms', jid)
 
   // =============================================================================
   // Build all command items
@@ -521,7 +507,13 @@ function CommandPaletteContent({
         keywords: ['draft', 'drafts'],
       }
       if (!searchQuery || Number.isFinite(itemMatchRank(draftsEntry, searchQuery))) {
-        grouped.unshift({ key: 'drafts', type: 'view', label: t('commandPalette.drafts'), items: [draftsEntry] })
+        if (isDefaultView) {
+          grouped.unshift({ key: 'drafts', type: 'view', label: t('commandPalette.drafts'), items: [draftsEntry] })
+        } else {
+          const views = grouped.find(group => group.type === 'view')
+          if (views) views.items.push(draftsEntry)
+          else grouped.push({ key: 'drafts', type: 'view', label: t('commandPalette.views'), items: [draftsEntry] })
+        }
       }
     }
 
@@ -568,8 +560,8 @@ function CommandPaletteContent({
   // Effects
   // =============================================================================
 
-  // A mode change must leave type-to-search ready even after a pointer selection.
-  // Defer hover tracking until paint so a parked pointer cannot replace the initial selection.
+  // The mount-only hover guard prevents a parked pointer from replacing the initial selection.
+  // Mode changes refocus type-to-search after pointer selection.
   useEffect(() => {
     inputRef.current?.focus()
     requestAnimationFrame(() => {
@@ -617,6 +609,7 @@ function CommandPaletteContent({
         updateSelectedIndex((i) => Math.max(i - 1, 0))
         break
       case 'Enter': {
+        if (e.target !== inputRef.current) return
         e.preventDefault()
         e.stopPropagation() // Prevent global shortcuts from firing
         // Use ref for synchronous access to avoid race condition with state updates
