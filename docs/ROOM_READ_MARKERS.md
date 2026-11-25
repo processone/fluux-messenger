@@ -76,6 +76,10 @@ If the account-local identity reservation itself is refused, the exact legacy
 exception carries its surviving identity in the shared guard; later conversion
 and both Off setters keep that boundary. This fallback still requires a writable
 shared guard and does not replace the total-write-denial limitation above.
+When local identity exists, the exception references its opaque, erasable proof
+ID instead of copying identity; a replacement proof cannot reactivate it. If continuity remains unwritable during Off, the exact
+shared exception can retain room revocations and ordering while preserving
+untouched choices; deleting local proof still invalidates earlier work.
 Already-linked inputs need no duplicate exception in the shared clear guard.
 Pure migration never publishes from its first write.
 Refusal of a final On lift leaves its revocation in place without deleting other
