@@ -1694,6 +1694,13 @@
         }
     },
     "commandPalette": {
+        "drafts": "Entwürfe",
+        "searchDrafts": "Entwurf suchen…",
+        "confirmResumeTitle": "Entwurf öffnen?",
+        "confirmResumeEdit": "Beim Öffnen des Entwurfs werden ungespeicherte Änderungen an dieser Nachricht verworfen.",
+        "confirmResumeWhisper": "Beim Öffnen des Raumentwurfs wird nicht gesendeter privater Text verworfen.",
+        "confirmResumeWhisperFile": "Beim Öffnen des Raumentwurfs werden nicht gesendeter privater Text und die angehängte Datei verworfen.",
+        "confirmResumeAction": "Verwerfen und Entwurf öffnen",
         "moreMatches": "Weitere Treffer",
         "open": "Befehlspalette öffnen",
         "placeholder": "Gehe zu...",

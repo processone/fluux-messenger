@@ -1694,6 +1694,13 @@
         }
     },
     "commandPalette": {
+        "drafts": "Mustandid",
+        "searchDrafts": "Otsi mustandit…",
+        "confirmResumeTitle": "Kas avada mustand?",
+        "confirmResumeEdit": "Mustandi avamine tühistab selle sõnumi salvestamata muudatused.",
+        "confirmResumeWhisper": "Ruumi mustandi avamine eemaldab saatmata privaatse teksti.",
+        "confirmResumeWhisperFile": "Ruumi mustandi avamine eemaldab saatmata privaatse teksti ja lisatud faili.",
+        "confirmResumeAction": "Loobu ja ava mustand",
         "moreMatches": "Veel vasteid",
         "open": "Ava käsupalett",
         "placeholder": "Mine...",

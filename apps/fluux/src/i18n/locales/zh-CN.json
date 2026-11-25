@@ -1692,6 +1692,13 @@
         }
     },
     "commandPalette": {
+        "drafts": "草稿",
+        "searchDrafts": "查找草稿…",
+        "confirmResumeTitle": "打开草稿？",
+        "confirmResumeEdit": "打开草稿将放弃对此消息尚未保存的修改。",
+        "confirmResumeWhisper": "打开房间草稿将放弃尚未发送的私密文本。",
+        "confirmResumeWhisperFile": "打开房间草稿将放弃尚未发送的私密文本和附加文件。",
+        "confirmResumeAction": "放弃并打开草稿",
         "moreMatches": "更多匹配项",
         "open": "打开命令面板",
         "placeholder": "转到…",

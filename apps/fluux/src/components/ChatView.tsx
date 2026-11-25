@@ -17,6 +17,7 @@ import { VerifyPeerDialog } from './VerifyPeerDialog'
 import { useChatStore, useConnectionStore, useBlockingStore } from '@fluux/sdk/react'
 import { useMessageHoverState, useConversationDraft, useTimeFormat } from '@/hooks'
 import { useConversationThread } from '@/hooks/useConversationThread'
+import { useDraftResumeTarget, type RegisterDraftResume } from '@/hooks/useDraftResumeTarget'
 import { Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, groupHeaderIndex, buildReplyContext } from './conversation'
 import type { FindOnPageHandle } from '@/hooks/useFindOnPage'
@@ -43,6 +44,7 @@ import { trackSend } from '@/utils/pendingSends'
 import { encryptionSendErrorKey } from '@/e2ee/encryptionSendError'
 
 interface ChatViewProps {
+  onRegisterDraftResume?: RegisterDraftResume
   onBack?: () => void
   onSwitchToMessages?: (conversationId: string) => void
   onSearchInConversation?: (conversationId: string) => void
@@ -61,7 +63,7 @@ interface ChatViewProps {
 const setChatTargetMessageId = (target: string | MessageRowRef) => chatStore.getState().setTargetMessageId(target)
 const triggerChatAnimation = (id: string, animation: string, senderName: string) => chatStore.getState().triggerAnimation(id, animation, senderName)
 
-export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, onShowSavedInConversation, onShowProfile, mainContentRef, composerRef, findOnPageRef }: ChatViewProps) {
+export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, onShowSavedInConversation, onShowProfile, mainContentRef, composerRef, findOnPageRef, onRegisterDraftResume }: ChatViewProps) {
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
@@ -359,6 +361,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
       composer={
         <MessageInput
           {...thread.composerProps}
+          onRegisterDraftResume={onRegisterDraftResume}
           composerRef={composerHandleRef}
           textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
           conversationId={activeConversation.id}
@@ -851,6 +854,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
 })
 
 export const MessageInput = memo(function MessageInput({
+  onRegisterDraftResume,
   composerRef,
   textareaRef,
   conversationId,
@@ -889,6 +893,7 @@ export const MessageInput = memo(function MessageInput({
   onEncryptionClick,
   isDarkMode,
 }: {
+  onRegisterDraftResume?: RegisterDraftResume
   composerRef: React.RefObject<MessageComposerHandle | null>
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>
   conversationId: string
@@ -962,12 +967,21 @@ export const MessageInput = memo(function MessageInput({
   const { resolveInput, classifyInput } = useSlashCommands(chatCommandContext)
 
   // Draft persistence - saves on conversation change, restores on load
-  const [text, setText, consumeDraft] = useConversationDraft({
+  const [text, setText, consumeDraft, , restoreMessageDraft] = useConversationDraft({
     conversationId,
     draftOperations: { owner: chatStore, getDraft, setDraft, clearDraft },
     composerRef,
     editingConversationId: editingMessage?.conversationId,
   })
+
+  useDraftResumeTarget(onRegisterDraftResume, 'chat', conversationId,
+    editingMessage?.conversationId === conversationId ? 'edit' : null,
+    editingMessage?.conversationId === conversationId ? editingMessage : null,
+    () => {
+      if (!restoreMessageDraft()) return false
+      onCancelEdit()
+      return true
+    })
 
   // Convert Message to ReplyInfo for the composer
   // XEP-0461: for chat-type messages, use the client-generated id (not stanza-id, which is only for groupchat)

@@ -31,6 +31,7 @@ import { composerAutocompleteAriaProps } from './composer/autocompleteAria'
 import { usesMobileEnterKey } from './composer/mobileEnter'
 import { ConversationThread } from './conversation/ConversationThread'
 import { useConversationThread } from '@/hooks/useConversationThread'
+import { useDraftResumeTarget, type RegisterDraftResume } from '@/hooks/useDraftResumeTarget'
 import { RoomHeader } from './RoomHeader'
 import { RoomVoiceControls } from './RoomVoiceControls'
 import { OccupantPanel } from './OccupantPanel'
@@ -84,6 +85,7 @@ function getHatColors(hat: { uri: string; hue?: number }) {
 const noPeerMarkerSubscription = () => () => {}
 
 interface RoomViewProps {
+  onRegisterDraftResume?: RegisterDraftResume
   onBack?: () => void
   // Focus zone refs for Tab cycling
   mainContentRef?: RefObject<HTMLElement | null>
@@ -121,7 +123,7 @@ const readActiveRoomMessages = () => roomStore.getState().activeMessages()
 const setRoomTargetMessageId = (target: string | MessageRowRef) => roomStore.getState().setTargetMessageId(target)
 const triggerRoomAnimation = (id: string, animation: string, senderName: string) => roomStore.getState().triggerAnimation(id, animation, senderName)
 
-export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation, onShowSavedInConversation, covered = false, renderMobileOccupants, onCloseMobileOccupants }: RoomViewProps) {
+export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation, onShowSavedInConversation, covered = false, renderMobileOccupants, onCloseMobileOccupants, onRegisterDraftResume }: RoomViewProps) {
   const { t } = useTranslation()
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
@@ -245,6 +247,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Carries the counterpart's occupant-id (captured at entry) so presence checks
   // bind to the person, not just the nick (XEP-0045 §7.5, XEP-0421).
   const [whisperTarget, setWhisperTarget] = useState<WhisperTarget | null>(null)
+  const focusAfterWhisperCancel = useRef<string | null>(null)
   // setAffiliation and setRole are now from useRoomActive() to avoid subscribing
   // to list-level selectors that cause render loops when other rooms update
   const addToast = useToastStore((s) => s.addToast)
@@ -295,9 +298,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     stableRoom.nickToAvatarCache !== activeRoom.nickToAvatarCache
   )) setStableRoom(activeRoom)
 
-  // Stable callback that clears any staged compose state before entering whisper
-  // mode. Whispers are text-only so a staged reply, edit, or pending attachment
-  // must be discarded to avoid showing conflicting UI (banner + attachment preview).
+  // A recipient change must not carry a staged reply, edit or file to another audience.
   const enterWhisperMode = useCallback((nick: string) => {
     setReplyingTo(null)
     setEditingMessage(null)
@@ -336,7 +337,18 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   // Stable callback to clear whisper target (name avoids clash with the
   // composer-internal handleClearWhisper defined inside RoomMessageInput).
-  const handleClearWhisperTarget = useCallback(() => setWhisperTarget(null), [])
+  const handleClearWhisperTarget = useCallback(() => {
+    focusAfterWhisperCancel.current = activeRoomRef.current?.jid ?? null
+    setWhisperTarget(null)
+  }, [])
+
+  useLayoutEffect(() => {
+    if (whisperTarget || !focusAfterWhisperCancel.current) return
+    const roomJid = focusAfterWhisperCancel.current
+    focusAfterWhisperCancel.current = null
+    if (document.querySelector('[data-modal="true"]')) return
+    if (activeRoom?.jid === roomJid) composerHandleRef.current?.focus()
+  }, [whisperTarget, activeRoom?.jid, composerHandleRef])
 
   if (!activeRoom) return null
 
@@ -460,6 +472,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                 <RoomMessageInput
                   {...thread.composerProps}
                   key={activeRoom.jid}
+                  onRegisterDraftResume={onRegisterDraftResume}
                   ref={composerHandleRef}
                   roomJid={activeRoom.jid}
                   textareaRef={composerRef as React.RefObject<ComposerInputElement | null>}
@@ -1626,6 +1639,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 })
 
 interface RoomMessageInputProps {
+  onRegisterDraftResume?: RegisterDraftResume
   roomJid: string
   textareaRef?: React.RefObject<ComposerInputElement | null>
   sendMessage: (roomJid: string, body: string, options?: { replyTo?: { id: string; to: string; fallback?: { author: string; body: string } }; references?: MentionReference[]; attachment?: FileAttachment }) => Promise<string>
@@ -1658,7 +1672,17 @@ interface RoomMessageInputProps {
   isDarkMode?: boolean
 }
 
-export const RoomMessageInput = memo(function RoomMessageInput({
+export const RoomMessageInput = memo(function RoomMessageInput(props: RoomMessageInputProps & { ref?: React.Ref<MessageComposerHandle> }) {
+  // Public and private editors cannot share a buffer or a late failed-send recovery owner.
+  const recipient = props.whisperTarget
+  const identity = JSON.stringify([props.roomJid, recipient
+    ? recipient.occupantId ? ['occupant-id', recipient.occupantId] : ['nickname', recipient.nick]
+    : ['public']])
+  return <RoomMessageInputContent key={identity} {...props} />
+})
+
+const RoomMessageInputContent = memo(function RoomMessageInputContent({
+  onRegisterDraftResume,
   roomJid,
   textareaRef,
   sendMessage,
@@ -1724,6 +1748,18 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   const occupants = roomStore.getState().getRoom(roomJid)?.occupants ?? EMPTY_OCCUPANTS
   // Draft actions are stable function refs — read non-reactively from the store.
   const { setDraft, getDraft, clearDraft, clearFirstNewMessageId } = roomStore.getState()
+  const ordinaryDraftOrigin = useRef({ account: getStorageScopeJid(), text: getDraft(roomJid), confirmed: !!roomStore.getState().ordinaryDrafts?.has(roomJid) })
+  const getOrdinaryDraft = useCallback((jid: string, text: string) => {
+    const origin = ordinaryDraftOrigin.current
+    if (origin.account === getStorageScopeJid() && origin.text === text) return origin.confirmed
+    const state = roomStore.getState()
+    return state.getDraft(jid) === text && state.ordinaryDrafts?.has(jid) === true
+  }, [])
+  const markPublicEdit = (text: string) => {
+    if (!whisperTarget && editingMessage?.roomJid !== roomJid) {
+      ordinaryDraftOrigin.current = { account: getStorageScopeJid(), text, confirmed: true }
+    }
+  }
   const addToast = useToastStore((s) => s.addToast)
   const [showPollCreator, setShowPollCreator] = useState(false)
 
@@ -1779,15 +1815,26 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     restore: (text: string, references: MentionReference[]) => void
   }>({ references: [], restore: () => {} })
 
+  // A reopened room has no private recipient; its private buffer has no durable draft operations.
+  const whisperDraftOperations = useMemo(() => ({
+    owner: {},
+    getDraft: (_roomJid: string) => '',
+    setDraft: (_roomJid: string, _text: string) => {},
+    clearDraft: (_roomJid: string) => {},
+  }), [])
+
   // The current mounted room owns both recovered text and its mention metadata.
-  const [text, setText, consumeDraft, discardDraft] = useConversationDraft({
+  const [text, setText, consumeDraft, discardDraft, restoreMessageDraft] = useConversationDraft({
     conversationId: roomJid,
-    draftOperations: { owner: roomStore, getDraft, setDraft, clearDraft },
+    draftOperations: whisperTarget ? whisperDraftOperations : { owner: roomStore, getDraft, setDraft, clearDraft, getOrdinary: getOrdinaryDraft },
     composerRef,
     onDraftRestored: handleDraftRestored,
     editingConversationId: editingMessage?.roomJid,
     getReferences: () => mentionRecovery.current.references,
-    onDraftRecovered: (text, references) => mentionRecovery.current.restore(text, references),
+    onDraftRecovered: (text, references, ordinary) => {
+      ordinaryDraftOrigin.current = { account: getStorageScopeJid(), text, confirmed: ordinary === true }
+      mentionRecovery.current.restore(text, references)
+    },
   })
 
   // External writes (including Send clearing the box) end the typing session.
@@ -1799,15 +1846,29 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   mentionRecovery.current = { references, restore: restoreReferences }
   clearReferencesRef.current = () => setReferences([])
 
-  // Exit whisper mode AND discard the typed text. The composer draft is keyed only
-  // by room JID, so a private whisper draft would otherwise survive into the public
-  // composer and could be sent to the whole room. Discarding upholds the invariant:
-  // private text is never converted into a public message (XEP-0045 §7.5).
+  // Private text and files must never change audience when this editor exits (XEP-0045 §7.5).
   const handleClearWhisper = () => {
     whisperDraftGeneration.current += 1
     discardDraft()
+    onRemovePendingAttachment?.()
     onClearWhisper?.()
   }
+
+  useDraftResumeTarget(onRegisterDraftResume, 'room', roomJid,
+    whisperTarget ? 'whisper' : editingMessage?.roomJid === roomJid ? 'edit' : null,
+    whisperTarget ?? (editingMessage?.roomJid === roomJid ? editingMessage : null),
+    () => {
+      if (whisperTarget) {
+        const state = roomStore.getState()
+        if (!state.ordinaryDrafts?.has(roomJid) || !state.getDraft(roomJid).trim()) return false
+        handleClearWhisper()
+        onCancelEdit()
+        return true
+      }
+      if (!restoreMessageDraft()) return false
+      onCancelEdit()
+      return true
+    }, !!pendingAttachment)
 
   // Slash commands (XEP-0045 moderation/subject/invite shortcuts, plus app-level
   // easter eggs). The context composes the room action hooks and the roomUiStore
@@ -1860,6 +1921,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   // Handle mention selection
   const handleMentionSelect = (index: number) => {
     const { newText, newCursorPosition, reference } = selectMatch(index)
+    markPublicEdit(newText)
     insertMention(newText, reference)
     // Restores focus, drops the caret after the mention rather than at the end
     // of the message, and reports the new position back for the next lookup.
@@ -2074,6 +2136,15 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     />
   ) : null
 
+  const handleCommandSelect = (index: number) => {
+    const command = commandMenu.state.matches[index]
+    if (!command) return
+    const value = `/${command.name} `
+    markPublicEdit(value)
+    setText(value)
+    commandMenu.dismiss()
+  }
+
   // Popovers rendered above the composer, in priority order: help panel, then
   // command completion menu, then the mention dropdown.
   const aboveInputNode = helpOpen ? (
@@ -2083,13 +2154,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
       matches={commandMenu.state.matches}
       selectedIndex={commandMenu.state.selectedIndex}
       navSerial={commandMenu.state.navSerial}
-      onSelect={(idx) => {
-        const cmd = commandMenu.state.matches[idx]
-        if (cmd) {
-          setText(`/${cmd.name} `)
-          commandMenu.dismiss()
-        }
-      }}
+      onSelect={handleCommandSelect}
       onDismiss={commandMenu.dismiss}
     />
   ) : (
@@ -2142,11 +2207,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         }
         if (enterSelectsSuggestion || e.key === 'Tab') {
           e.preventDefault()
-          const cmd = commandMenu.state.matches[commandMenu.state.selectedIndex]
-          if (cmd) {
-            setText(`/${cmd.name} `)
-            commandMenu.dismiss()
-          }
+          handleCommandSelect(commandMenu.state.selectedIndex)
           return
         }
         if (e.key === 'Escape') {
@@ -2193,7 +2254,10 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         placeholder={placeholder}
         ariaProps={inputAriaProps}
         mergedRef={mergedRef}
-        onEdit={handleEditorEdit}
+        onEdit={(text, references) => {
+          markPublicEdit(text)
+          handleEditorEdit(text, references)
+        }}
         onChange={(e) => {
           setMentionInput({ text: e.target.value, position: e.target.selectionStart })
           onChange(e)
@@ -2218,6 +2282,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     <div
       onKeyDownCapture={(e) => {
         if (whisperTarget && e.key === 'Escape' && !attachmentWarning) {
+          e.preventDefault()
           e.stopPropagation()
           handleClearWhisper()
         }
@@ -2268,6 +2333,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         />
       )}
       <MessageComposer
+        onExplicitTextEdit={markPublicEdit}
         ref={composerRef}
         textareaRef={textareaRef}
         placeholder={whisperTarget ? t('rooms.whisperPlaceholder', { nick: whisperTarget.nick }) : t('chat.messageRoom', { name: roomName })}

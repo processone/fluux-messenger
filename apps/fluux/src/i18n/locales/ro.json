@@ -1696,6 +1696,13 @@
         }
     },
     "commandPalette": {
+        "drafts": "Ciorne",
+        "searchDrafts": "Caută o ciornă…",
+        "confirmResumeTitle": "Deschide ciorna?",
+        "confirmResumeEdit": "Deschiderea ciornei va elimina modificările nesalvate ale acestui mesaj.",
+        "confirmResumeWhisper": "Deschiderea ciornei camerei va elimina textul privat netrimis.",
+        "confirmResumeWhisperFile": "Deschiderea ciornei camerei va elimina textul privat netrimis și fișierul atașat.",
+        "confirmResumeAction": "Renunță și deschide ciorna",
         "moreMatches": "Mai multe rezultate",
         "open": "Deschide paleta de comenzi",
         "placeholder": "Mergi la...",

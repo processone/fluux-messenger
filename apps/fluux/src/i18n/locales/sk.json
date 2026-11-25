@@ -1697,6 +1697,13 @@
         }
     },
     "commandPalette": {
+        "drafts": "Koncepty",
+        "searchDrafts": "Nájsť koncept…",
+        "confirmResumeTitle": "Otvoriť koncept?",
+        "confirmResumeEdit": "Otvorením konceptu sa zahodia neuložené zmeny tejto správy.",
+        "confirmResumeWhisper": "Otvorením konceptu miestnosti sa zahodí neodoslaný súkromný text.",
+        "confirmResumeWhisperFile": "Otvorením konceptu miestnosti sa zahodí neodoslaný súkromný text a priložený súbor.",
+        "confirmResumeAction": "Zahodiť a otvoriť koncept",
         "moreMatches": "Ďalšie výsledky",
         "open": "Otvoriť paletu príkazov",
         "placeholder": "Prejsť na...",

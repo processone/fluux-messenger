@@ -1695,6 +1695,13 @@
         }
     },
     "commandPalette": {
+        "drafts": "Brouillons",
+        "searchDrafts": "Rechercher un brouillon…",
+        "confirmResumeTitle": "Ouvrir le brouillon ?",
+        "confirmResumeEdit": "L’ouverture du brouillon annulera les modifications non enregistrées de ce message.",
+        "confirmResumeWhisper": "L’ouverture du brouillon du salon supprimera le texte privé non envoyé.",
+        "confirmResumeWhisperFile": "L’ouverture du brouillon du salon supprimera le texte privé non envoyé et le fichier joint.",
+        "confirmResumeAction": "Abandonner et ouvrir le brouillon",
         "moreMatches": "Autres résultats",
         "open": "Ouvrir la palette de commandes",
         "placeholder": "Aller à...",
