@@ -4,7 +4,7 @@ import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
 import { AT_BOTTOM_THRESHOLD } from '../apps/fluux/src/utils/scrollStateManager'
 import { AT_BOTTOM_OK_PX, waitForTopVisibleSettled, wheelAwayFromBottom } from './harness/scrollHarness'
-import { arrive, distance, keepJson, measureDuring, mountedMessageIndexes, readInteractionReadState, readInteractionView, scrollToBottomContainer, interactionScrollFrames, findAndRevealInteractionText, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
+import { restoreMessageActionFocus, tabOutOfMessageActions, setInteractionTyping, sampleInteractionLayout, expectTypingClearance, arrive, distance, keepJson, measureDuring, mountedMessageIndexes, readInteractionReadState, readInteractionView, scrollToBottomContainer, interactionScrollFrames, findAndRevealInteractionText, setupInteraction, stableFrames, TARGET, waitForActions } from './harness/messageInteraction'
 
 async function seedRow(page: Page, content: 'long' | 'file', mode: 'light' | 'dark' = 'dark') {
   await bootDemo(page, '/demo.html?tutorial=false')
@@ -424,6 +424,7 @@ for (const kind of ['chat', 'room'] as const) {
   })
 
   test(`${kind}: interaction hold clears typing and keeps picker geometry through preview and media growth, then restores keyboard focus`, async ({ page }) => {
+    await page.setViewportSize({ width: 800, height: 900 })
     const { row, body, list } = await setupInteraction(page, kind)
     await body.hover()
     await waitForActions(page)
@@ -436,6 +437,16 @@ for (const kind of ['chat', 'room'] as const) {
     expect(pickerBox.y).toBeGreaterThanOrEqual(listBox.y)
     expect(pickerBox.y + pickerBox.height).toBeLessThanOrEqual(listBox.y + listBox.height)
     await keepJson(`${kind}-picker-viewport-bounds`, { picker: pickerBox, list: listBox })
+    const search = row.locator('em-emoji-picker').getByRole('searchbox')
+    await expect(search).toBeFocused()
+    const typingFrames = await sampleInteractionLayout(page, { row, control: search, tail: row, panel: row.locator('[data-message-panel="reactions"]') }, async () => {
+      for (const state of ['one', 'two', 'off'] as const) {
+        await setInteractionTyping(page, kind, state)
+        await stableFrames(page, TARGET)
+      }
+    })
+    expectTypingClearance(typingFrames, true, (await row.getAttribute('data-message-row-id'))!)
+    await keepJson(`${kind}-picker-typing-frames`, typingFrames)
     let releaseMedia!: () => void
     const mediaReady = new Promise<void>(resolve => { releaseMedia = resolve })
     const mediaRequested = page.waitForRequest(request => request.url().includes('screenshot-chat-dark.png?interaction-media'))
@@ -632,7 +643,7 @@ for (const kind of ['chat', 'room'] as const) {
   test(`${kind}: interaction hold follows keyboard action focus and preserves native text selection`, async ({ page }) => {
     const { row, body, list } = await setupInteraction(page, kind)
     const more = row.getByRole('button', { name: 'More options', exact: true })
-    await more.focus()
+    await restoreMessageActionFocus(page, row)
     await expect(list).toHaveAttribute('data-message-interaction')
     await page.keyboard.press('Enter')
     await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
@@ -642,6 +653,8 @@ for (const kind of ['chat', 'room'] as const) {
     await page.keyboard.press('Escape')
     await expect(more).toBeFocused()
     await expect(row.locator('[data-message-panel="more"]')).toHaveCount(0)
+    await tabOutOfMessageActions(page)
+    await expect(list).not.toHaveAttribute('data-message-interaction')
     const text = row.locator('[data-msg-text]').first()
     const box = (await text.boundingBox())!
     const top = (await body.boundingBox())!.y
@@ -722,7 +735,7 @@ for (const kind of ['chat', 'room'] as const) {
     await expect(row.locator('[data-message-toolbar]')).toHaveCSS('opacity', '0')
     await expect(list).not.toHaveAttribute('data-message-interaction')
     observations.push({ stage: 'mouse focus does not retain toolbar visibility', ...await readInteractionView(page) })
-    // Captain G3: an ordinary middle click resumes saved following and ends its hover block.
+    // Middle press yields to native scrolling; passive movement cannot reacquire the hold.
     await body.hover()
     await waitForActions(page)
     await row.getByRole('button', { name: 'Reply', exact: true }).hover()

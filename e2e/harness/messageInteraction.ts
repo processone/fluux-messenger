@@ -1,6 +1,6 @@
 import { writeFile, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type Locator } from '@playwright/test'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { chatStore, roomStore } from '@fluux/sdk/stores'
 import type { useSettingsStore } from '../../apps/fluux/src/stores/settingsStore'
@@ -16,8 +16,8 @@ type Demo = Window & {
 export const TARGET = 'interaction-target'
 export const jidFor = (kind: ConversationKind) => kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
 
-export async function arrive(page: Page, kind: ConversationKind, ids: string[], own = false) {
-  await page.evaluate(({ kind, ids, own }) => {
+export async function arrive(page: Page, kind: ConversationKind, ids: string[], own = false, body?: string) {
+  await page.evaluate(({ kind, ids, own, body }) => {
     const scope = window as unknown as Demo
     const jid = kind === 'chat' ? 'emma@fluux.chat' : 'team@conference.fluux.chat'
     const firstTimestamp = Date.now() - ids.length
@@ -25,16 +25,16 @@ export async function arrive(page: Page, kind: ConversationKind, ids: string[], 
       const message = {
         id, stanzaId: undefined, originId: undefined, occupantId: undefined,
         from: kind === 'chat' ? own ? 'you@fluux.chat' : jid : `${jid}/${own ? 'You' : 'Adrien'}`,
-        body: own ? 'Let’s keep this message in place while choosing an action.' : 'A new update from the conversation.',
+        body: body ?? (own ? 'Let’s keep this message in place while choosing an action.' : 'A new update from the conversation.'),
         timestamp: new Date(firstTimestamp + index), isOutgoing: own,
       }
       if (kind === 'chat') scope.__demoClient.emitSDK('chat:message', { message: { ...message, type: 'chat', conversationId: jid }, isLiveArrival: true })
       else scope.__demoClient.emitSDK('room:message', { roomJid: jid, message: { ...message, type: 'groupchat', roomJid: jid, nick: own ? 'You' : 'Adrien' }, isLiveArrival: true, incrementUnread: true })
     }
-  }, { kind, ids, own })
+  }, { kind, ids, own, body })
 }
 
-export async function setupInteraction(page: Page, kind: ConversationKind, restingPointer = false, virtualized = true) {
+export async function setupInteraction(page: Page, kind: ConversationKind, restingPointer = false, virtualized = true, targetBody?: string) {
   if (process.env.FLUUX_INTERACTION_TRACE) page.on('console', message => {
     if (/\[Scroll\]|\[Interaction\]/.test(message.text())) console.log(message.text())
   })
@@ -53,19 +53,12 @@ export async function setupInteraction(page: Page, kind: ConversationKind, resti
   }, kind)
   await page.locator('[data-message-list]').waitFor()
   await arrive(page, kind, Array.from({ length: 45 }, (_, i) => `interaction-seed-${i}`))
-  await arrive(page, kind, [TARGET], true)
+  await arrive(page, kind, [TARGET], true, targetBody)
   await page.keyboard.press('End')
   const row = page.locator(`.message-row[data-message-id="${TARGET}"]`)
   await expect(row).toBeInViewport()
   await expect.poll(() => distance(page)).toBeLessThanOrEqual(1)
   await stableFrames(page, TARGET)
-  if (!restingPointer) {
-    // The listener mounts with the conversation: give it coordinates before a deliberate entry.
-    // A browser's first mousemove can have zero movement even when the pointer changed position.
-    await page.mouse.move(1, 1)
-    await page.mouse.move(0, 0)
-    await page.keyboard.press('Shift')
-  }
   return { row, body: row.locator('[data-message-body]'), list: page.locator('[data-message-list]') }
 }
 
@@ -215,4 +208,114 @@ export async function findAndRevealInteractionText(page: Page, query: string) {
     }
     return { found, before, afterFind, afterReveal: list.scrollTop }
   }, query)
+}
+
+
+export async function setInteractionTyping(page: Page, kind: ConversationKind, state: 'one' | 'two' | 'off') {
+  await page.evaluate(({ kind, jid, state }) => {
+    const client = (window as unknown as Demo).__demoClient
+    const name = state === 'two' ? 'Emmanuelle Catherine Wilson – International infrastructure coordination' : 'Emma Wilson'
+    if (kind === 'chat') {
+      client.emitSDK('contacts:contact-updated', { jid, updates: { name } })
+      client.emitSDK('chat:typing', { conversationId: jid, jid, isTyping: state !== 'off' })
+    } else {
+      client.emitSDK('room:typing', { roomJid: jid, nick: 'Adrien', isTyping: state === 'one' })
+      client.emitSDK('room:typing', { roomJid: jid, nick: 'Emmanuelle Catherine Wilson – International infrastructure coordination', isTyping: state === 'two' })
+    }
+  }, { kind, jid: jidFor(kind), state })
+  await expect(page.locator('[data-typing-pill]')).toHaveCount(state === 'off' ? 0 : 1)
+}
+
+export const ACTION_LINK_BODY = 'Review the notes: https://example.invalid/review'
+
+export async function restoreMessageActionFocus(page: Page, row: Locator) {
+  // Tab changes areas by design; Escape supplies the existing keyboard entry to a message button.
+  await row.locator('[data-msg-text]').hover()
+  await waitForActions(page, (await row.getAttribute('data-message-id'))!)
+  const more = row.getByRole('button', { name: 'More options', exact: true })
+  await more.click()
+  await expect(row.locator('[data-message-panel="more"]')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(more).toBeFocused()
+  await expect(row.locator('[data-message-panel]')).toHaveCount(0)
+  await waitForActions(page, (await row.getAttribute('data-message-id'))!)
+}
+
+export async function tabOutOfMessageActions(page: Page) {
+  await page.keyboard.press('Tab')
+  await expect(page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()).toBeFocused()
+}
+
+type LayoutRect = { top: number; bottom: number; left: number; right: number; width: number; height: number }
+export interface InteractionLayoutFrame {
+  row: LayoutRect
+  control: LayoutRect
+  tail: LayoutRect | null
+  panel: LayoutRect | null
+  viewport: LayoutRect
+  bandHeight: number
+  toolbarOpacity: number
+  scrollTop: number
+  held: string | null
+  connected: boolean
+}
+
+export async function sampleInteractionLayout(page: Page, elements: {
+  row: Locator; control: Locator; tail?: Locator; panel?: Locator
+}, action: () => Promise<unknown>): Promise<InteractionLayoutFrame[]> {
+  const handles = {
+    row: await elements.row.elementHandle(), control: await elements.control.elementHandle(),
+    tail: await elements.tail?.elementHandle() ?? null, panel: await elements.panel?.elementHandle() ?? null,
+  }
+  try {
+    await page.evaluate(({ row, control, tail, panel }) => {
+      if (!row || !control) throw new Error('Missing layout observation target')
+      const list = row.closest('[data-message-list]')!
+      const scope = window as Window & { __interactionLayoutFrames?: InteractionLayoutFrame[]; __interactionLayoutFrame?: number }
+      scope.__interactionLayoutFrames = []
+      const box = (element: Element): LayoutRect => {
+        const { top, bottom, left, right, width, height } = element.getBoundingClientRect()
+        return { top, bottom, left, right, width, height }
+      }
+      const tick = () => {
+        scope.__interactionLayoutFrames!.push({ row: box(row), control: box(control), tail: tail ? box(tail) : null,
+          panel: panel ? box(panel) : null, viewport: box(list),
+          bandHeight: list.parentElement!.querySelector('[data-typing-band]')!.getBoundingClientRect().height,
+          toolbarOpacity: Number(getComputedStyle(row.querySelector('[data-message-toolbar]')!).opacity),
+          scrollTop: list.scrollTop, held: list.getAttribute('data-message-interaction'),
+          connected: row.isConnected && control.isConnected && (!tail || tail.isConnected) })
+        scope.__interactionLayoutFrame = requestAnimationFrame(tick)
+      }
+      tick()
+    }, handles)
+    try { await action() }
+    finally {
+      await page.evaluate(() => {
+        const scope = window as Window & { __interactionLayoutFrame?: number }
+        if (scope.__interactionLayoutFrame !== undefined) cancelAnimationFrame(scope.__interactionLayoutFrame)
+      })
+    }
+    const frames = await page.evaluate(() => (window as Window & { __interactionLayoutFrames?: InteractionLayoutFrame[] }).__interactionLayoutFrames!)
+    expect(frames.length, 'layout observations must span browser frames').toBeGreaterThan(2)
+    return frames
+  } finally {
+    await Promise.all(Object.values(handles).map(handle => handle?.dispose()))
+  }
+}
+
+export function expectTypingClearance(frames: InteractionLayoutFrame[], protectTail: boolean, heldId?: string) {
+  for (const frame of frames) {
+    if (heldId !== undefined) expect(frame.held, 'the original action must retain its hold through every frame').toBe(heldId)
+    expect(frame.connected, 'the original observed row and controls must remain mounted').toBe(true)
+    expect(frame.control.top, 'active control top').toBeGreaterThanOrEqual(frame.viewport.top - 1)
+    expect(frame.control.bottom, 'active control bottom').toBeLessThanOrEqual(frame.viewport.bottom + 1)
+    if (frame.panel && frame.panel.height <= frame.viewport.height) {
+      expect(frame.panel.top, 'fitting panel top').toBeGreaterThanOrEqual(frame.viewport.top - 1)
+      expect(frame.panel.bottom, 'fitting panel bottom').toBeLessThanOrEqual(frame.viewport.bottom + 1)
+    }
+    const activeTop = frame.panel && frame.panel.height <= frame.viewport.height ? frame.panel.top : frame.control.top
+    if (protectTail && frame.tail && frame.tail.height <= frame.viewport.height && frame.tail.bottom - activeTop <= frame.viewport.height) {
+      expect(frame.tail.bottom, 'the former tail must stay whole when both fit').toBeLessThanOrEqual(frame.viewport.bottom + 1)
+    }
+  }
 }

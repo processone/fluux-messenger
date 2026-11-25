@@ -51,6 +51,11 @@ export function useMessageInteractionHold({
   const menu = useRef<{ row: HTMLElement; close: () => void } | null>(null)
   const pressing = useRef(false)
   const nativeDragging = useRef(false)
+  const capturedPress = useRef<{
+    control: HTMLButtonElement; pointerId: number; bounds: DOMRect; x: number; y: number
+  } | null>(null)
+  const cancelledClick = useRef<HTMLButtonElement | null>(null)
+  const touchPointer = useRef(false)
   const keyboard = useRef(true)
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -69,9 +74,18 @@ export function useMessageInteractionHold({
     leaveTimer.current = null
   }, [])
 
+  const releaseCapturedPress = useCallback((cancelClick: boolean) => {
+    const press = capturedPress.current
+    capturedPress.current = null
+    if (!press) return
+    if (cancelClick) cancelledClick.current = press.control
+    if (press.control.hasPointerCapture(press.pointerId)) press.control.releasePointerCapture(press.pointerId)
+  }, [])
+
   // Also called by the positioning controller before navigation takes the pixels.
   const cancel = useCallback(() => {
     clearLeave()
+    releaseCapturedPress(true)
     held.current = null
     pointerRow.current = null
     focusRow.current = null
@@ -81,7 +95,7 @@ export function useMessageInteractionHold({
     closing?.close()
     if (closing) ports.current.menuChanged?.(false)
     notify()
-  }, [clearLeave, notify])
+  }, [clearLeave, notify, releaseCapturedPress])
 
   const start = useCallback((row: HTMLElement, refresh = false, control?: HTMLElement) => {
     const id = readMessageRowId(row)
@@ -90,7 +104,7 @@ export function useMessageInteractionHold({
     clearLeave()
     if (menu.current && menu.current.row !== row) return
     if (held.current?.row === row) {
-      if (refresh) ports.current.begin(held.current.id, control)
+      if (refresh || control) ports.current.begin(held.current.id, control)
       return
     }
     if (!ports.current.begin(id, control)) return
@@ -144,18 +158,78 @@ export function useMessageInteractionHold({
       const row = target instanceof Element ? target.closest<HTMLElement>('[data-message-row-id]') : null
       return row && scrollRef.current?.contains(row) ? row : null
     }
+    const onPointerDown = (event: PointerEvent) => {
+      touchPointer.current = event.pointerType === 'touch'
+      if (touchPointer.current) keyboard.current = false
+      if (event.button !== 0 || !event.isPrimary) return
+      releaseCapturedPress(true)
+      cancelledClick.current = null
+      if (touchPointer.current || !hasHover() || !event.isTrusted) return
+      const source = event.composedPath()[0]
+      const control = source instanceof Element ? source.closest('button') : null
+      if (!(control instanceof HTMLButtonElement) || control.disabled ||
+        !(event.target instanceof Element) || !event.target.closest('[data-message-toolbar]') || !rowFor(event.target)) return
+      // Native capture keeps the original click target through layout motion without synthesizing a click.
+      capturedPress.current = { control, pointerId: event.pointerId, bounds: control.getBoundingClientRect(), x: event.clientX, y: event.clientY }
+      control.setPointerCapture(event.pointerId)
+    }
+    const outsidePress = (event: PointerEvent) => {
+      const press = capturedPress.current
+      if (!press || press.pointerId !== event.pointerId || event.clientX === press.x && event.clientY === press.y) return false
+      const inside = (rect: DOMRect) => event.clientX >= rect.left && event.clientX < rect.right &&
+        event.clientY >= rect.top && event.clientY < rect.bottom
+      return !inside(press.bounds) && !inside(press.control.getBoundingClientRect())
+    }
+    const onPointerMove = (event: PointerEvent) => {
+      const press = capturedPress.current
+      if (!press || press.pointerId !== event.pointerId || event.clientX === press.x && event.clientY === press.y) return
+      if (outsidePress(event) || (event.buttons & 1) === 0) {
+        releaseCapturedPress(true)
+        pressing.current = false
+        pointerRow.current = null
+        maybeRelease()
+      } else {
+        press.x = event.clientX
+        press.y = event.clientY
+      }
+    }
+    const onPointerUp = (event: PointerEvent) => {
+      if (capturedPress.current?.pointerId !== event.pointerId) return
+      if (outsidePress(event)) releaseCapturedPress(true)
+      // The browser implicitly releases capture after pointerup, retaining its native click target.
+      else capturedPress.current = null
+    }
+    const onPointerCancel = (event: PointerEvent) => {
+      if (capturedPress.current?.pointerId !== event.pointerId) return
+      releaseCapturedPress(true)
+      pressing.current = false
+      pointerRow.current = null
+      maybeRelease()
+    }
+    const onClick = (event: MouseEvent) => {
+      if (event.detail === 0) return
+      const control = cancelledClick.current
+      cancelledClick.current = null
+      if (control && event.composedPath().includes(control)) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+      }
+    }
     const onMove = (event: MouseEvent) => {
+      if (capturedPress.current) return
       const row = rowFor(event.target)
       if (pressing.current) pointerRow.current = held.current?.row === row ? row : null
       else if (pointerRow.current !== row) pointerRow.current = null
       maybeRelease()
     }
     const onOut = (event: MouseEvent) => {
+      // WebKit can emit stationary layout boundary events before pending pointer capture takes effect.
+      if (capturedPress.current) return
       if (rowFor(event.relatedTarget) !== pointerRow.current) pointerRow.current = null
       maybeRelease()
     }
     const onDown = (event: MouseEvent) => {
-      if (!hasHover()) return
+      if (touchPointer.current || !hasHover()) return
       keyboard.current = false
       nativeDragging.current = false
       if (event.button === 1) {
@@ -167,9 +241,11 @@ export function useMessageInteractionHold({
       const row = rowFor(event.target)
       if (row) {
         pointerRow.current = row
-        const control = event.target instanceof Element
-          ? event.target.closest<HTMLElement>('[data-message-toolbar] button') ?? undefined : undefined
+        const source = event.composedPath()[0]
+        const control = event.target instanceof Element && event.target.closest('[data-message-toolbar]') && source instanceof Element
+          ? source.closest<HTMLElement>('button,input,textarea,select') ?? undefined : undefined
         start(row, false, control)
+        if (held.current?.row !== row) releaseCapturedPress(false)
         pressing.current = true
       }
     }
@@ -232,6 +308,11 @@ export function useMessageInteractionHold({
       cancel()
       ports.current.release(true)
     }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('pointermove', onPointerMove, true)
+    document.addEventListener('pointerup', onPointerUp, true)
+    document.addEventListener('pointercancel', onPointerCancel, true)
+    document.addEventListener('click', onClick, true)
     document.addEventListener('mousemove', onMove, true)
     document.addEventListener('mouseout', onOut, true)
     document.addEventListener('mousedown', onDown, true)
@@ -247,6 +328,11 @@ export function useMessageInteractionHold({
     document.addEventListener('input', onInput, true)
     window.addEventListener('blur', onBlur)
     return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('pointermove', onPointerMove, true)
+      document.removeEventListener('pointerup', onPointerUp, true)
+      document.removeEventListener('pointercancel', onPointerCancel, true)
+      document.removeEventListener('click', onClick, true)
       document.removeEventListener('mousemove', onMove, true)
       document.removeEventListener('mouseout', onOut, true)
       document.removeEventListener('mousedown', onDown, true)
@@ -266,7 +352,7 @@ export function useMessageInteractionHold({
       cancel()
       ports.current.release(false)
     }
-  }, [enabled, conversationId, scrollRef, start, cancel, maybeRelease])
+  }, [enabled, conversationId, scrollRef, start, cancel, maybeRelease, releaseCapturedPress])
 
   useLayoutEffect(() => {
     const target = held.current

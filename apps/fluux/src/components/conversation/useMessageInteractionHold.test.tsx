@@ -88,8 +88,7 @@ describe('deliberate message interaction', () => {
   it('releases a pointer-only hold on completion even over the jump-to-latest FAB', () => {
     const { release, result } = setup()
     const fab = document.createElement('div')
-    fab.dataset.interactionBridge = ''
-    fab.innerHTML = '<button>Scroll to bottom</button>'
+    fab.innerHTML = '<button data-fab="scroll-to-bottom">Scroll to bottom</button>'
     document.body.append(fab)
     pressRow()
     mouse('mouseout', row)
@@ -107,8 +106,8 @@ describe('deliberate message interaction', () => {
   })
   it('does not start a hold from the FAB alone', () => {
     const { begin } = setup()
-    const fab = document.createElement('div')
-    fab.dataset.interactionBridge = ''
+    const fab = document.createElement('button')
+    fab.dataset.fab = 'scroll-to-bottom'
     document.body.append(fab)
     mouse('mousemove', document.body, 10, 10)
     mouse('mousemove', fab, 600, 400)
@@ -154,6 +153,28 @@ describe('deliberate message interaction', () => {
     const { begin } = setup()
     mouse('mousedown', row)
     expect(begin).toHaveBeenCalledTimes(1)
+  })
+  it('refreshes a same-row pointer action after keyboard focus without replacing the held row', () => {
+    const { begin, result } = setup()
+    act(() => action.focus())
+    const reply = document.createElement('button')
+    reply.textContent = 'Reply'
+    row.querySelector('[data-message-toolbar]')!.append(reply)
+    mouse('mousedown', reply)
+    expect(begin).toHaveBeenLastCalledWith(row.dataset.messageRowId, reply)
+    expect(begin).toHaveBeenCalledTimes(2)
+    expect(result.current.context.heldRow).toBe(row)
+  })
+  it('ignores touch compatibility mouse events even when hover capability is available', () => {
+    const { begin, result } = setup()
+    const event = new Event('pointerdown', { bubbles: true })
+    Object.assign(event, { pointerType: 'touch', isPrimary: true, button: 0, pointerId: 1, clientX: 100, clientY: 200 })
+    fireEvent(action, event)
+    mouse('mousedown', action)
+    act(() => action.focus())
+    mouse('mouseup', action)
+    expect(begin).not.toHaveBeenCalled()
+    expect(result.current.context.heldRow).toBeNull()
   })
   it('does not leave a plain message click sticky under the pointer', () => {
     const { result, release } = setup()

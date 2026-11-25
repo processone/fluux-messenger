@@ -218,6 +218,8 @@ export function MessageList<T extends BaseMessage>({
   const firstMessageId = deduplicatedMessages[0]
     ? messageRowId(deduplicatedMessages[0])
     : undefined
+  const lastResidentMessage = deduplicatedMessages[deduplicatedMessages.length - 1]
+  const lastMessageRowKey = lastResidentMessage ? rowKeys.get(lastResidentMessage) : undefined
   const lastMessage = messages[messages.length - 1]
   const lastMessageId = lastMessage ? messageRowId(lastMessage) : undefined
   // The SDK names the divider's ROW, so this resolves the RESIDENT row it means —
@@ -584,6 +586,7 @@ export function MessageList<T extends BaseMessage>({
     typingBandRef,
     lastMessageIsOutgoing: lastMessage?.isOutgoing ?? false,
     lastMessageId,
+    lastMessageRowKey,
     staticMode,
     virtualizer: activeVirtualizer,
     onInteractionEnd: () => cancelInteractionRef.current(),
@@ -803,6 +806,7 @@ export function MessageList<T extends BaseMessage>({
             className={rowClass(rowId)}
             data-message-id={msg.id}
             data-message-row-id={rowId}
+            data-message-row-key={rowKeys.get(msg)}
             data-message-row-alias={msg.localRowRef && messageRowId(msg.localRowRef)}
             data-stanza-id={msg.stanzaId}
             data-origin-id={msg.originId}
@@ -976,6 +980,7 @@ export function MessageList<T extends BaseMessage>({
                     className={rowClass(rowId)}
                     data-message-id={msg.id}
                     data-message-row-id={rowId}
+                    data-message-row-key={rowKeys.get(msg)}
                     data-message-row-alias={msg.localRowRef && messageRowId(msg.localRowRef)}
                     data-stanza-id={msg.stanzaId}
                     data-origin-id={msg.originId}
@@ -1065,7 +1070,6 @@ export function MessageList<T extends BaseMessage>({
       {/* Scroll to bottom FAB with spring animation */}
       <div
         data-fab-container="scroll-to-bottom"
-        data-interaction-bridge
         hidden={interactionMenuOpen}
         className={`absolute bottom-4 end-4 z-40 ${fabAnimationClass(fabVisible, hasFabBeenVisible)}`}
         inert={!fabVisible}

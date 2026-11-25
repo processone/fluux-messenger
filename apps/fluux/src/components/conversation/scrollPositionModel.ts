@@ -72,7 +72,7 @@ export type TopOffsetAnchorPosition = {
       currentBandHeightPx: number
       controlTopPx: number
       controlBottomPx: number
-      tailMessageId?: string
+      tailRowKey?: string
     }
   }
 }

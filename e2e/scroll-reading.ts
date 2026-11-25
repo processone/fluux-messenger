@@ -3249,34 +3249,25 @@ test.describe('Insertion drift while scrolled up', () => {
     await syncEngineGeometry(page)
   }
 
-  /**
-   * Whether a hover hold (FLM-229) is active as a load-older starts. Either way the pointer rests on
-   * the middle of the list, where every later wheel lands, and stays there: a hover hold starts only
-   * when the pointer moves onto a message, so none starts later on. With `none`, one wheel tick ends
-   * any hold the pointer started. With `held`, a hold starts on the message under the pointer, and
-   * the controller then refuses the load's restore request. On CI the pointer `openScrolledUp`
-   * leaves mid-list started that hold by chance (FLM-210).
-   */
-  type HoverAtLoadStart = 'none' | 'held'
-  const HOVER_AT_LOAD_START: readonly HoverAtLoadStart[] = ['none', 'held']
-  /** Title suffix: no hover hold is the plain case. */
-  const hoverVariant = (hover: HoverAtLoadStart) =>
-    hover === 'held' ? ' (hover hold as the load starts)' : ''
-  /** One wheel tick: wheel input ends a hover hold, and moves the reader only a little. */
+  /** An explicit hold makes the controller refuse the load's directional restore request. */
+  type HoldAtLoadStart = 'none' | 'held'
+  const HOLD_AT_LOAD_START: readonly HoldAtLoadStart[] = ['none', 'held']
+  const holdVariant = (hold: HoldAtLoadStart) =>
+    hold === 'held' ? ' (interaction hold as the load starts)' : ''
   const HOLD_ENDING_WHEEL_PX = 60
 
-  async function settleHover(page: Page, hover: HoverAtLoadStart) {
+  async function settleHold(page: Page, hold: HoldAtLoadStart) {
     const list = page.locator('[data-message-list]').first()
     const box = await list.boundingBox()
     expect(box, 'the message list must be laid out').not.toBeNull()
     const x = box!.x + box!.width / 2
     const y = box!.y + box!.height / 2
     await page.mouse.move(x, y)
-    if (hover === 'none') {
+    if (hold === 'none') {
       await page.mouse.wheel(0, -HOLD_ENDING_WHEEL_PX)
-      await page.waitForTimeout(400)
+      await settle(page)
       await syncEngineGeometry(page)
-      await expect(list, 'precondition: no hover hold once the reader has wheeled')
+      await expect(list, 'precondition: no interaction hold once the reader has wheeled')
         .not.toHaveAttribute('data-message-interaction')
       return
     }
@@ -3285,17 +3276,13 @@ test.describe('Insertion drift while scrolled up', () => {
       [x, y] as const,
     )
     expect(onMessage, 'precondition: the pointer must rest on a message').toBe(true)
-    // The controller refuses pointer intent while a scroll gesture still holds input (FLM-229), so
-    // nudge the pointer by a pixel until the hold starts.
-    let nudge = 0
-    await expect.poll(async () => {
-      nudge = nudge === 0 ? 1 : 0
-      await page.mouse.move(x + nudge, y)
-      return list.getAttribute('data-message-interaction')
-    }, {
-      message: 'precondition: a pointer resting on a message must start the hover hold',
-      timeout: 10_000,
-    }).not.toBeNull()
+    await settle(page)
+    await syncEngineGeometry(page)
+    await expect(list, 'passive hover must not acquire the fixture hold')
+      .not.toHaveAttribute('data-message-interaction')
+    await page.mouse.down()
+    await expect(list, 'precondition: a primary press must acquire the fixture hold')
+      .toHaveAttribute('data-message-interaction')
   }
 
   /**
@@ -3307,7 +3294,7 @@ test.describe('Insertion drift while scrolled up', () => {
    * scrolls that way while the load waits, until the rows the load started from have left the view,
    * and the arrival lands between the rows they now read and those rows: below the view after
    * scrolling up, above it after scrolling down. The rows the reader then sees are the ones tracked.
-   * `hover` says whether a hover hold is active as the load starts; every wheel lands where the
+   * `hover` says whether an interaction hold is active as the load starts; every wheel lands where the
    * pointer rests, which stays put. With `arrival: false` no delayed message lands, so only the
    * batch moves the window.
    */
@@ -3319,7 +3306,7 @@ test.describe('Insertion drift while scrolled up', () => {
       wheelDuringWaitPx?: number
       scrollBeforeArrival?: 'up' | 'down'
       kind?: ConversationKind
-      hover?: HoverAtLoadStart
+      hover?: HoldAtLoadStart
       arrival?: boolean
     } = {},
   ) {
@@ -3327,7 +3314,7 @@ test.describe('Insertion drift while scrolled up', () => {
     const hover = options.hover ?? 'none'
     const list = page.locator('[data-message-list]').first()
     await gateOlderLoad(page, kind)
-    await settleHover(page, hover)
+    await settleHold(page, hover)
 
     const before = await readView(page, kind)
     expect(before, 'the message list must be readable').not.toBeNull()
@@ -3358,7 +3345,7 @@ test.describe('Insertion drift while scrolled up', () => {
     if (hover === 'held') {
       await expect(
         list,
-        'precondition: the hover hold must still be active once the load has started',
+        'precondition: the interaction hold must still be active once the load has started',
       ).toHaveAttribute('data-message-interaction')
     }
 
@@ -3386,8 +3373,9 @@ test.describe('Insertion drift while scrolled up', () => {
       )
       await page.waitForTimeout(400)
       await syncEngineGeometry(page)
-      await expect(list, 'precondition: the reader\'s wheel must end any hover hold')
+      await expect(list, 'precondition: the reader\'s wheel must end any interaction hold')
         .not.toHaveAttribute('data-message-interaction')
+      if (hover === 'held') await page.mouse.up()
       const moved = await readView(page, kind)
       expect(moved, 'the message list must be readable').not.toBeNull()
       expect(
@@ -3518,7 +3506,7 @@ test.describe('Insertion drift while scrolled up', () => {
       await syncEngineGeometry(page)
     }
     await gateOlderLoad(page, kind)
-    await settleHover(page, 'none')
+    await settleHold(page, 'none')
 
     // A long message lands just under the top of the view, and the reader expands it.
     const start = await readView(page, kind)
@@ -3587,7 +3575,7 @@ test.describe('Insertion drift while scrolled up', () => {
       await startOlderLoad(page, kind)
       const below = await readTall()
       expect(below, 'the tall message must stay rendered above the view').not.toBeNull()
-      // The wheel lands where the pointer rests, which has started no hover hold.
+      // The wheel lands where the pointer rests, which has started no interaction hold.
       await page.mouse.wheel(0, Math.round(below!.top + depth))
       await page.waitForTimeout(400)
       await syncEngineGeometry(page)
@@ -3727,12 +3715,11 @@ test.describe('Insertion drift while scrolled up', () => {
   // arrival started held that off-screen row, which the arrival had moved, so the rows the reader
   // was reading jumped by the arrival's height though nothing landed above them.
   //
-  // FLM-210 (CI, chromium and webkit), hover hold: a pointer resting on a message as the load
-  // starts holds it (FLM-229), so the controller refuses the load's restore request. Ambient
+  // An explicit press as the load starts makes the controller refuse its restore request. Ambient
   // insertion handling still stood aside for the arrival, and nothing held the reader's rows
   // (invariant-14r read midway: 424 px).
-  for (const hover of HOVER_AT_LOAD_START) {
-    test(`invariant-14p${hoverVariant(hover)}: a reader who scrolls up while a load-older waits keeps their rows when a delayed message lands below them`, async ({ page }) => {
+  for (const hover of HOLD_AT_LOAD_START) {
+    test(`invariant-14p${holdVariant(hover)}: a reader who scrolls up while a load-older waits keeps their rows when a delayed message lands below them`, async ({ page }) => {
       await openScrolledUp(page)
       const r = await insertDuringInFlightLoadOlder(
         page,
@@ -3770,10 +3757,10 @@ test.describe('Insertion drift while scrolled up', () => {
 
   // FLM-210, review FLM-338 R1, at the resident bound: there the arrival also evicts the oldest
   // row, a window shift the pending load restores for at once, so it held the same off-screen row.
-  // With a hover hold, the load the hover hold refused leaves its batch to ambient insertion
+  // With an interaction hold, the load the interaction hold refused leaves its batch to ambient insertion
   // handling, and at the bound that batch also evicts the newest rows.
-  for (const hover of HOVER_AT_LOAD_START) {
-    test(`invariant-14q${hoverVariant(hover)}: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when a delayed message lands below them`, async ({ page }) => {
+  for (const hover of HOLD_AT_LOAD_START) {
+    test(`invariant-14q${holdVariant(hover)}: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when a delayed message lands below them`, async ({ page }) => {
       await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
       const r = await insertDuringInFlightLoadOlder(
         page,
@@ -3809,12 +3796,12 @@ test.describe('Insertion drift while scrolled up', () => {
     })
   }
 
-  // The reported defect, at the same bound with no arrival. A hover hold as the load starts makes
+  // The reported defect, at the same bound with no arrival. An interaction hold as the load starts makes
   // the controller refuse the load's restore, so the batch is ambient insertion handling's to hold.
   // At the bound the batch also evicts the newest rows, which moves the bottom row, and that
   // handling took the batch for a live-edge arrival: the rows the reader scrolled to left the view.
-  for (const hover of HOVER_AT_LOAD_START) {
-    test(`invariant-14w${hoverVariant(hover)}: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when the batch lands`, async ({ page }) => {
+  for (const hover of HOLD_AT_LOAD_START) {
+    test(`invariant-14w${holdVariant(hover)}: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when the batch lands`, async ({ page }) => {
       await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
       const r = await insertDuringInFlightLoadOlder(page, '', {
         scrollBeforeArrival: 'up',
@@ -3848,8 +3835,8 @@ test.describe('Insertion drift while scrolled up', () => {
   // Bug found in review of the hold above: the batch can also carry the row that was first and
   // backfill its archive id, which renames that row's handle. Looked up by that handle, the row
   // seemed evicted, so the batch was taken for a live-edge arrival again.
-  for (const hover of HOVER_AT_LOAD_START) {
-    test(`invariant-14y${hoverVariant(hover)}: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when the batch also backfills the first row's archive id`, async ({ page }) => {
+  for (const hover of HOLD_AT_LOAD_START) {
+    test(`invariant-14y${holdVariant(hover)}: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when the batch also backfills the first row's archive id`, async ({ page }) => {
       await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
       await watchNextOlderPage(page, 'room', { carryFirstRow: true })
       const r = await insertDuringInFlightLoadOlder(page, '', {
@@ -3889,8 +3876,8 @@ test.describe('Insertion drift while scrolled up', () => {
   // Bug found in review of the hold above: trimming the newest rows can leave one of the reader's
   // own older messages last. That moved bottom row was taken for the reader's send, which returned
   // them to the live edge although they sent nothing.
-  for (const hover of HOVER_AT_LOAD_START) {
-    test(`invariant-14z${hoverVariant(hover)}: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when the trimmed tail leaves their own older message last`, async ({ page }) => {
+  for (const hover of HOLD_AT_LOAD_START) {
+    test(`invariant-14z${holdVariant(hover)}: at the resident bound, a reader who scrolls up while a load-older waits keeps their rows when the trimmed tail leaves their own older message last`, async ({ page }) => {
       await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
       await ownNewestHalfOfRoom(page)
       await watchNextOlderPage(page, 'room')
@@ -3924,7 +3911,7 @@ test.describe('Insertion drift while scrolled up', () => {
     })
   }
 
-  // The same defect class without a hover hold: at the bound an arrival above the reader
+  // The same defect class without an interaction hold: at the bound an arrival above the reader
   // starts the load's restore, and the reader then scrolls on, which releases the load. Its batch
   // is again ambient insertion handling's to hold, and it evicts the newest rows.
   test('invariant-14x: at the resident bound, a reader who scrolls on while a load-older waits after an interior arrival keeps the rows they scrolled to', async ({ page }) => {
@@ -3958,8 +3945,8 @@ test.describe('Insertion drift while scrolled up', () => {
   // so the row the load started from goes above the view, and a delayed message lands between the
   // two. The restore held that row, which the arrival does not move, so it left the rows the reader
   // was reading pushed down by the arrival's height.
-  for (const hover of HOVER_AT_LOAD_START) {
-    test(`invariant-14r${hoverVariant(hover)}: a reader who scrolls down while a load-older waits keeps their rows when a delayed message lands above them`, async ({ page }) => {
+  for (const hover of HOLD_AT_LOAD_START) {
+    test(`invariant-14r${holdVariant(hover)}: a reader who scrolls down while a load-older waits keeps their rows when a delayed message lands above them`, async ({ page }) => {
       await openScrolledUp(page)
       const r = await insertDuringInFlightLoadOlder(
         page,

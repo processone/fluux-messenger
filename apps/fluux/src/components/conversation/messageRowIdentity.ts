@@ -189,6 +189,11 @@ function cssString(value: string): string {
   return `"${value.replace(/["\\\n\r\f]/g, char => `\\${char.charCodeAt(0).toString(16)} `)}"`
 }
 
+/** Mount keys distinguish room occurrences that legitimately share a presentation handle. */
+export function findMessageRowByKey(root: ParentNode, key: string): HTMLElement | null {
+  return root.querySelector<HTMLElement>(`[data-message-row-key=${cssString(key)}]`)
+}
+
 /** Accepts a presentation handle; normalize literal IDs with {@link messageTargetRowId} first. */
 export function findMessageRowElement(root: ParentNode, rowId: string): HTMLElement | null {
   const quoted = cssString(rowId)

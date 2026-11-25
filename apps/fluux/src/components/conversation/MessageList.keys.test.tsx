@@ -22,7 +22,7 @@ import { render } from '@testing-library/react'
 import { FlatMessageList as MessageList } from './MessageList.flat-test-utils'
 import type { BaseMessage, RoomMessage } from '@fluux/sdk'
 import { roomMessageFixture } from '@/test-utils/roomMessages'
-import { findMessageRowElement, messageRowId } from './messageRowIdentity'
+import { findMessageRowElement, findMessageRowByKey, messageRowId } from './messageRowIdentity'
 import { scrollStateManager } from '@/utils/scrollStateManager'
 
 vi.mock('react-i18next', () => ({
@@ -264,6 +264,9 @@ describe('MessageList — row keys resilient to id-less messages', () => {
     const rows = [...container.querySelectorAll<HTMLElement>('.message-row')]
     expect(rows.map((row) => row.textContent)).toEqual(['before the restart', 'after the restart'])
     expect(new Set(rows.map((row) => row.dataset.messageRowId)).size).toBe(1)
+    const keys = rows.map(row => row.dataset.messageRowKey!)
+    expect(new Set(keys).size).toBe(2)
+    expect(findMessageRowByKey(container, keys[1])).toBe(rows[1])
     expect(errorSpy.mock.calls.some((args) => args.some((arg) => typeof arg === 'string' && KEY_WARNING.test(arg)))).toBe(false)
   })
 

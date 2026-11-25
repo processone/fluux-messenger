@@ -99,7 +99,7 @@ export const MessageToolbar = memo(function MessageToolbar({
   const { t } = useTranslation()
   const [actionFocused, setActionFocused] = useState(false)
   const [pointerPressed, setPointerPressed] = useState(false)
-  // A keyboard-visible control must remain interactive until its native click is dispatched.
+  // A pressed control must stay visible when layout moves it away from a stationary pointer.
   useEffect(() => {
     if (!pointerPressed) return
     let releaseTimer: ReturnType<typeof setTimeout> | undefined
@@ -201,7 +201,7 @@ export const MessageToolbar = memo(function MessageToolbar({
     <div
       data-message-toolbar
       onMouseDownCapture={event => {
-        setPointerPressed(event.button === 0 && actionFocused)
+        setPointerPressed(event.button === 0)
         keyboardFocus.current = false
         setActionFocused(false)
       }}

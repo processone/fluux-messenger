@@ -72,7 +72,7 @@ it('H2 an ongoing text selection keeps its row while crossing jump-to-latest (fd
   s.frames(10)
   expect(bench.distanceFromEnd(), 'held: the arrival does not pull the list').toBeGreaterThan(5)
 
-  const fab = bench.element().parentElement!.querySelector<HTMLElement>('[data-interaction-bridge]')!
+  const fab = bench.element().parentElement!.querySelector<HTMLElement>('[data-fab="scroll-to-bottom"]')!
   fireEvent.mouseOut(row, { relatedTarget: fab })
   fireEvent.mouseMove(fab, { clientX: 400, clientY: 500, movementX: 1 })
   s.frames(20)

@@ -8,7 +8,8 @@ import type { AnchorPreservationRequest } from './scrollPositionModel'
 import type { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorBrowserAdapter'
 import { deriveReachabilityForDesired } from './scrollPositionFacts'
 import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
-import { findMessageRowElement } from './messageRowIdentity'
+import { getComposedActiveElement } from '@/hooks/composedFocus'
+import { findMessageRowElement, findMessageRowByKey } from './messageRowIdentity'
 
 /** Distinguishes fixed-anchor stimuli in frame-loop diagnostics. */
 export type AnchorPreservationLoopLabel =
@@ -122,19 +123,19 @@ export class AnchorPreservationBrowserAdapter {
       const rowGrowth = rowHeightPx === undefined ? 0 : Math.max(0, row.getBoundingClientRect().height - rowHeightPx)
       let clearance = 0
       if (typingClearance && (typingClearance.currentBandHeightPx > 0 || typingClearance.currentBandHeightPx !== typingClearance.bandHeightPx)) {
-        const { controlTopPx, controlBottomPx, tailMessageId } = typingClearance
+        const { controlTopPx, controlBottomPx, tailRowKey } = typingClearance
         const bubbleTop = bubble.getBoundingClientRect().top
         const baselineTop = offsetPx - rowGrowth
         const panel = row.querySelector<HTMLElement>('[data-message-panel]')
         const panelRect = panel?.getBoundingClientRect()
-        const focus = panel?.contains(document.activeElement) ? document.activeElement?.getBoundingClientRect() : null
+        const focus = panel?.contains(document.activeElement) ? getComposedActiveElement()?.getBoundingClientRect() : null
         const activeRect = panelRect && panelRect.height <= scroller.clientHeight ? panelRect : focus
         const activeTop = activeRect ? baselineTop + activeRect.top - bubbleTop : controlTopPx - rowGrowth
         const activeBottom = activeRect ? baselineTop + activeRect.bottom - bubbleTop : controlBottomPx - rowGrowth
         // The active control wins if the old tail and the control cannot fit together.
         const upper = Math.max(0, activeTop)
         clearance = Math.max(0, activeBottom - scroller.clientHeight)
-        const tail = tailMessageId ? findMessageRowElement(scroller, tailMessageId) : null
+        const tail = tailRowKey ? findMessageRowByKey(scroller, tailRowKey) : null
         const tailRect = tail?.getBoundingClientRect()
         const tailBottom = tailRect ? baselineTop + tailRect.bottom - bubbleTop : null
         if (tailRect && tailRect.height <= scroller.clientHeight && tailBottom !== null && tailBottom - scroller.clientHeight <= upper) {

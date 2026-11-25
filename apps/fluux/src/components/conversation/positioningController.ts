@@ -216,6 +216,7 @@ export class PositioningController {
   reconcileInteractionHold(input: {
     conversationId: string
     typingBandHeight?: number
+    controlBounds?: { topPx: number; bottomPx: number }
     executor: AnchorPreservationExecutor
   }): boolean {
     const active = this.model.active
@@ -225,11 +226,17 @@ export class PositioningController {
     this.runner.cancel('anchor-preservation', 'superseded')
     let request = active.request as InteractionPositionRequest
     const placement = request.desired.placement
-    if (placement.kind === 'top-offset' && placement.typingClearance && input.typingBandHeight !== undefined) {
-      request = { ...request, desired: { ...request.desired, placement: {
-        ...placement, typingClearance: { ...placement.typingClearance, currentBandHeightPx: input.typingBandHeight },
-      } } }
-      this.model = { ...this.model, active: { ...active, request } }
+    if (placement.kind === 'top-offset' && placement.typingClearance) {
+      const previous = placement.typingClearance
+      const currentBandHeightPx = input.typingBandHeight ?? previous.currentBandHeightPx
+      const controlTopPx = input.controlBounds?.topPx ?? previous.controlTopPx
+      const controlBottomPx = input.controlBounds?.bottomPx ?? previous.controlBottomPx
+      if (currentBandHeightPx !== previous.currentBandHeightPx || controlTopPx !== previous.controlTopPx || controlBottomPx !== previous.controlBottomPx) {
+        request = { ...request, desired: { ...request.desired, placement: {
+          ...placement, typingClearance: { ...previous, currentBandHeightPx, controlTopPx, controlBottomPx },
+        } } }
+        this.model = { ...this.model, active: { ...active, request } }
+      }
     }
     const run = installAnchorRun(this.runner, request, input.executor)
     this.model = advancePhaseIfCurrent(this.model, input.conversationId, request.generation, { kind: 'reconciling' })

@@ -17,6 +17,7 @@ import type { MessageRowRef } from '@fluux/sdk'
 import { useRef, useEffect, useLayoutEffect, useState, useCallback, type RefObject } from 'react'
 import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
 import { platform } from '@/platform'
+import { getComposedActiveElement } from '@/hooks/composedFocus'
 import type { ControllerFrameLoopRegistration } from './controllerFrameLoop'
 import { readUserScrollInput, useScrollContainerBinding } from './useScrollContainerBinding'
 import { useViewportResizeReconciliation } from './useViewportResizeReconciliation'
@@ -68,7 +69,7 @@ import {
 } from './scrollPositionModel'
 import { runScrollShadowSafely } from './scrollPositionShadow'
 import { findMessageTargetElement } from './messageTargetElement'
-import { findMessageRowElement, messageTargetRowId, readMessageRowId } from './messageRowIdentity'
+import { findMessageRowElement, findMessageRowByKey, messageTargetRowId, readMessageRowId } from './messageRowIdentity'
 import { VirtualRowGrowthBatcher } from './virtualRowGrowth'
 import { layoutEvents, passiveEvents, planCommit, type CommitEvent, type CommitFacts } from './commitPlan'
 
@@ -223,6 +224,8 @@ export interface UseMessageListScrollOptions {
    *  reconciled) without growing messageCount, so "did the bottom change?" must key off this
    *  id, not just the count — otherwise a just-sent message fails to stick to the bottom. */
   lastMessageId?: string
+  /** A room handle can name several occurrences; clearance must retain the visible one. */
+  lastMessageRowKey?: string
   /** When true, disables all auto-scroll behaviors (conversation switch scroll,
    *  ResizeObserver auto-scroll, new message scroll-to-bottom, target message scroll).
    *  Used by read-only preview views (search context, activity context) that manage
@@ -368,6 +371,7 @@ export function useMessageListScroll({
   typingBandRef,
   lastMessageIsOutgoing = false,
   lastMessageId,
+  lastMessageRowKey,
   staticMode = false,
   virtualizer,
   onLiveEdgeMeasured,
@@ -862,31 +866,39 @@ export function useMessageListScroll({
     rememberCurrentScrollSnapshot,
   })
 
+  const reconcileInteractionHold = useCallback((controlBounds?: { topPx: number; bottomPx: number }) =>
+    positioningControllerRef.current?.reconcileInteractionHold({
+      conversationId,
+      typingBandHeight: typingBandRef?.current?.getBoundingClientRect().height,
+      controlBounds,
+      executor: createAnchorPreservationExecutor('interaction-anchor'),
+    }) ?? false, [conversationId, typingBandRef, createAnchorPreservationExecutor])
+
   const reconcileLiveEdge = useCallback((
     trigger: string,
     rearmEligibleFromGeometry: boolean,
   ): boolean => {
     const controller = positioningControllerRef.current
     if (!controller) return false
-    if (controller.reconcileInteractionHold({ conversationId, executor: createAnchorPreservationExecutor('interaction-anchor') })) return true
+    if (reconcileInteractionHold()) return true
     return controller.reconcileLiveEdge({
       conversationId,
       executor: createLiveEdgeExecutor(trigger),
       rearmEligibleFromGeometry,
     })
-  }, [conversationId, createLiveEdgeExecutor, createAnchorPreservationExecutor])
+  }, [conversationId, createLiveEdgeExecutor, reconcileInteractionHold])
   live.reconcileLiveEdge = reconcileLiveEdge
 
   const reconcileMessageTargetAfterResize = useCallback(() => {
     const controller = positioningControllerRef.current
-    if (controller?.reconcileInteractionHold({ conversationId, executor: createAnchorPreservationExecutor('interaction-anchor') })) return true
+    if (reconcileInteractionHold()) return true
     const desired = controller?.snapshot().active?.request.desired
     if (!controller || desired?.kind !== 'message') return false
     return controller.reconcileMessageTargetAfterResize({
       conversationId,
       executor: buildExplicitTargetExecutor(desired.messageId, false),
     })
-  }, [conversationId, buildExplicitTargetExecutor, createAnchorPreservationExecutor])
+  }, [conversationId, buildExplicitTargetExecutor, reconcileInteractionHold])
 
 
   live.flushMeasuredRowGrowth = (measuredConversationId, measuredGrowth) => {
@@ -1231,18 +1243,24 @@ export function useMessageListScroll({
     const controller = positioningControllerRef.current
     if (staticMode || !scroller || !row || !bubble || !controller) return false
     const current = controller.snapshot().active?.request.desired
-    if (controller.hasInteractionHold() && current?.kind === 'anchor' && current.messageId === rowId) {
-      return controller.reconcileInteractionHold({ conversationId, executor: createAnchorPreservationExecutor('interaction-anchor') })
+    const viewportRect = scroller.getBoundingClientRect()
+    const rowRect = row.getBoundingClientRect()
+    const bubbleRect = bubble.getBoundingClientRect()
+    const activeRoot = document.activeElement
+    const focusedControl = row.contains(activeRoot) ? getComposedActiveElement() : null
+    const activeControl = control && control !== activeRoot ? control : focusedControl ?? control ??
+      row.querySelector<HTMLElement>('[data-message-toolbar]')
+    const controlRect = (activeControl ?? bubble).getBoundingClientRect()
+    if (controller.hasInteractionHold() && current?.kind === 'anchor' && current.messageId === rowId && current.placement.kind === 'top-offset') {
+      return reconcileInteractionHold({
+        topPx: current.placement.offsetPx + controlRect.top - bubbleRect.top,
+        bottomPx: current.placement.offsetPx + controlRect.bottom - bubbleRect.top,
+      })
     }
     observeViewportGeometry(conversationId, undefined, true)
     if (!flow.interactionSpace) flow.interactionSpace = { conversationId, scroller, padding: scroller.style.paddingBottom }
-    const viewportRect = scroller.getBoundingClientRect()
-    const rowRect = row.getBoundingClientRect()
-    const active = document.activeElement
-    const activeControl = control ?? (row.contains(active) ? active : null) ??
-      row.querySelector<HTMLElement>('[data-message-toolbar]')
-    const controlRect = (activeControl ?? bubble).getBoundingClientRect()
-    const tail = lastMessageId ? findMessageRowElement(scroller, lastMessageId) : null
+    const tail = lastMessageRowKey ? findMessageRowByKey(scroller, lastMessageRowKey) :
+      lastMessageId ? findMessageRowElement(scroller, lastMessageId) : null
     const tailRect = tail?.getBoundingClientRect()
     const wasAtLatest = windowAtLiveEdge !== false && getDistanceFromBottom(scroller) <= 1
     const bandHeight = typingBandRef?.current?.getBoundingClientRect().height ?? 0
@@ -1250,7 +1268,7 @@ export function useMessageListScroll({
     // Include the same one-pixel endpoint as the interaction FAB: fractional WebKit layout can
     // leave a pinned view there. A long row may extend above the scrollport while its bottom fits.
     const keepTailVisible = windowAtLiveEdge !== false && getDistanceFromBottom(scroller) <= 1 &&
-      rowId === lastMessageId && rowRect.bottom > viewportRect.top && rowRect.bottom <= viewportRect.bottom
+      row === tail && rowRect.bottom > viewportRect.top && rowRect.bottom <= viewportRect.bottom
     const request = controller.beginInteractionHold({
       conversationId,
       desired: {
@@ -1262,8 +1280,8 @@ export function useMessageListScroll({
             bandHeightPx: bandHeight, currentBandHeightPx: bandHeight,
             controlTopPx: controlRect.top - viewportRect.top,
             controlBottomPx: controlRect.bottom - viewportRect.top,
-            ...(wasAtLatest && tailRect && tailRect.height <= viewportRect.height && tailRect.bottom <= viewportRect.bottom + 1
-              ? { tailMessageId: lastMessageId } : {}),
+            ...(wasAtLatest && lastMessageRowKey && tailRect && tailRect.height <= viewportRect.height && tailRect.bottom <= viewportRect.bottom + 1
+              ? { tailRowKey: lastMessageRowKey } : {}),
           },
         },
       },
@@ -1281,24 +1299,6 @@ export function useMessageListScroll({
     live.onLiveEdgeMeasured?.(false)
     return true
   }
-
-  const reconcileTypingBand = useStableCallback(() => {
-    if (staticMode) return false
-    return positioningControllerRef.current?.reconcileInteractionHold({
-      conversationId,
-      typingBandHeight: typingBandRef?.current?.getBoundingClientRect().height,
-      executor: createAnchorPreservationExecutor('interaction-anchor'),
-    }) ?? false
-  })
-
-  useLayoutEffect(() => {
-    const band = typingBandRef?.current
-    if (!band || staticMode) return
-    // Commit events cover mounting/removal; measured wrapping can arrive without a React commit.
-    const observer = new ResizeObserver(reconcileTypingBand)
-    observer.observe(band)
-    return () => observer.disconnect()
-  }, [conversationId, staticMode, typingBandRef, reconcileTypingBand])
 
   const releaseInteractionHold = useStableCallback((resume: boolean) => {
     // Compositor movement may precede its scroll callback and pointer departure. Consume it before
@@ -2207,7 +2207,7 @@ export function useMessageListScroll({
     // the cap. It still moves every row below it, and the load's pending request makes the
     // controller refuse ambient insertion preservation, so the load restores its anchor for it now
     // and again when its batch lands (FLM-210). The coordinator reads it from the store's interior
-    // placement version. A load whose request the controller refused, under a hover hold for one,
+    // placement version. A load whose request the controller refused, under an interaction hold for one,
     // holds nothing: the coordinator drops it and ambient insertion preservation keeps the shift.
     if (decision.kind === 'waiting') {
       debugLog('PREPEND WAITING', {
@@ -2484,7 +2484,7 @@ export function useMessageListScroll({
   // the latchable isAtBottomRef) and a same-conversation check. Only the false→true edge re-pins;
   // typing stopping GROWS the scroller back, which the browser clamps scrollTop for on its own.
   const typingIndicator = ({ sameConversation, hadTypingIndicator }: { sameConversation: boolean; hadTypingIndicator: boolean }) => {
-    if (typingBandRef && reconcileTypingBand()) return
+    if (typingBandRef && positioningControllerRef.current?.hasInteractionHold()) return
     const scroller = scrollerRef.current
     const decision = decideTypingIndicator({
       staticMode,
@@ -2550,7 +2550,7 @@ export function useMessageListScroll({
   // Reconcile each committed layout, including arrivals that intentionally skip live-follow.
   const refreshInteractionHold = () => {
     if (!staticMode && positioningControllerRef.current?.hasInteractionHold()) {
-      reconcileTypingBand()
+      reconcileInteractionHold()
       refreshScrollToBottomFab()
     }
   }
