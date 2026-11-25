@@ -1692,6 +1692,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Utkast",
+        "searchDrafts": "Finn et utkast…",
         "moreMatches": "Flere treff",
         "open": "Åpne kommandopalett",
         "placeholder": "Gå til...",

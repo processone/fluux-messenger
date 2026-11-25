@@ -1692,6 +1692,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Drög",
+        "searchDrafts": "Finna drög…",
         "moreMatches": "Fleiri niðurstöður",
         "open": "Opna skipanaspjald",
         "placeholder": "Fara í...",

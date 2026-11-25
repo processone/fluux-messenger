@@ -1694,6 +1694,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Entwürfe",
+        "searchDrafts": "Entwurf suchen…",
         "moreMatches": "Weitere Treffer",
         "open": "Befehlspalette öffnen",
         "placeholder": "Gehe zu...",

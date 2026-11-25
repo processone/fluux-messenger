@@ -1694,6 +1694,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Mustandid",
+        "searchDrafts": "Otsi mustandit…",
         "moreMatches": "Veel vasteid",
         "open": "Ava käsupalett",
         "placeholder": "Mine...",

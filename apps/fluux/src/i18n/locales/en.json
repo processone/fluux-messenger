@@ -1692,6 +1692,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Drafts",
+        "searchDrafts": "Find a draft…",
         "moreMatches": "More matches",
         "open": "Open command palette",
         "placeholder": "Go to...",

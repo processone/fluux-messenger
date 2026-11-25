@@ -1696,6 +1696,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Черновики",
+        "searchDrafts": "Найти черновик…",
         "moreMatches": "Другие результаты",
         "open": "Открыть палитру команд",
         "placeholder": "Перейти к...",

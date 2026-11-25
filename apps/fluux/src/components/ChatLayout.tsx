@@ -192,7 +192,7 @@ function ModalHost({
   onStartConversation,
 }: {
   shortcuts: ReturnType<typeof useKeyboardShortcuts>
-  onSidebarViewChange: (view: SidebarView) => void
+  onSidebarViewChange: (view: SidebarView, targetJid?: string) => void
   onOpenSettings: () => void
   onToggleConsole: () => void
   onToggleShortcutHelp: () => void
@@ -1270,7 +1270,12 @@ function ChatLayoutContent() {
           subscription, so a toggle re-renders only the host, not the sidebar column. */}
       <ModalHost
         shortcuts={shortcuts}
-        onSidebarViewChange={handleSidebarViewChange}
+        onSidebarViewChange={(view, targetJid) => {
+          handleSidebarViewChange(view)
+          // On narrow screens the destination route, not just the active store, opens the composer.
+          if (targetJid && view === 'messages') navigateToMessages(targetJid, { replace: true })
+          if (targetJid && view === 'rooms') navigateToRooms(targetJid, { replace: true })
+        }}
         onOpenSettings={() => navigateToSettings()}
         onToggleConsole={toggleConsole}
         onToggleShortcutHelp={toggleShortcutHelp}

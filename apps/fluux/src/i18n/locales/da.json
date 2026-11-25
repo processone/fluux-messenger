@@ -1692,6 +1692,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Kladder",
+        "searchDrafts": "Find en kladde…",
         "moreMatches": "Flere resultater",
         "open": "Åbn kommandopalet",
         "placeholder": "Gå til...",

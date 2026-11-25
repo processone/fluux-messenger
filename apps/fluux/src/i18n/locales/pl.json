@@ -1698,6 +1698,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Wersje robocze",
+        "searchDrafts": "Znajdź wersję roboczą…",
         "moreMatches": "Więcej wyników",
         "open": "Otwórz paletę poleceń",
         "placeholder": "Przejdź do...",

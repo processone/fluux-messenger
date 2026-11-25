@@ -1700,6 +1700,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Abbozzi",
+        "searchDrafts": "Sib abbozz…",
         "moreMatches": "Aktar riżultati",
         "open": "Iftaħ il-palett tal-kmandi",
         "placeholder": "Mur għand...",

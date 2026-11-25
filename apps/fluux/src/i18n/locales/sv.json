@@ -1692,6 +1692,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Utkast",
+        "searchDrafts": "Hitta ett utkast…",
         "moreMatches": "Fler träffar",
         "open": "Öppna kommandopaletten",
         "placeholder": "Gå till...",

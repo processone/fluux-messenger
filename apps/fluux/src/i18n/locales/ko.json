@@ -1692,6 +1692,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "임시 메시지",
+        "searchDrafts": "임시 메시지 찾기…",
         "moreMatches": "추가 결과",
         "open": "명령 팔레트 열기",
         "placeholder": "이동...",

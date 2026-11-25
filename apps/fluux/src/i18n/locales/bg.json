@@ -1692,6 +1692,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Чернови",
+        "searchDrafts": "Търсене на чернова…",
         "moreMatches": "Още резултати",
         "open": "Отваряне на командната палитра",
         "placeholder": "Отиди на...",

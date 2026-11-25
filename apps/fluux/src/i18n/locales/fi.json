@@ -1692,6 +1692,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Luonnokset",
+        "searchDrafts": "Etsi luonnos…",
         "moreMatches": "Lisää osumia",
         "open": "Avaa komentopaletti",
         "placeholder": "Siirry...",

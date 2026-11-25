@@ -1694,6 +1694,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "טיוטות",
+        "searchDrafts": "חיפוש טיוטה…",
         "moreMatches": "תוצאות נוספות",
         "open": "פתיחת לוח הפקודות",
         "placeholder": "עבור אל...",

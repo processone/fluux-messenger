@@ -1696,6 +1696,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Ciorne",
+        "searchDrafts": "Caută o ciornă…",
         "moreMatches": "Mai multe rezultate",
         "open": "Deschide paleta de comenzi",
         "placeholder": "Mergi la...",

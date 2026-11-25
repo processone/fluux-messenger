@@ -1698,6 +1698,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Osnutki",
+        "searchDrafts": "Poišči osnutek…",
         "moreMatches": "Več zadetkov",
         "open": "Odpri ukazno paleto",
         "placeholder": "Pojdi na...",

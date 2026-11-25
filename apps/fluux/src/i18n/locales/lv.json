@@ -1695,6 +1695,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Melnraksti",
+        "searchDrafts": "Atrast melnrakstu…",
         "moreMatches": "Vairāk rezultātu",
         "open": "Atvērt komandu paleti",
         "placeholder": "Doties uz...",

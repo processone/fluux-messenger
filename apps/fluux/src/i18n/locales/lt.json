@@ -1696,6 +1696,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Juodraščiai",
+        "searchDrafts": "Rasti juodraštį…",
         "moreMatches": "Daugiau rezultatų",
         "open": "Atverti komandų paletę",
         "placeholder": "Eiti į...",

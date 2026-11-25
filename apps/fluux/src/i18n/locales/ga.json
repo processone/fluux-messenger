@@ -1698,6 +1698,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Dréachtaí",
+        "searchDrafts": "Aimsigh dréacht…",
         "moreMatches": "Tuilleadh torthaí",
         "open": "Oscail an phailéad orduithe",
         "placeholder": "Téigh go...",

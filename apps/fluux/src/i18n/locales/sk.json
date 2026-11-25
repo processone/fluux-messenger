@@ -1697,6 +1697,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Koncepty",
+        "searchDrafts": "Nájsť koncept…",
         "moreMatches": "Ďalšie výsledky",
         "open": "Otvoriť paletu príkazov",
         "placeholder": "Prejsť na...",

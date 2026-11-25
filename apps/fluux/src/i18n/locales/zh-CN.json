@@ -1692,6 +1692,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "草稿",
+        "searchDrafts": "查找草稿…",
         "moreMatches": "更多匹配项",
         "open": "打开命令面板",
         "placeholder": "转到…",

@@ -1700,6 +1700,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "المسودات",
+        "searchDrafts": "البحث عن مسودة…",
         "moreMatches": "المزيد من النتائج",
         "open": "فتح لوحة الأوامر",
         "placeholder": "الانتقال إلى...",

@@ -1692,6 +1692,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Concepten",
+        "searchDrafts": "Zoek een concept…",
         "moreMatches": "Meer resultaten",
         "open": "Opdrachtenpalet openen",
         "placeholder": "Ga naar...",

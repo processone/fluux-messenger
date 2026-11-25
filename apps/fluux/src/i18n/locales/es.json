@@ -1696,6 +1696,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Borradores",
+        "searchDrafts": "Buscar un borrador…",
         "moreMatches": "Más resultados",
         "open": "Abrir la paleta de comandos",
         "placeholder": "Ir a...",

@@ -1698,6 +1698,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Koncepty",
+        "searchDrafts": "Najít koncept…",
         "moreMatches": "Další výsledky",
         "open": "Otevřít příkazovou paletu",
         "placeholder": "Přejít na...",

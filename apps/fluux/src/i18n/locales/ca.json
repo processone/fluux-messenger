@@ -1696,6 +1696,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Esborranys",
+        "searchDrafts": "Cerca un esborrany…",
         "moreMatches": "Més resultats",
         "open": "Obre la paleta d'ordres",
         "placeholder": "Ves a...",

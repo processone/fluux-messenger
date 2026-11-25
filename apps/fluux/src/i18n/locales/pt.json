@@ -1696,6 +1696,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Rascunhos",
+        "searchDrafts": "Procurar um rascunho…",
         "moreMatches": "Mais resultados",
         "open": "Abrir a paleta de comandos",
         "placeholder": "Ir para...",

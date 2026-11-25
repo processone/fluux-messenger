@@ -1694,6 +1694,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Skice",
+        "searchDrafts": "Pronađi skicu…",
         "moreMatches": "Više rezultata",
         "open": "Otvori paletu naredbi",
         "placeholder": "Idi na...",

@@ -1696,6 +1696,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Чарнавікі",
+        "searchDrafts": "Знайсці чарнавік…",
         "moreMatches": "Іншыя вынікі",
         "open": "Адкрыць палітру каманд",
         "placeholder": "Перайсці да...",

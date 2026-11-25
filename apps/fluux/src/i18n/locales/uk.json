@@ -1696,6 +1696,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Чернетки",
+        "searchDrafts": "Знайти чернетку…",
         "moreMatches": "Інші результати",
         "open": "Відкрити палітру команд",
         "placeholder": "Перейти до...",

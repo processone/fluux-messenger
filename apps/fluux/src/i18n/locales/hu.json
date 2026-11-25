@@ -1692,6 +1692,8 @@
         }
     },
     "commandPalette": {
+        "drafts": "Piszkozatok",
+        "searchDrafts": "Piszkozat keresése…",
         "moreMatches": "További találatok",
         "open": "Parancspaletta megnyitása",
         "placeholder": "Ugrás...",
