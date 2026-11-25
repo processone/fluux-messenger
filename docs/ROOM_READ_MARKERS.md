@@ -37,14 +37,17 @@ state and keeps keyboard focus until saving finishes; repeated input does not
 start another save. Saving and account clearing are asynchronous. Conversion
 never reuses a pending view; a fresh focused observation is required afterward.
 
-Before a scoped clear seals legacy import, it converts existing unaffected
-accounts' preferences, preserving their effective choices. Clearing removes the
-affected account's consent, migration fence and watermarks. A single anonymous
-profile token prevents later legacy records from being imported as new consent
-and rejects edits paused before clearing. It contains no account identifier or
-read position; the empty coordination database contains neither. Watermark writes
-share the clearing transaction and recheck the generation after delayed
-self-marker resolution, so erased watermarks cannot return. A background read
+Scoped clearing removes the target account's records before attempting to convert
+unaffected preferences. Each conversion stores its self-contained choice before
+its compatibility fence, so either refused write leaves valid consent intact. Partial failure is reported;
+the anonymous token still invalidates prior work, but seals legacy import only
+when unaffected choices are safely preserved. A previously sealed profile stays
+sealed. Successful clearing prevents later legacy records from granting consent.
+The token contains no account identifier or read position; the empty coordination database contains neither. Watermark writes
+share the clearing transaction and merge the durable map rather than a cached
+copy. Archive requests carry their original erasure boundary through every replay
+path. Authorized publication saves its anchor and starts dispatch in one synchronous
+step, so an unattempted send cannot leave a saved anchor. A background read
 failure does not discard saved room choices.
 
 An older client reads the new format as off. A still-open older tab can write and

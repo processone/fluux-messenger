@@ -76,18 +76,25 @@ describe('performLogout', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
-  it('clears the captured logout account’s room data after clearing its session, without erasing another account', async () => {
+  it.each(['none', 'consent', 'migration'] as const)('clears the captured logout account without erasing another account (conversion refused: %s)', async failure => {
     const other = 'other@example.com'
     const packet = new DOMParser().parseFromString(roomFixture.message, 'application/xml')
     const archiveId = packet.getElementsByTagNameNS('urn:xmpp:sid:0', 'stanza-id')[0].getAttribute('id')!
     const watermark = JSON.stringify({ sent: { [roomFixture.room]: { archiveId, row: { id: packet.documentElement.getAttribute('id')!, stanzaId: archiveId } } } })
     const key = (account: string, kind: string) => `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([account, kind])}`
     for (const account of [JID, other]) {
-      localStorage.setItem(key(account, 'consent'), JSON.stringify({ version: 2, rooms: [roomFixture.room] }))
-      localStorage.setItem(key(account, 'migration'), '2')
+      localStorage.setItem(key(account, 'consent'), JSON.stringify(account === JID ? { version: 2, rooms: [roomFixture.room] } : { enabled: true, rooms: [roomFixture.room] }))
+      if (account === JID) localStorage.setItem(key(account, 'migration'), '2')
       localStorage.setItem(key(account, 'watermarks'), watermark)
+    }
+    if (failure !== 'none') {
+      const storage = localStorage
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, property) => property === 'setItem'
+        ? (name: string, value: string) => { if (name === key(other, failure)) throw new DOMException('Quota exhausted', 'QuotaExceededError'); target.setItem(name, value) }
+        : Reflect.get(target, property, target) }))
     }
     saveSession(JID, 'secret', SERVER)
     await performLogout({ disconnect: vi.fn().mockResolvedValue(undefined), jid: JID, shouldCleanLocalData: true })

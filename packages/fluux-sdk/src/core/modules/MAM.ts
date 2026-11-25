@@ -272,6 +272,10 @@ const PREVIEW_WALK_MAX_CONCURRENT = 2
  * @category Core
  */
 export class MAM extends BaseModule {
+  protected override captureQuery() {
+    return { ...super.captureQuery(), roomMarkersCurrent: this.deps.getRoomReadMarkers?.().captureReplayBoundary?.() ?? (() => false) }
+  }
+
   readonly correctionReceipts = new CorrectionReceipts(this.deps)
   private correctionQueries = new Map<string, CorrectionReconciliation>()
   private observedArchives = new Map<string, () => boolean>()
@@ -1066,7 +1070,7 @@ export class MAM extends BaseModule {
 
           // Resolve only after all targets in the page have been parsed.
           await this.resolvePeerMarkers(roomJid, rawEntries, [...allMessages, ...collectedMessages],
-            isForward ? { after: currentAfter } : { before: currentBefore })
+            session.roomMarkersCurrent, isForward ? { after: currentAfter } : { before: currentBefore })
           session.assertCurrent()
 
           if (!isForward) modifications.corrections.unshift(...modifications.corrections.splice(correctionStart))
@@ -1402,7 +1406,7 @@ export class MAM extends BaseModule {
         if (msg) collectedMessages.push(msg)
       }
 
-      await this.resolvePeerMarkers(roomJid, rawEntries, collectedMessages)
+      await this.resolvePeerMarkers(roomJid, rawEntries, collectedMessages, session.roomMarkersCurrent)
       session.assertCurrent()
       const originalBodies = collectedMessages.map(message => message.body)
       const unresolved = await this.applyModifications(collectedMessages, modifications, roomMessageAuthor, undefined, undefined,
@@ -2434,7 +2438,7 @@ export class MAM extends BaseModule {
       const mamRoomJids = mamRooms.map((r) => r.jid)
       await executeWithConcurrency(
         mamRoomJids,
-        (roomJid) => session.isCurrent() ? this.fetchPreviewForRoom(roomJid) : Promise.resolve(),
+        (roomJid) => session.isCurrent() ? this.fetchPreviewForRoom(roomJid, session.roomMarkersCurrent) : Promise.resolve(),
         concurrency
       )
 
@@ -2460,8 +2464,9 @@ export class MAM extends BaseModule {
    *
    * @param roomJid - The bare JID of the room
    */
-  async fetchPreviewForRoom(roomJid: string): Promise<void> {
+  async fetchPreviewForRoom(roomJid: string, replayCurrent?: () => boolean): Promise<void> {
     const session = this.captureQuery()
+    const watermarkCurrent = replayCurrent ?? session.roomMarkersCurrent
     const endUpdate = this.deps.stores?.connection?.beginUpdate?.(['rooms'])
     try {
       // Cache-first: try loading preview from IndexedDB before making a network query.
@@ -2469,7 +2474,7 @@ export class MAM extends BaseModule {
       const cached = await this.deps.stores?.room.loadPreviewFromCache(roomJid)
       session.assertCurrent()
       if (cached) {
-        void this.restorePeerMarkers(roomJid).catch(() => {})
+        void this.restorePeerMarkers(roomJid, watermarkCurrent).catch(() => {})
         return
       }
 
@@ -2504,7 +2509,7 @@ export class MAM extends BaseModule {
         const response = await this.deps.sendIQ(iq)
         session.assertCurrent()
         if (!response) return
-        const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, me)
+        const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, me, watermarkCurrent)
         session.assertCurrent()
         const latestMessage = messages.at(-1)
         if (latestMessage) this.deps.stores?.room.updateLastMessagePreview(roomJid, latestMessage)
@@ -3349,8 +3354,9 @@ export class MAM extends BaseModule {
 
   /** Cached edges can lie after every peer marker. Recover one latest page,
    * independent of forward catch-up, without timeline or coverage writes. */
-  private async restorePeerMarkers(roomJid: string): Promise<void> {
+  private async restorePeerMarkers(roomJid: string, replayCurrent?: () => boolean): Promise<void> {
     const session = this.captureQuery()
+    const watermarkCurrent = replayCurrent ?? session.roomMarkersCurrent
     for (const [room, replay] of this.peerMarkerReplays) {
       if (!replay.isCurrent()) this.peerMarkerReplays.delete(room)
     }
@@ -3370,7 +3376,7 @@ export class MAM extends BaseModule {
       if (page.kind !== 'page') return
       // Only resident/cache targets have passed through their normal content
       // owners. Raw page rows have not been decrypted and are not candidates.
-      await this.resolvePeerMarkers(roomJid, page.entries, [], { before: '' })
+      await this.resolvePeerMarkers(roomJid, page.entries, [], watermarkCurrent, { before: '' })
     }).finally(() => {
       // A queued room can stop qualifying; do not consume its page before a query.
       if (!queried && this.peerMarkerReplays.get(roomJid)?.task === task) this.peerMarkerReplays.delete(roomJid)
@@ -3380,19 +3386,19 @@ export class MAM extends BaseModule {
   }
 
   private async resolvePeerMarkers(roomJid: string, entries: readonly RawArchiveEntry[], messages: readonly RoomMessage[],
-    cursor?: { before?: string; after?: string }): Promise<void> {
+    watermarkCurrent: () => boolean, cursor?: { before?: string; after?: string }): Promise<void> {
     const markers = this.deps.getRoomReadMarkers?.()
     if (!markers) return
     const session = this.captureQuery()
     markers.recordArchiveOrder(roomJid, entries.map(entry => entry.archiveId).filter((id): id is string => !!id), cursor)
     for (const { messageEl } of entries) {
       if (!messageEl.getChild('displayed', NS_CHAT_MARKERS) || messageEl.getChild('body')) continue
-      await markers.receive(roomJid, messageEl, messages, true)
+      await markers.receive(roomJid, messageEl, messages, true, watermarkCurrent)
       session.assertCurrent()
     }
   }
 
-  private async resolveRoomArchiveEntries(entries: RawArchiveEntry[], roomJid: string, me: RoomSelf): Promise<RoomMessage[]> {
+  private async resolveRoomArchiveEntries(entries: RawArchiveEntry[], roomJid: string, me: RoomSelf, watermarkCurrent: () => boolean): Promise<RoomMessage[]> {
     const session = this.captureQuery()
     const messages: RoomMessage[] = []
     const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
@@ -3402,7 +3408,7 @@ export class MAM extends BaseModule {
         if (message) messages.push(message)
       }
     }
-    await this.resolvePeerMarkers(roomJid, entries, messages)
+    await this.resolvePeerMarkers(roomJid, entries, messages, watermarkCurrent)
     session.assertCurrent()
     const unresolved = await this.applyModifications(messages, modifications, roomMessageAuthor)
     session.assertCurrent()
@@ -3886,7 +3892,7 @@ export class MAM extends BaseModule {
       const message = this.parseRoomArchiveMessage(forwarded, roomJid, me, archiveId)
       if (message) messages.push(message)
     }
-    await this.resolvePeerMarkers(roomJid, entries, messages)
+    await this.resolvePeerMarkers(roomJid, entries, messages, session.roomMarkersCurrent)
     session.assertCurrent()
     await this.applyModifications(messages, modifications, roomMessageAuthor, from => getResource(from) || from)
     session.assertCurrent()
@@ -4006,7 +4012,7 @@ export class MAM extends BaseModule {
         await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, 'room', this.extractForwardedTimestamp(forwarded))
         if (!session.isCurrent()) return null
       }
-      const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, me)
+      const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, me, session.roomMarkersCurrent)
       if (!session.isCurrent()) return null
       result = messages.at(-1) ?? null
     } catch (error) {

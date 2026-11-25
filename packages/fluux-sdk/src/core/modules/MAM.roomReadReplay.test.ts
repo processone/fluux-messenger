@@ -1,8 +1,9 @@
+import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parse } from 'ltx'
 import type { Element } from '@xmpp/client'
 import { MAM } from './MAM'
-import { RoomReadMarkers, ROOM_MARKER_OCCUPANT_LIMIT } from './RoomReadMarkers'
+import { RoomReadMarkers, clearRoomReadMarkersLocalData, ROOM_READ_MARKERS_STORAGE_KEY, ROOM_MARKER_OCCUPANT_LIMIT } from './RoomReadMarkers'
 import fixture from './fixtures/roomReadReplay.json'
 import { createMockPresenceReader, createMockRoom, createMockStores } from '../test-utils'
 import type { ModuleDependencies } from './BaseModule'
@@ -27,7 +28,7 @@ const PEER_NICK = getResource(parse(fixture.marker).attrs.from)!
 // peer marker, then the newest cached row; forward catch-up misses the marker.
 // Only transport and store boundaries are stand-ins. The real resolver owns
 // the badge. Focused deterministic coverage runs with the archive checks.
-function harness(block?: 'discovery' | 'archive') {
+function harness(block?: 'discovery' | 'archive', self = false) {
   let release!: () => void
   let entered!: () => void
   const held = new Promise<void>(resolve => { release = resolve })
@@ -50,7 +51,7 @@ function harness(block?: 'discovery' | 'archive') {
   const actor = parse(fixture.marker).getChild('occupant-id', ACTOR_NS)!.attrs.id
   const features = parse(fixture.disco).getChild('query', 'http://jabber.org/protocol/disco#info')!
     .getChildren('feature').map(feature => feature.attrs.var)
-  const room = createMockRoom(fixture.room, { isPrivate: isPrivateRoom(features), isNonAnonymous: isNonAnonymousRoom(features), nickname: OWN_NICK, joined: true, isJoining: false,
+  const room = createMockRoom(fixture.room, { isPrivate: isPrivateRoom(features), isNonAnonymous: isNonAnonymousRoom(features), nickname: self ? PEER_NICK : OWN_NICK, joined: true, isJoining: false,
     occupants: new Map([
       [OWN_NICK, { nick: OWN_NICK, occupantId: newest.occupantId!, role: 'participant', affiliation: 'member' }],
       [PEER_NICK, { nick: PEER_NICK, occupantId: actor, role: 'moderator', affiliation: 'owner' }],
@@ -78,7 +79,7 @@ function harness(block?: 'discovery' | 'archive') {
     return parse(fixture.fin)
   })
   const deps: ModuleDependencies = { stores, presence: createMockPresenceReader(), sendIQ,
-    getCurrentJid: () => 'bob@localhost/browser', getXmpp: () => connection,
+    getCurrentJid: () => self ? 'alice@localhost/browser' : 'bob@localhost/browser', getXmpp: () => connection,
     sendStanza: vi.fn(), emit: vi.fn(), emitSDK: vi.fn(),
     registerMAMCollector: (id, collector) => { collectors.set(id, collector); return () => { collectors.delete(id) } },
   }
@@ -97,9 +98,50 @@ function harness(block?: 'discovery' | 'archive') {
 }
 
 beforeEach(() => { localStorage.clear(); setStorageScopeJid('bob@localhost') })
-afterEach(() => { setStorageScopeJid(null); vi.restoreAllMocks() })
+afterEach(() => { setStorageScopeJid(null); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('room read positions after cached reconnect', () => {
+  it.each(['cached preview', 'refresh preview', 'by ID', 'locate', 'cached catch-up', 'partial clear'] as const)('does not restore a self watermark from pre-clear %s work', async path => {
+    setStorageScopeJid('alice@localhost')
+    const h = harness('archive', true)
+    for (const row of h.rows) row.isOutgoing = false
+    const storage = localStorage
+    if (path === 'partial clear') {
+      const other = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify(['other@localhost', 'consent'])}`
+      storage.setItem(other, JSON.stringify({ enabled: true, rooms: [fixture.room] }))
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === other) throw new DOMException('Quota exhausted', 'QuotaExceededError'); target.setItem(name, value) }
+        : Reflect.get(target, key, target) }))
+    } else expect(await h.markers.setRoomEnabled(fixture.room, true)).toBe(true)
+    if (path === 'refresh preview') h.stores.room.loadPreviewFromCache.mockResolvedValue(null)
+    if (path === 'locate') h.stores.room.getMessageByArchiveId.mockResolvedValue(null)
+    const replayed = h.nextReplay()
+    const pending = path === 'by ID' ? h.mam.fetchRoomMessageById(fixture.room, h.newest.stanzaId!)
+      : path === 'locate' ? h.mam.locateRoomMessage(fixture.room, h.newest.stanzaId!)
+      : path === 'cached catch-up' ? h.mam.catchUpRoomHistory(fixture.room, h.rows)
+      : h.mam.fetchPreviewForRoom(fixture.room)
+    await h.waiting
+    try { expect(await clearRoomReadMarkersLocalData('alice@localhost')).toBe(path !== 'partial clear') } finally { vi.stubGlobal('localStorage', storage); h.release() }
+    await pending
+    await replayed
+    const watermark = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify(['alice@localhost', 'watermarks'])}`
+    expect(localStorage.getItem(watermark)).toBeNull()
+    expect(h.deps.sendStanza).not.toHaveBeenCalled()
+    h.markers.cancelPending()
+  })
+
+  it('keeps peer display when an old page completes after local erasure', async () => {
+    const h = harness('archive')
+    const replayed = h.nextReplay()
+    await h.mam.fetchPreviewForRoom(fixture.room)
+    await h.waiting
+    try { expect(await clearRoomReadMarkersLocalData('bob@localhost')).toBe(true) } finally { h.release() }
+    await replayed
+    expect(h.markers.readers(fixture.room, h.target)).toMatchObject([{ nick: PEER_NICK }])
+    expect(h.deps.sendStanza).not.toHaveBeenCalled()
+    h.markers.cancelPending()
+  })
+
   it('restores the marker before the cached edge once, outside the timeline and coverage', async () => {
     const h = harness()
     const pointer = h.room.readPointer
