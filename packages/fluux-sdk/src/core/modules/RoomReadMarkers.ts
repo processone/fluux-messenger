@@ -38,22 +38,31 @@ function clearFence() {
   return '!' + btoa(bytes).slice(0, -2)
 }
 let storageRevision = 0
-interface ClearGuard { generation: string | null; legacy: Record<string, string>; open: boolean }
+interface LegacyPermission { choice: string; generation?: string }
+interface ClearGuard { generation: string | null; legacy: Record<string, LegacyPermission>; open: boolean }
 function readClearGuard(): ClearGuard {
   const raw = localStorage.getItem(CLEAR_GENERATION_KEY)
   if (raw === null) return { generation: null, legacy: {}, open: true }
   try {
     const value = JSON.parse(raw) as { generation?: unknown; legacy?: unknown }
-    if (typeof value.generation === 'string' && !!value.generation && value.legacy && typeof value.legacy === 'object' && !Array.isArray(value.legacy)
-      && Object.values(value.legacy).every(entry => typeof entry === 'string')) {
-      return { generation: value.generation, legacy: value.legacy as Record<string, string>, open: false }
+    if (typeof value.generation === 'string' && !!value.generation && value.legacy && typeof value.legacy === 'object' && !Array.isArray(value.legacy)) {
+      const legacy: Record<string, LegacyPermission> = Object.create(null)
+      for (const [account, entry] of Object.entries(value.legacy)) {
+        if (typeof entry === 'string') legacy[account] = { choice: entry }
+        else {
+          const permission = entry as { choice?: unknown; generation?: unknown } | null
+          if (!permission || typeof permission.choice !== 'string' || (permission.generation !== undefined && (typeof permission.generation !== 'string' || !permission.generation))) return { generation: raw, legacy: {}, open: false }
+          legacy[account] = { choice: permission.choice, generation: permission.generation as string | undefined }
+        }
+      }
+      return { generation: value.generation, legacy, open: false }
     }
   } catch { /* Earlier guards stored only the generation. */ }
   return { generation: raw, legacy: {}, open: false }
 }
 function pruneLegacyPermission(account: string) {
   const guard = readClearGuard()
-  if (typeof guard.legacy[account] !== 'string') return
+  if (!guard.legacy[account]) return
   delete guard.legacy[account]
   localStorage.setItem(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy: guard.legacy }))
 }
@@ -133,13 +142,14 @@ function readSavedRoomConsent(account: string): SavedConsent {
   const previous = (retained || !history?.edits) && !cleared && record?.version === 2 && validRooms
   const legacy = (retained || fence === null) && record?.version === undefined && typeof record?.enabled === 'boolean' && validRooms
   const choice = previous || legacy ? JSON.stringify([previous ? 2 : 0, previous || record?.enabled === true, previous || record?.enabled === true ? oldRooms : []]) : undefined
-  const allowed = retained || guard.open || (choice !== undefined && guard.legacy[account] === choice)
+  const permission = guard.legacy[account]
+  const allowed = retained || guard.open || (choice !== undefined && permission?.choice === choice)
   const rooms = current || (allowed && (previous || (legacy && record?.enabled === true))) ? oldRooms.filter(room => !history?.revoked?.includes(room)) : []
   return {
     raw, fence, clearToken, rooms, cleared,
     generation: current ? record.generation as string : history?.generation
       ? raw !== null && continuity?.generation === history.generation ? history.generation : 'absent:' + history.generation
-      : choice !== undefined && allowed && continuity ? continuity.generation : JSON.stringify([account, clearToken, fenceEpoch ?? '']),
+      : choice !== undefined && allowed ? continuity?.generation ?? permission?.generation ?? JSON.stringify([account, clearToken, fenceEpoch ?? '']) : JSON.stringify([account, clearToken, fenceEpoch ?? '']),
     epoch: fenceEpoch ?? (current ? record.epoch as string : ''),
     edits: { ...(history?.edits ?? (current ? record.edits as Record<string, string> : {})) },
     revoked: history?.revoked ?? [],
@@ -235,7 +245,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       for (const kind of ['consent', 'watermarks', 'continuity'] as const) localStorage.removeItem(storageKey(scoped!, kind))
       writeBarrier(storageKey(scoped!, 'migration'), clearFence())
       let preserved = true
-      const legacy: Record<string, string> = Object.create(null)
+      const legacy: Record<string, LegacyPermission> = Object.create(null)
       const accounts: string[] = []
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i)
@@ -262,7 +272,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         } catch {
           preserved = false
           // Only unchanged, previously valid surviving choices may bypass sealing.
-          if (saved?.legacyChoice && !saved.linkedInput && saved.rooms.length && localStorage.getItem(storageKey(other, 'consent')) === saved.raw) legacy[other] = saved.legacyChoice
+          if (saved?.legacyChoice && !saved.linkedInput && saved.rooms.length && localStorage.getItem(storageKey(other, 'consent')) === saved.raw) legacy[other] = { choice: saved.legacyChoice, generation: saved.generation }
         }
       }
       if (!writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: generateUUID(), legacy }))) return false
@@ -585,7 +595,10 @@ export class RoomReadMarkers extends BaseModule {
     const unknownKey = this.roomKey('')
     let unreadable: { history?: ConsentFence; generation?: string; clearToken: string | null } | undefined
     if (!boundary) {
-      try { unreadable = { history: readConsentFence(localStorage.getItem(storageKey(account, 'migration'))), generation: readConsentContinuity(account)?.generation, clearToken: readClearGuard().generation } }
+      try {
+        const guard = readClearGuard()
+        unreadable = { history: readConsentFence(localStorage.getItem(storageKey(account, 'migration'))), generation: readConsentContinuity(account)?.generation ?? guard.legacy[account]?.generation, clearToken: guard.generation }
+      }
       catch { /* No readable ownership means suppression cannot yet be retired as superseded. */ }
     }
     let edits = (boundary?.rooms ?? []).map(room => this.beginConsentEdit(room, account, boundary))

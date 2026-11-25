@@ -72,6 +72,10 @@ the shared token, so another tab’s later conversion cannot release a failed Of
 including when its two reads fail after that reservation already exists.
 Scoped conversion reserves missing identity once; only existing input proof
 waits for preference commit before replacement.
+If the account-local identity reservation itself is refused, the exact legacy
+exception carries its surviving identity in the shared guard; later conversion
+and both Off setters keep that boundary. This fallback still requires a writable
+shared guard and does not replace the total-write-denial limitation above.
 Already-linked inputs need no duplicate exception in the shared clear guard.
 Pure migration never publishes from its first write.
 Refusal of a final On lift leaves its revocation in place without deleting other

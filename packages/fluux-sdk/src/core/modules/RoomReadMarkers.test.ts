@@ -1626,7 +1626,7 @@ describe('RoomReadMarkers', () => {
     } finally { observer.cancelPending(); vi.stubGlobal('localStorage', storage) }
   })
 
-  it.each([false, true].flatMap(refused => [false, true].flatMap(erased => (refused ? ['before Off', 'after Off'] : ['after Off']).map(order => [refused, erased, order] as const))))('keeps unreadable legacy all-Off after another account’s logout (conversion refused: %s, target erased: %s, reservation: %s)', async (refusedConversion, erased, order) => {
+  it.each([false, true].flatMap(refused => [false, true].flatMap(erased => (refused ? ['preference', 'reservation'] : ['none']).flatMap(failure => (refused ? ['before Off', 'after Off'] : ['after Off']).map(order => [refused, erased, order, failure] as const)))))('keeps unreadable legacy all-Off after another account’s logout (conversion refused: %s, target erased: %s, reservation: %s, refusal: %s)', async (refusedConversion, erased, order, failure) => {
     expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     await markers.viewed(roomJid, rows[0])
     expect(send).toHaveBeenCalledTimes(1)
@@ -1634,9 +1634,10 @@ describe('RoomReadMarkers', () => {
     localStorage.removeItem(migrationKey)
     localStorage.removeItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'continuity'])}`)
     const storage = localStorage
+    const proofKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'continuity'])}`
     const logoutOther = async () => {
       if (refusedConversion) vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
-        ? (name: string, value: string) => { if (name === consentKey) throw new DOMException('Conversion refused', 'SecurityError'); base.setItem(name, value) }
+        ? (name: string, value: string) => { if (name === (failure === 'reservation' ? proofKey : consentKey)) throw new DOMException('Conversion refused', 'SecurityError'); base.setItem(name, value) }
         : Reflect.get(base, key, base) }))
       try { expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(!refusedConversion) }
       finally { vi.stubGlobal('localStorage', storage) }
@@ -1697,6 +1698,46 @@ describe('RoomReadMarkers', () => {
       try { expect(fresh.isEnabledFor(roomJid)).toBe(false); expect(fresh.isEnabledFor(replayFixture.room)).toBe(false); await fresh.reload() }
       finally { fresh.cancelPending() }
     } finally { vi.stubGlobal('localStorage', storage) }
+  })
+
+  it.each((['room', 'all'] as const).flatMap(mode => [false, true].map(erased => [mode, erased] as const)))('keeps a waiting legacy %s Off when unrelated logout cannot reserve identity (target erased: %s)', async (mode, erased) => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    await markers.viewed(roomJid, rows[0])
+    expect(send).toHaveBeenCalledTimes(1)
+    const proofKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'continuity'])}`
+    localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid, replayFixture.room] }))
+    localStorage.removeItem(migrationKey)
+    localStorage.removeItem(proofKey)
+    const opening = pauseNextConsentOpen()
+    const pending = mode === 'room' ? markers.setRoomEnabled(roomJid, false) : markers.setEnabled(false)
+    await opening.ready
+    const storage = localStorage
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === proofKey) throw new DOMException('Reservation refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    try {
+      expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(false)
+      vi.stubGlobal('localStorage', storage)
+      if (erased) {
+        expect(await clearRoomReadMarkersLocalData(jid)).toBe(true)
+        const fresh = new RoomReadMarkers(dependencies, () => focused)
+        try { expect(await fresh.setRoomEnabled(roomJid, true)).toBe(true) } finally { fresh.cancelPending() }
+      }
+    } finally { vi.stubGlobal('localStorage', storage); opening.release() }
+    expect(await pending).toBe(true)
+    const other = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      await other.reload()
+      markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await markers.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(erased ? 2 : 1)
+      expect(other.isEnabledFor(roomJid)).toBe(erased)
+      expect(other.isEnabledFor(replayFixture.room)).toBe(!erased && mode === 'room')
+      expect(JSON.parse(storage.getItem(ROOM_READ_MARKERS_STORAGE_KEY + ':clear-generation')!).legacy[jid]).toBeUndefined()
+      expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+      await markers.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { other.cancelPending() }
   })
 
   it.each(['absent', 'reserved', 'linked'] as const)('writes only needed continuity proof during scoped conversion (%s)', async state => {
