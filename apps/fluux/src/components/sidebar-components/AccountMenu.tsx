@@ -242,6 +242,49 @@ export function AccountMenu({ onLogout, onOpenProfile, zoneRef }: AccountMenuPro
 
   const menuBody = (
     <>
+      <button type="button" role="menuitem" data-account-item onClick={run(() => setShowChangelog(true))} className={itemClass}>
+        <Sparkles className="size-4 flex-shrink-0" aria-hidden="true" />
+        <span className="truncate">{t('menu.whatsNew')}</span>
+      </button>
+      {!isMobile && (
+        <button type="button" role="menuitem" data-account-item onClick={run(openShortcutHelp)} className={itemClass}>
+          <Keyboard className="size-4 flex-shrink-0" aria-hidden="true" />
+          <span className="truncate">{t('menu.keyboardShortcuts')}</span>
+        </button>
+      )}
+      <a
+        href="https://github.com/processone/fluux-messenger/issues"
+        target="_blank"
+        rel="noopener noreferrer"
+        role="menuitem"
+        data-account-item
+        onClick={() => close()}
+        className={itemClass}
+      >
+        <Bug className="size-4 flex-shrink-0" aria-hidden="true" />
+        <span className="truncate">{t('menu.reportIssue')}</span>
+      </a>
+      <button type="button" role="menuitem" data-account-item onClick={run(() => setShowAbout(true))} className={itemClass}>
+        <Info className="size-4 flex-shrink-0" aria-hidden="true" />
+        <span className="truncate">{t('menu.about')}</span>
+      </button>
+
+      <div className="my-1 border-t border-fluux-hover" role="separator" />
+
+      <button type="button" role="menuitem" data-account-item onClick={run(onOpenProfile)} className={itemClass}>
+        <User className="size-4 flex-shrink-0" aria-hidden="true" />
+        <span className="truncate">{t('sidebar.viewProfile')}</span>
+      </button>
+
+      {!isMobile && advancedMode && (
+        <button type="button" role="menuitem" data-account-item onClick={run(toggleConsole)} className={itemClass}>
+          <Terminal className="size-4 flex-shrink-0" aria-hidden="true" />
+          <span className="truncate">{consoleOpen ? t('menu.hideConsole') : t('menu.showConsole')}</span>
+        </button>
+      )}
+
+      <div className="my-1 border-t border-fluux-hover" role="separator" />
+
       <div role="group" aria-label={presenceLabel}>
         {presenceOptions.map((option) => (
           <button
@@ -301,48 +344,6 @@ export function AccountMenu({ onLogout, onOpenProfile, zoneRef }: AccountMenuPro
           )}
         </div>
       </form>
-
-      <div className="my-1 border-t border-fluux-hover" role="separator" />
-
-      <button type="button" role="menuitem" data-account-item onClick={run(onOpenProfile)} className={itemClass}>
-        <User className="size-4 flex-shrink-0" aria-hidden="true" />
-        <span className="truncate">{t('sidebar.viewProfile')}</span>
-      </button>
-
-      <div className="my-1 border-t border-fluux-hover" role="separator" />
-
-      {!isMobile && advancedMode && (
-        <button type="button" role="menuitem" data-account-item onClick={run(toggleConsole)} className={itemClass}>
-          <Terminal className="size-4 flex-shrink-0" aria-hidden="true" />
-          <span className="truncate">{consoleOpen ? t('menu.hideConsole') : t('menu.showConsole')}</span>
-        </button>
-      )}
-      <button type="button" role="menuitem" data-account-item onClick={run(() => setShowChangelog(true))} className={itemClass}>
-        <Sparkles className="size-4 flex-shrink-0" aria-hidden="true" />
-        <span className="truncate">{t('menu.whatsNew')}</span>
-      </button>
-      {!isMobile && (
-        <button type="button" role="menuitem" data-account-item onClick={run(openShortcutHelp)} className={itemClass}>
-          <Keyboard className="size-4 flex-shrink-0" aria-hidden="true" />
-          <span className="truncate">{t('menu.keyboardShortcuts')}</span>
-        </button>
-      )}
-      <a
-        href="https://github.com/processone/fluux-messenger/issues"
-        target="_blank"
-        rel="noopener noreferrer"
-        role="menuitem"
-        data-account-item
-        onClick={() => close()}
-        className={itemClass}
-      >
-        <Bug className="size-4 flex-shrink-0" aria-hidden="true" />
-        <span className="truncate">{t('menu.reportIssue')}</span>
-      </a>
-      <button type="button" role="menuitem" data-account-item onClick={run(() => setShowAbout(true))} className={itemClass}>
-        <Info className="size-4 flex-shrink-0" aria-hidden="true" />
-        <span className="truncate">{t('menu.about')}</span>
-      </button>
 
       <div className="my-1 border-t border-fluux-hover" role="separator" />
 

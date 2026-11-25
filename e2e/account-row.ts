@@ -325,7 +325,7 @@ test.describe('account row (short phone viewport)', () => {
     const logout = sheet.getByRole('menuitem', { name: /log out/i })
     await logout.scrollIntoViewIfNeeded()
     await expect(logout).toBeInViewport()
-    await sheet.getByRole('menuitemradio', { name: 'Online' }).focus()
+    await sheet.getByRole('menuitem', { name: "What's New" }).focus()
     await page.keyboard.press('Shift+Tab')
     await expect(logout).toBeFocused()
     await expect(logout).toBeInViewport()
