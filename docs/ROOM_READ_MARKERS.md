@@ -79,7 +79,12 @@ shared guard and does not replace the total-write-denial limitation above.
 When local identity exists, the exception references its opaque, erasable proof
 ID instead of copying identity; a replacement proof cannot reactivate it. If continuity remains unwritable during Off, the exact
 shared exception can retain room revocations and ordering while preserving
-untouched choices; deleting local proof still invalidates earlier work.
+untouched choices; deleting local proof still invalidates earlier work. Repeated
+scoped conversion retains that exception’s revocations and ordering. Migration
+retires shared authority only after a linked replacement is saved, and delayed
+failure cleanup checks the account’s shared protection as well as its token.
+A retained exception links newly reserved local proof even when replacement
+is refused.
 Already-linked inputs need no duplicate exception in the shared clear guard.
 Pure migration never publishes from its first write.
 Refusal of a final On lift leaves its revocation in place without deleting other

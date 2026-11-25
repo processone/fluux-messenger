@@ -1873,6 +1873,132 @@ describe('RoomReadMarkers', () => {
     } finally { other.cancelPending() }
   })
 
+  async function prepareSharedRevocation(local: boolean, hold?: 'on' | 'open' | 'read', orderingOnly = false) {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    await markers.viewed(roomJid, rows[0])
+    expect(send).toHaveBeenCalledTimes(1)
+    const storage = localStorage
+    const proofKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'continuity'])}`
+    const legacy = JSON.stringify({ enabled: true, rooms: [roomJid, replayFixture.room] })
+    if (local) await keepLocalIdentityAfterRefusedConversion(legacy)
+    else {
+      storage.setItem(consentKey, legacy)
+      storage.removeItem(migrationKey)
+      storage.removeItem(proofKey)
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === proofKey) throw new DOMException('Proof refused', 'SecurityError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      try { expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(false) }
+      finally { vi.stubGlobal('localStorage', storage) }
+    }
+    const revoke = async () => {
+      const next = new RoomReadMarkers(dependencies, () => focused)
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === proofKey) throw new DOMException('Proof refused', 'SecurityError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      try { expect(await next.setRoomEnabled(roomJid, false)).toBe(false) }
+      finally { next.cancelPending(); vi.stubGlobal('localStorage', storage) }
+    }
+    if (orderingOnly) await revoke()
+    const opening = hold ? pauseNextConsentOpen(hold === 'open') : undefined
+    const pending = opening ? markers.setRoomEnabled(roomJid, true) : undefined
+    if (opening) await opening.ready
+    await revoke()
+    return { storage, proofKey, opening, pending }
+  }
+
+  it.each([false, true].flatMap(local => [false, true].map(held => [local, held] as const)))('preserves shared revocation through another refused scoped conversion (local proof: %s, older On: %s)', async (local, held) => {
+    const { storage, proofKey, opening, pending } = await prepareSharedRevocation(local, held ? 'on' : undefined)
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === proofKey || name === consentKey) throw new DOMException('Conversion refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    try { expect(await clearRoomReadMarkersLocalData('another@localhost')).toBe(false) }
+    finally { vi.stubGlobal('localStorage', storage); opening?.release() }
+    if (held) expect(await pending).toBe(false)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      await observer.reload()
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
+      expect(await observer.setRoomEnabled(roomJid, true)).toBe(true)
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { observer.cancelPending() }
+  })
+
+  it.each([false, true].flatMap(local => (['migration', 'On', 'Off'] as const).map(mode => [local, mode] as const)))('preserves shared choices until the replacement fence succeeds (local proof: %s, %s)', async (local, mode) => {
+    const { storage } = await prepareSharedRevocation(local)
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === migrationKey) throw new DOMException('Fence refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      try {
+        expect(await (mode === 'migration' ? markers.reload() : markers.setRoomEnabled(roomJid, mode === 'On'))).toBe(false)
+        expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
+        observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+        await observer.viewed(roomJid, rows[1])
+        expect(send).toHaveBeenCalledTimes(1)
+      } finally { await observer.reload(); vi.stubGlobal('localStorage', storage) }
+      await observer.reload()
+      expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(await observer.setRoomEnabled(roomJid, true)).toBe(true)
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { observer.cancelPending(); vi.stubGlobal('localStorage', storage) }
+  })
+
+  it.each([false, true])('keeps retained shared authority erasable after a replacement fence is refused (local proof: %s)', async local => {
+    const { storage } = await prepareSharedRevocation(local)
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === migrationKey) throw new DOMException('Fence refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    try { expect(await markers.reload()).toBe(false) }
+    finally { vi.stubGlobal('localStorage', storage) }
+    const legacy = storage.getItem(consentKey)!
+    const opening = pauseNextConsentOpen()
+    const pending = markers.setRoomEnabled(roomJid, true)
+    await opening.ready
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === migrationKey || name === ROOM_READ_MARKERS_STORAGE_KEY + ':clear-generation') throw new DOMException('Barrier refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    try { expect(await clearRoomReadMarkersLocalData(jid)).toBe(false); storage.setItem(consentKey, legacy) }
+    finally { vi.stubGlobal('localStorage', storage); opening.release() }
+    expect(await pending).toBe(false)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      await observer.reload()
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+    } finally { observer.cancelPending() }
+  })
+
+  it.each([false, true].flatMap(local => (['open', 'read'] as const).flatMap(mode => [false, true].map(orderingOnly => [local, mode, orderingOnly] as const))))('keeps failed On cleanup from erasing newer shared protection (local proof: %s, %s, ordering only: %s)', async (local, mode, orderingOnly) => {
+    const { storage, opening, pending } = await prepareSharedRevocation(local, mode, orderingOnly)
+    let deny = mode === 'read'
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'getItem'
+      ? (name: string) => { if (deny && name === consentKey) { deny = false; throw new DOMException('Read refused', 'SecurityError') } return base.getItem(name) }
+      : Reflect.get(base, key, base) }))
+    try { opening!.release(); expect(await pending).toBe(false) }
+    finally { vi.stubGlobal('localStorage', storage); opening!.release() }
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      await observer.reload()
+      expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(await observer.setRoomEnabled(roomJid, true)).toBe(true)
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { observer.cancelPending() }
+  })
+
   it.each(['absent', 'reserved', 'linked'] as const)('writes only needed continuity proof during scoped conversion (%s)', async state => {
     const storage = localStorage
     const proofKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'continuity'])}`
