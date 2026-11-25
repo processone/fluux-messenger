@@ -239,7 +239,7 @@ for (const lang of ['en', 'fr'] as const) {
       await expect(description).toBeVisible()
       await capture(page, `search-empty-${lang}-${mode}`)
       await field.fill('quartzbadger')
-      await expect(page.getByText(words.search.noResults, { exact: true })).toBeVisible()
+      await expect(page.getByText(words.search.panel.localEmpty, { exact: true })).toBeVisible()
       await expect(description).toBeVisible()
       await expect(field).toBeFocused()
       await expect(page.getByRole('button', { name: words.search.searchServer, exact: true })).toBeVisible()
