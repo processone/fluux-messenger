@@ -1309,6 +1309,10 @@ html, body {
   }
 }
 
+[data-date-pill][data-find-covered] {
+  visibility: hidden;
+}
+
 /* Utility: guarantee a comfortable >=44px touch hit area for icon-only or */
 /* compact buttons WITHOUT enlarging the glyph or changing desktop density. */
 /* The rule is inert on hovering/fine-pointer devices (mouse): only on touch */

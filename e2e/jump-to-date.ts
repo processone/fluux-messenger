@@ -427,3 +427,61 @@ for (const kind of ['chat', 'room'] as const) {
     expect(row.y).toBeLessThan(bounds.y + bounds.height)
   })
 }
+
+// Find keeps its front layer; only day controls completely covered by it leave the keyboard route.
+for (const kind of ['chat', 'room'] as const) {
+  for (const width of [320, 390]) {
+    test(`${kind}: Find excludes covered day pills at ${width}px and preserves the menu fallback`, async ({ page, browserName }) => {
+      await setup(page, kind)
+      await showFloating(page)
+      await page.keyboard.press('ControlOrMeta+f')
+      const find = thread(page).locator('[data-find-on-page-bar]')
+      await expect(find).toBeVisible()
+      await floating(page).click()
+      await expect(dialog(page).getByLabel('Date', { exact: true })).toBeFocused()
+      await page.setViewportSize({ width, height: 844 })
+      await settle(page)
+      const coverage = await floating(page).evaluate(element => {
+        const pill = element.getBoundingClientRect()
+        const bar = element.closest('[data-conversation-thread]')!.querySelector('[data-find-on-page-bar]')!.getBoundingClientRect()
+        return { covered: bar.left <= pill.left && bar.right >= pill.right && bar.top <= pill.top && bar.bottom >= pill.bottom, pill: pill.toJSON(), bar: bar.toJSON() }
+      })
+      expect(coverage.covered).toBe(true)
+      const floatingName = (await floating(page).getAttribute('aria-label'))!
+      await page.keyboard.press('Escape')
+      await expect(dialog(page)).toHaveCount(0)
+      await shot(page, `find-${browserName}-${kind}-${width}-covered`)
+      await expect(actions(page)).toBeFocused()
+      await expect(floating(page)).not.toBeVisible()
+      await expect(thread(page).getByRole('button', { name: floatingName, exact: true }).and(floating(page))).toHaveCount(0)
+      await list(page).evaluate(element => { element.scrollTop = 0 })
+      await settle(page)
+      await separator(page).evaluate(element => {
+        const scroller = element.closest('[data-message-list]')!
+        const bar = element.closest('[data-conversation-thread]')!.querySelector('[data-find-on-page-bar]')!
+        scroller.scrollTop += element.getBoundingClientRect().top - bar.getBoundingClientRect().top - 2
+      })
+      await settle(page)
+      const separatorName = (await separator(page).getAttribute('aria-label'))!
+      await expect(separator(page)).not.toBeVisible()
+      await expect(thread(page).getByRole('button', { name: separatorName, exact: true }).and(separator(page))).toHaveCount(0)
+      await page.keyboard.press('Tab')
+      await page.keyboard.press('Tab')
+      await expect(separator(page)).not.toBeFocused()
+      await openMenu(page)
+      await page.keyboard.press('Escape')
+      await expect(dialog(page)).toHaveCount(0)
+      await expect(actions(page)).toBeFocused()
+      await find.getByRole('button', { name: 'Close (Esc)', exact: true }).click()
+      await expect(find).toHaveCount(0)
+      await expect(separator(page)).toBeVisible()
+      await tabTo(page, separator(page))
+      await page.keyboard.press('Enter')
+      await expect(dialog(page)).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(dialog(page)).toHaveCount(0)
+      await expect(separator(page)).toBeFocused()
+      await test.info().attach('find-covered-date-controls', { body: JSON.stringify({ kind, width, coverage, floatingName, separatorName }), contentType: 'application/json' })
+    })
+  }
+}

@@ -1,4 +1,4 @@
-import { useCallback, useRef, type ComponentProps, type ReactNode, type RefObject } from 'react'
+import { useCallback, useLayoutEffect, useRef, type ComponentProps, type ReactNode, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Upload } from 'lucide-react'
 import { MediaAutoloadProvider } from '@/contexts'
@@ -9,7 +9,7 @@ import { ReactionMentions } from './ReactionMentions'
 import { EasterEggMentions } from './EasterEggMentions'
 import { EasterEggAnimation } from '../easter-eggs/EasterEggAnimation'
 import { JumpToDateDialog } from './JumpToDateDialog'
-import { focusConversationActions, isDatePillVisible } from './datePillFocus'
+import { focusConversationActions, isDatePillVisible, observeDatePillsCoveredByFind } from './datePillFocus'
 
 interface ConversationThreadProps {
   /** `layout` from useConversationThread. */
@@ -44,6 +44,9 @@ export function ConversationThread({
   const { t } = useTranslation()
   const { id, find } = thread
   const rootRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (find.isOpen && rootRef.current) return observeDatePillsCoveredByFind(rootRef.current)
+  }, [find.isOpen, id])
   const restoreDateFocus = useCallback((opener: HTMLElement | null, jumped: boolean) => {
     const root = rootRef.current
     // An old dialog's cleanup must not focus a conversation opened in the meantime.
