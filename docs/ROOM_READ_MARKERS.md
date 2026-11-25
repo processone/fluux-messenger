@@ -49,11 +49,15 @@ a writable account fence and reports incomplete cleanup. When all barrier writes
 are denied and no usable prior barrier exists, durable revocation cannot be
 guaranteed; cleanup reports failure rather than claiming completion. Successful
 cleanup leaves no target-account data in the guard; failed cleanup can retain
-protection records. The empty coordination database contains no account data.
+protection records. Full clearing retries its shared seal after ordinary data frees
+storage. A later fresh choice preserves the fallback epoch independently of the
+consent record, so an older overwrite cannot reset the erasure boundary.
+The empty coordination database contains no account data.
 
 Watermark writes share the clearing transaction and merge the durable map rather
 than a cached copy. Room archive operations capture their erasure boundary once
-and carry it through cursor fallbacks, hydration, paging and queued catch-up.
+and carry it through cursor fallbacks, hydration, paging and queued catch-up,
+including both cache reads in normal room activation.
 Foreground and fresh-session callers capture before loading their cache.
 Generic chat archive work does not capture room consent. Discovery retry drains
 the original observation after refreshing consent; it never creates a new view.

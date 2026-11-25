@@ -71,7 +71,7 @@ interface SavedConsent {
 function readSavedRoomConsent(account: string): SavedConsent {
   const raw = localStorage.getItem(storageKey(account, 'consent'))
   const fence = localStorage.getItem(storageKey(account, 'migration'))
-  const cleared = fence?.startsWith('!') ?? false
+  const fenceEpoch = fence?.startsWith('!') ? fence : undefined
   const guard = readClearGuard()
   const clearToken = guard.generation
   let value: unknown = null
@@ -81,8 +81,9 @@ function readSavedRoomConsent(account: string): SavedConsent {
     typeof room === 'string' && !!room && getBareJid(room) === room)
   const validEdits = record?.edits && typeof record.edits === 'object' && !Array.isArray(record.edits)
     && Object.values(record.edits).every(edit => typeof edit === 'string')
-  const current = !cleared && record?.version === 3 && validRooms && typeof record.generation === 'string' && !!record.generation
-    && typeof record.epoch === 'string' && validEdits
+  const current = record?.version === 3 && validRooms && typeof record.generation === 'string' && !!record.generation
+    && typeof record.epoch === 'string' && validEdits && (!fenceEpoch || record.epoch === fenceEpoch)
+  const cleared = !!fenceEpoch && !current
   const oldRooms = validRooms ? [...new Set(record!.rooms as string[])] : []
   const previous = !cleared && record?.version === 2 && validRooms
   const legacy = fence === null && record?.version === undefined && typeof record?.enabled === 'boolean' && validRooms
@@ -104,14 +105,19 @@ function roomConsentValue(saved: SavedConsent, rooms: string[], edits = saved.ed
 function persistRoomConsent(account: string, saved: SavedConsent, rooms: string[], edits = saved.edits, epoch = saved.epoch) {
   if (saved.cleared) {
     pruneLegacyPermission(account)
+    if (epoch !== saved.epoch) localStorage.setItem(storageKey(account, 'migration'), epoch)
     localStorage.setItem(storageKey(account, 'consent'), roomConsentValue(saved, rooms, edits, epoch))
-    localStorage.setItem(storageKey(account, 'migration'), '2')
     return
   }
   // Attempt both revocation barriers even when one refuses its write.
   let failed: { error: unknown } | undefined
   try { pruneLegacyPermission(account) } catch (error) { failed = { error } }
-  try { localStorage.setItem(storageKey(account, 'migration'), '2') } catch (error) { failed = { error } }
+  try {
+    const fence = localStorage.getItem(storageKey(account, 'migration'))
+    if (fence?.startsWith('!')) {
+      if (fence !== epoch) localStorage.setItem(storageKey(account, 'migration'), epoch)
+    } else localStorage.setItem(storageKey(account, 'migration'), '2')
+  } catch (error) { failed = { error } }
   if (failed) throw failed.error
   localStorage.setItem(storageKey(account, 'consent'), roomConsentValue(saved, rooms, edits, epoch))
 }
@@ -202,7 +208,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       } catch { /* Non-account feature keys are still erased. */ }
     }
     // Replace the seal before deleting any existing protection.
-    const sealed = writeBarrier(CLEAR_GENERATION_KEY, generateUUID())
+    let sealed = writeBarrier(CLEAR_GENERATION_KEY, generateUUID())
     if (!sealed) {
       try { for (const account of Object.keys(readClearGuard().legacy)) accounts.add(account) }
       catch { /* Unreadable permissions cannot be reconstructed; the clear reports failure. */ }
@@ -212,7 +218,10 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       if (!sealed && fences.has(key)) continue
       localStorage.removeItem(key)
     }
-    if (!sealed) {
+    if (!sealed) sealed = writeBarrier(CLEAR_GENERATION_KEY, generateUUID())
+    if (sealed) {
+      for (const key of fences) localStorage.removeItem(key)
+    } else {
       for (const account of accounts) writeBarrier(storageKey(account, 'migration'), clearFence())
       return false
     }
@@ -351,7 +360,7 @@ export class RoomReadMarkers extends BaseModule {
             rooms = rooms.filter(room => room !== change.room)
             if (change.enabled) rooms.push(change.room)
             edits[change.room] = generateUUID()
-          } else if (change) { rooms = []; epoch = generateUUID() }
+          } else if (change) { rooms = []; epoch = saved.epoch.startsWith('!') ? clearFence() : generateUUID() }
           changed = true
           persistRoomConsent(account, saved, rooms, edits, epoch)
           this.refusedConsent.delete(account)

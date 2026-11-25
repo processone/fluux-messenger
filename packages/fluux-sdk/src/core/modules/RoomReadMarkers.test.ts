@@ -1168,6 +1168,57 @@ describe('RoomReadMarkers', () => {
     finally { fresh.cancelPending() }
   })
 
+  it('retries full sealing after freeing space and rejects an unlisted opening On', async () => {
+    const prefix = ROOM_READ_MARKERS_STORAGE_KEY + ':'
+    const guard = prefix + 'clear-generation'
+    const otherConsent = `${prefix}${JSON.stringify(['other@localhost', 'consent'])}`
+    localStorage.setItem(otherConsent, JSON.stringify({ enabled: true, rooms: [replayFixture.room] }))
+    const held = pauseNextConsentOpen()
+    const pending = markers.setRoomEnabled(roomJid, true)
+    await held.ready
+    const storage = localStorage
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) => key === 'setItem'
+      ? (name: string, value: string) => {
+        if (name === guard && target.getItem(otherConsent) !== null) throw new DOMException('Quota exhausted', 'QuotaExceededError')
+        target.setItem(name, value)
+      } : Reflect.get(target, key, target) }))
+    let cleared = false
+    try {
+      expect(storage.getItem(consentKey)).toBeNull()
+      cleared = await clearRoomReadMarkersLocalData(null, true)
+    } finally { vi.stubGlobal('localStorage', storage); held.release() }
+    expect(await pending).toBe(false)
+    expect(cleared).toBe(true)
+    expect(markers.isEnabledFor(roomJid)).toBe(false)
+  })
+
+  it.each([['scoped', 'opening On'], ['full', 'opening On'], ['scoped', 'own replay'], ['full', 'own replay']] as const)('keeps the %s fallback epoch after fresh choice and a legacy overwrite for %s', async (kind, work) => {
+    const captured = useCapturedSelfReading()
+    localStorage.setItem(consentKey, JSON.stringify({ enabled: false, rooms: [] }))
+    const origin = markers.captureReplayBoundary()
+    const held = pauseNextConsentOpen()
+    const pending = markers.setRoomEnabled(roomJid, true)
+    await held.ready
+    const storage = localStorage
+    const guard = ROOM_READ_MARKERS_STORAGE_KEY + ':clear-generation'
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === guard) throw new DOMException('Quota exhausted', 'QuotaExceededError'); target.setItem(name, value) }
+      : Reflect.get(target, key, target) }))
+    let watermark: string | null = null
+    try {
+      expect(await clearRoomReadMarkersLocalData(jid, kind === 'full')).toBe(false)
+      expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(true)
+      expect(await markers.setEnabled(false)).toBe(true)
+      expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(true)
+      localStorage.setItem(consentKey, JSON.stringify({ enabled: false, rooms: [] }))
+      await markers.receive(roomJid, captured.reflected, [], true, origin)
+      watermark = storage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'watermarks'])}`)
+    } finally { vi.stubGlobal('localStorage', storage); held.release() }
+    const result = await pending
+    if (work === 'opening On') expect(result).toBe(false)
+    else expect(watermark).toBeNull()
+  })
+
   it.each(['scoped', 'full'] as const)('reports total barrier write denial during %s erasure', async kind => {
     const captured = useCapturedSelfReading()
     const old = JSON.stringify({ enabled: true, rooms: [roomJid] })

@@ -379,7 +379,7 @@ describe('room read positions after cached reconnect', () => {
     expect(localStorage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify(['alice@localhost', 'watermarks'])}`)).toBeNull()
   })
 
-  it.each([['activation', false], ['activation', true], ['join', false], ['join', true], ['fresh-session', false], ['fresh-session', true]] as const)('carries the production %s cache-read origin into own watermark intake (cleared: %s)', async (path, cleared) => {
+  it.each([['activation', false], ['activation', true], ['activation-latest', false], ['activation-latest', true], ['activation-around', false], ['activation-around', true], ['join', false], ['join', true], ['fresh-session', false], ['fresh-session', true]] as const)('carries the production %s cache-read origin into own watermark intake (cleared: %s)', async (path, cleared) => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     const h = harness(undefined, true)
     roomStore.getState().reset()
@@ -387,7 +387,7 @@ describe('room read positions after cached reconnect', () => {
     h.room.supportsMAM = true
     roomStore.getState().addRoom(h.room)
     const client = createMockClient()
-    if (path === 'activation') client.isConnected.mockReturnValue(false)
+    if (path.startsWith('activation')) client.isConnected.mockReturnValue(false)
     Object.assign(client.internal.mam, {
       captureRoomReplay: h.mam.captureRoomReplay.bind(h.mam),
       catchUpRoomHistory: h.mam.catchUpRoomHistory.bind(h.mam),
@@ -397,7 +397,14 @@ describe('room read positions after cached reconnect', () => {
     const gate = new Promise<void>(resolve => { release = resolve })
     const entered = new Promise<void>(resolve => { reached = resolve })
     const load = roomStore.getState().loadMessagesFromCache
-    roomStore.setState({ loadMessagesFromCache: async () => { reached(); await gate; return [h.target] } })
+    const around = roomStore.getState().loadMessagesAroundFromCache
+    roomStore.setState({
+      loadMessagesFromCache: async () => {
+        if (path !== 'activation-around') { reached(); await gate }
+        return [h.target]
+      },
+      loadMessagesAroundFromCache: async () => { reached(); await gate; return [h.target] },
+    })
     if (path === 'join') roomStore.getState().setActiveRoom(fixture.room)
     connectionStore.getState().setServerInfo({ identities: [], domain: 'localhost', features: [MAM_NS] })
     const cleanup = path === 'fresh-session' ? setupBackgroundSyncSideEffects(client) : setupRoomSideEffects(client)
@@ -405,18 +412,21 @@ describe('room read positions after cached reconnect', () => {
     try {
       simulateFreshSession(client)
       client._emitSDK('room:joined', { roomJid: fixture.room, joined: true })
+      const activation = path === 'activation-latest' || path === 'activation-around'
+        ? roomStore.getState().activateRoom(fixture.room) : undefined
       if (path === 'activation') roomStore.getState().setActiveRoom(fixture.room)
       if (path === 'fresh-session') await vi.advanceTimersByTimeAsync(MAM_ROOM_CATCHUP_DELAY_MS)
       await entered
       if (cleared) expect(await clearRoomReadMarkersLocalData('alice@localhost')).toBe(true)
       client.isConnected.mockReturnValue(true)
       release()
+      await activation
       await replayed
       const saved = JSON.parse(localStorage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify(['alice@localhost', 'watermarks'])}`) ?? 'null')
       if (cleared) expect(saved).toBeNull()
       else expect(saved?.sent?.[fixture.room]?.archiveId).toBe(h.target.stanzaId)
       expect(h.deps.sendStanza).not.toHaveBeenCalled()
-    } finally { release(); cleanup(); roomStore.setState({ loadMessagesFromCache: load }); h.markers.cancelPending() }
+    } finally { release(); cleanup(); roomStore.setState({ loadMessagesFromCache: load, loadMessagesAroundFromCache: around }); h.markers.cancelPending() }
   })
 
 
