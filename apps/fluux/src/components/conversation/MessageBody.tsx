@@ -57,8 +57,6 @@ export interface MessageBodyProps {
   isCurrentMatch?: boolean
   /** Stable message identity, so code blocks can remember their "Wrap lines" state */
   wrapIdentity?: WrapIdentity
-  /** Non-text trailing UI; excluded from message text and search highlighting. */
-  trailingContent?: ReactNode
 }
 
 /**
@@ -88,7 +86,6 @@ export const MessageBody = memo(function MessageBody({
   highlightTerms,
   isCurrentMatch,
   wrapIdentity,
-  trailingContent,
 }: MessageBodyProps) {
   const { t } = useTranslation()
   const mentionColor = mentionColors ? (nick: string) => mentionColors.get(nick)
@@ -103,7 +100,6 @@ export const MessageBody = memo(function MessageBody({
     return (
       <div className="text-fluux-muted italic" title={moderationReason || undefined}>
         {label}
-        {trailingContent}
       </div>
     )
   }
@@ -134,7 +130,6 @@ export const MessageBody = memo(function MessageBody({
             className="not-italic"
           />
         )}
-        {trailingContent}
       </div>
     )
   }
@@ -144,7 +139,6 @@ export const MessageBody = memo(function MessageBody({
     <div dir="auto" data-msg-text className="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]">
       {wrap(noStyling ? body : renderStyledMessage(body, mentions, nickname, knownNicks, isDarkMode, mentionColor, wrapIdentity))}
       {isEdited && <EditedIndicator originalBody={originalBody} />}
-      {trailingContent}
     </div>
   )
 })

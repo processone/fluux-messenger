@@ -1961,6 +1961,12 @@
         "roomDescription": "Send bare i bekreftede, ikke-oppførte, ikke-anonyme rom kun for medlemmer, med færre enn 20 tilstedeværende med stabile romidentiteter. Krypterte meldinger er utelatt.",
         "masterOff": "Hovedbryteren under Personvern er av. Rommet deler ikke leseposisjonen din før du slår den på.",
         "metadata": "Rommet og de tilstedeværende kan se leseaktiviteten din. Arkivet kan lagre disse metadataene. Deaktivering stopper fremtidige oppdateringer, men fjerner ikke lagrede markører.",
+        "readThroughHere": "Lest hit:",
+        "others_one": "+{{count}} annen",
+        "others_other": "+{{count}} andre",
+        "readerCount_one": "{{count}} leser",
+        "readerCount_other": "{{count}} lesere",
+        "exactPosition": "Personer med senere leseposisjoner er ikke med i denne listen.",
         "readThrough": "Lest til og med denne meldingen",
         "readers": "Lest til og med denne meldingen: {{names}}",
         "saveFailed": "Kunne ikke lagre valget. Deling forblir av. Kontroller tilgangen til lagring før du slår det på igjen."

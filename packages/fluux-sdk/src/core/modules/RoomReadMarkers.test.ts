@@ -469,6 +469,16 @@ describe('RoomReadMarkers', () => {
     expect(markers.readers(roomJid, rows[1])).toHaveLength(0)
   })
 
+  it('excludes this account across device nicknames using its verified occupant identity', async () => {
+    // Source: the request to ignore our own marker on every device. The room's
+    // occupant ID is account-wide; a device nickname must not turn self into a peer.
+    room.occupants.set('Alice phone', { ...room.occupants.get('Alice')!, nick: 'Alice phone' })
+    iq.mockResolvedValue(disco(features, room.occupants.size))
+    await markers.receive(roomJid, marker('archive-b', 'alice-id', 'Alice phone'))
+    await markers.receive(roomJid, marker('archive-b'))
+    expect(markers.readers(roomJid, rows[1])).toEqual([{ occupantId: 'bob-id', nick: 'Bob', avatar: undefined }])
+  })
+
   it('reuses negative discovery and coalesces concurrent markers within the same roster epoch', async () => {
     iq.mockResolvedValue(disco([...features, 'muc_public']))
     await Promise.all([markers.receive(roomJid, marker('archive-a')), markers.receive(roomJid, marker('archive-b'))])

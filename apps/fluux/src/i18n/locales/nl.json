@@ -1961,6 +1961,12 @@
         "roomDescription": "Alleen verzenden in geverifieerde, niet-vermelde, niet-anonieme kamers uitsluitend voor leden, met minder dan 20 aanwezigen met vaste kameridentiteiten. Versleutelde berichten zijn uitgesloten.",
         "masterOff": "De hoofdschakelaar onder Privacy is uitgeschakeld. Deze kamer deelt je leespositie pas nadat je die hebt ingeschakeld.",
         "metadata": "De kamer en de aanwezigen kunnen je leesactiviteit zien. Het archief kan deze metadata bewaren. Uitschakelen stopt toekomstige updates, maar verwijdert opgeslagen markeringen niet.",
+        "readThroughHere": "Gelezen tot hier:",
+        "others_one": "+{{count}} andere",
+        "others_other": "+{{count}} anderen",
+        "readerCount_one": "{{count}} lezer",
+        "readerCount_other": "{{count}} lezers",
+        "exactPosition": "Mensen met latere leesposities staan niet in deze lijst.",
         "readThrough": "Gelezen tot en met dit bericht",
         "readers": "Gelezen tot en met dit bericht: {{names}}",
         "saveFailed": "De keuze kon niet worden opgeslagen. Delen blijft uitgeschakeld. Controleer de toegang tot opslag voordat je het opnieuw inschakelt."

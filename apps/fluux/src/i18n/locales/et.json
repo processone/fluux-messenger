@@ -1963,6 +1963,12 @@
         "roomDescription": "Saada ainult kontrollitud, loendis mitteolevates, mitteanonüümsetes liikmetele mõeldud tubades, kus on alla 20 kohalolija püsivate toaidentiteetidega. Krüptitud sõnumid on välistatud.",
         "masterOff": "Privaatsuse pealüliti on väljas. Tuba ei jaga sinu lugemisjärge enne selle sisselülitamist.",
         "metadata": "Tuba ja kohalolijad näevad sinu lugemistegevust. Arhiiv võib neid metaandmeid säilitada. Väljalülitamine peatab uued uuendused, kuid ei eemalda salvestatud märgiseid.",
+        "readThroughHere": "Siiani loetud:",
+        "others_one": "+{{count}} teine",
+        "others_other": "+{{count}} teist",
+        "readerCount_one": "{{count}} lugeja",
+        "readerCount_other": "{{count}} lugejat",
+        "exactPosition": "Hilisema lugemiskohaga inimesi selles loendis ei ole.",
         "readThrough": "Loetud selle sõnumini",
         "readers": "Loetud selle sõnumini: {{names}}",
         "saveFailed": "Valikut ei saanud salvestada. Jagamine jääb välja lülitatuks. Enne uuesti sisselülitamist kontrolli ligipääsu salvestusruumile."
