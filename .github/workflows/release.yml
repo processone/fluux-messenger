@@ -686,18 +686,26 @@ jobs:
       - name: Build web app
         run: npm run build
 
+      # Same 404 fallback as the Live Demo, so the zip matches what GitHub Pages serves.
+      - name: Setup 404 fallback for SPA routing
+        run: cp apps/fluux/dist/index.html apps/fluux/dist/404.html
+
       - name: Create web zip
         run: |
           VERSION="${RELEASE_TAG#v}"
           ZIP_NAME="fluux-messenger-${VERSION}-web.zip"
           cd apps/fluux/dist
           zip -r "../../../${ZIP_NAME}" .
+          # Unversioned copy so deployments can always fetch the same asset name.
+          cp "../../../${ZIP_NAME}" ../../../fluux-messenger-web.zip
           echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
 
       - name: Upload web zip to Release
         uses: softprops/action-gh-release@v3.0.4
         with:
-          files: ${{ env.ZIP_NAME }}
+          files: |
+            ${{ env.ZIP_NAME }}
+            fluux-messenger-web.zip
           tag_name: ${{ env.RELEASE_TAG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
