@@ -97,7 +97,7 @@ async function main() {
     assert.equal(typeof tray.available, 'boolean')
     log({ nativeCommand: 'get_tray_status', result: tray })
     const logDirectory = await client.command('POST', `/session/${client.id}/execute/async`, {
-      script: 'const done = arguments[arguments.length - 1]; window.__TAURI_INTERNALS__.invoke("get_log_directory").then(done, e => done({error: String(e)}));', args: [],
+      script: 'const done = arguments[arguments.length - 1]; window.__TAURI_INTERNALS__.invoke("get_default_log_directory").then(done, e => done({error: String(e)}));', args: [],
     })
     assert.equal(typeof logDirectory, 'string')
     assert.ok(config.nativeProfiles.some(base => contains(base, logDirectory)), 'Native diagnostics escaped the owned profile')
@@ -108,7 +108,7 @@ async function main() {
       const records = contents.trim().split('\n').map(line => JSON.parse(line))
       assert.ok(records.length)
       await writeFile(join(evidence, 'anomalies.jsonl'), contents)
-      log({ nativeLogDirectory: logDirectory, anomalyFiles: names, records: records.length })
+      log({ nativeDefaultLogDirectory: logDirectory, anomalyFiles: names, records: records.length })
     }, 'Isolated frontend diagnostics were not preserved')
     await capture('login.png')
     log({ assertions: 'Actual Windows login input, Tab focus and read-only native IPC passed' })

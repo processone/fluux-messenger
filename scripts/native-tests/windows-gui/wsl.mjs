@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { spawn, execFileSync } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdir, readFile, writeFile, rm, realpath } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, realpath } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { encodedPowerShell, parseOptions, psLiteral } from './common.mjs'
 import { canonicalDestination, contains, requireOutside } from './paths.mjs'
+import { acquireWorkspace, cleanWorkspace, releaseWorkspace, startWorkspaceJob } from './workspace.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const powershell = '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
@@ -32,39 +33,48 @@ async function main() {
     requireOutside(workspace, evidence, 'Evidence')
   }
   const marker = join(workspace, '.fluux-gui-workspace.json')
-  if (mode === 'build') {
-    assert.equal(command('git', ['-C', root, 'status', '--porcelain']), '', 'Commit the harness before building')
-    await mkdir(workspace)
-    await writeFile(marker, JSON.stringify({ kind: 'fluux-windows-gui', workspace }))
-    const commit = command('git', ['-C', root, 'rev-parse', 'HEAD'])
-    execFileSync('git', ['-C', root, 'archive', '--format=tar', '-o', join(workspace, 'source.tar'), commit], { timeout: 120000 })
-    await writeFile(join(workspace, 'source.json'), JSON.stringify({ commit }))
+  const ownership = { kind: 'fluux-windows-gui', workspace, guardVersion: 1 }
+  if (mode === 'clean') {
+    assert.deepEqual(JSON.parse(await readFile(marker, 'utf8')), ownership)
+    return cleanWorkspace(workspace)
   }
-  assert.deepEqual(JSON.parse(await readFile(marker, 'utf8')), { kind: 'fluux-windows-gui', workspace })
-  if (mode === 'clean') { await rm(workspace, { recursive: true }); return }
-  if (evidence) await mkdir(evidence)
-  const source = JSON.parse(await readFile(join(workspace, 'source.json'), 'utf8'))
-  assert.equal(source.commit, command('git', ['-C', root, 'rev-parse', 'HEAD']), 'Rebuild the workspace for the current committed version')
-  // Windows Node keeps driver traffic on Windows loopback even with WSL NAT networking.
-  const script = mode === 'build' ? join(root, 'scripts/native-tests/windows-gui/windows.mjs') : join(workspace, 'source/scripts/native-tests/windows-gui/windows.mjs')
-  const argv = [windows(script), mode, '--workspace', windows(workspace), '--commit', source.commit]
-  if (evidence) argv.push('--evidence', windows(evidence))
-  if (options['--fail-after-session']) argv.push('--fail-after-session')
-  const child = spawn(powershell, encodedPowerShell(`$ErrorActionPreference='Stop'; & (Get-Command node.exe).Source ${argv.map(psLiteral).join(' ')}; exit $LASTEXITCODE`), { stdio: 'inherit' })
-  const cancel = () => {
-    const path = evidence ? join(evidence, 'cancel') : mode === 'build' ? join(workspace, 'build.cancel') : undefined
-    if (path) writeFile(path, '').catch(error => console.error(error.message))
-    else child.kill()
-  }
-  process.on('SIGINT', cancel)
-  process.on('SIGTERM', cancel)
+  if (mode === 'build') assert.equal(command('git', ['-C', root, 'status', '--porcelain']), '', 'Commit the harness before building')
+  const lease = await acquireWorkspace(workspace)
   try {
-    const [code, signal] = await once(child, 'exit')
-    assert.equal(signal, null, `Windows supervisor was terminated: ${signal}`)
-    process.exitCode = code ?? 1
-  } finally {
-    process.off('SIGINT', cancel)
-    process.off('SIGTERM', cancel)
-  }
+    if (mode === 'build') {
+      await mkdir(workspace)
+      await writeFile(marker, JSON.stringify(ownership), { flag: 'wx' })
+      const commit = command('git', ['-C', root, 'rev-parse', 'HEAD'])
+      execFileSync('git', ['-C', root, 'archive', '--format=tar', '-o', join(workspace, 'source.tar'), commit], { timeout: 120000 })
+      await writeFile(join(workspace, 'source.json'), JSON.stringify({ commit }))
+    }
+    assert.deepEqual(JSON.parse(await readFile(marker, 'utf8')), ownership)
+    if (evidence) await mkdir(evidence)
+    const source = JSON.parse(await readFile(join(workspace, 'source.json'), 'utf8'))
+    assert.equal(source.commit, command('git', ['-C', root, 'rev-parse', 'HEAD']), 'Rebuild the workspace for the current committed version')
+    // Windows Node keeps driver traffic on Windows loopback even with WSL NAT networking.
+    const script = mode === 'build' ? join(root, 'scripts/native-tests/windows-gui/windows.mjs') : join(workspace, 'source/scripts/native-tests/windows-gui/windows.mjs')
+    const argv = [windows(script), mode, '--workspace', windows(workspace), '--commit', source.commit, '--lease-token', lease.token]
+    if (evidence) argv.push('--evidence', windows(evidence))
+    if (options['--fail-after-session']) argv.push('--fail-after-session')
+    // Windows Node can outlive the bridge, so an interrupted handoff must retain the lease.
+    await startWorkspaceJob(lease)
+    const child = spawn(powershell, encodedPowerShell(`$ErrorActionPreference='Stop'; & (Get-Command node.exe).Source ${argv.map(psLiteral).join(' ')}; exit $LASTEXITCODE`), { stdio: 'inherit' })
+    const cancel = () => {
+      const path = evidence ? join(evidence, 'cancel') : mode === 'build' ? join(workspace, 'build.cancel') : undefined
+      if (path) writeFile(path, '').catch(error => console.error(error.message))
+      else child.kill()
+    }
+    process.on('SIGINT', cancel)
+    process.on('SIGTERM', cancel)
+    try {
+      const [code, signal] = await once(child, 'exit')
+      assert.equal(signal, null, `Windows supervisor was terminated: ${signal}`)
+      process.exitCode = code ?? 1
+    } finally {
+      process.off('SIGINT', cancel)
+      process.off('SIGTERM', cancel)
+    }
+  } finally { await releaseWorkspace(lease) }
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1 })

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { execFileSync } from 'node:child_process'
 import { hash } from 'node:crypto'
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { checkBuild, cleanupProfiles, parseOptions } from './common.mjs'
@@ -15,6 +15,7 @@ test('build record binds bytes, reviewed commit, identity and TLS features', asy
   try {
     const app = join(directory, 'native-executable')
     await copyFile(process.execPath, app)
+    await chmod(app, 0o700)
     const record = {
       identity: config.identifier, features: config.build.features, bundled: false,
       commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
@@ -33,6 +34,9 @@ test('build record binds bytes, reviewed commit, identity and TLS features', asy
     await save({ ...record, features: devConfig.build.features })
     await assert.rejects(checkBuild(app, record.commit))
     await save({ ...record, sha256: hash('sha256', await readFile(new URL('./common.mjs', import.meta.url))) })
+    await assert.rejects(checkBuild(app, record.commit), /Executable differs/)
+    await save(record)
+    await appendFile(app, Buffer.from([0]))
     await assert.rejects(checkBuild(app, record.commit), /Executable differs/)
   } finally { await rm(directory, { recursive: true }) }
 })

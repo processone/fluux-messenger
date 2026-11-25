@@ -89,7 +89,7 @@ jobs:
         run: npm run test:run --workspace=@xmpp/fluux
 
       - name: Windows GUI harness provenance contracts
-        run: node --test scripts/native-tests/windows-gui/common.test.mjs scripts/native-tests/windows-gui/paths.test.mjs scripts/test-local-windows.test.mjs
+        run: node --test scripts/native-tests/windows-gui/common.test.mjs scripts/native-tests/windows-gui/paths.test.mjs scripts/native-tests/windows-gui/workspace.test.mjs scripts/test-local-windows.test.mjs
 
   # Informational: lists rewritten test expectations, removed protection and
   # growth of files over 2,000 lines in the job summary. It is its own job and

@@ -78,7 +78,7 @@ The native journey finds login, types `alex@example.org` without submitting,
 sends Tab, verifies password focus, and invokes the read-only `get_tray_status`
 command, asserting its two boolean fields. It saves `login.png`, `identity.json`,
 `session.jsonl`, `native.log`, `anomalies.jsonl`, `worker-result.json`, `job.json`
-and `cleanup.json`. The smoke reads the effective native log directory and requires
+and `cleanup.json`. The smoke reads the native default sidecar directory and requires
 the frontend's startup diagnostics to appear inside an owned native profile.
 The screenshot shows the test address and focused password field. Additional
 `login-initial.png` and `login-address.png` frames show the preceding states; the protocol
@@ -99,6 +99,9 @@ schemes. The **compile-time** `windows-gui-test` mode instead:
 - puts native logs under the test identity rather than the shared log directory.
 
 Normal app builds do not enable this feature and keep their existing behavior.
+The ordinary sidecar retains its default directory even when `--log-file` redirects
+native tracing. The GUI test's default sidecar directory uses its disposable identity;
+no frontend filesystem permission is widened.
 The launcher exclusively creates the test identity directories under Windows'
 actual roaming/local application-data folders. It refuses any existing directory,
 including leftovers, instead of reading or deleting it. WebView2 receives its own
@@ -152,9 +155,16 @@ Keep `build.log` from the workspace if diagnosing a failed build. The build work
 captures subprocess diagnostics there explicitly and the parent replays the file
 to the WSL command's output, including when that output is redirected.
 
-Do not clean a workspace while its smoke or build is running. Evidence is kept
-outside it and survives cleanup. No source, dependency or process should be left
-running after a completed smoke.
+Build, preflight, run and clean share an exclusive workspace lease. The lease file
+is a sibling of the workspace, so recursive removal cannot unlock it halfway through.
+The launcher marks the Windows handoff before starting it and releases the lease
+only after confirmed job shutdown, or when no app/build worker was started.
+An unconfirmed stop retains the lease and blocks clean as well as another run.
+Do not remove that file to bypass the guard: first reconcile the job evidence and
+confirm that the owned processes have exited. Workspaces from older harness versions
+without the guard-version marker are refused rather than deleted blindly.
+Evidence stays outside the workspace and survives cleanup. No source, dependency
+or process should be left running after a completed smoke.
 
 ## Checks and proof limits
 

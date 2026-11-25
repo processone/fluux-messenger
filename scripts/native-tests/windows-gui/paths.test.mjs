@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mkdtemp, mkdir, rm, symlink } from 'node:fs/promises'
+import { mkdtemp, mkdir, realpath, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { canonicalDestination, contains, requireOutside } from './paths.mjs'
@@ -28,8 +28,8 @@ test('canonical parents expose output aliases into a checkout or disposable work
     const workspaceAlias = join(root, 'workspace-alias')
     await symlink(checkout, checkoutAlias, 'junction')
     await symlink(workspace, workspaceAlias, 'junction')
-    const canonicalCheckout = await canonicalDestination(checkout)
-    const canonicalWorkspace = await canonicalDestination(workspace)
+    const canonicalCheckout = await realpath(checkout)
+    const canonicalWorkspace = await realpath(workspace)
     assert.throws(() => requireOutside(canonicalCheckout, join(canonicalCheckout, 'new-output'), 'Evidence'), /outside/)
     assert.equal(await canonicalDestination(join(checkoutAlias, 'new-output')), join(canonicalCheckout, 'new-output'))
     assert.equal(await canonicalDestination(join(workspaceAlias, 'new-output')), join(canonicalWorkspace, 'new-output'))

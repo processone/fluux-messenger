@@ -57,9 +57,9 @@ export function createTauriSink(writeLine: (line: string) => Promise<void>): Sin
   }
 }
 
-// Native startup owns the effective directory, including explicit overrides and disposable builds.
+// Native defaults preserve ordinary sidecars across tracing overrides while isolating disposable builds.
 async function sidecarDir(): Promise<string> {
-  return invoke<string>('get_log_directory')
+  return invoke<string>('get_default_log_directory')
 }
 
 /** `anomalies.YYYY-MM-DD.jsonl`, daily-rotated to match `fluux.log`. */

@@ -425,8 +425,8 @@ fn get_idle_time() -> Result<u64, String> {
 #[cfg(not(target_os = "macos"))]
 const KEYRING_SERVICE: &str = "com.processone.fluux";
 
-// Shared by every build identity, so a development build logs next to the
-// release one. `apps/fluux/src/anomaly/sinks/tauri.ts` reads the same path.
+// Ordinary builds share diagnostics for continuity across release and Dev;
+// disposable GUI builds must use their isolated identity.
 const LOG_DIR_NAME: &str = "net.processone.fluux";
 
 fn log_identity_migration(report: &identity_migration::DirsReport) {
@@ -1172,9 +1172,30 @@ fn open_notification_settings() -> Result<(), String> {
     notifications::settings_pane::open()
 }
 
+fn default_log_identity(identifier: &str) -> &str {
+    if cfg!(feature = "windows-gui-test") {
+        identifier
+    } else {
+        LOG_DIR_NAME
+    }
+}
+
+fn default_log_directory(identifier: &str) -> std::path::PathBuf {
+    let identity = default_log_identity(identifier);
+    let base = dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let dir = base.join(identity).join("logs");
+    #[cfg(target_os = "macos")]
+    let dir = dirs::home_dir()
+        .map(|home| home.join("Library").join("Logs").join(identity))
+        .unwrap_or(dir);
+    dir
+}
+
 #[tauri::command]
-fn get_log_directory(log_directory: tauri::State<'_, LogDirectory>) -> String {
-    log_directory.0.to_string_lossy().into_owned()
+fn get_default_log_directory(app: tauri::AppHandle) -> String {
+    default_log_directory(&app.config().identifier)
+        .to_string_lossy()
+        .into_owned()
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
@@ -1351,12 +1372,8 @@ fn main() {
     #[cfg(not(feature = "windows-gui-test"))]
     let identity_migration = identity_migration::migrate_platform_dirs(&identifier);
 
-    // Ordinary builds share diagnostics; disposable builds must retain their isolated identity.
-    let log_identity = if cfg!(feature = "windows-gui-test") {
-        identifier.as_str()
-    } else {
-        LOG_DIR_NAME
-    };
+    // The sidecar keeps its default destination even when a CLI override redirects tracing.
+    let log_identity = default_log_identity(&identifier);
 
     // Parse CLI flags early, before tracing subscriber init
     let args: Vec<String> = std::env::args().collect();
@@ -1425,15 +1442,7 @@ fn main() {
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::path::PathBuf::from("."))
     } else {
-        let base = dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-        let dir = base.join(log_identity).join("logs");
-
-        #[cfg(target_os = "macos")]
-        let dir = dirs::home_dir()
-            .map(|h| h.join("Library").join("Logs").join(log_identity))
-            .unwrap_or(dir);
-
-        dir
+        default_log_directory(&identifier)
     };
 
     // Initialize tracing subscriber:
@@ -1608,7 +1617,7 @@ fn main() {
             mcp::bridge::mcp_respond,
             log_to_terminal,
             open_notification_settings,
-            get_log_directory,
+            get_default_log_directory,
             #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
             open_logs_folder,
             #[cfg(any(target_os = "linux", target_os = "windows"))]

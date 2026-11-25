@@ -16,21 +16,21 @@ beforeEach(() => {
 })
 
 describe('createPluginFsWriter', () => {
-  it('appends to the daily sidecar beside the resolved native log on macOS', async () => {
+  it('uses the native default directory for the ordinary macOS sidecar', async () => {
     const write = createPluginFsWriter(() => new Date('2026-07-29T11:47:02Z'))
     await write(line)
+    expect(invoke).toHaveBeenCalledWith('get_default_log_directory')
     expect(vi.mocked(writeFile).mock.calls[0][0]).toBe(
       '/Users/test/Library/Logs/net.processone.fluux/anomalies.2026-07-29.jsonl',
     )
   })
 
   it('uses the disposable Windows directory reported by native startup', async () => {
-    vi.mocked(invoke).mockResolvedValue('C:\\Temp\\fluux-gui-smoke\\logs')
+    vi.mocked(invoke).mockResolvedValue('C:\\Users\\test\\AppData\\Local\\net.processone.fluux.dev.gui-test\\logs')
     const write = createPluginFsWriter(() => new Date('2026-07-29T00:00:00Z'))
     await write(line)
-    expect(invoke).toHaveBeenCalledWith('get_log_directory')
     expect(vi.mocked(writeFile).mock.calls[0][0]).toBe(
-      'C:\\Temp\\fluux-gui-smoke\\logs/anomalies.2026-07-29.jsonl',
+      'C:\\Users\\test\\AppData\\Local\\net.processone.fluux.dev.gui-test\\logs/anomalies.2026-07-29.jsonl',
     )
   })
 

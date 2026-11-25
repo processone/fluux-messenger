@@ -8,10 +8,15 @@ import { appendFileSync, closeSync, openSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkBuild, cleanupProfiles, driverVersion, encodedPowerShell, features, identity, parseOptions, psLiteral, sha256 } from './common.mjs'
+import { confirmWorkspaceStopped, leaseFile, requireWorkspaceJob } from './workspace.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const ps = script => execFileSync('powershell.exe', encodedPowerShell(`$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; ${script}`), { encoding: 'utf8', timeout: 30000 }).trim()
 let buildLog
+let workspaceLease
+let internalWorker = false
+let jobMayHaveStarted = false
+let jobShutdownConfirmed = false
 const invoke = (program, args, cwd) => {
   const output = buildLog ? openSync(buildLog, 'a') : undefined
   try {
@@ -29,11 +34,15 @@ async function ownedJob({ script, args, workspace, env = process.env, cancelFile
   const argv = [script, ...args]
   assert.ok(argv.every(value => !value.includes('"')), 'Windows arguments must not contain quote characters')
   const command = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; Add-Type -Path ${psLiteral(join(here, 'OwnedJob.cs'))}; $job=[FluuxOwnedJob]::new(); $code=1; try { $job.Start(${psLiteral(process.execPath)}, ${psLiteral(argv.map(value => `"${value}"`).join(' '))}, ${psLiteral(workspace)}); $code=$job.Wait(${timeout}, ${psLiteral(cancelFile)}) } finally { try { $job.Stop(); @{remaining=$job.ActiveProcesses();worker=$job.ProcessId;exit=$code;cancelled=$job.Cancelled} | ConvertTo-Json | Set-Content -Encoding UTF8 -LiteralPath ${psLiteral(record)} } finally { $job.Dispose() } }; exit $code`
+  await requireWorkspaceJob(workspaceLease)
+  jobMayHaveStarted = true
+  jobShutdownConfirmed = false
   const child = spawn('powershell.exe', encodedPowerShell(command), { env, stdio: 'inherit' })
   const [code, signal] = await once(child, 'exit')
   assert.equal(signal, null)
   const job = JSON.parse((await readFile(record, 'utf8')).replace(/^\uFEFF/, ''))
   assert.equal(job.remaining, 0, 'Owned job still contains processes')
+  jobShutdownConfirmed = true
   return { code, shutdownConfirmed: true }
 }
 
@@ -143,12 +152,15 @@ async function run(workspace, evidence, fail, expectedCommit) {
 async function main() {
   assert.equal(process.platform, 'win32', 'The Windows worker requires native Windows Node')
   const [mode, ...args] = process.argv.slice(2)
-  const options = parseOptions(args, { '--workspace': 'path', '--evidence': 'path', '--fail-after-session': 'flag', '--commit': 'value' })
+  internalWorker = mode === 'build-worker'
+  const options = parseOptions(args, { '--workspace': 'path', '--evidence': 'path', '--fail-after-session': 'flag', '--commit': 'value', '--lease-token': 'value' })
   const workspace = resolve(options['--workspace'])
+  workspaceLease = { file: leaseFile(workspace), token: options['--lease-token'] }
+  await requireWorkspaceJob(workspaceLease)
   if (mode === 'build') {
     let result
     try {
-      result = await ownedJob({ script: fileURLToPath(import.meta.url), args: ['build-worker', '--workspace', workspace], workspace,
+      result = await ownedJob({ script: fileURLToPath(import.meta.url), args: ['build-worker', '--workspace', workspace, '--lease-token', workspaceLease.token], workspace,
         cancelFile: join(workspace, 'build.cancel'), record: join(workspace, 'build-job.json'), timeout: 3600000 })
     } finally {
       try { process.stdout.write(await readFile(join(workspace, 'build.log'))) } catch (error) {
@@ -172,4 +184,7 @@ main().catch(error => {
   if (buildLog) appendFileSync(buildLog, `${error.stack}\n`)
   else console.error(error.stack)
   process.exitCode = 1
+}).finally(async () => {
+  // The inner build worker cannot certify its own job's shutdown.
+  if (workspaceLease && !internalWorker && (!jobMayHaveStarted || jobShutdownConfirmed)) await confirmWorkspaceStopped(workspaceLease)
 })
