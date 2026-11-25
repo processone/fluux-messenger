@@ -24,7 +24,8 @@ import { useTranslation } from 'react-i18next'
 import { useWrappedCodeBlocksStore, type WrapIdentity } from '../stores/wrappedCodeBlocksStore'
 import { LiveEdgeGrowthContext } from '../components/conversation/liveEdgeGrowthContext'
 import { ModalShell } from '../components/ModalShell'
-import { useIsMobileWeb } from '../hooks/useIsMobileWeb'
+import { useIsTouch } from '../hooks/useHasHover'
+import { platform } from '../platform'
 import { useHighlighter } from './codeHighlight'
 import { getConsistentTextColor } from '../components/Avatar'
 import { MessageLink } from '../components/conversation/MessageLink'
@@ -449,7 +450,7 @@ function CodeExpandModal({
   onToggleWrap: () => void
   onClose: () => void
 }) {
-  const mobile = useIsMobileWeb()
+  const mobile = useIsTouch() && platform().shell !== 'desktop'
   // A phone's full-screen reading default must not change the inline block's
   // session preference or the desktop view of that block.
   const [mobileWrapped, setMobileWrapped] = useState(true)
