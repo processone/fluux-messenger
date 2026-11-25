@@ -98,7 +98,9 @@ export async function clearLocalData(options: ClearLocalDataOptions = {}): Promi
     ignoreStore.getState().reset()
     // Saved messages and their unsent queue are message text kept on this device too.
     clearSavedLocalData(scopedJid, allAccounts)
-    clearRoomReadMarkersLocalData(scopedJid, allAccounts)
+    if (await clearRoomReadMarkersLocalData(scopedJid, allAccounts) === false) {
+      console.warn('[Fluux] Room read-position data removal could not be coordinated')
+    }
     // Clear search index (IndexedDB)
     await clearSearchIndex()
     console.log('[Fluux] clearLocalData: stores reset')

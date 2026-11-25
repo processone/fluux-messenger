@@ -1,7 +1,9 @@
+import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { xml, type Element } from '@xmpp/client'
 import { RoomReadMarkers, clearRoomReadMarkersLocalData, ROOM_MARKER_ORDER_PAGE_LIMIT, ROOM_MARKER_DISCOVERY_RETRY_DELAYS, ROOM_READ_MARKERS_STORAGE_KEY } from './RoomReadMarkers'
 import { MAM } from './MAM'
+import * as idbConnection from '../../utils/idbConnection'
 import { parse } from 'ltx'
 import { parseMessageContent } from './messagingUtils'
 import fixture from './fixtures/roomReadMarkers.json'
@@ -33,6 +35,43 @@ const message = (id: string, time: number, extra: Partial<RoomMessage> = {}): Ro
 const marker = (id: string, occupantId = 'bob-id', nick = 'Bob') => xml('message', { type: 'groupchat', from: `${roomJid}/${nick}` },
   xml('displayed', { xmlns: 'urn:xmpp:chat-markers:0', id }), xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: occupantId }))
 
+// Hold a real test-backend transaction so another runtime can queue behind it.
+// The database identity comes from the product's actual open, not a second pin.
+async function holdConsentStorage() {
+  const name = vi.mocked(indexedDB.open).mock.calls[0]?.[0]
+  if (!name) throw new Error('Consent storage must be initialized before holding a transaction')
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(name)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  const transaction = db.transaction(db.objectStoreNames[0], 'readwrite')
+  const store = transaction.objectStore(db.objectStoreNames[0])
+  let released = false
+  let started!: () => void
+  const ready = new Promise<void>(resolve => { started = resolve })
+  const done = new Promise<void>((resolve, reject) => {
+    transaction.oncomplete = () => resolve()
+    transaction.onabort = () => reject(transaction.error)
+  })
+  const pump = () => {
+    store.get('turn').onsuccess = () => { started(); if (!released) pump() }
+  }
+  pump()
+  await ready
+  const waiting: (() => void)[] = []
+  const create = IDBDatabase.prototype.transaction
+  const spy = vi.spyOn(IDBDatabase.prototype, 'transaction').mockImplementation(function (this: IDBDatabase, stores, mode, options) {
+    const next = create.call(this, stores, mode, options)
+    if (mode === 'readwrite') waiting.shift()?.()
+    return next
+  })
+  return {
+    next: () => new Promise<void>(resolve => { waiting.push(resolve) }),
+    release: async () => { released = true; await done; spy.mockRestore(); db.close() },
+  }
+}
+
 describe('RoomReadMarkers', () => {
   let stores: ReturnType<typeof createMockStores>
   let room: ReturnType<typeof createMockRoom>
@@ -44,12 +83,7 @@ describe('RoomReadMarkers', () => {
   let focused: boolean
   let rows: RoomMessage[]
   beforeEach(() => {
-    const queues = new Map<string, Promise<unknown>>()
-    vi.stubGlobal('navigator', { locks: { request: (name: string, action: () => unknown) => {
-      const task = (queues.get(name) ?? Promise.resolve()).then(action)
-      queues.set(name, task.catch(() => {}))
-      return task
-    } } })
+    vi.spyOn(indexedDB, 'open')
     localStorage.clear()
     setStorageScopeJid(jid)
     account = jid
@@ -432,7 +466,7 @@ describe('RoomReadMarkers', () => {
     expect(send).not.toHaveBeenCalled()
     const unsubscribe = markers.subscribe(() => { markers.getConsent() })
     try {
-      clearRoomReadMarkersLocalData(jid, allAccounts)
+      await clearRoomReadMarkersLocalData(jid, allAccounts)
       expect(markers.getConsent()).toEqual({ enabled: false, rooms: [] })
       window.dispatchEvent(new StorageEvent('storage', { key: null }))
       await markers.reload()
@@ -783,20 +817,164 @@ describe('RoomReadMarkers', () => {
     } finally { otherTab.cancelPending() }
   })
 
-  it('stops local publication immediately while opt-out waits behind another tab’s lock', async () => {
+  it('stops local publication immediately while opt-out waits behind another tab’s transaction', async () => {
     await markers.setRoomEnabled(roomJid, true)
-    let release!: () => void
-    let started!: () => void
-    const held = new Promise<void>(resolve => { release = resolve })
-    const ready = new Promise<void>(resolve => { started = resolve })
-    const blocker = navigator.locks.request(consentKey, async () => { started(); await held })
-    await ready
+    const held = await holdConsentStorage()
+    const queued = held.next()
     const optOut = markers.setRoomEnabled(roomJid, false)
     try {
+      await queued
       expect(markers.isEnabledFor(roomJid)).toBe(false)
       await markers.viewed(roomJid, rows[1])
       expect(send).not.toHaveBeenCalled()
-    } finally { release(); await blocker; await optOut }
+    } finally { await held.release(); await optOut }
+    expect(markers.isEnabledFor(roomJid)).toBe(false)
+  })
+
+  it.each(['connection', 'encryption manager', 'module teardown'] as const)(
+    'keeps an initiating account’s queued Off through %s changes', async change => {
+      await markers.setRoomEnabled(roomJid, true)
+      const held = await holdConsentStorage()
+      const queued = held.next()
+      const optOut = markers.setRoomEnabled(roomJid, false)
+      try {
+        await queued
+        if (change === 'connection') {
+          dependencies.getXmpp = () => ({}) as ReturnType<ModuleDependencies['getXmpp']>
+          dependencies.getCurrentJid = () => `${account}/reconnected`
+        } else if (change === 'encryption manager') {
+          dependencies.getE2EEManager = () => ({}) as ReturnType<NonNullable<ModuleDependencies['getE2EEManager']>>
+        } else markers.cancelPending()
+        expect(markers.isEnabledFor(roomJid)).toBe(false)
+      } finally { await held.release() }
+      const saved = await optOut
+      expect(JSON.parse(localStorage.getItem(consentKey)!).rooms).toEqual([])
+      expect(saved).toBe(true)
+      expect(markers.getConsent().rooms).toEqual([])
+      await markers.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+    })
+
+  it('requires a fresh focused observation after conversion instead of holding an old view across it', async () => {
+    await markers.setRoomEnabled(roomJid, true)
+    localStorage.removeItem(migrationKey)
+    localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+    const held = await holdConsentStorage()
+    const queued = held.next()
+    const conversion = markers.reload()
+    await queued
+    focused = false
+    const oldView = markers.viewed(roomJid, rows[1])
+    focused = true
+    const connection = {} as ReturnType<ModuleDependencies['getXmpp']>
+    dependencies.getXmpp = () => connection
+    try { await held.release(); await conversion; await oldView } finally { focused = true }
+    expect(markers.isEnabledFor(roomJid)).toBe(true)
+    expect(send).not.toHaveBeenCalled()
+    await markers.viewed(roomJid, rows[1])
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([false, true])('orders an earlier queued edit in another runtime before clearing (all accounts: %s)', async allAccounts => {
+    await markers.setRoomEnabled(roomJid, false)
+    // A separately loaded module has the tab-local clear revision of another tab.
+    vi.resetModules()
+    const { clearRoomReadMarkersLocalData: clearOtherRuntime } = await import('./RoomReadMarkers')
+    const held = await holdConsentStorage()
+    const editQueued = held.next()
+    const optIn = markers.setRoomEnabled(roomJid, true)
+    await editQueued
+    const clearQueued = held.next()
+    const cleared = clearOtherRuntime(jid, allAccounts)
+    try {
+      expect(await Promise.race([clearQueued.then(() => 'queued'), cleared.then(() => 'finished')])).toBe('queued')
+    } finally { await held.release() }
+    await optIn
+    await cleared
+    expect(markers.isEnabledFor(roomJid)).toBe(false)
+    for (const kind of ['consent', 'migration', 'watermarks']) {
+      expect(localStorage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, kind])}`)).toBeNull()
+    }
+  })
+
+  it.each([false, true])('finishes a concurrent consent write before clearing in another runtime (all accounts: %s)', async allAccounts => {
+    await markers.setRoomEnabled(roomJid, false)
+    vi.resetModules()
+    const { clearRoomReadMarkersLocalData: clearOtherRuntime } = await import('./RoomReadMarkers')
+    const storage = localStorage
+    let armed = true
+    let cleared: Promise<boolean> | undefined
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) => key === 'setItem'
+      ? (key: string, value: string) => {
+        if (key === consentKey && armed) {
+          armed = false
+          cleared = clearOtherRuntime(jid, allAccounts)
+        }
+        target.setItem(key, value)
+      } : Reflect.get(target, key, target) }))
+    await markers.setRoomEnabled(roomJid, true)
+    expect(cleared).toBeDefined()
+    expect(await cleared).toBe(true)
+    for (const kind of ['consent', 'migration', 'watermarks']) {
+      expect(localStorage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, kind])}`)).toBeNull()
+    }
+    expect(markers.isEnabledFor(roomJid)).toBe(false)
+  })
+
+  it.each([false, true])('rejects an earlier edit still opening its database after another runtime clears (all accounts: %s)', async allAccounts => {
+    await markers.setRoomEnabled(roomJid, false)
+    vi.resetModules()
+    const { clearRoomReadMarkersLocalData: clearOtherRuntime } = await import('./RoomReadMarkers')
+    const open = idbConnection.openIndexedDB
+    let opened!: () => void
+    let release!: () => void
+    const ready = new Promise<void>(resolve => { opened = resolve })
+    const held = new Promise<void>(resolve => { release = resolve })
+    vi.spyOn(idbConnection, 'openIndexedDB').mockImplementationOnce(async (...args) => {
+      const db = await open(...args)
+      opened()
+      await held
+      return db
+    })
+    const optIn = markers.setRoomEnabled(roomJid, true)
+    await ready
+    try { expect(await clearOtherRuntime(jid, allAccounts)).toBe(true) } finally { release() }
+    const saved = await optIn
+    for (const kind of ['consent', 'migration', 'watermarks']) {
+      expect(localStorage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, kind])}`)).toBeNull()
+    }
+    expect(saved).toBe(false)
+    expect(markers.isEnabledFor(roomJid)).toBe(false)
+  })
+
+  it('does not erase legacy choices when background conversion cannot open coordination storage', async () => {
+    const saved = JSON.stringify({ enabled: true, rooms: [roomJid] })
+    localStorage.setItem(consentKey, saved)
+    vi.stubGlobal('indexedDB', undefined)
+    expect(await markers.reload()).toBe(false)
+    expect(localStorage.getItem(consentKey)).toBe(saved)
+    expect(markers.isEnabledFor(roomJid)).toBe(false)
+  })
+
+  it.each(['absent', 'rejected'] as const)('keeps current saved consent untouched during a refresh with %s coordination access', async failure => {
+    await markers.setRoomEnabled(roomJid, true)
+    const saved = localStorage.getItem(consentKey)
+    if (failure === 'absent') vi.stubGlobal('indexedDB', undefined)
+    else vi.spyOn(indexedDB, 'open').mockImplementation(() => { throw new DOMException('Storage denied', 'SecurityError') })
+    const unsubscribe = markers.subscribe(() => { markers.getConsent() })
+    try {
+      window.dispatchEvent(new StorageEvent('storage', { key: `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'watermarks'])}` }))
+      await markers.reload()
+      expect(localStorage.getItem(consentKey)).toBe(saved)
+      expect(markers.isEnabledFor(roomJid)).toBe(true)
+    } finally { unsubscribe() }
+  })
+
+  it('saves the room choice without Web Locks', async () => {
+    vi.stubGlobal('navigator', {})
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    expect(markers.isEnabledFor(roomJid)).toBe(true)
+    expect(await markers.setRoomEnabled(roomJid, false)).toBe(true)
     expect(markers.isEnabledFor(roomJid)).toBe(false)
   })
 
@@ -856,7 +1034,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it.each(['normal', 'early timer', 'backward wall clock'] as const)('retains badges and retries discovery with %s without another presence', async clock => {
-    vi.useFakeTimers()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     await markers.receive(roomJid, marker('archive-a'))
     const display = markers.readers(roomJid, rows[0])
     await markers.setRoomEnabled(roomJid, true)
@@ -963,11 +1141,11 @@ describe('RoomReadMarkers', () => {
 
 
   it('does not reuse an old discovery backoff after local data is cleared and a fresh view opts in', async () => {
-    vi.useFakeTimers()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     await markers.setRoomEnabled(roomJid, true)
     iq.mockRejectedValueOnce(new Error('Discovery unavailable'))
     await markers.viewed(roomJid, rows[1])
-    clearRoomReadMarkersLocalData(jid)
+    await clearRoomReadMarkersLocalData(jid)
     await markers.setRoomEnabled(roomJid, true)
     await markers.viewed(roomJid, rows[1])
     expect(send).toHaveBeenCalledTimes(1)

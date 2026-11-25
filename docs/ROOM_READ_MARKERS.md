@@ -28,13 +28,20 @@ Consent stays under the same account-scoped local storage key, in a versioned
 format without a master flag. A separate account-scoped migration fence prevents
 legacy writes from being migrated again after an older tab overwrites that key.
 Such writes reset consent to off; they never restore paused rooms. Consent edits
-and migration use a per-account browser lock before reading and writing the latest
-choices; pending sends recheck durable consent. Choosing Off stops publication in
-this tab while saving waits for the lock. Saving room consent is asynchronous,
-and a browser without the locking API cannot save an opt-in. An older client
-reads the new format as off. A still-open older tab can write and use its cached
-choices, including choices revoked in the new app. The new app cannot enforce
-its revocations in older code.
+and migration share a browser storage transaction with account clearing before
+reading and writing the latest choices. No Web Locks support is required.
+Pending sends recheck durable consent. Choosing Off stops publication in this tab
+while saving waits for another transaction, including through a reconnect.
+Saving room consent and clearing its data are asynchronous. Conversion never
+reuses a pending view; a fresh focused observation is required afterward. An older
+client reads the new format as off. A still-open older tab can write and use its
+cached choices, including choices revoked in the new app. The new app cannot
+enforce its revocations in older code.
+
+The coordination database contains no account records or read positions. Clearing
+also retains one anonymous generation token so a paused tab cannot restore old
+choices after clearing has finished.
+
 Failed saves stop sharing and report the failure. Clearing account-local data
 also removes the migration fence.
 

@@ -379,21 +379,29 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await openRoom(bob)
     const resumedId = await archiveId(content[2])
     await expect.poll(() => displayed(alice).some(frame => frame.includes(resumedId))).toBe(true)
-    const encryptedHeld = displayed(alice).length
     const { publicKey } = await generateKey({ type: 'ecc', curve: 'curve25519Legacy',
       userIDs: [{ name: 'Disposable room proof' }], format: 'object' })
     const ciphertext = await encrypt({ message: await createMessage({ text: 'Private room reading proof' }), encryptionKeys: publicKey, format: 'binary' })
     const encryptedId = randomUUID()
     await joinControl(member, room, 'EncryptedSender')
+    const controlId = randomUUID()
+    const controlBody = 'Plaintext control with the encrypted sender present'
+    await member.send(xml('message', { type: 'groupchat', to: room, id: controlId }, xml('body', {}, controlBody)))
+    await alice.page.bringToFront()
+    await expect(alice.page.locator('[data-message-body]').filter({ hasText: controlBody })).toBeInViewport()
+    const controlArchiveId = await archiveId(controlId)
+    await expect.poll(() => displayed(alice).some(frame => frame.includes(controlArchiveId))).toBe(true)
+    const encryptedHeld = displayed(alice).length
     await member.send(xml('message', { type: 'groupchat', to: room, id: encryptedId },
-      xml('body', {}, '[OpenPGP-encrypted message]'),
+      xml('body', {}, 'Protected room payload fallback'),
       xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'urn:xmpp:openpgp:0', name: 'OpenPGP' }),
       xml('openpgp', { xmlns: 'urn:xmpp:openpgp:0' }, Buffer.from(ciphertext).toString('base64'))))
     await alice.page.bringToFront()
     await expect.poll(() => alice.received.some(frame => frame.includes(encryptedId))).toBe(true)
     const encryptedRow = alice.page.locator(`[data-stanza-id="${await archiveId(encryptedId)}"]`)
     await expect(encryptedRow).toBeInViewport()
-    await expect(encryptedRow).toContainText(/encrypted/i)
+    await expect(encryptedRow.getByText('Encrypted message: OpenPGP not supported', { exact: true })).toBeVisible()
+    await expect(encryptedRow).not.toContainText('Protected room payload fallback')
     await noPublication(alice, encryptedHeld, 'encrypted-row')
     await member.send(xml('presence', { to: `${room}/EncryptedSender`, type: 'unavailable' }))
     await expect.poll(() => alice.received.some(frame => frame.includes(`${room}/EncryptedSender`) && /type=['"]unavailable['"]/.test(frame))).toBe(true)
@@ -445,7 +453,7 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await alice.page.bringToFront()
     await expect(alice.page.locator('[data-message-body]').filter({ hasText: 'Twenty occupants must not share reading' })).toBeInViewport()
     await noPublication(alice, twentyHeld, 'twenty-occupants')
-    if (evidence) writeFileSync(`${evidence}/room-read-eligibility-and-sync.json`, JSON.stringify({ at19, at20, encryptedArchiveId: await archiveId(encryptedId), privateSyncArchiveId: syncId }, null, 2))
+    if (evidence) writeFileSync(`${evidence}/room-read-eligibility-and-sync.json`, JSON.stringify({ at19, at20, controlArchiveId, encryptedArchiveId: await archiveId(encryptedId), privateSyncArchiveId: syncId }, null, 2))
     const disco = await owner.iqCaller.request(xml('iq', { type: 'get', to: room }, xml('query', { xmlns: DISCO })))
     const publicDisco = await owner.iqCaller.request(xml('iq', { type: 'get', to: publicRoom }, xml('query', { xmlns: DISCO })))
     if (evidence) {

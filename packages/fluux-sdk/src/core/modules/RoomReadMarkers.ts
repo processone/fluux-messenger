@@ -9,6 +9,7 @@ import type { MessageRowRef } from '../types/messageRow'
 import { exactPosition, isAfterBoundary } from '../../stores/shared/readState'
 import { getRoomModerationId, messageRowRef } from '../../utils/roomStanzaId'
 import { roomSelf, isOwnRoomMessage } from '../../utils/roomSelf'
+import { openIndexedDB } from '../../utils/idbConnection'
 
 export interface RoomReadConsent {
   /** @deprecated Compatibility summary only: true when at least one room is selected, not a master consent. */
@@ -28,14 +29,45 @@ const REQUEST_RETRY_MS = ROOM_MARKER_DISCOVERY_RETRY_DELAYS[0]
 export const ROOM_MARKER_ORDER_PAGE_LIMIT = 20
 export const ROOM_READ_MARKERS_STORAGE_KEY = 'fluux-room-read-markers'
 const STORAGE_PREFIX = ROOM_READ_MARKERS_STORAGE_KEY + ':'
+const CLEAR_GENERATION_KEY = STORAGE_PREFIX + 'clear-generation'
 const storageKey = (account: string, kind: 'consent' | 'watermarks' | 'migration') => STORAGE_PREFIX + JSON.stringify([account, kind])
 let storageRevision = 0
-/** Remove consent and published-position references with the account's local data. */
-export function clearRoomReadMarkersLocalData(account: string | null, allAccounts = false) {
-  storageRevision++
+let allAccountsClearRevision = 0
+const accountClearRevisions = new Map<string, number>()
+const clearGeneration = (account: string) => `${allAccountsClearRevision}:${accountClearRevisions.get(account) ?? 0}`
+
+async function withConsentStorage<T>(action: () => T): Promise<T> {
+  const db = await openIndexedDB('fluux-room-read-coordination', 1, {
+    upgrade: db => { db.createObjectStore('consent') },
+    onClosed: () => {},
+  })
   try {
+    return await new Promise<T>((resolve, reject) => {
+      // A single readwrite scope orders every tab's consent edits, conversion
+      // and clears. Keep the localStorage work synchronous inside its request.
+      const transaction = db.transaction('consent', 'readwrite')
+      let result: T
+      let failure: unknown
+      transaction.objectStore('consent').get('turn').onsuccess = () => {
+        try { result = action() } catch (error) { failure = error; transaction.abort() }
+      }
+      transaction.oncomplete = () => resolve(result)
+      transaction.onabort = () => reject(failure ?? transaction.error ?? new Error('Room consent transaction aborted'))
+    })
+  } finally { db.close() }
+}
+
+/** Remove consent and published-position references after earlier queued writes. */
+export async function clearRoomReadMarkersLocalData(account: string | null, allAccounts = false): Promise<boolean> {
+  const scoped = account ? getBareJid(account) : null
+  if (!allAccounts && !scoped) return true
+  storageRevision++
+  if (allAccounts) { allAccountsClearRevision++; accountClearRevisions.clear() }
+  else accountClearRevisions.set(scoped!, (accountClearRevisions.get(scoped!) ?? 0) + 1)
+  const remove = () => {
     if (!allAccounts) {
-      if (account) for (const kind of ['consent', 'watermarks', 'migration'] as const) localStorage.removeItem(storageKey(getBareJid(account), kind))
+      for (const kind of ['consent', 'watermarks', 'migration'] as const) localStorage.removeItem(storageKey(scoped!, kind))
+      localStorage.setItem(CLEAR_GENERATION_KEY, generateUUID())
       return
     }
     const keys: string[] = []
@@ -44,7 +76,14 @@ export function clearRoomReadMarkersLocalData(account: string | null, allAccount
       if (key?.startsWith(STORAGE_PREFIX)) keys.push(key)
     }
     for (const key of keys) localStorage.removeItem(key)
-  } catch { /* An unavailable storage cannot enable sharing. */ }
+    localStorage.setItem(CLEAR_GENERATION_KEY, generateUUID())
+  }
+  try { await withConsentStorage(remove); return true } catch {
+    // A denied coordination database must not stop the caller from erasing its
+    // remaining account data. Report failure even when direct removal succeeds.
+    try { remove() } catch { return false }
+    return false
+  }
 }
 export const ROOM_MARKER_OCCUPANT_LIMIT = 20
 const NONE: readonly RoomReader[] = Object.freeze([])
@@ -152,9 +191,9 @@ export class RoomReadMarkers extends BaseModule {
     }
     return state
   }
-  private readSavedConsent() {
-    const raw = localStorage.getItem(this.storageKey('consent'))
-    const migrated = localStorage.getItem(this.storageKey('migration'))
+  private readSavedConsent(account = this.account()) {
+    const raw = localStorage.getItem(storageKey(account, 'consent'))
+    const migrated = localStorage.getItem(storageKey(account, 'migration'))
     let value: unknown = null
     try { value = JSON.parse(raw ?? 'null') } catch { /* Malformed preferences convert to off, never to consent. */ }
     const record = value && typeof value === 'object' ? value as Record<string, unknown> : null
@@ -167,39 +206,43 @@ export class RoomReadMarkers extends BaseModule {
   }
   private async writeConsent(update?: (rooms: string[]) => string[]): Promise<boolean> {
     const account = this.account()
-    const query = this.capture()
+    const generation = clearGeneration(account)
     if (!account) return false
     let changed = false
     try {
-      // localStorage has no compare-and-swap. Every read/modify/write, including
-      // migration, shares this browser lock across tabs before reading the list.
-      if (!globalThis.navigator?.locks) throw new Error('Consent storage cannot be locked')
-      return await navigator.locks.request(storageKey(account, 'consent'), () => {
-        if (!query.isCurrent() || account !== this.account()) return false
+      // This anonymous generation also catches a paused tab still opening its
+      // coordination connection when another runtime completes account clearing.
+      const storedGeneration = localStorage.getItem(CLEAR_GENERATION_KEY)
+      return await withConsentStorage(() => {
+        if (generation !== clearGeneration(account) || storedGeneration !== localStorage.getItem(CLEAR_GENERATION_KEY)) {
+          this.refusedConsent.add(account)
+          return false
+        }
         try {
-          const saved = this.readSavedConsent()
+          const saved = this.readSavedConsent(account)
           if (!update && !saved.needsMigration) return true
           const rooms = update ? update(this.refusedConsent.has(account) ? [] : saved.rooms) : saved.rooms
           changed = true
           // Fence first; failure of either write removes the reusable old opt-in.
-          localStorage.setItem(this.storageKey('migration'), '2')
-          localStorage.setItem(this.storageKey('consent'), JSON.stringify({ version: 2, rooms }))
+          localStorage.setItem(storageKey(account, 'migration'), '2')
+          localStorage.setItem(storageKey(account, 'consent'), JSON.stringify({ version: 2, rooms }))
           this.refusedConsent.delete(account)
           this.consentRevision++
-          this.state().consent = { enabled: rooms.length > 0, rooms }
+          const state = this.accounts.get(account)
+          if (state) state.consent = { enabled: rooms.length > 0, rooms }
           return true
         } catch {
           changed = true
-          this.failConsentSave(this.state())
+          this.failConsentSave(account)
           return false
         }
       })
     } catch {
-      changed = true
-      if (query.isCurrent() && account === this.account()) this.failConsentSave(this.state())
+      if (changed || update) this.failConsentSave(account)
+      else this.refusedConsent.add(account)
       return false
     } finally {
-      if (changed && query.isCurrent() && account === this.account()) this.notify()
+      if (changed && account === this.account()) this.notify()
     }
   }
   private migrateConsent() {
@@ -219,7 +262,10 @@ export class RoomReadMarkers extends BaseModule {
   /** Re-read durable choices without creating a viewed event or missing account keys. */
   reload() {
     this.consentRevision++; this.queued.clear(); this.accounts.delete(this.account()); this.notify()
-    return this.migrateConsent()
+    try {
+      if (this.readSavedConsent().needsMigration) return this.migrateConsent()
+    } catch { this.refusedConsent.add(this.account()) }
+    return Promise.resolve(true)
   }
   subscribe = (listener: () => void) => {
     if (!this.listeners.size && typeof window !== 'undefined') window.addEventListener('storage', this.onStorage)
@@ -264,7 +310,7 @@ export class RoomReadMarkers extends BaseModule {
     if (!roomJid || getBareJid(roomJid) !== roomJid) return Promise.resolve(false)
     const key = this.roomKey(roomJid)
     const edit = Symbol()
-    // A save can wait behind another tab's lock. Suppress this tab immediately,
+    // A save can wait behind another tab's transaction. Suppress this tab immediately,
     // rather than allowing an already-queued viewed event to publish meanwhile.
     this.consentEdits.set(key, edit)
     this.consentRevision++; this.queued.clear(); this.notify()
@@ -276,12 +322,13 @@ export class RoomReadMarkers extends BaseModule {
       this.notify()
     })
   }
-  private failConsentSave(state: AccountState) {
-    this.refusedConsent.add(this.account())
-    state.consent = { enabled: false, rooms: [] }
+  private failConsentSave(account: string) {
+    this.refusedConsent.add(account)
+    const state = this.accounts.get(account)
+    if (state) state.consent = { enabled: false, rooms: [] }
     // In particular, quota exhaustion must not leave an older opt-in ready to
     // reactivate on restart. Removing a key does not need more storage space.
-    try { localStorage.removeItem(this.storageKey('consent')) } catch { /* The UI reports the unsaved choice. */ }
+    try { localStorage.removeItem(storageKey(account, 'consent')) } catch { /* The UI reports the unsaved choice. */ }
   }
 
   private discover(roomJid: string): Promise<boolean> {
@@ -566,10 +613,7 @@ export class RoomReadMarkers extends BaseModule {
   }
 
   /** Explicit focused viewport evidence, after the existing read writer ran. */
-  async viewed(roomJid: string, row: RoomMessage): Promise<void> {
-    try {
-      if (this.readSavedConsent().needsMigration) await this.migrateConsent()
-    } catch { this.refusedConsent.add(this.account()) }
+  viewed(roomJid: string, row: RoomMessage): Promise<void> {
     if (!this.focused() || !this.isEnabledFor(roomJid) || !canMark(row, roomJid) || row.isOutgoing) return Promise.resolve()
     if (this.state().sent[roomJid]?.archiveId === row.stanzaId) return Promise.resolve()
     const key = this.roomKey(roomJid)
