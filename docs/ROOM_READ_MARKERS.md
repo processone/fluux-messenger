@@ -58,13 +58,22 @@ recovery may change only the initiating unchanged storage boundary; it cannot
 recreate cleared records or erase newer choices. Transaction abort never replays
 destructive cleanup outside its storage turn. A failed Off instead obtains a
 fresh storage turn to revoke only its still-owned choices, preserving newer
-independent opt-ins. Normal and compact recovery fences contain only revocations and ordering
-history; they cannot authorize an unsaved On. Confirmed preferences remain the
-only source of permission, with revocations overlaid after partial writes. Recovery advances
+independent opt-ins. Normal and compact recovery fences retain revocations and ordering history;
+they cannot authorize an unsaved On. Confirmed preferences remain the
+only source of permission, with revocations overlaid after partial writes.
+An independently erasable continuity proof binds the account identity to its
+preference; clearing removes both, even when the import fence cannot be replaced.
+During a partial legacy Off, the proof also binds the exact previously validated
+input, so untouched selections survive conversion refusal without authorizing a
+different replacement. Pure migration never publishes from its first write.
+Refusal of a final On lift leaves its revocation in place without deleting other
+saved selections. Recovery advances
 ordering without changing account identity, so another room’s Off remains valid. Local room suppression survives failed saving until a fresh
 choice or a new account boundary supersedes it. The legacy all-Off operation
 uses the same room-scoped guards and temporarily protects an unknown selection
-until its initial snapshot is available. It never uses local suppression as saved consent. Pre-clear Off cannot modify
+until its initial snapshot is available, including after repeated read refusal.
+Unresolved suppression becomes room-scoped when reads recover, excluding newer
+choices and retiring after target erasure. It never uses local suppression as saved consent. Pre-clear Off cannot modify
 post-clear consent, even after a legacy overwrite or fresh opt-in. A later fresh choice preserves the fallback epoch independently of the
 consent record, so an older overwrite cannot reset the erasure boundary.
 The empty coordination database contains no account data.
