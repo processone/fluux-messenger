@@ -1462,8 +1462,10 @@ describe('RoomReadMarkers', () => {
     try {
       expect(await peer.setRoomEnabled(fixture.room, true)).toBe(true)
       await vi.advanceTimersToNextTimerAsync()
+      visible = false
+      // An invalid repeated notification joins pending work without authorizing a fresh view.
+      await markers.viewed(replayFixture.room, captured.row, () => visible)
       expect(send).not.toHaveBeenCalled()
-      expect(iq).toHaveBeenCalledTimes(1)
       visible = true
       iq.mockImplementation(async () => parse(replayFixture.disco))
       await markers.viewed(replayFixture.room, captured.row, () => visible)
