@@ -132,7 +132,7 @@ vi.mock('./OccupantPanel', () => ({ OccupantPanel: () => <div data-testid="occup
 vi.mock('./conversation/MessageList', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./conversation/MessageList')>()
   const { DateSeparator } = await import('./conversation/DateSeparator')
-  const { localDayValue } = await import('./conversation/JumpToDateDialog')
+  const { localDayValue } = await import('@fluux/sdk')
   return {
     ...actual,
     MessageList: (props: MessageListProps<Message>) => {
