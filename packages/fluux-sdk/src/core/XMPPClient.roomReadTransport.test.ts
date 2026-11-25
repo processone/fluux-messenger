@@ -72,4 +72,3 @@ it('does not consume a position before transport starts, but retains uncertain a
     expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
   } finally { markers.cancelPending(); await client.disconnect() }
 })
-
