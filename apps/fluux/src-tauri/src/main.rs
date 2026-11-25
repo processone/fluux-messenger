@@ -425,8 +425,8 @@ fn get_idle_time() -> Result<u64, String> {
 #[cfg(not(target_os = "macos"))]
 const KEYRING_SERVICE: &str = "com.processone.fluux";
 
-// Shared by every build identity, so a development build logs next to the
-// release one. `apps/fluux/src/anomaly/sinks/tauri.ts` reads the same path.
+// Ordinary builds share diagnostics for continuity across release and Dev;
+// disposable GUI builds must use their isolated identity.
 const LOG_DIR_NAME: &str = "net.processone.fluux";
 
 fn log_identity_migration(report: &identity_migration::DirsReport) {
@@ -1172,6 +1172,32 @@ fn open_notification_settings() -> Result<(), String> {
     notifications::settings_pane::open()
 }
 
+fn default_log_identity(identifier: &str) -> &str {
+    if cfg!(feature = "windows-gui-test") {
+        identifier
+    } else {
+        LOG_DIR_NAME
+    }
+}
+
+fn default_log_directory(identifier: &str) -> std::path::PathBuf {
+    let identity = default_log_identity(identifier);
+    let base = dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let dir = base.join(identity).join("logs");
+    #[cfg(target_os = "macos")]
+    let dir = dirs::home_dir()
+        .map(|home| home.join("Library").join("Logs").join(identity))
+        .unwrap_or(dir);
+    dir
+}
+
+#[tauri::command]
+fn get_default_log_directory(app: tauri::AppHandle) -> String {
+    default_log_directory(&app.config().identifier)
+        .to_string_lossy()
+        .into_owned()
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 #[tauri::command]
 fn open_logs_folder(
@@ -1318,6 +1344,9 @@ fn with_communication<R: tauri::Runtime>(
     }
 }
 
+#[cfg(feature = "windows-gui-test")]
+mod windows_gui_test;
+
 fn main() {
     // The silent cleanup helper must exit before directory migration, tracing,
     // single-instance handling, plugins or a webview can open personal state.
@@ -1336,7 +1365,15 @@ fn main() {
     startup_recovery::lab::assert_identity(&identifier);
     // Must run before anything opens the app's directories: the log file
     // below, the plugins, and the webview's storage.
+    #[cfg(feature = "windows-gui-test")]
+    windows_gui_test::initialize(&identifier);
+    #[cfg(feature = "windows-gui-test")]
+    let identity_migration: Option<identity_migration::DirsReport> = None;
+    #[cfg(not(feature = "windows-gui-test"))]
     let identity_migration = identity_migration::migrate_platform_dirs(&identifier);
+
+    // The sidecar keeps its default destination even when a CLI override redirects tracing.
+    let log_identity = default_log_identity(&identifier);
 
     // Parse CLI flags early, before tracing subscriber init
     let args: Vec<String> = std::env::args().collect();
@@ -1386,9 +1423,9 @@ fn main() {
         eprintln!("  -h, --help            Show this help message");
         eprintln!();
         eprintln!("Logs are always written to a daily-rotating file in:");
-        eprintln!("  macOS:   ~/Library/Logs/{LOG_DIR_NAME}/");
-        eprintln!("  Linux:   ~/.local/share/{LOG_DIR_NAME}/logs/");
-        eprintln!("  Windows: %LOCALAPPDATA%\\{LOG_DIR_NAME}\\logs\\");
+        eprintln!("  macOS:   ~/Library/Logs/{log_identity}/");
+        eprintln!("  Linux:   ~/.local/share/{log_identity}/logs/");
+        eprintln!("  Windows: %LOCALAPPDATA%\\{log_identity}\\logs\\");
         eprintln!();
         eprintln!("Environment variables:");
         eprintln!("  RUST_LOG              Override log filter (e.g. RUST_LOG=debug)");
@@ -1405,19 +1442,7 @@ fn main() {
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::path::PathBuf::from("."))
     } else {
-        // Platform log directory:
-        //   macOS:   ~/Library/Logs/net.processone.fluux/
-        //   Linux:   ~/.local/share/net.processone.fluux/logs/  (or $XDG_DATA_HOME)
-        //   Windows: %LOCALAPPDATA%\net.processone.fluux\logs\
-        let base = dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-        let dir = base.join(LOG_DIR_NAME).join("logs");
-
-        #[cfg(target_os = "macos")]
-        let dir = dirs::home_dir()
-            .map(|h| h.join("Library").join("Logs").join(LOG_DIR_NAME))
-            .unwrap_or(dir);
-
-        dir
+        default_log_directory(&identifier)
     };
 
     // Initialize tracing subscriber:
@@ -1556,8 +1581,11 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init());
-    let app = if cfg!(feature = "startup-recovery-lab") {
-        // The disposable lab never checks or installs updates.
+    let app = if cfg!(any(
+        feature = "startup-recovery-lab",
+        feature = "windows-gui-test"
+    )) {
+        // Disposable qualification builds never check or install updates.
         app
     } else {
         let app = with_updates(app);
@@ -1589,6 +1617,7 @@ fn main() {
             mcp::bridge::mcp_respond,
             log_to_terminal,
             open_notification_settings,
+            get_default_log_directory,
             #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
             open_logs_folder,
             #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -1813,7 +1842,11 @@ fn main() {
             // development and portable/AppImage builds self-register.
             #[cfg(any(
                 target_os = "linux",
-                all(debug_assertions, target_os = "windows")
+                all(
+                    debug_assertions,
+                    target_os = "windows",
+                    not(feature = "windows-gui-test")
+                )
             ))]
             {
                 #[cfg(target_os = "linux")]
