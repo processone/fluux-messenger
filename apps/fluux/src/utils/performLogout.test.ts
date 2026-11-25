@@ -1,5 +1,7 @@
+import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { hasFastToken } from '@fluux/sdk'
+import { hasFastToken, ROOM_READ_MARKERS_STORAGE_KEY } from '@fluux/sdk'
+import roomFixture from '../../../../packages/fluux-sdk/src/core/modules/fixtures/roomReadMarkers.json'
 import { performLogout } from './performLogout'
 import { deleteCredentials } from '@/utils/keychain'
 import { setPlatformForTesting } from '@/platform'
@@ -74,6 +76,25 @@ describe('performLogout', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it('clears the captured logout account’s room data after clearing its session, without erasing another account', async () => {
+    const other = 'other@example.com'
+    const packet = new DOMParser().parseFromString(roomFixture.message, 'application/xml')
+    const archiveId = packet.getElementsByTagNameNS('urn:xmpp:sid:0', 'stanza-id')[0].getAttribute('id')!
+    const watermark = JSON.stringify({ sent: { [roomFixture.room]: { archiveId, row: { id: packet.documentElement.getAttribute('id')!, stanzaId: archiveId } } } })
+    const key = (account: string, kind: string) => `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([account, kind])}`
+    for (const account of [JID, other]) {
+      localStorage.setItem(key(account, 'consent'), JSON.stringify({ version: 2, rooms: [roomFixture.room] }))
+      localStorage.setItem(key(account, 'migration'), '2')
+      localStorage.setItem(key(account, 'watermarks'), watermark)
+    }
+    saveSession(JID, 'secret', SERVER)
+    await performLogout({ disconnect: vi.fn().mockResolvedValue(undefined), jid: JID, shouldCleanLocalData: true })
+    expect(getSession()).toBeNull()
+    for (const kind of ['consent', 'migration', 'watermarks']) expect(localStorage.getItem(key(JID, kind))).toBeNull()
+    expect(JSON.parse(localStorage.getItem(key(other, 'consent'))!).rooms).toEqual([roomFixture.room])
+    expect(localStorage.getItem(key(other, 'watermarks'))).toBe(watermark)
   })
 
   // ★ The ordering invariant: the intent must flip BEFORE any await, so a

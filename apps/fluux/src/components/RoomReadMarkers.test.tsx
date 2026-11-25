@@ -51,9 +51,9 @@ describe('room read-marker controls', () => {
     const picked = screen.getByRole('switch', { name: 'Share my read position in this room' })
     expect(screen.getAllByRole('switch')).toHaveLength(1)
     expect(picked).toHaveAttribute('aria-checked', 'false')
-    fireEvent.click(picked)
+    await act(async () => { fireEvent.click(picked) })
     expect(picked).toHaveAttribute('aria-checked', 'true')
-    fireEvent.click(picked)
+    await act(async () => { fireEvent.click(picked) })
     expect(picked).toHaveAttribute('aria-checked', 'false')
   })
 
@@ -63,6 +63,29 @@ describe('room read-marker controls', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Share my read position in this room' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not save this choice. Sharing stays off.')
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('keeps a held save visibly busy, ignores another activation and preserves keyboard focus', async () => {
+    const markers = source(false)
+    let release!: () => void
+    const held = new Promise<void>(resolve => { release = resolve })
+    const save = vi.fn(async (jid: string, enabled: boolean) => { await held; return markers.setRoomEnabled(jid, enabled) })
+    render(<RoomReadSharing markers={{ ...markers, setRoomEnabled: save }} roomJid={room} />)
+    const toggle = screen.getByRole('switch', { name: 'Share my read position in this room' })
+    toggle.focus()
+    try {
+      fireEvent.click(toggle)
+      fireEvent.click(toggle)
+      expect(save).toHaveBeenCalledTimes(1)
+      expect(toggle).toHaveAttribute('aria-busy', 'true')
+      expect(toggle).toHaveAttribute('aria-disabled', 'true')
+      expect(toggle).not.toBeDisabled()
+      expect(toggle).toHaveFocus()
+      expect(toggle).toHaveAttribute('aria-checked', 'false')
+    } finally { await act(async () => { release(); await held }) }
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'))
+    expect(toggle).not.toHaveAttribute('aria-busy', 'true')
+    expect(toggle).toHaveFocus()
   })
 
   it('shows three inline names and opens the exact-position list from an unboxed native link', () => {

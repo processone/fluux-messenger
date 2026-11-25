@@ -13,14 +13,24 @@ export function RoomReadSharing({ markers, roomJid }: { markers: Pick<RoomReadMa
   const read = useCallback(() => markers.isEnabledFor(roomJid), [markers, roomJid])
   const checked = useSyncExternalStore(markers.subscribe, read)
   const [saveFailed, setSaveFailed] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const pendingSave = useRef(false)
   const label = t('readMarkers.shareInRoom')
   return (
     <div className="space-y-2">
       <SettingsRow label={label} description={t('readMarkers.roomDescription')}>
-        <Toggle checked={checked} aria-label={label}
+        <Toggle checked={checked} aria-label={label} loading={saving} preserveFocusWhileLoading
           onChange={async enabled => {
-            const saved = await markers.setRoomEnabled(roomJid, enabled)
-            setSaveFailed(saved === false)
+            if (pendingSave.current) return
+            pendingSave.current = true
+            setSaving(true)
+            try {
+              const saved = await markers.setRoomEnabled(roomJid, enabled)
+              setSaveFailed(saved === false)
+            } finally {
+              pendingSave.current = false
+              setSaving(false)
+            }
           }} />
       </SettingsRow>
       {saveFailed && <p role="alert" className="px-4 text-xs text-fluux-error">{t('readMarkers.saveFailed')}</p>}

@@ -51,6 +51,8 @@ export function clearAutoReconnectCredentials(jid: string | null): void {
 }
 
 interface ClearLocalDataOptions {
+  /** Logout may have removed the session before cleanup starts. */
+  accountJid?: string | null
   /** Live client push module, when clearing data before disconnect. */
   push?: PushRegistrar
   /**
@@ -67,10 +69,10 @@ interface ClearLocalDataOptions {
  * Call on disconnect when the user opts to clean local data.
  */
 export async function clearLocalData(options: ClearLocalDataOptions = {}): Promise<void> {
+  const accountJid = options.accountJid === undefined ? getSession()?.jid : options.accountJid
+  const scopedJid = accountJid ? getBareJid(accountJid) : null
   await endPushSession(options.push)
   const allAccounts = options.allAccounts ?? false
-  const session = getSession()
-  const scopedJid = session?.jid ? getBareJid(session.jid) : null
 
   console.log(`[Fluux] clearLocalData: starting (${allAccounts ? 'all accounts' : (scopedJid ?? 'current account')})`)
 

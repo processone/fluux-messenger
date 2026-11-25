@@ -25,25 +25,32 @@ one again. Missing, invalid or unreadable preferences remain off. Conversion doe
 not publish a marker or reset the last-sent positions.
 
 Consent stays under the same account-scoped local storage key, in a versioned
-format without a master flag. A separate account-scoped migration fence prevents
-legacy writes from being migrated again after an older tab overwrites that key.
-Such writes reset consent to off; they never restore paused rooms. Consent edits
-and migration share a browser storage transaction with account clearing before
-reading and writing the latest choices. No Web Locks support is required.
+format without a master flag. Account generations and per-room edit revisions
+reject an older On that arrives after a newer Off without discarding another
+room's choices. Browser storage transactions serialize the actual commits; they
+do not by themselves establish the order in which people made choices. Web Locks
+support is not required.
+
 Pending sends recheck durable consent. Choosing Off stops publication in this tab
-while saving waits for another transaction, including through a reconnect.
-Saving room consent and clearing its data are asynchronous. Conversion never
-reuses a pending view; a fresh focused observation is required afterward. An older
-client reads the new format as off. A still-open older tab can write and use its
-cached choices, including choices revoked in the new app. The new app cannot
-enforce its revocations in older code.
+while saving waits, including through a reconnect. The room switch shows its busy
+state and keeps keyboard focus until saving finishes; repeated input does not
+start another save. Saving and account clearing are asynchronous. Conversion
+never reuses a pending view; a fresh focused observation is required afterward.
 
-The coordination database contains no account records or read positions. Clearing
-also retains one anonymous generation token so a paused tab cannot restore old
-choices after clearing has finished.
+Before a scoped clear seals legacy import, it converts existing unaffected
+accounts' preferences, preserving their effective choices. Clearing removes the
+affected account's consent, migration fence and watermarks. A single anonymous
+profile token prevents later legacy records from being imported as new consent
+and rejects edits paused before clearing. It contains no account identifier or
+read position; the empty coordination database contains neither. Watermark writes
+share the clearing transaction and recheck the generation after delayed
+self-marker resolution, so erased watermarks cannot return. A background read
+failure does not discard saved room choices.
 
-Failed saves stop sharing and report the failure. Clearing account-local data
-also removes the migration fence.
+An older client reads the new format as off. A still-open older tab can write and
+use its cached choices, including choices revoked in the new app. The new app
+cannot enforce its revocations in older code. Failed saves stop sharing and
+report the failure.
 
 Direct-chat read positions remain separate planned work in issue #5. They will
 need their own Privacy preference and fresh consent, never copied from rooms.

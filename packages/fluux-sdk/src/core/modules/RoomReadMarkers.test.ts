@@ -72,6 +72,33 @@ async function holdConsentStorage() {
   }
 }
 
+function capturedRoomReading() {
+  const packet = parse(fixture.message)
+  const reflected = parse(fixture.marker)
+  const parsed = parseMessageContent({ messageEl: packet, body: packet.getChildText('body')!, expectedStanzaIdBy: roomJid })
+  const actor = reflected.getChild('occupant-id', 'urn:xmpp:occupant-id:0')!.attrs.id
+  const author = packet.getChild('occupant-id', 'urn:xmpp:occupant-id:0')!.attrs.id
+  const row: RoomMessage = { type: 'groupchat', roomJid, id: packet.attrs.id, stanzaId: parsed.stanzaId, originId: parsed.originId,
+    from: packet.attrs.from, nick: packet.attrs.from.slice(roomJid.length + 1), occupantId: author,
+    body: parsed.processedBody, timestamp: parsed.timestamp, isOutgoing: false }
+  return { reflected, actor, author, row }
+}
+
+function pauseNextConsentOpen() {
+  const open = idbConnection.openIndexedDB
+  let opened!: () => void
+  let release!: () => void
+  const ready = new Promise<void>(resolve => { opened = resolve })
+  const held = new Promise<void>(resolve => { release = resolve })
+  vi.spyOn(idbConnection, 'openIndexedDB').mockImplementationOnce(async (...args) => {
+    const db = await open(...args)
+    opened()
+    await held
+    return db
+  })
+  return { ready, release: () => release() }
+}
+
 describe('RoomReadMarkers', () => {
   let stores: ReturnType<typeof createMockStores>
   let room: ReturnType<typeof createMockRoom>
@@ -109,6 +136,16 @@ describe('RoomReadMarkers', () => {
     markers = new RoomReadMarkers(dependencies, () => focused)
     markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
   })
+
+  function useCapturedSelfReading() {
+    const captured = capturedRoomReading()
+    room.occupants.set('Alice', { ...room.occupants.get('Alice')!, occupantId: captured.actor })
+    room.occupants.set('Bob', { ...room.occupants.get('Bob')!, occupantId: captured.author })
+    rows = [captured.row]
+    room.readPointer = makeReadPointer(captured.row, 'room')
+    markers.recordArchiveOrder(roomJid, [captured.row.stanzaId!])
+    return captured
+  }
 
   afterEach(() => { markers.cancelPending(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); setStorageScopeJid(null) })
 
@@ -167,7 +204,7 @@ describe('RoomReadMarkers', () => {
     expect(await markers.setEnabled(true)).toBe(false)
     await markers.viewed(roomJid, rows[1])
     expect(send).not.toHaveBeenCalled()
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     expect(markers.isEnabledFor('another@conference.localhost')).toBe(false)
     await markers.viewed(roomJid, rows[1])
     expect(send).toHaveBeenCalledTimes(1)
@@ -190,7 +227,8 @@ describe('RoomReadMarkers', () => {
     localStorage.setItem(consentKey, JSON.stringify({ enabled, rooms: selected ? [roomJid] : [] }))
     await markers.reload()
     expect(markers.isEnabledFor(roomJid)).toBe(expected)
-    expect(JSON.parse(localStorage.getItem(consentKey)!)).toEqual({ version: 2, rooms: expected ? [roomJid] : [] })
+    expect(JSON.parse(localStorage.getItem(consentKey)!)).toMatchObject({ version: 3, rooms: expected ? [roomJid] : [] })
+    expect(JSON.parse(localStorage.getItem(consentKey)!)).not.toHaveProperty('enabled')
     await markers.reload()
     expect(markers.isEnabledFor(roomJid)).toBe(expected)
     expect(markers.isEnabledFor('another@conference.localhost')).toBe(false)
@@ -208,7 +246,7 @@ describe('RoomReadMarkers', () => {
     })
 
   it('preserves sent watermarks through migration without publishing or enabling the old master API', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     await markers.viewed(roomJid, rows[1])
     send.mockClear()
     const watermarkKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'watermarks'])}`
@@ -217,6 +255,7 @@ describe('RoomReadMarkers', () => {
     localStorage.removeItem(migrationKey)
     localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
     await markers.reload()
+    expect(localStorage.getItem(watermarkKey)).toBe(saved)
     expect(markers.isEnabledFor(roomJid)).toBe(true)
     expect(await markers.setEnabled(true)).toBe(false)
     await markers.viewed(roomJid, rows[0])
@@ -229,7 +268,7 @@ describe('RoomReadMarkers', () => {
     const otherTab = new RoomReadMarkers(dependencies, () => focused)
     const otherRoom = 'another@conference.localhost'
     try {
-      await markers.setRoomEnabled(roomJid, true)
+      expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
       await otherTab.setRoomEnabled(otherRoom, true)
       await markers.setRoomEnabled(roomJid, false)
       expect(markers.getConsent().rooms).toEqual([otherRoom])
@@ -239,7 +278,7 @@ describe('RoomReadMarkers', () => {
       await markers.reload()
       expect(markers.isEnabledFor(roomJid)).toBe(false)
       expect(otherTab.isEnabledFor(roomJid)).toBe(false)
-      await markers.setRoomEnabled(roomJid, true)
+      expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
       expect(markers.isEnabledFor(roomJid)).toBe(true)
       expect(send).not.toHaveBeenCalled()
     } finally { otherTab.cancelPending() }
@@ -264,7 +303,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('serializes an interleaved read, other-room revocation and stale write', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     const otherTab = new RoomReadMarkers(dependencies, () => focused)
     const otherRoom = 'another@conference.localhost'
     const storage = localStorage
@@ -314,21 +353,21 @@ describe('RoomReadMarkers', () => {
 
   it.each(['muc_membersonly', 'muc_hidden', 'muc_nonanonymous', 'urn:xmpp:occupant-id:0', 'urn:xmpp:sid:0'])(
     'fails closed without %s even when broad private/reaction flags say yes', async missing => {
-      await markers.setRoomEnabled(roomJid, true)
+      expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
       iq.mockResolvedValue(disco(features.filter(feature => feature !== missing)))
       await markers.viewed(roomJid, rows[1])
       expect(send).not.toHaveBeenCalled()
     })
 
   it.each(['muc_public', 'muc_open', 'muc_semianonymous'])('rejects contradictory %s', async flag => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     iq.mockResolvedValue(disco([...features, flag]))
     await markers.viewed(roomJid, rows[1])
     expect(send).not.toHaveBeenCalled()
   })
 
   it('rejects failed discovery and ambiguous or unrelated room-count forms', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     iq.mockRejectedValueOnce(new Error('Discovery unavailable'))
     await markers.viewed(roomJid, rows[1])
     expect(send).not.toHaveBeenCalled()
@@ -347,7 +386,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('accepts 19 occupants and rejects 20 or an unreliable count', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     for (let i = 2; i < 19; i++) room.occupants.set(`Member ${i}`, { nick: `Member ${i}`, occupantId: `member-${i}`, role: 'participant', affiliation: 'member' })
     iq.mockResolvedValue(disco(features, 19))
     await markers.viewed(roomJid, rows[0])
@@ -368,7 +407,7 @@ describe('RoomReadMarkers', () => {
     for (const invalidate of [() => { focused = false }, async () => await markers.setRoomEnabled(roomJid, false), () => { room.joined = false }, () => { account = 'bob@localhost' }, () => markers.cancelPending()]) {
       focused = true; room.joined = true; account = jid
       markers.observe(xml('presence', { from: `${roomJid}/Bob` }))
-      await markers.setRoomEnabled(roomJid, true)
+      expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
       let answer!: (value: ReturnType<typeof disco>) => void
       let started!: () => void
       const ready = new Promise<void>(resolve => { started = resolve })
@@ -382,7 +421,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('does not send from own, encrypted, private, unconfirmed or beyond-pointer rows', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     for (const row of [message('own', 1000, { isOutgoing: true }), message('encrypted', 1000, { encryptedPayload: '<encrypted/>' }),
       message('private', 1000, { isPrivate: true }), message('local', 1000, { stanzaId: undefined }), message('ahead', 3000)]) {
       await markers.viewed(roomJid, row)
@@ -391,7 +430,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('persists account-scoped consent and forward-only watermark, including in-flight dedupe', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     await Promise.all([markers.viewed(roomJid, rows[1]), markers.viewed(roomJid, rows[1])])
     await markers.viewed(roomJid, rows[0])
     expect(send).toHaveBeenCalledTimes(1)
@@ -442,7 +481,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('drops pending publication on a room configuration update, including when discovery later succeeds', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     let answer!: (reply: ReturnType<typeof disco>) => void
     let started!: () => void
     const ready = new Promise<void>(resolve => { started = resolve })
@@ -457,7 +496,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it.each([false, true])('clears account data without recreating keys after read, reload or storage refresh (all accounts: %s)', async allAccounts => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     await markers.viewed(roomJid, rows[1])
     send.mockClear()
     await markers.reload()
@@ -495,7 +534,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('requires an independent viewed row despite local-read, hydration and private-sync signals', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     const viewed = vi.spyOn(markers, 'viewed')
     emitLocalRead({ account: jid, kind: 'room', conversationId: roomJid, pointer: makeReadPointer(rows[1], 'room') })
     emitLocalRead({ account: jid, kind: 'chat', conversationId: 'bob@localhost', pointer: makeReadPointer({ id: 'chat-proof', stanzaId: 'chat-archive', from: 'bob@localhost', timestamp: rows[1].timestamp }, 'chat') })
@@ -510,7 +549,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('uses an own replay as durable forward evidence across restart, never as a send trigger', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     await markers.viewed(roomJid, rows[0])
     rows.splice(1, 0, message('archive-between', 1500))
     const collectors = new Map<string, (stanza: Element) => void>()
@@ -536,7 +575,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('does not revive an older opt-in or lose the send watermark after storage refuses an opt-out', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     await markers.viewed(roomJid, rows[1])
     // happy-dom binds and caches storage methods inside its proxy. Intercept
     // this boundary directly, retaining its real data and removal behavior.
@@ -559,19 +598,14 @@ describe('RoomReadMarkers', () => {
   })
 
   it('resolves the actual captured server marker and verified room-assigned target', async () => {
-    const packet = parse(fixture.message)
-    const reflected = parse(fixture.marker)
-    const parsed = parseMessageContent({ messageEl: packet, body: packet.getChildText('body')!, expectedStanzaIdBy: roomJid })
-    const actor = reflected.getChild('occupant-id', 'urn:xmpp:occupant-id:0')!.attrs.id
-    const author = packet.getChild('occupant-id', 'urn:xmpp:occupant-id:0')!.attrs.id
+    const { reflected, actor, author, row } = capturedRoomReading()
     // The captured stanza was delivered to Bob, who sees Alice as a peer.
     account = 'bob@localhost'
     setStorageScopeJid(account)
     room.nickname = 'Bob'
     room.occupants.set('Alice', { ...room.occupants.get('Alice')!, occupantId: actor })
     room.occupants.set('Bob', { ...room.occupants.get('Bob')!, occupantId: author })
-    rows = [{ ...message(parsed.stanzaId!, parsed.timestamp.getTime()), id: packet.attrs.id,
-      from: packet.attrs.from, nick: 'Bob', occupantId: author, body: parsed.processedBody, isOutgoing: true }]
+    rows = [{ ...row, isOutgoing: true }]
     await markers.receive(roomJid, reflected)
     expect(markers.readers(roomJid, rows[0])).toMatchObject([{ occupantId: actor, nick: 'Alice' }])
     expect(send).not.toHaveBeenCalled()
@@ -716,7 +750,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('remembers an unsuccessful archive-order pair instead of walking it again on each view', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     await markers.viewed(roomJid, rows[1])
     markers = new RoomReadMarkers(dependencies, () => focused)
     dependencies.registerMAMCollector = () => () => {}
@@ -730,7 +764,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('resumes sharing when the existing archive lookup positively identifies a purged send anchor', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     await markers.viewed(roomJid, rows[0])
     markers = new RoomReadMarkers(dependencies, () => focused)
     dependencies.lookUpRoomArchiveAnchor = vi.fn(async () => ({ kind: 'absent' as const }))
@@ -741,7 +775,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('continues a capped archive walk from its last proven cursor on the next view', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     await markers.viewed(roomJid, rows[0])
     markers = new RoomReadMarkers(dependencies, () => focused)
     const collectors = new Map<string, (stanza: Element) => void>()
@@ -767,7 +801,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('allows a fresh connection to replace a stalled send from an old session without order evidence', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     let answer!: (value: Element) => void
     let started!: () => void
     const ready = new Promise<void>(resolve => { started = resolve })
@@ -784,7 +818,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('honors a different tab’s durable opt-out before its storage event arrives and notifies subscribed controls', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     const notify = vi.fn()
     const unsubscribe = markers.subscribe(notify)
     const otherTab = new RoomReadMarkers(dependencies, () => focused)
@@ -800,7 +834,7 @@ describe('RoomReadMarkers', () => {
 
 
   it('revokes an in-flight send from another tab before discovery finishes', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     let answer!: (reply: ReturnType<typeof disco>) => void
     let started!: () => void
     const ready = new Promise<void>(resolve => { started = resolve })
@@ -812,13 +846,13 @@ describe('RoomReadMarkers', () => {
       await otherTab.setRoomEnabled(roomJid, false)
       answer(disco())
       await pending
-      expect(markers.isEnabledFor(roomJid)).toBe(false)
       expect(send).not.toHaveBeenCalled()
+      expect(markers.isEnabledFor(roomJid)).toBe(false)
     } finally { otherTab.cancelPending() }
   })
 
   it('stops local publication immediately while opt-out waits behind another tab’s transaction', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     const held = await holdConsentStorage()
     const queued = held.next()
     const optOut = markers.setRoomEnabled(roomJid, false)
@@ -833,7 +867,7 @@ describe('RoomReadMarkers', () => {
 
   it.each(['connection', 'encryption manager', 'module teardown'] as const)(
     'keeps an initiating account’s queued Off through %s changes', async change => {
-      await markers.setRoomEnabled(roomJid, true)
+      expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
       const held = await holdConsentStorage()
       const queued = held.next()
       const optOut = markers.setRoomEnabled(roomJid, false)
@@ -856,7 +890,7 @@ describe('RoomReadMarkers', () => {
     })
 
   it('requires a fresh focused observation after conversion instead of holding an old view across it', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     localStorage.removeItem(migrationKey)
     localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
     const held = await holdConsentStorage()
@@ -912,7 +946,7 @@ describe('RoomReadMarkers', () => {
         }
         target.setItem(key, value)
       } : Reflect.get(target, key, target) }))
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     expect(cleared).toBeDefined()
     expect(await cleared).toBe(true)
     for (const kind of ['consent', 'migration', 'watermarks']) {
@@ -925,26 +959,136 @@ describe('RoomReadMarkers', () => {
     await markers.setRoomEnabled(roomJid, false)
     vi.resetModules()
     const { clearRoomReadMarkersLocalData: clearOtherRuntime } = await import('./RoomReadMarkers')
-    const open = idbConnection.openIndexedDB
-    let opened!: () => void
-    let release!: () => void
-    const ready = new Promise<void>(resolve => { opened = resolve })
-    const held = new Promise<void>(resolve => { release = resolve })
-    vi.spyOn(idbConnection, 'openIndexedDB').mockImplementationOnce(async (...args) => {
-      const db = await open(...args)
-      opened()
-      await held
-      return db
-    })
+    const opening = pauseNextConsentOpen()
     const optIn = markers.setRoomEnabled(roomJid, true)
-    await ready
-    try { expect(await clearOtherRuntime(jid, allAccounts)).toBe(true) } finally { release() }
+    await opening.ready
+    try { expect(await clearOtherRuntime(jid, allAccounts)).toBe(true) } finally { opening.release() }
     const saved = await optIn
     for (const kind of ['consent', 'migration', 'watermarks']) {
       expect(localStorage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, kind])}`)).toBeNull()
     }
     expect(saved).toBe(false)
     expect(markers.isEnabledFor(roomJid)).toBe(false)
+  })
+
+  it.each(['room', 'all'] as const)('preserves an unrelated account’s requested %s Off through a scoped clear', async mode => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    vi.resetModules()
+    const { clearRoomReadMarkersLocalData: clearOtherRuntime } = await import('./RoomReadMarkers')
+    const opening = pauseNextConsentOpen()
+    const off = mode === 'room' ? markers.setRoomEnabled(roomJid, false) : markers.setEnabled(false)
+    await opening.ready
+    try { expect(await clearOtherRuntime('other@localhost')).toBe(true) } finally { opening.release() }
+    const saved = await off
+    expect(JSON.parse(localStorage.getItem(consentKey)!).rooms).toEqual([])
+    expect(saved).toBe(true)
+    const fresh = new RoomReadMarkers(dependencies, () => focused)
+    try { expect(fresh.isEnabledFor(roomJid)).toBe(false) } finally { fresh.cancelPending() }
+  })
+
+  it.each(['room', 'all', 'other room'] as const)('does not let a paused On override a later %s edit', async mode => {
+    const kept = 'kept@conference.localhost'
+    const other = 'other@conference.localhost'
+    expect(await markers.setRoomEnabled(kept, true)).toBe(true)
+    expect(await markers.setRoomEnabled(roomJid, false)).toBe(true)
+    const opening = pauseNextConsentOpen()
+    const delayed = markers.setRoomEnabled(roomJid, true)
+    await opening.ready
+    const next = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      const target = mode === 'other room' ? other : roomJid
+      if (mode !== 'all') expect(await next.setRoomEnabled(target, true)).toBe(true)
+      expect(mode === 'all' ? await next.setEnabled(false) : await next.setRoomEnabled(target, false)).toBe(true)
+    } finally { opening.release(); next.cancelPending() }
+    const saved = await delayed
+    const expected = mode === 'all' ? [] : mode === 'room' ? [kept] : [kept, roomJid]
+    expect(markers.getConsent().rooms).toEqual(expected)
+    expect(saved).toBe(mode === 'other room')
+  })
+
+  it.each([false, true])('does not reimport a stale legacy opt-in after clearing (all accounts: %s)', async allAccounts => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    expect(await clearRoomReadMarkersLocalData(jid, allAccounts)).toBe(true)
+    expect(localStorage.getItem(consentKey)).toBeNull()
+    expect(localStorage.getItem(migrationKey)).toBeNull()
+    localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+    const fresh = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      await fresh.reload()
+      expect(fresh.isEnabledFor(roomJid)).toBe(false)
+      await fresh.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+    } finally { fresh.cancelPending() }
+  })
+
+  it('preserves an unaffected account’s effective legacy consent before sealing legacy import', async () => {
+    const other = 'other@localhost'
+    const key = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([other, 'consent'])}`
+    localStorage.setItem(key, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+    expect(await clearRoomReadMarkersLocalData(jid)).toBe(true)
+    account = other
+    expect(markers.isEnabledFor(roomJid)).toBe(true)
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it.each([false, true])('merges saved rooms after a background read recovers (another runtime converts: %s)', async otherConverts => {
+    const kept = 'kept@conference.localhost'
+    const other = 'other@conference.localhost'
+    localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [kept] }))
+    const db = globalThis.indexedDB
+    vi.stubGlobal('indexedDB', undefined)
+    expect(await markers.reload()).toBe(false)
+    vi.stubGlobal('indexedDB', db)
+    if (otherConverts) {
+      const next = new RoomReadMarkers(dependencies, () => focused)
+      try { await next.reload() } finally { next.cancelPending() }
+    }
+    expect(await markers.setRoomEnabled(other, true)).toBe(true)
+    expect(markers.getConsent().rooms).toEqual([kept, other])
+  })
+
+  it('orders own watermark writes with clearing through the same storage scope', async () => {
+    const captured = useCapturedSelfReading()
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    const storage = await holdConsentStorage()
+    const queued = storage.next().then(() => 'queued')
+    const incoming = markers.receive(roomJid, captured.reflected)
+    const watermark = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'watermarks'])}`
+    try {
+      const first = await Promise.race([queued, incoming.then(() => 'completed')])
+      expect(localStorage.getItem(watermark)).toBeNull()
+      expect(first).toBe('queued')
+    } finally { await storage.release() }
+    await incoming
+    expect(JSON.parse(localStorage.getItem(watermark)!).sent[roomJid].archiveId).toBe(capturedTarget)
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it.each([[false, false], [false, true], [true, false], [true, true]])('does not recreate a cleared watermark from a held self-marker (all accounts: %s, archived: %s)', async (allAccounts, archived) => {
+    const captured = useCapturedSelfReading()
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    await markers.viewed(roomJid, captured.row)
+    expect(send).toHaveBeenCalledTimes(1)
+    send.mockClear()
+    vi.resetModules()
+    const { clearRoomReadMarkersLocalData: clearOtherRuntime } = await import('./RoomReadMarkers')
+    let started!: () => void
+    let release!: () => void
+    const ready = new Promise<void>(resolve => { started = resolve })
+    const held = new Promise<void>(resolve => { release = resolve })
+    stores.room.getMessageByArchiveId = vi.fn(async () => { started(); await held; return captured.row })
+    const unsubscribe = markers.subscribe(() => { markers.getConsent() })
+    const incoming = markers.receive(roomJid, captured.reflected, [], archived)
+    await ready
+    try {
+      expect(await clearOtherRuntime(jid, allAccounts)).toBe(true)
+      window.dispatchEvent(new StorageEvent('storage', { key: consentKey, newValue: null }))
+    } finally { release() }
+    await incoming
+    unsubscribe()
+    const watermark = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'watermarks'])}`
+    expect(localStorage.getItem(watermark)).toBeNull()
+    expect(send).not.toHaveBeenCalled()
   })
 
   it('does not erase legacy choices when background conversion cannot open coordination storage', async () => {
@@ -957,7 +1101,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it.each(['absent', 'rejected'] as const)('keeps current saved consent untouched during a refresh with %s coordination access', async failure => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     const saved = localStorage.getItem(consentKey)
     if (failure === 'absent') vi.stubGlobal('indexedDB', undefined)
     else vi.spyOn(indexedDB, 'open').mockImplementation(() => { throw new DOMException('Storage denied', 'SecurityError') })
@@ -979,7 +1123,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it('keeps this client opted out when storage refuses both the write and removal of an older consent', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     const storage = localStorage
     const refuse = () => { throw new DOMException('Storage unavailable', 'SecurityError') }
     vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) =>
@@ -993,7 +1137,7 @@ describe('RoomReadMarkers', () => {
 
 
   it('refreshes a cached send watermark on connection takeover before the other tab’s storage event', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     const otherTab = new RoomReadMarkers(dependencies, () => focused)
     otherTab.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
     await otherTab.viewed(roomJid, rows[1])
@@ -1005,7 +1149,7 @@ describe('RoomReadMarkers', () => {
 
 
   it('reuses a completed walk for different candidates and resumes at its cursor when fresh order evidence arrives', async () => {
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     await markers.viewed(roomJid, rows[1])
     markers = new RoomReadMarkers(dependencies, () => focused)
     const collectors = new Map<string, (stanza: Element) => void>()
@@ -1037,7 +1181,7 @@ describe('RoomReadMarkers', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     await markers.receive(roomJid, marker('archive-a'))
     const display = markers.readers(roomJid, rows[0])
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     iq.mockRejectedValueOnce(new Error('Discovery timeout'))
     markers.observe(xml('presence', { from: `${roomJid}/Bob` }))
     await markers.viewed(roomJid, rows[1])
@@ -1142,11 +1286,11 @@ describe('RoomReadMarkers', () => {
 
   it('does not reuse an old discovery backoff after local data is cleared and a fresh view opts in', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     iq.mockRejectedValueOnce(new Error('Discovery unavailable'))
     await markers.viewed(roomJid, rows[1])
     await clearRoomReadMarkersLocalData(jid)
-    await markers.setRoomEnabled(roomJid, true)
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     await markers.viewed(roomJid, rows[1])
     expect(send).toHaveBeenCalledTimes(1)
     expect(vi.getTimerCount()).toBe(0)
