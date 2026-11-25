@@ -166,6 +166,40 @@ for (const lang of ['en', 'fr'] as const) {
       await expect(bar).toHaveCount(0)
     })
 
+    test(`${lang} ${mode}: Members backdrop covers Find on tablets`, async ({ page }) => {
+      await page.setViewportSize({ width: 768, height: 812 })
+      await boot(page, lang, mode)
+      await navigateToStressRoom(page, false, ROOM_JID)
+      await page.keyboard.press('Control+f')
+      const bar = page.locator('[data-find-on-page-bar]')
+      const input = bar.locator('input')
+      for (const width of [768, 1023]) {
+        await page.setViewportSize({ width, height: 812 })
+        await input.fill('quartzbadger')
+        await expect(bar.locator('span')).toHaveText(words.search.noResults)
+        await findGeometry(input)
+        const box = await input.boundingBox()
+        expect(box).not.toBeNull()
+        const point = { x: box!.x + box!.width / 4, y: box!.y + box!.height / 2 }
+        await page.getByRole('button', { name: words.rooms.showMembers, exact: true }).click()
+        const members = page.getByRole('heading', { name: words.rooms.members, exact: true })
+        await expect(members).toBeVisible()
+        await syncEngineGeometry(page)
+        const panel = await members.locator('..').locator('..').boundingBox()
+        expect(panel).not.toBeNull()
+        expect(point.x).toBeLessThan(panel!.x)
+        await capture(page, `find-members-open-${lang}-${mode}-${width}`)
+        await page.mouse.click(point.x, point.y)
+        await expect(members).toHaveCount(0)
+        await expect(input).toHaveValue('quartzbadger')
+        await input.click()
+        await findGeometry(input)
+        await capture(page, `find-members-dismissed-${lang}-${mode}-${width}`)
+      }
+      await input.press('Escape')
+      await expect(bar).toHaveCount(0)
+    })
+
     test(`${lang} ${mode}: compact settings show full descriptions`, async ({ page }) => {
       await page.setViewportSize({ width: 375, height: 812 })
       await boot(page, lang, mode)

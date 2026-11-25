@@ -51,9 +51,9 @@ export function FindOnPageBar({
       ? t('search.noResults', 'No matches')
       : ''
 
-  // The message list paints its floating date pill later; keep Find above that clickable overlay.
+  // Stay above timeline pills but below the Members backdrop so background clicks still dismiss it.
   return (
-    <div className="absolute top-0 end-0 z-40 m-2 max-w-[calc(100%-1rem)]">
+    <div className="absolute top-0 end-0 z-[31] m-2 max-w-[calc(100%-1rem)]">
       <div data-find-on-page-bar className="flex flex-wrap items-center gap-1 px-2 py-1.5 bg-fluux-bg border border-fluux-border rounded-lg shadow-lg">
         <TextInput
           ref={inputRef}
