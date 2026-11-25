@@ -289,6 +289,12 @@ export function createPlan(changes, cwd = root) {
     if (/HingeLayout\.swift$|scripts\/ios-hinge-layout\.test\.mjs$|scripts\/native-tests\/HingeLayoutTests\.swift$/.test(path)) {
       npm('test:ios-hinge', reason, { requires: 'mac' }); platform(reason); continue
     }
+    if (/KeyboardLayout\.swift$|KeyboardReporter\.swift$|IOSFeedbackPlugin\.swift$|scripts\/ios-keyboard-layout\.test\.mjs$|scripts\/native-tests\/KeyboardLayoutTests\.swift$/.test(path)) {
+      nodeTest('scripts/ios-keyboard-layout.test.mjs', reason, [], { requires: 'mac' })
+      platform(reason)
+      // Reporter and plugin wiring still need the existing native generation/build fallback.
+      if (!/KeyboardReporter\.swift$|IOSFeedbackPlugin\.swift$/.test(path)) continue
+    }
     if (/ShareViewController\.swift$|scripts\/native-tests\/(ios-share\/|SharedURLTests\.swift$)|scripts\/(macos-share|ios-extension-identifiers|ios-share-schemes)\.test\.mjs$/.test(path)) {
       share(reason); platform(reason); continue
     }

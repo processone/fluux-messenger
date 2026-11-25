@@ -180,6 +180,23 @@ test('Swift and native test fixtures route to their runtime owner rather than Vi
   assert.ok(ids(diagnostic).includes('test:ios-notifications'))
 })
 
+test('keyboard geometry and its native callers select the Mac predicate test', () => {
+  const pure = ['apps/fluux/src-tauri/plugins/ios-feedback/ios/Sources/KeyboardLayout.swift',
+    'scripts/native-tests/KeyboardLayoutTests.swift', 'scripts/ios-keyboard-layout.test.mjs']
+  const callers = ['apps/fluux/src-tauri/plugins/ios-feedback/ios/Sources/KeyboardReporter.swift',
+    'apps/fluux/src-tauri/plugins/ios-feedback/ios/Sources/IOSFeedbackPlugin.swift']
+  for (const path of [...pure, ...callers]) {
+    const plan = planFor([path])
+    const geometry = plan.steps.find(step => step.args.includes('scripts/ios-keyboard-layout.test.mjs'))
+    assert.ok(geometry, path)
+    assert.equal(geometry.command, 'node')
+    assert.equal(geometry.requires, 'mac')
+    assert.ok(ids(plan).includes('test:platform'), path)
+    assert.equal(ids(plan).includes('full:app'), callers.includes(path), path)
+    if (callers.includes(path)) assert.ok(ids(plan).includes('test:ios-project'), path)
+  }
+})
+
 test('deleted, renamed, setup, configs and unknown files widen explicitly; known prose does not', () => {
   const source = accessibility.find(path => path.endsWith('Settings.tsx'))
   for (const status of ['D', 'R']) assert.ok(ids(createPlan([{ path: source, status }])).includes('full:app'))
