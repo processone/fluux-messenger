@@ -112,6 +112,19 @@ See [Android Debug Bridge](https://developer.android.com/tools/adb#move).
 Keep `--debug` for this workflow: removing it selects a release build whose
 signing/distribution setup is separate. No Play Store upload is involved.
 
+## Keyboard and composer
+
+`KeyboardInsetsPlugin.kt` reports `data-keyboard-docked` on `<html>` only when the
+native IME is visible and has a positive bottom inset. It reads that state before
+consuming the inset: both page viewports have already shrunk afterward, so their
+height difference cannot identify the keyboard. The existing WebView padding and
+inset consumption are unchanged.
+
+Page-load completion requests a fresh inset dispatch, and activity resume follows
+the current content view. Conversation footers alone omit their extra safe-area
+term while docked; focused narrow touch cards also remove Send's bottom margin.
+Base gaps, editor size and touch targets are preserved.
+
 ## Proxy, generated configuration and limitations
 
 The proxy supports STARTTLS, direct TLS and SRV discovery using Android's active

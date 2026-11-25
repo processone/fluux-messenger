@@ -1190,3 +1190,107 @@ test.describe('room placeholder at phone width', () => {
     expect(g.scrollWidth).toBeGreaterThan(g.clientWidth)
   })
 })
+
+test.describe('native docked-keyboard composer spacing', () => {
+  test.use({ hasTouch: true })
+
+  for (const view of ['chat', 'room'] as const) {
+    test(`preserves the ${view} editor and controls while reclaiming keyboard spacing`, async ({ page }) => {
+      const editor = await openStableComposer(page, view)
+      if (view === 'chat') {
+        await page.evaluate(() => { location.hash = '#/messages/ava%40fluux.chat' })
+        await expect(editor).toHaveAttribute('placeholder', /Ava Martinez/)
+      }
+      await setDraft(editor, 'Short draft')
+      const card = page.locator('.composer-card')
+      const form = page.locator('[data-conversation-tail] .composer-form')
+      // Browser engines expose no device safe area here. Reuse the iPhone's recorded 34px
+      // inset for both classes: the emulator's zero inset cannot exercise padding removal.
+      // Native keyboard delivery is checked in the installed demos.
+      const insetStyle = await page.addStyleTag({ content: '.composer-form {}' })
+      await page.evaluate(() => {
+        const outside = document.createElement('form')
+        outside.id = 'outside-conversation-composer'
+        document.body.append(outside)
+      })
+
+      const read = () => card.evaluate((element) => {
+        const form = element.closest('form')!
+        const editor = form.querySelector<HTMLElement>('.message-input')!
+        const send = form.querySelector<HTMLElement>('.composer-send')!
+        const border = element.getBoundingClientRect()
+        const button = send.querySelector('button')!.getBoundingClientRect()
+        return {
+          height: border.height,
+          editorHeight: editor.getBoundingClientRect().height,
+          margin: parseFloat(getComputedStyle(send).marginBottom),
+          padding: parseFloat(getComputedStyle(form).paddingBottom),
+          topClearance: button.top - border.top,
+          sideClearance: border.right - button.right,
+          controls: [...form.querySelectorAll('.composer-actions button, .composer-actions [data-encryption-lock]')].map(control => {
+            const rect = control.getBoundingClientRect()
+            return [rect.width, rect.height]
+          }),
+          outsidePadding: getComputedStyle(document.getElementById('outside-conversation-composer')!).paddingBottom,
+        }
+      })
+
+      for (const width of [390, 960]) {
+        await page.setViewportSize({ width, height: 800 })
+        for (const fontSize of [16, 19]) {
+          await page.evaluate(size => { document.documentElement.style.fontSize = `${size}px` }, fontSize)
+          for (const safeClass of ['pb-safe', 'pb-safe-2']) {
+            const inset = 34
+            const baseRem = (safeClass === 'pb-safe-2' ? 0.5 : 1) / (width < 420 ? 2 : 1)
+            const baseGap = baseRem * fontSize
+            await form.evaluate((element, safeClass) => {
+              element.classList.remove('pb-safe', 'pb-safe-2')
+              element.classList.add(safeClass)
+              document.getElementById('outside-conversation-composer')!.className = `composer-form ${safeClass}`
+            }, safeClass)
+            await insetStyle.evaluate((element, { safeClass, baseRem, inset }) => {
+              element.textContent = `.composer-form.${safeClass} { padding-bottom: calc(${baseRem}rem + ${inset}px); }`
+            }, { safeClass, baseRem, inset })
+            await editor.focus()
+            await expect(editor).toBeFocused()
+            await card.locator('.composer-drawer-item').first().evaluate(async item => {
+              await Promise.all(item.getAnimations().map(animation => animation.finished))
+            })
+            await syncEngineGeometry(page)
+            const before = await read()
+            expect(before.padding).toBeCloseTo(baseGap + inset, 2)
+            expect(before.margin).toBeCloseTo(fontSize / 4, 2)
+
+            await page.evaluate(() => { document.documentElement.dataset.keyboardDocked = 'true' })
+            await expect.poll(async () => (await read()).margin).toBeCloseTo(width < 420 ? 0 : fontSize / 4, 2)
+            await syncEngineGeometry(page)
+            const docked = await read()
+            expect(docked.padding).toBeCloseTo(baseGap, 2)
+            expect(docked.height).toBeCloseTo(before.height - (width < 420 ? fontSize / 4 : 0), 2)
+            expect(docked.editorHeight).toBe(before.editorHeight)
+            expect(docked.controls).toEqual(before.controls)
+            if (view === 'chat') await expect(card.locator('[data-encryption-lock]')).toBeVisible()
+            expect(docked.topClearance).toBeCloseTo(before.topClearance, 2)
+            expect(docked.sideClearance).toBeCloseTo(before.sideClearance, 2)
+            expect(docked.outsidePadding).toBe(before.outsidePadding)
+            await expect(editor).toBeFocused()
+            expect(await editor.evaluate(el => el instanceof HTMLTextAreaElement ? el.value : el.textContent)).toBe('Short draft')
+
+            await page.evaluate(() => { delete document.documentElement.dataset.keyboardDocked })
+            await expect.poll(async () => (await read()).padding).toBeCloseTo(before.padding, 2)
+            expect((await read()).height).toBeCloseTo(before.height, 2)
+            await expect(editor).toBeFocused()
+
+            await page.evaluate(() => {
+              document.documentElement.dataset.keyboardDocked = 'true'
+              ;(document.activeElement as HTMLElement).blur()
+            })
+            expect(await card.evaluate(element => element.matches(':focus-within'))).toBe(false)
+            expect((await read()).margin).toBeCloseTo(before.margin, 2)
+            await page.evaluate(() => { delete document.documentElement.dataset.keyboardDocked })
+          }
+        }
+      }
+    })
+  }
+})

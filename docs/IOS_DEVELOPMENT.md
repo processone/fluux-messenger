@@ -331,6 +331,19 @@ Not available yet:
 
 Validate on a device before trusting a build with existing accounts or keys.
 
+## Keyboard and composer
+
+`KeyboardReporter.swift` in the `ios-feedback` plugin reports a full-width keyboard
+covering the window's bottom edge through `data-keyboard-docked` on `<html>`.
+It uses UIKit's keyboard end frame: WKWebView can pan its visual viewport by the
+keyboard height, leaving the viewport's bottom unchanged even with a keyboard open.
+The existing visual-viewport sizing remains independent of this flag.
+
+Only conversation footers omit the bottom safe-area term while docked, and focused
+narrow touch cards remove Send's extra bottom margin. Their relative base gaps,
+editor cap and touch targets stay unchanged. Keyboard dismissal restores the inset
+without requiring blur, and document reloads receive the current native state.
+
 ## Foldable iPhone hinge
 
 On a foldable iPhone, such as the iPhone Duo, the native host reports the hinge

@@ -29,14 +29,32 @@ mod tls;
 mod upload;
 mod xmpp_proxy;
 
-/// Loads the Kotlin plugin that keeps the WebView above the soft keyboard. WKWebView
-/// reports the keyboard through `visualViewport` on its own, so iOS needs no counterpart.
+#[cfg(target_os = "android")]
+struct KeyboardInsets<R: tauri::Runtime>(tauri::plugin::PluginHandle<R>);
+
+// Android consumes the IME inset before the page sees a resize. New documents also need
+// the native state when a still-visible keyboard causes no further inset change.
 #[cfg(target_os = "android")]
 fn keyboard_insets<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    use tauri::Manager;
     tauri::plugin::Builder::new("keyboard-insets")
-        .setup(|_app, api| {
-            api.register_android_plugin("com.processone.fluux.keyboard", "KeyboardInsetsPlugin")?;
+        .setup(|app, api| {
+            app.manage(KeyboardInsets(api.register_android_plugin(
+                "com.processone.fluux.keyboard",
+                "KeyboardInsetsPlugin",
+            )?));
             Ok(())
+        })
+        .on_page_load(|webview, payload| {
+            if payload.event() != tauri::webview::PageLoadEvent::Finished {
+                return;
+            }
+            let handle = webview.state::<KeyboardInsets<R>>().0.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = handle.run_mobile_plugin_async::<()>("refresh", ()).await {
+                    tracing::warn!("Could not refresh keyboard insets: {error}");
+                }
+            });
         })
         .build()
 }
