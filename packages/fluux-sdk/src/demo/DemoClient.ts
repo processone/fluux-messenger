@@ -194,7 +194,7 @@ export class DemoClient extends XMPPClient {
     this.roomReadMarkers = new RoomReadMarkers({
       stores: createDefaultStoreBindings(), presence: createPresenceReader(),
       getCurrentJid: () => this.currentJid, getXmpp: () => connection,
-      sendStanza: async () => {}, emit: () => {}, emitSDK: () => {},
+      sendStanza: async (_stanza, beforeWrite) => { beforeWrite?.() }, emit: () => {}, emitSDK: () => {},
       sendIQ: async request => {
         const roomJid = request.attrs.to
         const room = roomStore.getState().getRoom(roomJid)

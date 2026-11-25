@@ -39,16 +39,23 @@ never reuses a pending view; a fresh focused observation is required afterward.
 
 Scoped clearing removes the target account's records before attempting to convert
 unaffected preferences. Each conversion stores its self-contained choice before
-its compatibility fence, so either refused write leaves valid consent intact. Partial failure is reported;
-the anonymous token still invalidates prior work, but seals legacy import only
-when unaffected choices are safely preserved. A previously sealed profile stays
-sealed. Successful clearing prevents later legacy records from granting consent.
-The token contains no account identifier or read position; the empty coordination database contains neither. Watermark writes
-share the clearing transaction and merge the durable map rather than a cached
-copy. Archive requests carry their original erasure boundary through every replay
-path. Authorized publication saves its anchor and starts dispatch in one synchronous
-step, so an unattempted send cannot leave a saved anchor. A background read
-failure does not discard saved room choices.
+its compatibility fence, so either refused write leaves valid consent intact.
+Partial failure is reported, but legacy import still seals. The guard retains
+only the exact effective choices of unaffected accounts whose conversion was
+refused; it never permits the erased account to import old consent. Those
+exceptions disappear when their account saves or clears its choice. Unknown
+older guards remain sealed. The guard contains no erased-account identifier or
+read position; the empty coordination database contains neither.
+
+Watermark writes share the clearing transaction and merge the durable map rather
+than a cached copy. Room archive operations capture their erasure boundary once
+and carry it through cursor fallbacks, hydration, paging and queued catch-up.
+Generic chat archive work does not capture room consent. Pending publication
+rechecks its original observer's lifetime, current geometry, conversation,
+coverage and current private read pointer after waiting for storage. The real
+transport runs preflight before synchronously saving the anchor and starting its
+write. A definitely unstarted send leaves no anchor; uncertain attempted delivery
+retains it. A background read failure does not discard saved room choices.
 
 An older client reads the new format as off. A still-open older tab can write and
 use its cached choices, including choices revoked in the new app. The new app

@@ -131,7 +131,7 @@ describe('RoomReadMarkers', () => {
     stores.room.getRoom = vi.fn((id: string) => id === room.jid ? room : undefined)
     stores.room.getAllRoomMessages = vi.fn(() => [{ jid: room.jid, messages: rows }])
     stores.room.getMessageByArchiveId = vi.fn(async (_room: string, id: string) => rows.find(row => row.stanzaId === id) ?? null)
-    send = vi.fn<ModuleDependencies['sendStanza']>(async () => {})
+    send = vi.fn<ModuleDependencies['sendStanza']>(async (_stanza, beforeWrite) => { beforeWrite?.() })
     iq = vi.fn<ModuleDependencies['sendIQ']>(async () => disco())
     const connection = {} as ReturnType<ModuleDependencies['getXmpp']>
     dependencies = { stores, presence: createMockPresenceReader(), sendStanza: send, sendIQ: iq,
@@ -1086,6 +1086,58 @@ describe('RoomReadMarkers', () => {
     expect(markers.isEnabledFor(roomJid)).toBe(true)
   })
 
+  it.each([0, 2])('keeps the erased account out of legacy import after partial clearing (survivor format: %s)', async format => {
+    expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    const other = 'other@localhost'
+    const otherKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([other, 'consent'])}`
+    const old = JSON.stringify(format === 0 ? { enabled: true, rooms: [roomJid] } : { version: 2, rooms: [roomJid] })
+    localStorage.setItem(otherKey, old)
+    const storage = localStorage
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === otherKey) throw new DOMException('Quota exhausted', 'QuotaExceededError'); target.setItem(name, value) }
+      : Reflect.get(target, key, target) }))
+    expect(await clearRoomReadMarkersLocalData(jid)).toBe(false)
+    vi.stubGlobal('localStorage', storage)
+    localStorage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+    const fresh = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      await fresh.reload()
+      expect(fresh.isEnabledFor(roomJid)).toBe(false)
+      account = other
+      await fresh.reload()
+      expect(fresh.isEnabledFor(roomJid)).toBe(true)
+      expect(await fresh.setRoomEnabled(roomJid, false)).toBe(true)
+      localStorage.setItem(otherKey, old)
+      await fresh.reload()
+      expect(fresh.isEnabledFor(roomJid)).toBe(false)
+    } finally { fresh.cancelPending() }
+  })
+
+  it.each(['view', 'pointer'] as const)('rechecks the current %s at the held publication boundary', async change => {
+    const captured = useCapturedSelfReading(replayFixture)
+    const newest = capturedRoomReading({ ...replayFixture, message: replayFixture.newest }).row
+    rows = [captured.row, newest]
+    room.readPointer = makeReadPointer(newest, 'room')
+    markers.recordArchiveOrder(replayFixture.room, rows.map(row => row.stanzaId!))
+    iq.mockImplementation(async () => parse(replayFixture.disco))
+    expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(true)
+    let visible = true
+    const held = await holdConsentStorage()
+    const queued = held.next()
+    const pending = markers.viewed(replayFixture.room, newest, () => visible)
+    await queued
+    if (change === 'view') visible = false
+    else room.readPointer = makeReadPointer(captured.row, 'room')
+    await held.release()
+    await pending
+    expect(send).not.toHaveBeenCalled()
+    expect(localStorage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'watermarks'])}`)).toBeNull()
+    visible = true
+    room.readPointer = makeReadPointer(newest, 'room')
+    await markers.viewed(replayFixture.room, newest, () => visible)
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
   it('does not persist an own replay without an authenticated account', async () => {
     const captured = useCapturedSelfReading()
     account = ''
@@ -1318,7 +1370,7 @@ describe('RoomReadMarkers', () => {
     expect(iq).toHaveBeenCalledTimes(beforeRetry)
     let published!: () => void
     const wire = new Promise<void>(resolve => { published = resolve })
-    send.mockImplementation(async () => { published() })
+    send.mockImplementation(async (_stanza, beforeWrite) => { beforeWrite?.(); published() })
     if (clock === 'early timer') vi.spyOn(Date, 'now').mockReturnValue(Date.now() + ROOM_MARKER_DISCOVERY_RETRY_DELAYS[0] - 1)
     if (clock === 'backward wall clock') vi.setSystemTime(Date.now() - ROOM_MARKER_DISCOVERY_RETRY_DELAYS.at(-1)!)
     await vi.advanceTimersToNextTimerAsync()

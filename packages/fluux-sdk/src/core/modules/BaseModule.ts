@@ -38,7 +38,8 @@ export interface ModuleDependencies {
    * connection store binding. Always provided (defaults to a headless reader).
    */
   presence: PresenceReader
-  sendStanza: (stanza: Element) => Promise<void>
+  /** Run beforeWrite synchronously after preflight, immediately before the stream write. */
+  sendStanza: (stanza: Element, beforeWrite?: () => void) => Promise<void>
   sendIQ: (iq: Element, timeoutMs?: number) => Promise<Element>
   getCurrentJid: () => string | null
   emit: <K extends keyof ClientEvents>(

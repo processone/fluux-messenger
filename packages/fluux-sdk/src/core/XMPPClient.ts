@@ -754,7 +754,7 @@ export class XMPPClient {
       flushRoomOccupants: (roomJid?: string) => this.storeBindings?.flushOccupants(roomJid),
       waitForRoomOccupants: (roomJid: string) => this.storeBindings?.waitForOccupants(roomJid) ?? Promise.resolve(),
       presence: this.presenceReader,
-      sendStanza: (stanza: Element) => this.sendStanza(stanza),
+      sendStanza: (stanza: Element, beforeWrite?: () => void) => beforeWrite ? this.sendStanza(stanza, beforeWrite) : this.sendStanza(stanza),
       sendIQ: (iq: Element, timeoutMs?: number) => this.sendIQ(iq, timeoutMs),
       avatarState: this.avatarState,
       getCurrentJid: () => this.currentJid,
@@ -2115,8 +2115,8 @@ export class XMPPClient {
     }
   }
 
-  protected async sendStanza(stanza: Element): Promise<void> {
-    const write = this.beginStanzaSend(stanza)
+  protected async sendStanza(stanza: Element, beforeWrite?: () => void): Promise<void> {
+    const write = beforeWrite ? this.beginStanzaSend(stanza, beforeWrite) : this.beginStanzaSend(stanza)
     try {
       // The observer receives a deep snapshot, so it cannot alter the wire or
       // replay form. Dispatch stays ahead of every reply the send can expose.
@@ -2172,8 +2172,9 @@ export class XMPPClient {
     }
   }
 
-  protected beginStanzaSend(stanza: Element): Promise<void> {
+  protected beginStanzaSend(stanza: Element, beforeWrite?: () => void): Promise<void> {
     const xmpp = this.requireTransport('', { checkSocket: true })
+    beforeWrite?.()
     try {
       return xmpp.send(stanza)
     } catch (err) {

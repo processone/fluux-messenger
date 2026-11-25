@@ -32,6 +32,25 @@ const STORAGE_PREFIX = ROOM_READ_MARKERS_STORAGE_KEY + ':'
 const CLEAR_GENERATION_KEY = STORAGE_PREFIX + 'clear-generation'
 const storageKey = (account: string, kind: 'consent' | 'watermarks' | 'migration') => STORAGE_PREFIX + JSON.stringify([account, kind])
 let storageRevision = 0
+interface ClearGuard { generation: string | null; legacy: Record<string, string>; open: boolean }
+function readClearGuard(): ClearGuard {
+  const raw = localStorage.getItem(CLEAR_GENERATION_KEY)
+  if (raw === null) return { generation: null, legacy: {}, open: true }
+  try {
+    const value = JSON.parse(raw) as { generation?: unknown; legacy?: unknown }
+    if (typeof value.generation === 'string' && !!value.generation && value.legacy && typeof value.legacy === 'object' && !Array.isArray(value.legacy)
+      && Object.values(value.legacy).every(entry => typeof entry === 'string')) {
+      return { generation: value.generation, legacy: value.legacy as Record<string, string>, open: false }
+    }
+  } catch { /* Earlier guards stored only the generation. */ }
+  return { generation: raw, legacy: {}, open: false }
+}
+function pruneLegacyPermission(account: string) {
+  const guard = readClearGuard()
+  if (typeof guard.legacy[account] !== 'string') return
+  delete guard.legacy[account]
+  localStorage.setItem(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy: guard.legacy }))
+}
 interface SavedConsent {
   raw: string | null
   clearToken: string | null
@@ -40,11 +59,13 @@ interface SavedConsent {
   epoch: string
   edits: Record<string, string>
   needsMigration: boolean
+  legacyChoice?: string
 }
 function readSavedRoomConsent(account: string): SavedConsent {
   const raw = localStorage.getItem(storageKey(account, 'consent'))
   const fence = localStorage.getItem(storageKey(account, 'migration'))
-  const clearToken = localStorage.getItem(CLEAR_GENERATION_KEY)
+  const guard = readClearGuard()
+  const clearToken = guard.generation
   let value: unknown = null
   try { value = JSON.parse(raw ?? 'null') } catch { /* Malformed preferences convert to off, never to consent. */ }
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : null
@@ -54,27 +75,30 @@ function readSavedRoomConsent(account: string): SavedConsent {
     && Object.values(record.edits).every(edit => typeof edit === 'string')
   const current = record?.version === 3 && validRooms && typeof record.generation === 'string' && !!record.generation
     && typeof record.epoch === 'string' && validEdits
-  const importSealed = clearToken !== null && !clearToken.startsWith('unsealed:')
-  // Before sealing legacy import, a scoped clear converts unaffected accounts.
-  // No account identifier needs to survive erasure to reject later legacy writes.
-  const previous = !importSealed && record?.version === 2 && validRooms
-  const legacy = !importSealed && fence === null && record?.version === undefined
-    && typeof record?.enabled === 'boolean' && validRooms
-  const rooms = current || previous || (legacy && record?.enabled === true) ? [...new Set(record!.rooms as string[])] : []
+  const oldRooms = validRooms ? [...new Set(record!.rooms as string[])] : []
+  const previous = record?.version === 2 && validRooms
+  const legacy = fence === null && record?.version === undefined && typeof record?.enabled === 'boolean' && validRooms
+  const choice = previous || legacy ? JSON.stringify([previous ? 2 : 0, previous || record?.enabled === true, previous || record?.enabled === true ? oldRooms : []]) : undefined
+  const allowed = guard.open || (choice !== undefined && guard.legacy[account] === choice)
+  const rooms = current || (allowed && (previous || (legacy && record?.enabled === true))) ? oldRooms : []
   return {
     raw, clearToken, rooms,
     generation: current ? record.generation as string : undefined,
     epoch: current ? record.epoch as string : '',
     edits: current ? { ...record.edits as Record<string, string> } : {},
     needsMigration: raw !== null && !current,
+    legacyChoice: allowed ? choice : undefined,
   }
 }
 function roomConsentValue(saved: SavedConsent, rooms: string[], edits = saved.edits, epoch = saved.epoch) {
   return JSON.stringify({ version: 3, generation: saved.generation ?? generateUUID(), epoch, edits, rooms })
 }
 function persistRoomConsent(account: string, saved: SavedConsent, rooms: string[], edits = saved.edits, epoch = saved.epoch) {
-  // Fence first; failure of either write must not leave reusable legacy consent.
-  localStorage.setItem(storageKey(account, 'migration'), '2')
+  // Attempt both revocation barriers even when one refuses its write.
+  let failed: { error: unknown } | undefined
+  try { pruneLegacyPermission(account) } catch (error) { failed = { error } }
+  try { localStorage.setItem(storageKey(account, 'migration'), '2') } catch (error) { failed = { error } }
+  if (failed) throw failed.error
   localStorage.setItem(storageKey(account, 'consent'), roomConsentValue(saved, rooms, edits, epoch))
 }
 function readRoomWatermarks(account: string): Record<string, Position> {
@@ -119,6 +143,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
     if (!allAccounts) {
       for (const kind of ['consent', 'watermarks', 'migration'] as const) localStorage.removeItem(storageKey(scoped!, kind))
       let preserved = true
+      const legacy: Record<string, string> = Object.create(null)
       const accounts: string[] = []
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i)
@@ -126,21 +151,24 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         try {
           const parts: unknown = JSON.parse(key.slice(STORAGE_PREFIX.length))
           if (Array.isArray(parts) && parts.length === 2 && typeof parts[0] === 'string' && parts[0] !== scoped && parts[1] === 'consent') accounts.push(parts[0])
-        } catch { /* The shared anonymous clear token is not an account record. */ }
+        } catch { /* The shared clear guard is not an account record. */ }
       }
       for (const other of accounts) {
+        let saved: SavedConsent | undefined
         try {
-          const saved = readSavedRoomConsent(other)
+          saved = readSavedRoomConsent(other)
           // Store the self-contained choice first so either refusal preserves valid consent.
           if (saved.needsMigration) {
             localStorage.setItem(storageKey(other, 'consent'), roomConsentValue(saved, saved.rooms))
             localStorage.setItem(storageKey(other, 'migration'), '2')
           }
-        } catch { preserved = false }
+        } catch {
+          preserved = false
+          // Only unchanged, previously valid surviving choices may bypass sealing.
+          if (saved?.legacyChoice && saved.rooms.length && localStorage.getItem(storageKey(other, 'consent')) === saved.raw) legacy[other] = saved.legacyChoice
+        }
       }
-      const previous = localStorage.getItem(CLEAR_GENERATION_KEY)
-      const sealed = preserved || (previous !== null && !previous.startsWith('unsealed:'))
-      localStorage.setItem(CLEAR_GENERATION_KEY, `${sealed ? '' : 'unsealed:'}${generateUUID()}`)
+      localStorage.setItem(CLEAR_GENERATION_KEY, JSON.stringify({ generation: generateUUID(), legacy }))
       return preserved
     }
     const keys: string[] = []
@@ -619,13 +647,13 @@ export class RoomReadMarkers extends BaseModule {
     return canMark(row, roomJid) ? row : null
   }
 
-  async receive(roomJid: string, stanza: Element, additional: readonly RoomMessage[] = [], archived = false, replayCurrent: () => boolean = () => true): Promise<void> {
+  async receive(roomJid: string, stanza: Element, additional: readonly RoomMessage[] = [], archived = false, replayCurrent?: () => boolean): Promise<void> {
     const displays = stanza.getChildren('displayed', NS_CHAT_MARKERS)
     const actors = stanza.getChildren('occupant-id', NS_OCCUPANT_ID)
     if (stanza.attrs.type !== 'groupchat' || getBareJid(stanza.attrs.from ?? '') !== roomJid || !getResource(stanza.attrs.from ?? '')
       || stanza.getChild('body') || displays.length !== 1 || !displays[0].attrs.id || actors.length !== 1 || !actors[0].attrs.id) return
     const query = this.capture()
-    const watermarkCurrent = this.captureReplayBoundary()
+    const watermarkCurrent = replayCurrent ?? this.captureReplayBoundary()
     const key = this.roomKey(roomJid)
     if ((!this.eligible(roomJid) && !await this.discover(roomJid)) || !query.isCurrent()) return
     const epoch = this.epochs.get(key) ?? 0
@@ -649,7 +677,7 @@ export class RoomReadMarkers extends BaseModule {
       const sent = this.state().sent[roomJid]
       const advances = !sent || await this.forward(roomJid, sent.archiveId, position.archiveId, true, !archived)
       if (advances && query.isCurrent() && epoch === (this.epochs.get(key) ?? 0) && this.eligible(roomJid)) {
-        await this.rememberSent(roomJid, position, () => replayCurrent() && watermarkCurrent() && query.isCurrent()
+        await this.rememberSent(roomJid, position, () => watermarkCurrent() && query.isCurrent()
           && epoch === (this.epochs.get(key) ?? 0) && this.eligible(roomJid))
       }
     }
@@ -670,7 +698,7 @@ export class RoomReadMarkers extends BaseModule {
     } catch { return () => false }
   }
 
-  private async rememberSent(roomJid: string, position: Position, isCurrent: () => boolean, dispatch?: () => Promise<void>): Promise<boolean> {
+  private async rememberSent(roomJid: string, position: Position, isCurrent: () => boolean, dispatch?: (commit: () => void) => Promise<void>): Promise<boolean> {
     let delivery: Promise<{ ok: true } | { ok: false; error: unknown }> | undefined
     let saved = false
     try {
@@ -682,15 +710,21 @@ export class RoomReadMarkers extends BaseModule {
         if (previous && !this.order(roomJid).after(position.archiveId, previous.archiveId)) return false
         if (!isCurrent()) return false
         sent[roomJid] = position
-        localStorage.setItem(storageKey(account, 'watermarks'), JSON.stringify({ sent }))
-        this.state().sent = sent
-        // Dispatch starts while the same authorization and erasure scope still holds.
-        // Its eventual failure remains uncertain delivery, so the durable anchor stays.
-        if (dispatch) {
-          try { delivery = dispatch().then(() => ({ ok: true as const }), error => ({ ok: false as const, error })) }
-          catch (error) { delivery = Promise.resolve({ ok: false, error }) }
+        let active = true
+        let wrote = false
+        const commit = () => {
+          if (!active || wrote || !isCurrent()) throw new Error('Room viewing is no longer current')
+          localStorage.setItem(storageKey(account, 'watermarks'), JSON.stringify({ sent }))
+          this.state().sent = sent
+          wrote = true
         }
-        return true
+        try {
+          if (dispatch) {
+            try { delivery = dispatch(commit).then(() => ({ ok: true as const }), error => ({ ok: false as const, error })) }
+            catch (error) { delivery = Promise.resolve({ ok: false, error }) }
+          } else commit()
+        } finally { active = false }
+        return wrote
       })
     } catch { saved = false }
     const result = await delivery
@@ -699,7 +733,7 @@ export class RoomReadMarkers extends BaseModule {
   }
 
   /** Explicit focused viewport evidence, after the existing read writer ran. */
-  viewed(roomJid: string, row: RoomMessage): Promise<void> {
+  viewed(roomJid: string, row: RoomMessage, viewCurrent: () => boolean = () => true): Promise<void> {
     if (!this.focused() || !this.isEnabledFor(roomJid) || !canMark(row, roomJid) || row.isOutgoing) return Promise.resolve()
     if (this.state().sent[roomJid]?.archiveId === row.stanzaId) return Promise.resolve()
     const key = this.roomKey(roomJid)
@@ -708,7 +742,7 @@ export class RoomReadMarkers extends BaseModule {
     const held = this.queued.get(key)
     if (!held || !held.isCurrent() || held.epoch !== (this.epochs.get(key) ?? 0) || held.consent !== this.consentRevision
       || this.order(roomJid).after(row.stanzaId!, held.row.stanzaId!)) {
-      this.queued.set(key, { row, epoch: this.epochs.get(key) ?? 0, consent: this.consentRevision, isCurrent: query.isCurrent })
+      this.queued.set(key, { row, epoch: this.epochs.get(key) ?? 0, consent: this.consentRevision, isCurrent: () => query.isCurrent() && viewCurrent() })
     }
     const running = this.pending.get(key)
     if (running?.isCurrent()) return running.task
@@ -744,9 +778,13 @@ export class RoomReadMarkers extends BaseModule {
         if (reflected && !await this.forward(roomJid, reflected.archiveId, position.archiveId, true)) continue
         if (previous && !await this.forward(roomJid, previous.archiveId, position.archiveId, true)) continue
         if (!current()) continue
-        await this.rememberSent(roomJid, position, () => watermarkCurrent() && current(),
-          () => this.deps.sendStanza(xml('message', { type: 'groupchat', to: roomJid },
-            xml('displayed', { xmlns: NS_CHAT_MARKERS, id: position.archiveId }), xml('store', { xmlns: NS_HINTS }))))
+        const withinReadBoundary = () => {
+          const latest = this.getRoomWithOccupants(roomJid)?.readPointer
+          return !!latest && !isAfterBoundary(exactPosition(confirmed, 'room'), latest.order)
+        }
+        await this.rememberSent(roomJid, position, () => watermarkCurrent() && current() && withinReadBoundary(),
+          commit => this.deps.sendStanza(xml('message', { type: 'groupchat', to: roomJid },
+            xml('displayed', { xmlns: NS_CHAT_MARKERS, id: position.archiveId }), xml('store', { xmlns: NS_HINTS })), commit))
       }
     })
     const entry = { task, isCurrent: query.isCurrent }

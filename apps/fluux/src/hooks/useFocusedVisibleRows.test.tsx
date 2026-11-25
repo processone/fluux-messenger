@@ -1,15 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import type { RoomMessage } from '@fluux/sdk'
+import captured from '../../../../packages/fluux-sdk/src/core/modules/fixtures/roomReadReplay.json'
+import otherRoom from '../../../../packages/fluux-sdk/src/core/modules/fixtures/roomReadMarkers.json'
 import { useFocusedVisibleRows } from './useFocusedVisibleRows'
 import { useViewportObserver } from './useViewportObserver'
 import { messageRowId } from '@/components/conversation/messageRowIdentity'
 
 // Source: issue #1453's focused-view and shared-observer contract. The browser
 // journey owns actual layout; this exercises the shared observer's DOM boundary.
-const row: RoomMessage = { type: 'groupchat', id: 'reading-proof', roomJid: 'reading@conference.localhost',
-  from: 'reading@conference.localhost/Bob', nick: 'Bob', occupantId: 'bob-id', stanzaId: 'archive-reading-proof',
-  originId: undefined, body: 'Room reading proof', timestamp: new Date('2026-05-01T10:00:00Z'), isOutgoing: false }
+function capturedRow(raw: string): RoomMessage {
+  const packet = new DOMParser().parseFromString(raw, 'application/xml').documentElement
+  const forwarded = captured.archive.map(entry => new DOMParser().parseFromString(entry, 'application/xml').querySelector('forwarded')!)
+    .find(entry => entry.querySelector('message')!.getAttribute('id') === packet.getAttribute('id'))!
+  return { type: 'groupchat', roomJid: captured.room, id: packet.getAttribute('id')!, from: packet.getAttribute('from')!,
+    nick: packet.getAttribute('from')!.slice(captured.room.length + 1), occupantId: packet.querySelector('occupant-id')!.getAttribute('id')!,
+    stanzaId: packet.querySelector('stanza-id')!.getAttribute('id')!, originId: undefined,
+    body: packet.querySelector('body')!.textContent!, timestamp: new Date(forwarded.querySelector('delay')!.getAttribute('stamp')!), isOutgoing: false }
+}
+const row = capturedRow(captured.newest)
 const rect = (top: number, height: number) => ({ top, bottom: top + height, height, left: 0, right: 750, width: 750, x: 0, y: top, toJSON: () => ({}) })
 let notify: () => void
 let deliver: () => void
@@ -19,9 +28,9 @@ let scroller: HTMLDivElement
 let message: HTMLDivElement
 let observe: ReturnType<typeof vi.fn>
 let disconnect: ReturnType<typeof vi.fn>
-function useViewing(seen: (rows: readonly RoomMessage[]) => void, enabled = true, rows: readonly RoomMessage[] = [row]) {
+function useViewing(seen: (rows: readonly RoomMessage[], isCurrent: () => boolean) => void, enabled = true, rows: readonly RoomMessage[] = [row]) {
   const ref = { current: scroller }
-  const viewed = useFocusedVisibleRows(ref, rows, seen, enabled)
+  const viewed = useFocusedVisibleRows(ref, rows, seen, enabled, row.roomJid)
   useViewportObserver({ scrollContainerRef: ref, conversationId: row.roomJid, onVisibleRows: viewed, enabled })
 }
 beforeEach(() => {
@@ -56,11 +65,57 @@ beforeEach(() => {
 afterEach(() => { scroller.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers() })
 
 describe('focused visible room rows', () => {
+  it('expires a delivered view as soon as its conversation changes', () => {
+    const seen = vi.fn()
+    const ref = { current: scroller }
+    const view = renderHook(({ conversationId }) => useFocusedVisibleRows(ref, [row], seen, true, conversationId),
+      { initialProps: { conversationId: row.roomJid } })
+    const id = messageRowId(row)
+    if (!id) throw new Error('Captured row must have a stable identity')
+    act(() => view.result.current([id], () => true))
+    const current = seen.mock.calls[0][1] as () => boolean
+    expect(current()).toBe(true)
+    view.rerender({ conversationId: otherRoom.room })
+    expect(current()).toBe(false)
+  })
+
+  it('rechecks live row geometry while storage is pending', () => {
+    const seen = vi.fn()
+    const view = renderHook(() => useViewing(seen))
+    notify()
+    const current = seen.mock.calls.at(-1)![1] as () => boolean
+    expect(current()).toBe(true)
+    vi.mocked(message.getBoundingClientRect).mockReturnValue(rect(600, 100))
+    expect(current()).toBe(false)
+    view.unmount()
+  })
+
+  it('expires a delivered view when a dialog covers it or the room observer is removed', async () => {
+    const seen = vi.fn()
+    const view = renderHook(() => useViewing(seen))
+    notify()
+    const current = seen.mock.calls.at(-1)![1] as () => boolean
+    expect(current()).toBe(true)
+    const dialog = document.createElement('div')
+    dialog.setAttribute('aria-modal', 'true')
+    document.body.append(dialog)
+    expect(current()).toBe(false)
+    await act(async () => { await Promise.resolve() })
+    dialog.remove()
+    await act(async () => { await Promise.resolve() })
+    expect(current()).toBe(false)
+    notify()
+    const next = seen.mock.calls.at(-1)![1] as () => boolean
+    expect(next()).toBe(true)
+    view.unmount()
+    expect(next()).toBe(false)
+  })
+
   it('reports measured rows, never focus alone or offscreen geometry, and stops on teardown', () => {
     const seen = vi.fn()
     const view = renderHook(() => useViewing(seen))
     notify()
-    expect(seen).toHaveBeenLastCalledWith([row])
+    expect(seen).toHaveBeenLastCalledWith([row], expect.any(Function))
     seen.mockClear()
     focused = false
     notify()
@@ -74,7 +129,7 @@ describe('focused visible room rows', () => {
     window.dispatchEvent(new Event('focus'))
     expect(seen).not.toHaveBeenCalled()
     notify()
-    expect(seen).toHaveBeenLastCalledWith([row])
+    expect(seen).toHaveBeenLastCalledWith([row], expect.any(Function))
     view.unmount()
     expect(disconnect).toHaveBeenCalled()
     seen.mockClear()
@@ -93,7 +148,7 @@ describe('focused visible room rows', () => {
     act(() => document.dispatchEvent(new Event('visibilitychange')))
     expect(seen).not.toHaveBeenCalled()
     notify()
-    expect(seen).toHaveBeenLastCalledWith([row])
+    expect(seen).toHaveBeenLastCalledWith([row], expect.any(Function))
     view.unmount()
   })
 
@@ -108,7 +163,7 @@ describe('focused visible room rows', () => {
       expect(seen).not.toHaveBeenCalled()
       await act(async () => { modal.remove() })
       act(() => vi.runOnlyPendingTimers())
-      expect(seen).toHaveBeenCalledWith([row])
+      expect(seen).toHaveBeenCalledWith([row], expect.any(Function))
     } finally { modal.remove(); view.unmount() }
   })
 
@@ -120,7 +175,7 @@ describe('focused visible room rows', () => {
     expect(seen).not.toHaveBeenCalled()
     await act(async () => { scroller.removeAttribute('inert') })
     act(() => vi.runOnlyPendingTimers())
-    expect(seen).toHaveBeenCalledWith([row])
+    expect(seen).toHaveBeenCalledWith([row], expect.any(Function))
     view.unmount()
   })
 
@@ -144,7 +199,7 @@ describe('focused visible room rows', () => {
   })
 
   it('orders measured rows by their bottom edge when an upper row enters after a lower row', () => {
-    const earlier = { ...row, id: 'earlier-row', stanzaId: 'earlier-archive' }
+    const earlier = capturedRow(captured.message)
     const seen = vi.fn()
     const view = renderHook(() => useViewing(seen, true, [row, earlier]))
     act(() => {
@@ -157,7 +212,7 @@ describe('focused visible room rows', () => {
       deliver()
       vi.runOnlyPendingTimers()
     })
-    expect(seen).toHaveBeenLastCalledWith([earlier, row])
+    expect(seen).toHaveBeenLastCalledWith([earlier, row], expect.any(Function))
     view.unmount()
   })
 

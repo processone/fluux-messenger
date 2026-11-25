@@ -1099,13 +1099,13 @@ export const RoomMessageList = memo(function RoomMessageList({
         gaps: { intervals: gaps, onCatchUp: onCatchUpHistory, isCatchingUp },
       }}
       readMarkers={{
-        onFocusedVisibleRows: peerReadMarkers && collectViews ? rows => {
+        onFocusedVisibleRows: peerReadMarkers && collectViews ? (rows, isCurrent) => {
           // The shared observer orders these by their measured bottom edge.
           // Local read/MDS events and hydration never create viewing evidence.
           const incoming = rows.filter(row => !row.isOutgoing && !row.isPrivate && !row.systemEvent
             && !row.securityContext && !row.encryptedPayload && !row.unsupportedEncryption && !row.contentAvailability)
           const last = incoming.at(-1)
-          if (last) void peerReadMarkers.viewed(room.jid, last).catch(() => {})
+          if (last) void peerReadMarkers.viewed(room.jid, last, isCurrent).catch(() => {})
         } : undefined,
         firstNewRow: firstNewMessageRow,
         firstNewIsProvisional: firstNewMessageIsProvisional,

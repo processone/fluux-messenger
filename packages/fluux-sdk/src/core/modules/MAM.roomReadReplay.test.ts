@@ -5,6 +5,7 @@ import type { Element } from '@xmpp/client'
 import { MAM } from './MAM'
 import { RoomReadMarkers, clearRoomReadMarkersLocalData, ROOM_READ_MARKERS_STORAGE_KEY, ROOM_MARKER_OCCUPANT_LIMIT } from './RoomReadMarkers'
 import fixture from './fixtures/roomReadReplay.json'
+import otherRoom from './fixtures/roomReadMarkers.json'
 import { createMockPresenceReader, createMockRoom, createMockStores } from '../test-utils'
 import type { ModuleDependencies } from './BaseModule'
 import type { RoomMessage } from '../types'
@@ -29,6 +30,8 @@ const PEER_NICK = getResource(parse(fixture.marker).attrs.from)!
 // Only transport and store boundaries are stand-ins. The real resolver owns
 // the badge. Focused deterministic coverage runs with the archive checks.
 function harness(block?: 'discovery' | 'archive', self = false) {
+  setStorageScopeJid(self ? 'alice@localhost' : 'bob@localhost')
+  const owner = parse(self ? fixture.marker : fixture.newest).getChild('occupant-id', ACTOR_NS)!.attrs.id
   let release!: () => void
   let entered!: () => void
   const held = new Promise<void>(resolve => { release = resolve })
@@ -43,7 +46,7 @@ function harness(block?: 'discovery' | 'archive', self = false) {
       delayEl: forwarded.getChild('delay', DELAY_NS), expectedStanzaIdBy: fixture.room })
     return [{ type: 'groupchat', roomJid: fixture.room, id: message.attrs.id, originId: parsed.originId, stanzaId: parsed.stanzaId,
       from: message.attrs.from, nick: getResource(message.attrs.from)!, occupantId: message.getChild('occupant-id', ACTOR_NS)!.attrs.id,
-      body: parsed.processedBody, timestamp: parsed.timestamp, isOutgoing: true }]
+      body: parsed.processedBody, timestamp: parsed.timestamp, isOutgoing: message.getChild('occupant-id', ACTOR_NS)!.attrs.id === owner }]
   })
   const targetId = parse(fixture.marker).getChild('displayed', 'urn:xmpp:chat-markers:0')!.attrs.id
   const target = rows.find(row => row.stanzaId === targetId)!
@@ -55,7 +58,8 @@ function harness(block?: 'discovery' | 'archive', self = false) {
     occupants: new Map([
       [OWN_NICK, { nick: OWN_NICK, occupantId: newest.occupantId!, role: 'participant', affiliation: 'member' }],
       [PEER_NICK, { nick: PEER_NICK, occupantId: actor, role: 'moderator', affiliation: 'owner' }],
-    ]), readPointer: makeReadPointer(newest, 'room') })
+    ]) })
+  room.readPointer = makeReadPointer(newest, 'room')
   const stores = createMockStores()
   stores.room.getRoom = vi.fn(jid => jid === fixture.room ? room : undefined)
   stores.room.loadPreviewFromCache.mockResolvedValue(newest)
@@ -80,7 +84,7 @@ function harness(block?: 'discovery' | 'archive', self = false) {
   })
   const deps: ModuleDependencies = { stores, presence: createMockPresenceReader(), sendIQ,
     getCurrentJid: () => self ? 'alice@localhost/browser' : 'bob@localhost/browser', getXmpp: () => connection,
-    sendStanza: vi.fn(), emit: vi.fn(), emitSDK: vi.fn(),
+    sendStanza: vi.fn<ModuleDependencies['sendStanza']>(async (_stanza, beforeWrite) => { beforeWrite?.() }), emit: vi.fn(), emitSDK: vi.fn(),
     registerMAMCollector: (id, collector) => { collectors.set(id, collector); return () => { collectors.delete(id) } },
   }
   const markers = new RoomReadMarkers(deps)
@@ -283,5 +287,91 @@ describe('room read positions after cached reconnect', () => {
     expect(peak).toBe(MAM_BACKGROUND_CONCURRENCY)
     h.markers.cancelPending()
   })
+  it.each(['after', 'before'] as const)('inherits the room operation through a held purged %s cursor fallback', async direction => {
+    const h = harness(undefined, true)
+    const origin = vi.spyOn(h.markers, 'captureReplayBoundary')
+    let release!: () => void
+    let reached!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const entered = new Promise<void>(resolve => { reached = resolve })
+    const respond = h.sendIQ.getMockImplementation()!
+    let first = true
+    h.sendIQ.mockImplementation(async iq => {
+      if (iq.getChild('query', MAM_NS) && first) {
+        first = false; reached(); await gate
+        throw Object.assign(new Error('item-not-found'), { condition: 'item-not-found' })
+      }
+      return respond(iq)
+    })
+    h.stores.room.getRoomCoverage.mockReturnValue({ bottomId: h.target.id })
+    const replayed = h.nextReplay()
+    const pending = h.mam.queryRoomArchive({ roomJid: fixture.room, [direction]: h.target.id })
+    await entered
+    expect(await clearRoomReadMarkersLocalData('alice@localhost')).toBe(true)
+    release()
+    const result = await pending
+    await replayed
+    expect(result.messages.some(row => row.stanzaId === h.target.stanzaId)).toBe(true)
+    expect(origin).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify(['alice@localhost', 'watermarks'])}`)).toBeNull()
+  })
+
+  it('inherits the room operation through held hydration and its catch-up query', async () => {
+    const h = harness(undefined, true)
+    const origin = vi.spyOn(h.markers, 'captureReplayBoundary')
+    h.stores.connection.getStatus.mockReturnValue('online')
+    let release!: () => void
+    let reached!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const entered = new Promise<void>(resolve => { reached = resolve })
+    h.stores.room.loadMessagesFromCache.mockImplementationOnce(async () => { reached(); await gate; return [h.target] })
+    const replayed = h.nextReplay()
+    const pending = h.mam.catchUpRoom(fixture.room)
+    await entered
+    expect(await clearRoomReadMarkersLocalData('alice@localhost')).toBe(true)
+    release()
+    await pending
+    await replayed
+    expect(h.archiveRequests().some(iq => iq.getChild('query', MAM_NS)!.getChild('set', RSM_NS)!.getChildText('after') === h.target.stanzaId)).toBe(true)
+    expect(origin).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify(['alice@localhost', 'watermarks'])}`)).toBeNull()
+  })
+
+  it('inherits the force catch-up operation into rooms still waiting in its queue', async () => {
+    const h = harness(undefined, true)
+    const origin = vi.spyOn(h.markers, 'captureReplayBoundary')
+    h.stores.connection.getStatus.mockReturnValue('online')
+    const firstRoom = createMockRoom(otherRoom.room, { joined: true, isJoining: false })
+    h.room.supportsMAM = true
+    firstRoom.supportsMAM = true
+    h.stores.room.joinedRooms.mockReturnValue([firstRoom, h.room])
+    h.stores.room.getRoom.mockImplementation(jid => jid === firstRoom.jid ? firstRoom : h.room)
+    vi.spyOn(Date, 'now').mockReturnValue(h.newest.timestamp.getTime() + 1_000)
+    let release!: () => void
+    let reached!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const entered = new Promise<void>(resolve => { reached = resolve })
+    const respond = h.sendIQ.getMockImplementation()!
+    h.sendIQ.mockImplementation(async iq => {
+      if (iq.getChild('query', MAM_NS) && iq.attrs.to === firstRoom.jid) {
+        reached(); await gate
+        const fin = parse(fixture.afterFin)
+        fin.attrs.from = firstRoom.jid
+        return fin
+      }
+      return respond(iq)
+    })
+    const replayed = h.nextReplay()
+    const pending = h.mam.forceCatchUpAllRooms({ concurrency: 1 })
+    await entered
+    expect(await clearRoomReadMarkersLocalData('alice@localhost')).toBe(true)
+    release()
+    await pending
+    await replayed
+    expect(h.archiveRequests().map(iq => iq.attrs.to)).toEqual([firstRoom.jid, fixture.room])
+    expect(origin).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify(['alice@localhost', 'watermarks'])}`)).toBeNull()
+  })
+
 
 })
