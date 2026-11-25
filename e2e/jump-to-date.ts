@@ -299,6 +299,30 @@ for (const kind of ['chat', 'room'] as const) {
     await expect(page.getByRole('alert')).toHaveCount(0)
   })
 
+  for (const route of ['pill', 'menu'] as const) {
+    test(`${kind}: stacked cancellation returns to its ${route} opener`, async ({ page }) => {
+      await setup(page, kind)
+      const top = await list(page).evaluate(el => el.scrollTop)
+      if (route === 'pill') { await separator(page).click(); await pickerReady(page) }
+      else await openMenu(page)
+      // Keep both keydowns in one browser task so the foreground opens within the exit window.
+      const connected = await page.evaluate(isMac => {
+        const input = document.querySelector<HTMLInputElement>('#jump-to-date')!
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: !isMac, metaKey: isMac, bubbles: true }))
+        return input.isConnected
+      }, process.platform === 'darwin')
+      expect(connected).toBe(true)
+      await expect(page.getByPlaceholder('Go to...', { exact: true })).toBeFocused()
+      await expect(dialog(page)).toHaveCount(0)
+      await expect(page.getByPlaceholder('Go to...', { exact: true })).toBeFocused()
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('dialog')).toHaveCount(0)
+      await expect(route === 'pill' ? separator(page) : actions(page)).toBeFocused()
+      expect(await list(page).evaluate(el => el.scrollTop)).toBe(top)
+    })
+  }
+
   for (const outcome of ['cancel', 'foreground'] as const) {
     test(`${kind}: pending lookup retains focus and respects ${outcome}`, async ({ page }) => {
       await setup(page, kind)

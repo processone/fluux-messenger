@@ -39,7 +39,7 @@ interface ModalOverlayProps {
   /** Focus target restored when the OS window refocuses; defaults to the panel.
    *  See useRestoreFocus for the rationale. */
   focusRef?: RefObject<HTMLElement | null>
-  /** Replaces opener restoration on effect cleanup, including unmount and StrictMode probes. */
+  /** Replaces opener restoration, including when a foreground modal loses its opener in this panel. */
   restoreFocus?: (opener: HTMLElement | null) => void
   /** Where focus lands when the modal opens (ignored when `focusRef` is set):
    *  - `'auto'` (default): the first focusable child, so form modals focus their

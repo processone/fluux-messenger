@@ -23,6 +23,8 @@ import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
 import { ChatView } from './ChatView'
 import { RoomView } from './RoomView'
+import { ModalOverlay } from './ModalOverlay'
+import { MODAL_EXIT_MS } from '@/hooks/useModalTransition'
 
 const h = vi.hoisted(() => ({
   chat: null as Record<string, unknown> | null,
@@ -770,6 +772,71 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
         expect(kind.storeSpies.setTargetMessageId).toHaveBeenCalled()
       } finally {
         foreground.remove()
+        document.documentElement.removeAttribute('data-motion')
+      }
+    })
+
+    // The approved picker outcome must survive a foreground modal opened during dismissal.
+    it.each([
+      ['Escape', 'visible', 'pill'],
+      ['Close', 'visible', 'pill'],
+      ['backdrop', 'visible', 'pill'],
+      ['Escape', 'clipped', 'actions'],
+      ['Escape', 'removed', 'actions'],
+      ['jump', 'visible', 'messages'],
+      ['jump', 'switched', 'none'],
+      ['jump', 'covered', 'none'],
+      ['jump', 'foreground', 'none'],
+    ] as const)('restores %s with a %s opener after the foreground closes', async (outcome, state, expected) => {
+      document.documentElement.setAttribute('data-motion', 'full')
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      let resolve!: (result: unknown) => void
+      if (outcome === 'jump') h.findFirstMessageOfDay.mockReturnValueOnce(new Promise(done => { resolve = done }))
+      const view = kind.mount()
+      const pill = document.querySelector<HTMLElement>('[data-date-pill]')!
+      const rect = { x: 100, y: 100, top: 100, left: 100, right: 200, bottom: 126, width: 100, height: 26, toJSON() {} }
+      vi.spyOn(pill, 'getBoundingClientRect').mockImplementation(() => rect)
+      fireEvent.click(pill)
+      if (outcome === 'jump') fireEvent.submit(screen.getByLabelText('chat.jumpToDate.date').closest('form')!)
+      else if (outcome === 'Escape') fireEvent.keyDown(document, { key: 'Escape' })
+      else if (outcome === 'Close') fireEvent.click(screen.getByRole('button', { name: 'common.close' }))
+      else fireEvent.click(document.querySelector('[data-modal] > button')!)
+      expect(screen.getByRole('dialog', { name: 'chat.jumpToDate.title' })).toBeInTheDocument()
+      const foreground = render(<ModalOverlay onClose={() => {}}><input aria-label="Search conversations" /></ModalOverlay>)
+      const input = foreground.container.querySelector('input')!
+      const other = document.createElement('div')
+      try {
+        expect(input).toHaveFocus()
+        if (outcome === 'jump') await act(async () => resolve({ kind: 'found', message: kind.messages()[0], source: 'archive' }))
+        else act(() => vi.advanceTimersByTime(MODAL_EXIT_MS))
+        expect(screen.queryByRole('dialog', { name: 'chat.jumpToDate.title' })).toBeNull()
+        expect(input).toHaveFocus()
+        if (state === 'clipped') { rect.top = -100; rect.bottom = -74 }
+        if (state === 'removed') pill.remove()
+        if (state === 'switched') {
+          kind.activate(secondId, kind.messages())
+          view.rerender(kind.name === 'chat' ? <ChatView /> : <RoomView />)
+        }
+        if (state === 'covered') document.querySelector('[data-conversation-thread]')!.setAttribute('inert', '')
+        if (state === 'foreground') {
+          other.dataset.modal = 'true'
+          other.innerHTML = '<input aria-label="Another search">'
+          document.body.append(other)
+          other.querySelector('input')!.focus()
+        }
+        const messages = document.querySelector<HTMLElement>('[data-date-focus-target]')!
+        const focusMessages = vi.spyOn(messages, 'focus')
+        await act(async () => { foreground.unmount() })
+        if (expected === 'pill') expect(pill).toHaveFocus()
+        else if (expected === 'actions') expect(screen.getByRole('button', { name: 'Conversation actions' })).toHaveFocus()
+        else if (expected === 'messages') expect(messages).toHaveFocus()
+        else expect(focusMessages).not.toHaveBeenCalled()
+        if (state === 'foreground') expect(other.querySelector('input')).toHaveFocus()
+        if (outcome !== 'jump') expect(kind.storeSpies.setTargetMessageId).not.toHaveBeenCalled()
+      } finally {
+        foreground.unmount()
+        other.remove()
+        vi.useRealTimers()
         document.documentElement.removeAttribute('data-motion')
       }
     })

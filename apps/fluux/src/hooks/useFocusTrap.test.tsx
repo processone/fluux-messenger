@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { render, cleanup, fireEvent } from '@testing-library/react'
+import { render, cleanup, fireEvent, act } from '@testing-library/react'
 import { StrictMode, useRef } from 'react'
 import { useFocusTrap } from './useFocusTrap'
 import { getTabStops } from './composedFocus'
@@ -76,37 +76,31 @@ describe('useFocusTrap', () => {
     opener.remove()
   })
 
-  // Approved stacked-dialog behavior: a completed jump can remove the foreground opener.
-  it.each(['active', 'switched', 'covered', 'foreground'] as const)('restores a detached picker opener only in its %s conversation', state => {
-    const conversation = document.createElement('div')
-    conversation.dataset.conversationThread = 'alice@example.com'
-    conversation.innerHTML = '<div tabindex="0" data-date-focus-target></div><div data-modal="true"><input id="jump-to-date"><button>Go</button></div>'
-    document.body.append(conversation)
-    const messages = conversation.querySelector<HTMLElement>('[data-date-focus-target]')!
-    const focusMessages = vi.spyOn(messages, 'focus')
-    const picker = conversation.querySelector<HTMLElement>('[data-modal]')!
-    picker.querySelector('button')!.focus()
-    const { unmount, getByText } = render(<Trap />)
-    picker.remove()
-    if (state === 'switched') conversation.dataset.conversationThread = 'bob@example.com'
-    if (state === 'covered') conversation.setAttribute('inert', '')
-    expect(getByText('first')).toHaveFocus()
-    const foreground = document.createElement('div')
-    if (state === 'foreground') {
-      foreground.dataset.modal = 'true'
-      foreground.innerHTML = '<input aria-label="Search">'
-      document.body.append(foreground)
-      foreground.querySelector('input')!.focus()
+  // The picker owns the outcome; a foreground trap must preserve its custom restoration.
+  it.each([false, true])('delegates a detached opener without overriding another foreground owner: %s', async covered => {
+    const opener = document.createElement('button')
+    document.body.append(opener)
+    opener.focus()
+    const restoreFocus = vi.fn()
+    const parent = render(<Trap restoreFocus={restoreFocus} />)
+    const foreground = render(<Trap />)
+    expect(foreground.container.querySelector('button')).toHaveFocus()
+    parent.unmount()
+    restoreFocus.mockClear()
+    const other = document.createElement('div')
+    if (covered) {
+      other.dataset.modal = 'true'
+      other.innerHTML = '<input aria-label="Search">'
+      document.body.append(other)
+      other.querySelector('input')!.focus()
     }
-    unmount()
-    if (state === 'active') expect(messages).toHaveFocus()
-    else {
-      expect(messages).not.toHaveFocus()
-      expect(focusMessages).not.toHaveBeenCalled()
-    }
-    if (state === 'foreground') expect(foreground.querySelector('input')).toHaveFocus()
-    foreground.remove()
-    conversation.remove()
+    await act(async () => { foreground.unmount() })
+    if (covered) {
+      expect(other.querySelector('input')).toHaveFocus()
+      expect(restoreFocus).not.toHaveBeenCalled()
+    } else expect(restoreFocus).toHaveBeenCalledWith(opener)
+    other.remove()
+    opener.remove()
   })
 
   it('does nothing while inactive', () => {

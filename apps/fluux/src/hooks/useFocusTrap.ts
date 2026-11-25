@@ -7,11 +7,14 @@ import {
   getTabStops,
 } from './composedFocus'
 
+// A foreground trap retains its parent's restoration if its own opener disappears.
+const trapRestorers = new WeakMap<HTMLElement, () => void>()
+
 interface FocusTrapOptions {
   /** Preferred element to focus on open; falls back to the first focusable
    *  element, then the container itself. */
   initialFocusRef?: RefObject<HTMLElement | null>
-  /** Replaces default opener restoration on every effect cleanup, including StrictMode probes. */
+  /** Replaces default restoration; a foreground trap can retain this callback when its opener disappears. */
   restoreFocus?: (opener: HTMLElement | null) => void
   /** Gate the trap (e.g. an overlay's `open`/`isOpen` flag). Default true. */
   active?: boolean
@@ -54,15 +57,22 @@ export function useFocusTrap<T extends HTMLElement>(
       !container.contains(document.activeElement)
         ? document.activeElement
         : null
-    // A completed date lookup can remove the opener of a modal above it.
-    // Capture the still-active conversation before that picker leaves the DOM.
-    const dateConversation = previouslyFocused?.closest('[data-modal="true"]')?.querySelector('#jump-to-date')
-      ? previouslyFocused.closest<HTMLElement>('[data-conversation-thread]') : null
-    const dateConversationId = dateConversation?.dataset.conversationThread
+    let inheritedRestore: (() => void) | undefined
+    for (let owner = previouslyFocused; owner; owner = owner.parentElement) {
+      inheritedRestore = trapRestorers.get(owner)
+      if (inheritedRestore) break
+    }
 
     // A custom restorer can defer focus until explicit close. StrictMode's probe
     // then leaves focus inside the panel, so retain the first captured opener.
     if (previouslyFocused) openerRef.current = previouslyFocused
+
+    const restoreOpener = () => {
+      if (restoreFocus) restoreFocus(openerRef.current)
+      else if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true })
+      else inheritedRestore?.()
+    }
+    trapRestorers.set(container, restoreOpener)
 
     // Let the container hold focus itself when it has no focusable children, so
     // focus can never fall through to the page beneath.
@@ -95,12 +105,16 @@ export function useFocusTrap<T extends HTMLElement>(
 
     return () => {
       container.removeEventListener('keydown', handleKeyDown, capture)
-      if (restoreFocus) restoreFocus(openerRef.current)
-      else if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true })
-      else if (dateConversation?.isConnected && dateConversation.dataset.conversationThread === dateConversationId && !dateConversation.closest('[inert], [aria-hidden="true"]')) {
-        const focusedModal = document.activeElement?.closest('[data-modal="true"]')
-        if (focusedModal && !focusedModal.contains(container)) return
-        dateConversation.querySelector<HTMLElement>('[data-date-focus-target]')?.focus({ preventScroll: true })
+      trapRestorers.delete(container)
+      if (restoreFocus || previouslyFocused?.isConnected) restoreOpener()
+      else if (inheritedRestore) {
+        // Layout cleanup precedes DOM removal; the closing panel must no longer
+        // look like a foreground focus owner when its parent decides where to return.
+        queueMicrotask(() => {
+          const focusedModal = document.activeElement?.closest('[data-modal="true"]')
+          if (focusedModal && !focusedModal.contains(container)) return
+          restoreOpener()
+        })
       }
     }
   }, [containerRef, initialFocusRef, restoreFocus, active, includeShadowRoots])
