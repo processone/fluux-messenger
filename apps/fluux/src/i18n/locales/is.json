@@ -1961,6 +1961,12 @@
         "roomDescription": "Senda aðeins í staðfestum, óskráðum, ónafnlausum herbergjum sem eru eingöngu fyrir meðlimi, með færri en 20 viðstöddum með stöðug auðkenni í herberginu. Dulkóðuð skilaboð eru undanskilin.",
         "masterOff": "Aðalrofinn í Persónuvernd er slökktur. Herbergið deilir ekki lestrarstöðu þinni fyrr en þú kveikir á honum.",
         "metadata": "Herbergið og viðstaddir geta séð lestrarvirkni þína. Safnið kann að geyma þessi lýsigögn. Slökkt er á framtíðaruppfærslum, en vistuð merki eru ekki fjarlægð.",
+        "readThroughHere": "Lesið hingað:",
+        "others_one": "+{{count}} annar",
+        "others_other": "+{{count}} aðrir",
+        "readerCount_one": "{{count}} lesandi",
+        "readerCount_other": "{{count}} lesendur",
+        "exactPosition": "Fólk með síðari lestrarstöðu er ekki á þessum lista.",
         "readThrough": "Lesið að þessum skilaboðum",
         "readers": "Lesið að þessum skilaboðum: {{names}}",
         "saveFailed": "Ekki tókst að vista valið. Slökkt verður áfram á deilingu. Athugaðu aðgang að geymslu áður en þú kveikir aftur."

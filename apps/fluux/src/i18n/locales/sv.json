@@ -1961,6 +1961,12 @@
         "roomDescription": "Skicka endast i verifierade, olistade, icke-anonyma rum enbart för medlemmar, med färre än 20 närvarande med stabila rumsidentiteter. Krypterade meddelanden är undantagna.",
         "masterOff": "Huvudreglaget under Integritet är av. Rummet delar inte din läsposition förrän du slår på det.",
         "metadata": "Rummet och de närvarande kan se din läsaktivitet. Arkivet kan behålla dessa metadata. Avstängning stoppar framtida uppdateringar men tar inte bort sparade markörer.",
+        "readThroughHere": "Läst hit:",
+        "others_one": "+{{count}} annan",
+        "others_other": "+{{count}} andra",
+        "readerCount_one": "{{count}} läsare",
+        "readerCount_other": "{{count}} läsare",
+        "exactPosition": "Personer med senare läspositioner ingår inte i den här listan.",
         "readThrough": "Läst till och med detta meddelande",
         "readers": "Läst till och med detta meddelande: {{names}}",
         "saveFailed": "Valet kunde inte sparas. Delning förblir av. Kontrollera åtkomsten till lagringen innan du aktiverar igen."

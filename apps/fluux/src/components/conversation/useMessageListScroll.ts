@@ -268,6 +268,8 @@ export interface UseMessageListScrollResult {
   handleWheel: (e: React.WheelEvent<HTMLDivElement>) => void
   handleLoadEarlier: () => void
   handleMediaLoad: () => void
+  /** Correct plain row displacement from layout/resize callbacks before paint. */
+  handleRowLayoutChange: () => void
   /** Reconcile a positive, virtualizer-reported row-height delta against live scroll geometry. */
   handleVirtualRowMeasuredGrowth: (conversationId: string, heightDelta: number) => void
   scrollToBottom: () => void
@@ -1332,6 +1334,15 @@ export function useMessageListScroll({
       return geometry.height - geometry.top - geometry.client < 1
     }) ?? false
   }
+  const handleRowLayoutChange = useStableCallback(() => {
+    if (latestRef.current.staticMode || live.virtualizer) return
+    const wasAtBottom = isAtBottomRef.current
+    if (reconcileContentLayout()) return
+    const scroller = scrollerRef.current
+    if (wasAtBottom && scroller && getDistanceFromBottom(scroller) > 1) {
+      live.reconcileLiveEdge('row-layout', wasAtBottom)
+    }
+  })
   live.writeObserver = write => {
     const id = live.conversationId
     const scroller = scrollerRef.current
@@ -2618,6 +2629,7 @@ export function useMessageListScroll({
     handleWheel,
     handleLoadEarlier,
     handleMediaLoad,
+    handleRowLayoutChange,
     handleVirtualRowMeasuredGrowth,
     scrollToBottom,
     holdLiveEdgePin,

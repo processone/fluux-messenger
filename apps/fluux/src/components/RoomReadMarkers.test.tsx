@@ -2,15 +2,16 @@ import { Profiler } from 'react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { MessageRowRef, RoomReadConsent, RoomReader } from '@fluux/sdk'
-import { RoomReadBadge, RoomReadCorner, RoomReadSharing } from './RoomReadMarkers'
+import { RoomReadBadge, RoomReadSharing } from './RoomReadMarkers'
+import { RowLayoutContext } from './conversation/rowLayoutContext'
 
-// Approved room read-marker UI: consent controls and badge snapshots only.
-// SDK protocol/order/persistence facts belong to RoomReadMarkers.test.ts.
+// Source: the accepted short-line plan. Protocol and identity facts remain
+// owned by the SDK tests; this source supplies row subscription transitions.
 const room = 'reading@conference.localhost'
 const empty: readonly RoomReader[] = []
-function source() {
+function source(sharing = true) {
   const listeners = new Set<() => void>()
-  let consent: RoomReadConsent = { enabled: false, rooms: [] }
+  let consent: RoomReadConsent = { enabled: sharing, rooms: sharing ? [room] : [] }
   const badges = new Map<string, readonly RoomReader[]>()
   const notify = () => { for (const listener of listeners) listener() }
   return {
@@ -20,31 +21,32 @@ function source() {
     setRoomEnabled: (jid: string, enabled: boolean) => {
       consent = { ...consent, rooms: [...consent.rooms.filter(value => value !== jid), ...(enabled ? [jid] : [])] }; notify(); return true
     },
-    showsBadges: () => true,
     readers: (_room: string, row: MessageRowRef) => badges.get(row.id) ?? empty,
     setReaders: (rows: Record<string, readonly RoomReader[]>) => { for (const [row, readers] of Object.entries(rows)) badges.set(row, readers); notify() },
   }
 }
 
 const people: readonly RoomReader[] = [
-  { occupantId: 'sam-id', nick: 'Sam' }, { occupantId: 'jules-id', nick: 'Jules' },
-  { occupantId: 'noor-id', nick: 'Noor' }, { occupantId: 'maya-id', nick: 'Maya' },
+  { occupantId: 'jules-id', nick: 'Jules' }, { occupantId: 'maya-id', nick: 'Maya' },
+  { occupantId: 'noor-id', nick: 'Noor' }, { occupantId: 'sam-id', nick: 'Sam' },
 ]
 
-// Names remain visible and translated by the same path as the product.
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string, values?: { names?: string }) => {
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ i18n: { language: 'en', dir: () => 'ltr' }, t: (key: string, values?: { names?: string; count?: number }) => {
   const labels: Record<string, string> = {
     'readMarkers.master': 'Share room read positions', 'readMarkers.shareInRoom': 'Share my read position in this room',
     'readMarkers.readThrough': 'Read through this message', 'readMarkers.masterOff': 'The Privacy master switch is off.',
     'readMarkers.saveFailed': 'Could not save this choice. Sharing stays off.',
     'readMarkers.readers': `Read through this message: ${values?.names ?? ''}`,
+    'readMarkers.readThroughHere': 'Read through here:',
+    'readMarkers.others': `+${values?.count} ${values?.count === 1 ? 'other' : 'others'}`,
+    'readMarkers.readerCount': `${values?.count} readers`,
   }
   return labels[key] ?? key
 } }) }))
 
 describe('room read-marker controls', () => {
   it('shows two off-by-default switches and leaves the master off when choosing a room', () => {
-    const markers = source()
+    const markers = source(false)
     render(<><RoomReadSharing markers={markers} /><RoomReadSharing markers={markers} roomJid={room} /></>)
     const master = screen.getByRole('switch', { name: 'Share room read positions' })
     const picked = screen.getByRole('switch', { name: 'Share my read position in this room' })
@@ -61,20 +63,22 @@ describe('room read-marker controls', () => {
   })
 
   it('reports a failed consent save instead of suggesting sharing is enabled', () => {
-    const markers = { ...source(), setEnabled: () => false }
+    const markers = { ...source(false), setEnabled: () => false }
     render(<RoomReadSharing markers={markers} />)
     fireEvent.click(screen.getByRole('switch', { name: 'Share room read positions' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Could not save this choice. Sharing stays off.')
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
   })
 
-  it('caps avatars at three and opens a fully named list with an accessible native button', () => {
+  it('shows three inline names and opens the exact-position list from an unboxed native link', () => {
     const markers = source()
     markers.setReaders({ first: people })
     const view = render(<RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first', stanzaId: 'archive-first' }} />)
-    const opener = screen.getByRole('button', { name: 'Read through this message: Sam, Jules, Noor, Maya' })
-    expect(opener.querySelectorAll('[data-read-marker-avatar]')).toHaveLength(3)
-    expect(within(opener).getByText('+1')).toBeVisible()
+    const opener = screen.getByRole('button', { name: '+1 other: Read through this message: Jules, Maya, Noor, Sam' })
+    expect(view.container.querySelector('[data-read-marker-names]')).toHaveTextContent('Jules, Maya, and Noor')
+    expect(view.container.querySelector('[data-read-marker-avatar]')).toBeNull()
+    expect(opener).toHaveClass('underline', 'min-h-7')
+    expect(opener).toHaveTextContent('+1 other')
     opener.focus()
     expect(opener).toHaveFocus()
     // Native buttons supply Enter/Space activation and pointer/touch activation;
@@ -91,7 +95,7 @@ describe('room read-marker controls', () => {
     markers.setReaders({ first: people })
     render(<><input aria-label="Message composer" /><RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first' }} /></>)
     const composer = screen.getByRole('textbox', { name: 'Message composer' })
-    const opener = screen.getByRole('button', { name: 'Read through this message: Sam, Jules, Noor, Maya' })
+    const opener = screen.getByRole('button', { name: '+1 other: Read through this message: Jules, Maya, Noor, Sam' })
     composer.focus()
     expect(composer).toHaveFocus()
     // WebKit does not automatically focus a pointer-activated button. The event
@@ -107,7 +111,7 @@ describe('room read-marker controls', () => {
     const markers = source()
     markers.setReaders({ first: people })
     render(<><input aria-label="Message composer" /><RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first' }} /></>)
-    fireEvent.click(screen.getByRole('button', { name: 'Read through this message: Sam, Jules, Noor, Maya' }))
+    fireEvent.click(screen.getByRole('button', { name: '+1 other: Read through this message: Jules, Maya, Noor, Sam' }))
     const dialog = screen.getByRole('dialog', { name: 'Read through this message' })
     act(() => markers.setReaders({ first: empty }))
     expect(screen.getByRole('dialog', { name: 'Read through this message' })).toBe(dialog)
@@ -141,19 +145,56 @@ describe('room read-marker controls', () => {
     expect(counts.unchanged).toBe(before.unchanged)
   })
 
-  it('reserves a decorative corner only in qualifying rooms and keeps it unchanged when readers move', () => {
-    let eligible = false
-    const state = source()
-    const markers = { ...state, showsBadges: () => eligible }
-    const view = render(<RoomReadCorner markers={markers} roomJid={room} />)
-    expect(view.container.childElementCount).toBe(0)
-    eligible = true
+  it('notifies the timeline after row commits and ignores unrelated positions', async () => {
+    const markers = source()
+    const observed: string[] = []
+    const reconcile = () => {
+      observed.push(document.querySelector('[data-read-marker-names]')?.textContent ?? '')
+    }
+    const view = render(<RowLayoutContext.Provider value={reconcile}>
+      <RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first' }} />
+    </RowLayoutContext.Provider>)
+    expect(observed).toEqual([])
+    act(() => markers.setReaders({ first: people.slice(0, 2) }))
+    expect(observed).toEqual(['Jules and Maya'])
+    act(() => markers.setReaders({ second: [people[2]] }))
+    expect(observed).toEqual(['Jules and Maya'])
+    act(() => markers.setReaders({ first: empty }))
+    expect(observed).toEqual(['Jules and Maya', ''])
+    expect(view.container).toBeEmptyDOMElement()
     act(() => markers.setReaders({ first: [people[0]] }))
-    const corner = view.container.querySelector('[data-read-marker-corner]')!
-    expect(corner).toHaveAttribute('aria-hidden', 'true')
-    act(() => markers.setReaders({ first: empty, second: [people[0]] }))
-    expect(view.container.querySelector('[data-read-marker-corner]')).toBe(corner)
-    expect(view.container.textContent).toBe('')
+    expect(observed).toEqual(['Jules and Maya', '', 'Jules'])
+    view.unmount()
+    await Promise.resolve()
+    expect(observed).toEqual(['Jules and Maya', '', 'Jules', ''])
   })
 
+  it('renders short groups as text without controls and leaves no corner reservation', () => {
+    const markers = source()
+    markers.setReaders({ first: people.slice(0, 2) })
+    const view = render(<RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first', stanzaId: 'archive-first' }} />)
+    expect(view.container.querySelector('[data-read-marker-row] .italic')).toHaveTextContent('Read through here:')
+    expect(view.container.querySelector('[data-read-marker-names]')).toHaveTextContent('Jules and Maya')
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    act(() => markers.setReaders({ first: [people[1], people[0]] }))
+    expect(view.container.querySelector('[data-read-marker-names]')).toHaveTextContent('Jules and Maya')
+    expect(view.container.querySelector('[data-read-marker-corner]')).toBeNull()
+    act(() => markers.setReaders({ first: empty }))
+    expect(view.container).toBeEmptyDOMElement()
+  })
+
+  it('closes an open list when the parent unmounts the marker and does not reopen on remount', () => {
+    const markers = source()
+    markers.setReaders({ first: people })
+    const badge = <RoomReadBadge markers={markers} roomJid={room} row={{ id: 'first' }} />
+    const view = render(badge)
+    fireEvent.click(screen.getByRole('button'))
+    expect(screen.getByRole('dialog')).toBeVisible()
+    view.rerender(<></>)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(view.container).toBeEmptyDOMElement()
+    view.rerender(badge)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button')).toHaveTextContent('+1 other')
+  })
 })

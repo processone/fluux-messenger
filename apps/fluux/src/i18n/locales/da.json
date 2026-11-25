@@ -1961,6 +1961,12 @@
         "roomDescription": "Send kun i bekræftede, ikke-opførte, ikke-anonyme rum kun for medlemmer med færre end 20 tilstedeværende med stabile rumidentiteter. Krypterede beskeder er udelukket.",
         "masterOff": "Hovedkontakten under Privatliv er slået fra. Rummet deler ikke din læseposition, før du slår den til.",
         "metadata": "Rummet og de tilstedeværende kan se din læseaktivitet. Arkivet kan gemme disse metadata. Deaktivering stopper fremtidige opdateringer, men fjerner ikke gemte markører.",
+        "readThroughHere": "Læst hertil:",
+        "others_one": "+{{count}} anden",
+        "others_other": "+{{count}} andre",
+        "readerCount_one": "{{count}} læser",
+        "readerCount_other": "{{count}} læsere",
+        "exactPosition": "Personer med senere læsepositioner er ikke med på denne liste.",
         "readThrough": "Læst til og med denne besked",
         "readers": "Læst til og med denne besked: {{names}}",
         "saveFailed": "Valget kunne ikke gemmes. Deling forbliver slået fra. Kontrollér adgangen til lageret, før du slår det til igen."

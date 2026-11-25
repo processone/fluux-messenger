@@ -1965,6 +1965,12 @@
         "roomDescription": "Enviar apenas em salas verificadas, não listadas, não anónimas e só para membros, com menos de 20 ocupantes com identidades estáveis na sala. As mensagens encriptadas são excluídas.",
         "masterOff": "O interruptor geral em Privacidade está desativado. Esta sala não partilhará a sua posição de leitura até o ativar.",
         "metadata": "A sala e os seus ocupantes podem ver a sua atividade de leitura. O arquivo pode guardar estes metadados. Desativar interrompe as atualizações futuras, mas não elimina os marcadores guardados.",
+        "readThroughHere": "Lido até aqui:",
+        "others_one": "+{{count}} outra pessoa",
+        "others_other": "+{{count}} outras pessoas",
+        "readerCount_one": "{{count}} leitor",
+        "readerCount_other": "{{count}} leitores",
+        "exactPosition": "As pessoas com posições de leitura posteriores não estão incluídas nesta lista.",
         "readThrough": "Lido até esta mensagem",
         "readers": "Lido até esta mensagem: {{names}}",
         "saveFailed": "Não foi possível guardar a escolha. A partilha permanece desativada. Verifique o acesso ao armazenamento antes de a reativar."

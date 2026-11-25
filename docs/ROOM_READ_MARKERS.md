@@ -13,7 +13,9 @@ The master switch stops all sending without forgetting the selected rooms.
 
 The room and its occupants can see this metadata, and the room archive may retain
 it. Opting out stops future updates; it cannot retract previously stored markers.
-Incoming valid markers remain visible even when sharing is off.
+Fluux hides other people’s positions while either your master switch or this
+room’s sharing choice is off. This visibility choice does not delete received
+markers or change what the room has already stored.
 
 ## Eligibility
 
@@ -82,19 +84,21 @@ position alone.
 
 ## Display
 
-Each reader appears over the lower-right corner of their most recently displayed
-message (lower-left for right-to-left message text), identified by the room's occupant
-ID. Qualifying messages reserve trailing space after their text and reactions so
-badges cannot cover them. The spacer does not increase a text line's height;
-the visible badge is 24 pixels high within a transparent 28-pixel tap area anchored
-to the message column, outside the sender's avatar gutter.
-Some last lines may wrap earlier; moving a reader does
-not resize a qualified row. Nick changes preserve identity, departures hide the reader,
-and reused nicknames do not inherit another person's position. Fluux hides your
-own marker. Each badge shows up to three avatars; its button opens a full named
-list with keyboard and touch support. An open list keeps the names captured when
-it opened until you close it, even when readers advance. Updates use per-row snapshots rather than
-replacing the timeline's messages.
+A short, muted **Read through here** line follows the message and its reactions.
+It marks an inclusive position, not a receipt for that message alone. Each line
+shows up to three whole names in stable occupant-ID order. Short lists need no
+click. When names do not fit, an underlined **+N others** link opens the full list
+at that exact position; **N readers** is used when no name fits. People with later
+positions are not included. Only the label is italic. Large text can wrap, and
+there is no trailing text reservation or full-width peer divider.
+
+Nick changes preserve identity, departures hide the reader, and reused nicknames
+do not inherit another person's position. Fluux hides your own marker, including
+other devices using your account's verified room occupant ID. An open list keeps
+the names captured when it opened until you close it, even when readers advance.
+Disabling sharing also closes the list. Keyboard focus returns to the link, or
+to the timeline if the link disappeared. Updates use per-row snapshots rather
+than replacing the timeline's messages.
 
 Unread badges, the new-message divider, the local read pointer and private
 XEP-0490 synchronization keep their existing meanings and writers. Direct chats,

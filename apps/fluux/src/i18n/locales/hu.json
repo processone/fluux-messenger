@@ -1961,6 +1961,12 @@
         "roomDescription": "Küldés csak ellenőrzött, nem listázott, nem névtelen, kizárólag tagoknak fenntartott szobákban, 20-nál kevesebb jelenlévővel és állandó szobaazonosítókkal. A titkosított üzenetek kizárva.",
         "masterOff": "Az Adatvédelem főkapcsolója ki van kapcsolva. A szoba nem osztja meg az olvasási pozícióját, amíg be nem kapcsolja.",
         "metadata": "A szoba és a jelenlévők láthatják olvasási tevékenységét. Az archívum megőrizheti ezeket a metaadatokat. A kikapcsolás a jövőbeli frissítéseket állítja le, a tárolt jelölőket nem törli.",
+        "readThroughHere": "Eddig olvasta:",
+        "others_one": "+{{count}} további személy",
+        "others_other": "+{{count}} további személy",
+        "readerCount_one": "{{count}} olvasó",
+        "readerCount_other": "{{count}} olvasó",
+        "exactPosition": "A későbbi olvasási pozícióval rendelkezők nem szerepelnek ezen a listán.",
         "readThrough": "Eddig az üzenetig olvasva",
         "readers": "Eddig az üzenetig olvasva: {{names}}",
         "saveFailed": "A választás nem menthető. A megosztás kikapcsolva marad. Újbóli bekapcsolás előtt ellenőrizze a tárhely elérhetőségét."
