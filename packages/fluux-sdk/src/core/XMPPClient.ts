@@ -141,7 +141,7 @@ import {
 import { NS_MAM, NS_PING } from './namespaces'
 import { createDefaultStoreBindings } from './defaultStoreBindings'
 import { createPresenceReader, type PresenceReader } from './presenceReader'
-import { initSearchIndex, backfillFromMessageCache, migrateSearchPostings, migrateSearchFilters, setFilterIndexUnavailable, updateMessage as updateSearchIndex } from '../utils/searchIndex'
+import { initSearchIndex, backfillFromMessageCache, migrateSearchPostings, migrateSearchFilters, updateMessage as updateSearchIndex } from '../utils/searchIndex'
 import { getMessagesWithEncryptedPayload, updateMessage, deleteMessage, deleteMessageForRecovery } from '../utils/messageCache'
 import { queryPepNodeSymbol, publishPepNodeSymbol } from './rawXmppAccess'
 
@@ -1238,12 +1238,7 @@ export class XMPPClient {
       } catch {
         // Search initialization must not prevent sign-in or filter recovery.
       }
-      if (!searchScope.isCurrent()) return
-      try {
-        await migrateSearchFilters()
-      } catch (error) {
-        if (searchScope.isCurrent()) setFilterIndexUnavailable(error, scopedJid)
-      }
+      if (searchScope.isCurrent()) await migrateSearchFilters()
     })()
 
     this.currentJid = options.jid

@@ -28,8 +28,6 @@ export interface JumpToDateDialogProps {
   onClose: () => void
 }
 
-export { localDayBounds, localDayValue } from '@fluux/sdk'
-
 const PRESETS = [
   { key: 'today', days: 0, months: 0 },
   { key: 'weekAgo', days: 7, months: 0 },

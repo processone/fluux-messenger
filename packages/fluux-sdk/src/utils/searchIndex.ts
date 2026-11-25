@@ -1834,12 +1834,6 @@ async function copyFiltersBatch(scopeJid: string | null, assertCurrent: () => vo
 
 export type FilterIndexState = { status: 'preparing' | 'usable' | 'incomplete' | 'unavailable'; reason?: string }
 
-export function setFilterIndexUnavailable(error: unknown, scopeJid: string | null): void {
-  if (getStorageScopeJid() !== scopeJid) return
-  filterErrors.set(scopeJid, error instanceof Error ? error.message : String(error))
-  notifyFilterIndex()
-}
-
 export async function getFilterIndexState(scopeJid: string | null = getStorageScopeJid()): Promise<FilterIndexState> {
   const reason = filterErrors.get(scopeJid)
   if (reason) return { status: 'unavailable', reason }

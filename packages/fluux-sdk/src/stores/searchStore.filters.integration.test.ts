@@ -134,7 +134,8 @@ describe('filter store with the persisted index', () => {
     expect(searchStore.getState().mamResults.map(row => row.messageId)).toEqual(['photo'])
     expect(searchStore.getState().hasMoreMAMResults).toBe(false)
     const initial = request.mock.calls[0][0]
-    expect(request.mock.calls[1][0]).toMatchObject({ before: 'older-page', start: initial.start, end: initial.end })
+    expect(initial).toMatchObject({ maxPages: 20, maxResults: 100 })
+    expect(request.mock.calls[1][0]).toMatchObject({ before: 'older-page', maxPages: 20, start: initial.start, end: initial.end })
   })
 
   it('cancels archive loading when the reader begins another scope prefix', async () => {

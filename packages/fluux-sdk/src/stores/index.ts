@@ -78,7 +78,7 @@ export type { IgnoreState, IgnoredUser } from './ignoreStore'
 export { savedStore, findSavedEntry, selectSavedInConversation, clearSavedLocalData } from './savedStore'
 export type { SavedState } from './savedStore'
 
-export { searchStore, setSearchClient, getSearchClient, setSearchLocale, parseSearchInput } from './searchStore'
+export { searchStore, setSearchClient, getSearchClient, setSearchLocale } from './searchStore'
 export type { SearchState, SearchResult, ContextMessage, SearchResultContext, SearchFilterType, InPrefixSuggestion } from './searchStore'
 
 // =============================================================================

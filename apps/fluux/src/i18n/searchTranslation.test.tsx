@@ -12,6 +12,7 @@ import { SearchView } from '@/components/sidebar-components/SearchView'
 import { SearchContextView } from '@/components/SearchContextView'
 import en from './locales/en.json'
 import fr from './locales/fr.json'
+import de from './locales/de.json'
 
 vi.unmock('@fluux/sdk/react')
 
@@ -91,7 +92,7 @@ beforeEach(async () => {
   vi.clearAllMocks()
   testI18n = createInstance()
   await testI18n.use(initReactI18next).init({
-    resources: { en: { translation: en }, fr: { translation: fr } },
+    resources: { en: { translation: en }, fr: { translation: fr }, de: { translation: de } },
     lng: 'en',
     fallbackLng: 'en',
     interpolation: { escapeValue: false },
@@ -216,7 +217,18 @@ describe('search tab translation', () => {
     })
   })
 
-  it('keeps preparation wording plain for picked filters in both authored languages', async () => {
+  it('uses the selected language for the filter dialog instead of English fallback', async () => {
+    await changeLanguage('de')
+    renderTranslated(<SearchView />)
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }))
+    const dialog = screen.getByRole('dialog', { name: 'Filter' })
+    expect(dialog).toBeVisible()
+    expect(screen.getByLabelText('Von', { exact: true })).toBeVisible()
+    expect(screen.getByRole('checkbox', { name: 'Bilder' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Anwenden' })).toBeVisible()
+  })
+
+  it('keeps preparation wording plain for picked filters in English and French', async () => {
     Object.assign(searchState, { pickedFilters: ['has:image'], filtersBuilding: true })
     renderTranslated(<SearchView />)
     expect(screen.getByRole('status')).toHaveTextContent('sender and content filters')

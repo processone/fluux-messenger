@@ -45,14 +45,4 @@ describe('search preparation during sign-in', () => {
       expect(index.migrateSearchFilters).toHaveBeenCalledOnce()
     },
   )
-
-  it('exposes an unexpected filter preparation failure as unavailable', async () => {
-    vi.mocked(index.migrateSearchFilters).mockRejectedValueOnce(new Error('Filter preparation failed'))
-    const changed = new Promise<void>(resolve => {
-      const unsubscribe = index.subscribeFilterIndex(() => { unsubscribe(); resolve() })
-    })
-    await signIn()
-    await changed
-    expect(await index.getFilterIndexState()).toEqual({ status: 'unavailable', reason: 'Filter preparation failed' })
-  })
 })

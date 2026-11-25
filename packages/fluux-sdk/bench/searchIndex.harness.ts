@@ -1,20 +1,20 @@
-import type { Message } from '../../core/types'
-import * as index from '../searchIndex'
-import * as cache from '../messageCache'
-import { setStorageScopeJid } from '../storageScope'
-import { generateSearchHistory, seedVersion5SearchHistory } from './searchHistory'
+import type { Message } from '../src/core/types'
+import * as index from '../src/utils/searchIndex'
+import * as cache from '../src/utils/messageCache'
+import { setStorageScopeJid } from '../src/utils/storageScope'
+import { generateSearchHistory, seedVersion5SearchHistory } from '../src/utils/fixtures/searchHistory'
 
-export { generateSearchHistory, seedVersion5SearchHistory }
+export interface WordIndex {
+  search(query: string): Promise<Array<{ messageId: string }>>
+  closeSearchIndex(): Promise<void>
+}
 
 const percentile = (values: number[], fraction: number) => [...values].sort((a, b) => a - b)[Math.ceil(values.length * fraction) - 1]
 
 /** Run only in an isolated browser profile: the fixture uses its own account-scoped stores. */
-export async function measureSearchHistory(corpus: readonly Message[], count = 50_000, stage: 'version5' | 'candidate' = 'candidate') {
+export async function measureSearchHistory(corpus: readonly Message[], engine: WordIndex, variant: 'version5' | 'candidate', count = 50_000) {
   const scope = 'search-proof@example.test'
-  setStorageScopeJid(scope)
   const messages = generateSearchHistory(corpus, count)
-  await seedVersion5SearchHistory(scope, messages)
-  await cache.saveMessages('chat', messages as Message[])
   const expectedWordIds = messages.filter(message => /\bsearch\w*/i.test(message.body ?? ''))
     .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime()).slice(0, 50).map(message => message.id)
   if (!expectedWordIds.length) throw new Error('The corpus needs searchable conversation text')
@@ -22,7 +22,7 @@ export async function measureSearchHistory(corpus: readonly Message[], count = 5
     const values: number[] = []
     for (let round = 0; round < 30; round++) {
       const started = performance.now()
-      const results = await index.search('search')
+      const results = await engine.search('search')
       values.push(performance.now() - started)
       if (JSON.stringify(results.map(row => row.messageId)) !== JSON.stringify(expectedWordIds)) {
         throw new Error('Word search disagrees with the independently selected fixture messages')
@@ -30,13 +30,16 @@ export async function measureSearchHistory(corpus: readonly Message[], count = 5
     }
     return { medianMs: percentile(values, 0.5), p95Ms: percentile(values, 0.95) }
   }
+  setStorageScopeJid(scope)
   try {
-    const version5 = await timings()
-    if (stage === 'version5') return { stage, count: messages.length, corpusMessages: corpus.length, version5 }
+    await seedVersion5SearchHistory(scope, messages)
+    await cache.saveMessages('chat', messages as Message[])
+    const beforeFacets = await timings()
+    if (variant === 'version5') return { variant, count: messages.length, corpusMessages: corpus.length, wordOnly: beforeFacets }
     const started = performance.now()
     await index.migrateSearchFilters()
     const migrationMs = performance.now() - started
-    const candidate = await timings()
+    const wordOnly = await timings()
     const state = await index.getFilterIndexState()
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open(`fluux-search-index:${scope}`)
@@ -85,8 +88,9 @@ export async function measureSearchHistory(corpus: readonly Message[], count = 5
         IDBObjectStore.prototype.getAllKeys = originalKeys
       }
     }
-    return { stage, count: messages.length, corpusMessages: corpus.length, version5, candidate, migrationMs, facetRows, state, reads }
+    return { variant, count: messages.length, corpusMessages: corpus.length, beforeFacets, wordOnly, migrationMs, facetRows, state, reads }
   } finally {
+    await engine.closeSearchIndex()
     await index.closeSearchIndex()
     setStorageScopeJid(null)
   }

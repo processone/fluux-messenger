@@ -231,7 +231,7 @@ export function setSearchLocale(locale: string | undefined): void {
 }
 
 /** The query split into its words and its operators, in the reader's locale. */
-export function parseSearchInput(query: string, picked: readonly string[] = []): ParsedSearchInput {
+function parseSearchInput(query: string, picked: readonly string[] = []): ParsedSearchInput {
   return parseSearchFilters(query, searchLocale, picked)
 }
 
@@ -879,7 +879,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
         pagingAbortController = controller
         const result = await clientRef.messages.searchConversationHistory(
           {
-            query: text, with: scope, ...span, before: previousCursor, maxPages: 1, maxResults: 100,
+            query: text, with: scope, ...span, before: previousCursor, maxPages: 20, maxResults: 100,
             ...(filterGroups.length ? { filter: (message: Message) => matchesFilterTokens(message, filterGroups) } : {}),
           },
           controller.signal

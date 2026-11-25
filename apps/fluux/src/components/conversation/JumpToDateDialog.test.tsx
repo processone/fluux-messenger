@@ -4,7 +4,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { useToastStore } from '@/stores/toastStore'
-import { JumpToDateDialog, localDayBounds, localDayValue } from './JumpToDateDialog'
+import { JumpToDateDialog } from './JumpToDateDialog'
+import { localDayBounds, localDayValue } from '@fluux/sdk'
 
 const h = vi.hoisted(() => ({ find: vi.fn(), messages: {} }))
 vi.mock('@fluux/sdk', async (importOriginal) => ({

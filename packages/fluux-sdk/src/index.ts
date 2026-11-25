@@ -218,7 +218,6 @@ export {
   blockingStore,
   searchStore,
   setSearchLocale,
-  parseSearchInput,
 } from './stores'
 
 export type { CacheMigrationProgress, CacheMigrationState } from './stores/cacheMigrationStore'
