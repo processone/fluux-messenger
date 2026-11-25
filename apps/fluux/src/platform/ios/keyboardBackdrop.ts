@@ -60,7 +60,8 @@ let watching = false
 function sample(): void {
   frame = 0
   const viewport = window.visualViewport
-  // Layout coordinates of the last visible row: the visual viewport has been panned by the keyboard.
+  // Layout coordinates of the last visible row of the current visual viewport. WebKit may still be
+  // panning, so this can be stale; the viewport resize and scroll events sample again.
   const bottom = Math.min(Math.floor((viewport ? viewport.offsetTop + viewport.height : window.innerHeight) - 1), window.innerHeight - 1)
   const stack = document.elementsFromPoint(Math.floor(window.innerWidth / 2), Math.max(bottom, 0))
   const backgrounds = function* () { for (const element of stack) yield getComputedStyle(element).backgroundColor }
