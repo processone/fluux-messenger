@@ -1524,7 +1524,7 @@
         },
         "search": {
             "title": "Výsledky vyhledávání",
-            "description": "Vyberte výsledek v postranním panelu pro zobrazení konverzace."
+            "description": "Zde se zobrazují náhledy zpráv."
         }
     },
     "avatar": {

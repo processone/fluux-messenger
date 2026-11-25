@@ -1522,7 +1522,7 @@
         },
         "search": {
             "title": "Resultados da pesquisa",
-            "description": "Selecione um resultado na barra lateral para ver a conversa."
+            "description": "As pré-visualizações das mensagens aparecem aqui."
         }
     },
     "avatar": {

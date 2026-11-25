@@ -1520,7 +1520,7 @@
         },
         "search": {
             "title": "Suchergebnisse",
-            "description": "Wählen Sie ein Ergebnis in der Seitenleiste aus, um die Unterhaltung anzuzeigen."
+            "description": "Hier erscheinen Nachrichtenvorschauen."
         }
     },
     "avatar": {

@@ -93,13 +93,13 @@ export function SettingsView({ onBack, onSubPageBack, showOverview = false }: Se
   return (
     <div className="h-full flex flex-col bg-fluux-chat">
       {/* Header */}
-      <div className="h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
+      <div className="min-h-14 shrink-0 px-4 md:h-14 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
         {/* Back to the Encryption overview, at every width */}
         {encryptionSubPage && (
           <button
             type="button"
             onClick={onSubPageBack ?? (() => navigateToSettings('encryption', { replace: true }))}
-            className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover tap-target"
+            className="shrink-0 p-1 -ms-1 me-2 rounded hover:bg-fluux-hover tap-target"
             aria-label={t('common.back')}
           >
             <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
@@ -110,17 +110,17 @@ export function SettingsView({ onBack, onSubPageBack, showOverview = false }: Se
           <button
             type="button"
             onClick={onBack}
-            className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover md:hidden tap-target"
+            className="shrink-0 p-1 -ms-1 me-2 rounded hover:bg-fluux-hover md:hidden tap-target"
             aria-label={t('common.back')}
           >
             <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
           </button>
         )}
-        {CategoryIcon && <CategoryIcon className="size-5 text-fluux-muted me-2" />}
-        <div className="min-w-0">
+        {CategoryIcon && <CategoryIcon className="size-5 shrink-0 text-fluux-muted me-2" />}
+        <div className="min-w-0 py-2 md:py-0">
           <h2 className="type-view-title text-fluux-text truncate !leading-tight">{headerLabel}</h2>
           {categoryDescription && (
-            <p className="text-xs text-fluux-muted truncate">{categoryDescription}</p>
+            <p className="text-xs text-fluux-muted break-words md:truncate">{categoryDescription}</p>
           )}
         </div>
       </div>

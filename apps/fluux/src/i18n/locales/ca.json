@@ -1522,7 +1522,7 @@
         },
         "search": {
             "title": "Resultats de la cerca",
-            "description": "Seleccioneu un resultat a la barra lateral per veure la conversa."
+            "description": "Les previsualitzacions dels missatges apareixen aquí."
         }
     },
     "avatar": {

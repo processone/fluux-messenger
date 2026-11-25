@@ -1521,7 +1521,7 @@
         },
         "search": {
             "title": "Recherche",
-            "description": "Sélectionnez un résultat dans la barre latérale pour afficher la conversation."
+            "description": "L’aperçu des messages s’affiche ici."
         }
     },
     "avatar": {
