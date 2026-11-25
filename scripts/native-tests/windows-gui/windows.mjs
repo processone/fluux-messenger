@@ -37,8 +37,16 @@ async function ownedJob({ script, args, workspace, env = process.env, cancelFile
   await requireWorkspaceJob(workspaceLease)
   jobMayHaveStarted = true
   jobShutdownConfirmed = false
-  const child = spawn('powershell.exe', encodedPowerShell(command), { env, stdio: 'inherit' })
-  const [code, signal] = await once(child, 'exit')
+  let child
+  let exit
+  try {
+    child = spawn('powershell.exe', encodedPowerShell(command), { env, stdio: 'inherit' })
+    exit = await once(child, 'exit')
+  } catch (error) {
+    if (!child?.pid) jobMayHaveStarted = false
+    throw error
+  }
+  const [code, signal] = exit
   assert.equal(signal, null)
   const job = JSON.parse((await readFile(record, 'utf8')).replace(/^\uFEFF/, ''))
   assert.equal(job.remaining, 0, 'Owned job still contains processes')
@@ -119,7 +127,6 @@ async function run(workspace, evidence, fail, expectedCommit) {
   const profile = join(workspace, `profile-${token}`)
   const config = join(evidence, 'run.json')
   let supervisorCode
-  let workerMayHaveStarted = false
   let shutdownConfirmed = false
   let runError
   try {
@@ -135,16 +142,15 @@ async function run(workspace, evidence, fail, expectedCommit) {
     await writeFile(config, JSON.stringify({ ...info, profile, evidence, driverPort, nativePort, fail }))
     const env = { ...process.env, FLUUX_GUI_TEST_TOKEN: token, WEBVIEW2_USER_DATA_FOLDER: join(profile, 'webview') }
     // Inline commands work under Restricted script policy; no execution-policy setting is changed.
-    workerMayHaveStarted = true
     const result = await ownedJob({ script: join(here, 'worker.mjs'), args: [config], workspace, env,
       cancelFile: join(evidence, 'cancel'), record: join(evidence, 'job.json'), timeout: 150000 })
     supervisorCode = result.code
     shutdownConfirmed = result.shutdownConfirmed
     assert.equal(supervisorCode, 0, 'Windows smoke failed; inspect worker-result.json and native.log')
   } catch (error) { runError = error; throw error } finally {
-    const cleanup = await cleanupProfiles(owned, token, !workerMayHaveStarted || shutdownConfirmed)
+    const cleanup = await cleanupProfiles(owned, token, !jobMayHaveStarted || shutdownConfirmed)
     await writeFile(join(evidence, 'cleanup.json'), JSON.stringify({ ...cleanup, owned, supervisorCode,
-      workerMayHaveStarted, shutdownConfirmed, error: cleanup.errors.length ? 'Some owned profiles were retained; inspect errors' : null }, null, 2))
+      workerMayHaveStarted: jobMayHaveStarted, shutdownConfirmed, error: cleanup.errors.length ? 'Some owned profiles were retained; inspect errors' : null }, null, 2))
     if (cleanup.errors.length && !runError) throw new Error('Profile cleanup failed; inspect cleanup.json')
   }
 }

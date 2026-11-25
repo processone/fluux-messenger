@@ -159,7 +159,12 @@ Build, preflight, run and clean share an exclusive workspace lease. The lease fi
 is a sibling of the workspace, so recursive removal cannot unlock it halfway through.
 The launcher marks the Windows handoff before starting it and releases the lease
 only after confirmed job shutdown, or when no app/build worker was started.
-An unconfirmed stop retains the lease and blocks clean as well as another run.
+Prerequisite discovery happens before the protected Windows handoff. A definite
+process-creation failure preserves its launch error and releases the lease; run
+also removes the profiles it created when no supervisor could start. Once a
+supervisor might have run, missing shutdown confirmation retains the lease and
+blocks clean as well as another run. Clean verifies the workspace marker while
+holding the same lease used for removal.
 Do not remove that file to bypass the guard: first reconcile the job evidence and
 confirm that the owned processes have exited. Workspaces from older harness versions
 without the guard-version marker are refused rather than deleted blindly.

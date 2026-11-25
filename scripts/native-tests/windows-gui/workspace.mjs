@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
+import { join } from 'node:path'
 import { open, readFile, rm, writeFile } from 'node:fs/promises'
 
 // A sibling survives recursive workspace removal, so another command cannot enter halfway through clean.
@@ -44,7 +45,10 @@ export async function releaseWorkspace(lease) {
   await rm(lease.file)
 }
 
-export async function cleanWorkspace(workspace) {
+export async function cleanWorkspace(workspace, ownership) {
   const lease = await acquireWorkspace(workspace)
-  try { await rm(workspace, { recursive: true }) } finally { await releaseWorkspace(lease) }
+  try {
+    assert.deepEqual(JSON.parse(await readFile(join(workspace, '.fluux-gui-workspace.json'), 'utf8')), ownership)
+    await rm(workspace, { recursive: true })
+  } finally { await releaseWorkspace(lease) }
 }
