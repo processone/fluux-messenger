@@ -8,7 +8,7 @@ import { activateChat, navigateToStressRoom, settle } from './harness/scrollHarn
 // disposable demo histories. These browser checks do not qualify native phone pickers.
 type Kind = 'chat' | 'room'
 test.use({ colorScheme: 'dark', timezoneId: 'Europe/Paris' })
-const TODAY = '2026-03-02'
+const MESSAGE_DAY = '2026-03-02'
 const HISTORY_DAY = '2026-03-01'
 const ABSENT_DAY = '2024-02-29'
 const thread = (page: Page) => page.locator('[data-conversation-thread]:not([inert])')
@@ -109,15 +109,15 @@ for (const kind of ['chat', 'room'] as const) {
     const label = await floating(page).getAttribute('aria-label')
     await tabTo(page, floating(page))
     await shot(page, `after-${browserName}-${kind}-floating`)
+    await page.clock.setFixedTime(new Date('2026-03-03T00:30:00Z'))
     await page.keyboard.press('Space')
     await expect(dialog(page)).toBeVisible()
     expect(label).toContain('Jump to date')
-    await expect(dialog(page).getByLabel('Date', { exact: true })).toHaveValue(TODAY)
+    await expect(dialog(page).getByLabel('Date', { exact: true })).toHaveValue(MESSAGE_DAY)
     await page.keyboard.press('Escape')
     await expect(dialog(page)).toHaveCount(0)
     await expect(floating(page)).toBeFocused()
-    // Crossing midnight must not make the menu inherit either pill's saved day.
-    await page.clock.setFixedTime(new Date('2026-03-03T00:30:00Z'))
+    // The menu uses the new today, not either pill's historical day.
     await tabTo(page, actions(page))
     await page.keyboard.press('Space')
     await tabTo(page, page.getByRole('menuitem', { name: 'Jump to date', exact: true }))
@@ -151,6 +151,19 @@ for (const kind of ['chat', 'room'] as const) {
     await page.keyboard.press('Escape')
     await expect(dialog(page)).toHaveCount(0)
     await expect(actions(page)).toBeFocused()
+  })
+
+  test(`${kind}: Tab enters the conversation when the sidebar is hidden`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await setup(page, kind)
+    await thread(page).getByRole('button', { name: kind === 'chat' ? 'Back to conversations' : 'Back to rooms', exact: true }).focus()
+    await page.keyboard.press('Tab')
+    await expect(actions(page)).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(thread(page).locator('[data-date-focus-target]')).toBeFocused()
+    await tabTo(page, separator(page))
+    await page.keyboard.press('Enter')
+    await expect(dialog(page)).toBeVisible()
   })
 
   test(`${kind}: touch controls fit 320 and 390 pixel screens`, async ({ browser, browserName }) => {
@@ -216,9 +229,10 @@ for (const kind of ['chat', 'room'] as const) {
     await setup(page, kind)
     // Only the disposable demo archive boundary is held; the real picker, lookup and close guard run.
     await page.evaluate(kind => {
-      const scope = window as unknown as { __demoClient: { messages: Record<string, (options: Record<string, unknown>) => Promise<unknown>> } }
+      const scope = window as unknown as { __demoClient: { messages: Record<string, (options: Record<string, unknown>) => Promise<unknown>> }; __dateOriginalArchive?: (options: Record<string, unknown>) => Promise<unknown> }
       const method = kind === 'chat' ? 'queryMAM' : 'queryRoomMAM'
       const original = scope.__demoClient.messages[method].bind(scope.__demoClient.messages)
+      scope.__dateOriginalArchive = original
       scope.__demoClient.messages[method] = options => options.dateLookup
         ? Promise.reject(new Error('Archive unavailable in isolated demo check')) : original(options)
     }, kind)
@@ -237,13 +251,23 @@ for (const kind of ['chat', 'room'] as const) {
         __dateRelease?: () => void
         __datePending?: boolean
         __dateActionsFocused: number
+        __dateOriginalArchive: (options: Record<string, unknown>) => Promise<unknown>
+        __dateArchivePending: number
       }
       const method = kind === 'chat' ? 'queryMAM' : 'queryRoomMAM'
-      const original = scope.__demoClient.messages[method].bind(scope.__demoClient.messages)
+      const original = scope.__dateOriginalArchive
+      scope.__dateArchivePending = 0
+      const read = (options: Record<string, unknown>) => {
+        scope.__dateArchivePending++
+        return original(options).finally(() => { scope.__dateArchivePending-- })
+      }
+      let hold = true
       scope.__demoClient.messages[method] = options => {
         if (!options.dateLookup) return original(options)
+        if (!hold) return read(options)
+        hold = false
         scope.__datePending = true
-        return new Promise(resolve => { scope.__dateRelease = () => resolve({ messages: [], complete: false }) })
+        return new Promise((resolve, reject) => { scope.__dateRelease = () => { void read(options).then(resolve, reject) } })
       }
       scope.__dateActionsFocused = 0
       document.addEventListener('focusin', event => {
@@ -263,11 +287,15 @@ for (const kind of ['chat', 'room'] as const) {
     }
     await expect(dialog(page)).toHaveCount(0)
     expect(await page.evaluate(() => (window as unknown as { __dateActionsFocused: number }).__dateActionsFocused)).toBe(0)
-    const messages = thread(page).locator('[data-date-focus-target]')
-    await messages.focus()
-    await page.evaluate(() => (window as unknown as { __dateRelease: () => void }).__dateRelease())
+    const composer = thread(page).locator('.message-input')
+    await composer.focus()
     await settle(page)
-    await expect(messages).toBeFocused()
+    const before = await list(page).evaluate(el => ({ scroll: el.scrollTop, rows: [...el.querySelectorAll<HTMLElement>('[data-message-row-id]')].map(row => row.dataset.messageRowId), selected: el.querySelector<HTMLElement>('.message-highlight')?.dataset.messageId }))
+    await page.evaluate(() => (window as unknown as { __dateRelease: () => void }).__dateRelease())
+    await page.waitForFunction(() => (window as unknown as { __dateArchivePending: number }).__dateArchivePending === 0)
+    await settle(page)
+    await expect(composer).toBeFocused()
+    expect(await list(page).evaluate(el => ({ scroll: el.scrollTop, rows: [...el.querySelectorAll<HTMLElement>('[data-message-row-id]')].map(row => row.dataset.messageRowId), selected: el.querySelector<HTMLElement>('.message-highlight')?.dataset.messageId }))).toEqual(before)
     await expect(page.getByRole('alert')).toHaveCount(0)
   })
 
@@ -319,8 +347,12 @@ for (const kind of ['chat', 'room'] as const) {
         expect(await list(page).evaluate(el => el.scrollTop)).toBe(top)
       } else {
         await expect(page.getByPlaceholder('Go to...', { exact: true })).toBeFocused()
+        await settle(page)
+        const landedScroll = await list(page).evaluate(el => el.scrollTop)
         await page.keyboard.press('Escape')
         await expect(page.getByRole('dialog')).toHaveCount(0)
+        await expect(thread(page).locator('[data-date-focus-target]')).toBeFocused()
+        expect(await list(page).evaluate(el => el.scrollTop)).toBe(landedScroll)
       }
     })
   }
@@ -342,7 +374,7 @@ for (const kind of ['chat', 'room'] as const) {
     expect(Math.abs(currentTop - anchor.top)).toBeLessThanOrEqual(2)
     await openMenu(page)
     const input = dialog(page).getByLabel('Date', { exact: true })
-    await input.fill(TODAY)
+    await input.fill(MESSAGE_DAY)
     await page.evaluate(() => {
       const target = document.querySelector<HTMLElement>('[data-conversation-thread]:not([inert]) [data-date-focus-target]')!
       const focus = target.focus.bind(target)

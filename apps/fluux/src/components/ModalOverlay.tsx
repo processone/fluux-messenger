@@ -125,7 +125,7 @@ export function ModalOverlay({
     requestClose(onClose)
   }, [requestClose, onClose, onDismissRequest])
 
-  // Trap Tab focus inside the panel and return focus to the opener on close.
+  // Trap Tab inside the panel; restore the opener by default, or let the custom callback decide.
   // `focusRef` wins; otherwise `initialFocus='panel'` lands on the container so a
   // display-only modal never rings a content control on open.
   useFocusTrap(panelRef, {

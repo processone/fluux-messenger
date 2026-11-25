@@ -76,6 +76,35 @@ describe('useFocusTrap', () => {
     opener.remove()
   })
 
+  // Approved stacked-dialog behavior: a completed jump can remove the foreground opener.
+  it.each(['active', 'switched', 'covered', 'foreground'] as const)('restores a detached picker opener only in its %s conversation', state => {
+    const conversation = document.createElement('div')
+    conversation.dataset.conversationThread = 'alice@example.com'
+    conversation.innerHTML = '<div tabindex="0" data-date-focus-target></div><div data-modal="true"><input id="jump-to-date"><button>Go</button></div>'
+    document.body.append(conversation)
+    const messages = conversation.querySelector<HTMLElement>('[data-date-focus-target]')!
+    const picker = conversation.querySelector<HTMLElement>('[data-modal]')!
+    picker.querySelector('button')!.focus()
+    const { unmount, getByText } = render(<Trap />)
+    picker.remove()
+    if (state === 'switched') conversation.dataset.conversationThread = 'bob@example.com'
+    if (state === 'covered') conversation.setAttribute('inert', '')
+    expect(getByText('first')).toHaveFocus()
+    const foreground = document.createElement('div')
+    if (state === 'foreground') {
+      foreground.dataset.modal = 'true'
+      foreground.innerHTML = '<input aria-label="Search">'
+      document.body.append(foreground)
+      foreground.querySelector('input')!.focus()
+    }
+    unmount()
+    if (state === 'active') expect(messages).toHaveFocus()
+    else expect(messages).not.toHaveFocus()
+    if (state === 'foreground') expect(foreground.querySelector('input')).toHaveFocus()
+    foreground.remove()
+    conversation.remove()
+  })
+
   it('does nothing while inactive', () => {
     const opener = document.createElement('button')
     document.body.appendChild(opener)

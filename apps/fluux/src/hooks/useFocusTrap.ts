@@ -54,6 +54,12 @@ export function useFocusTrap<T extends HTMLElement>(
       !container.contains(document.activeElement)
         ? document.activeElement
         : null
+    // A completed date lookup can remove the opener of a modal above it.
+    // Capture the still-active conversation before that picker leaves the DOM.
+    const dateConversation = previouslyFocused?.closest('[data-modal="true"]')?.querySelector('#jump-to-date')
+      ? previouslyFocused.closest<HTMLElement>('[data-conversation-thread]') : null
+    const dateConversationId = dateConversation?.dataset.conversationThread
+
     // A custom restorer can defer focus until explicit close. StrictMode's probe
     // then leaves focus inside the panel, so retain the first captured opener.
     if (previouslyFocused) openerRef.current = previouslyFocused
@@ -91,6 +97,11 @@ export function useFocusTrap<T extends HTMLElement>(
       container.removeEventListener('keydown', handleKeyDown, capture)
       if (restoreFocus) restoreFocus(openerRef.current)
       else if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true })
+      else if (dateConversation?.isConnected && dateConversation.dataset.conversationThread === dateConversationId && !dateConversation.closest('[inert], [aria-hidden="true"]')) {
+        const focusedModal = document.activeElement?.closest('[data-modal="true"]')
+        if (focusedModal && !focusedModal.contains(container)) return
+        dateConversation.querySelector<HTMLElement>('[data-date-focus-target]')?.focus({ preventScroll: true })
+      }
     }
   }, [containerRef, initialFocusRef, restoreFocus, active, includeShadowRoots])
 }

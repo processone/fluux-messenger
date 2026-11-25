@@ -142,7 +142,7 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
       const dateStops = conversation
         ? [...conversation.querySelectorAll<HTMLElement>('[data-header-overflow-trigger], [data-date-pill]')].filter(isDatePillVisible)
         : []
-      if (dateStops.length && (currentZone || dateStops.includes(activeElement))) {
+      if (dateStops.length) {
         const stops = ZONE_ORDER.flatMap(zone => {
           const element = refsRef.current[zone]?.current
           if (!element) return []
@@ -154,7 +154,7 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
           ]
         })
         const current = stops.includes(activeElement) ? activeElement : currentZone ? refsRef.current[currentZone]?.current : null
-        const index = stops.findIndex(stop => stop === current)
+        const index = current ? stops.findIndex(stop => stop === current) : e.shiftKey ? 0 : -1
         e.preventDefault()
         for (let step = 1; step <= stops.length; step++) {
           const next = stops[(index + (e.shiftKey ? -step : step) + stops.length) % stops.length]
