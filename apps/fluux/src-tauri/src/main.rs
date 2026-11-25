@@ -1318,6 +1318,9 @@ fn with_communication<R: tauri::Runtime>(
     }
 }
 
+#[cfg(feature = "windows-gui-test")]
+mod windows_gui_test;
+
 fn main() {
     // The silent cleanup helper must exit before directory migration, tracing,
     // single-instance handling, plugins or a webview can open personal state.
@@ -1336,6 +1339,11 @@ fn main() {
     startup_recovery::lab::assert_identity(&identifier);
     // Must run before anything opens the app's directories: the log file
     // below, the plugins, and the webview's storage.
+    #[cfg(feature = "windows-gui-test")]
+    windows_gui_test::initialize(&identifier);
+    #[cfg(feature = "windows-gui-test")]
+    let identity_migration: Option<identity_migration::DirsReport> = None;
+    #[cfg(not(feature = "windows-gui-test"))]
     let identity_migration = identity_migration::migrate_platform_dirs(&identifier);
 
     // Parse CLI flags early, before tracing subscriber init
@@ -1410,6 +1418,9 @@ fn main() {
         //   Linux:   ~/.local/share/net.processone.fluux/logs/  (or $XDG_DATA_HOME)
         //   Windows: %LOCALAPPDATA%\net.processone.fluux\logs\
         let base = dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+        #[cfg(feature = "windows-gui-test")]
+        let dir = base.join(&identifier).join("logs");
+        #[cfg(not(feature = "windows-gui-test"))]
         let dir = base.join(LOG_DIR_NAME).join("logs");
 
         #[cfg(target_os = "macos")]
@@ -1556,8 +1567,11 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init());
-    let app = if cfg!(feature = "startup-recovery-lab") {
-        // The disposable lab never checks or installs updates.
+    let app = if cfg!(any(
+        feature = "startup-recovery-lab",
+        feature = "windows-gui-test"
+    )) {
+        // Disposable qualification builds never check or install updates.
         app
     } else {
         let app = with_updates(app);
@@ -1813,7 +1827,11 @@ fn main() {
             // development and portable/AppImage builds self-register.
             #[cfg(any(
                 target_os = "linux",
-                all(debug_assertions, target_os = "windows")
+                all(
+                    debug_assertions,
+                    target_os = "windows",
+                    not(feature = "windows-gui-test")
+                )
             ))]
             {
                 #[cfg(target_os = "linux")]

@@ -61,6 +61,19 @@ process/profile cleanup, retaining screenshots and protocol evidence outside the
 working copy. It requires real Linux drivers and display tools; missing tools
 fail rather than skip. This smoke is not packaged-app or release qualification.
 
+## Native Windows GUI smoke
+
+The opt-in [Windows GUI harness](../scripts/native-tests/windows-gui/README.md)
+starts Windows-local drivers and a native Node client from one WSL entry point.
+It builds an unsigned, production-TLS Dev GUI test identity with compile-time
+isolation from saved credentials, ordinary app data, shared logs and URI
+registration. Normal builds do not enable that mode. The smoke checks actual
+login input, Tab focus, a read-only native command and owned-job/profile cleanup,
+including a forced failure, with versioned evidence outside the checkout.
+It requires an interactive Windows desktop and matching WebView2/Edge drivers;
+missing prerequisites fail rather than skip. It does not qualify credentials,
+tray behavior, focus after switching windows, installers or releases.
+
 ## Shared application scenarios
 
 Use isolated test accounts on a controlled XMPP server, an isolated application
