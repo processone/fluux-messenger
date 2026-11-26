@@ -28,6 +28,7 @@ function emma(): Message[] {
     m('6', EMMA, 'Thanks! Run-through at 4? ☕', minutesAgo(2), {
       replyTo: { id: 'showcase-emma-5', fallbackBody: 'That looks gorgeous. Sending it to the printer right now' },
     }),
+    m('7', EMMA, 'I will bring the badges for the volunteers 🎟️', minutesAgo(1)),
   ]
 }
 

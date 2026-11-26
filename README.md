@@ -66,8 +66,8 @@
 
 | Saved Messages | Search |
 |----------------|--------|
-| <a href="screenshots/showcase/06-saved-dark.png"><img src="screenshots/showcase/06-saved-dark.png" width="380" alt="Saved messages screen listing five saved messages from chats and rooms"/></a> | <a href="screenshots/showcase/07-search-dark.png"><img src="screenshots/showcase/07-search-dark.png" width="380" alt="Message search with highlighted matches and a preview of the conversation"/></a> |
-| *Keep a private copy of any message, one click from the original* | *Full-text search across conversations and rooms* |
+| <a href="screenshots/showcase/06-saved-dark.png"><img src="screenshots/showcase/06-saved-dark.png" width="380" alt="Saved messages: the list of five entries beside the selected message, highlighted in its conversation with the nearby replies"/></a> | <a href="screenshots/showcase/07-search-dark.png"><img src="screenshots/showcase/07-search-dark.png" width="380" alt="Message search for poster narrowed to messages with an image, with the match highlighted in a preview of the conversation"/></a> |
+| *Keep a private copy of any message, one click from the original* | *Search chats and rooms, and filter by sender, date or content* |
 
 [See all screenshots in the visual overview](screenshots/OVERVIEW.md)
 

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<!-- Render with: node scripts/blog-hero/render.mjs 0.19.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fluux Messenger 0.19.0 release thumbnail</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  body { background: #0b1020; }
+  .glow { position: absolute; width: 1000px; height: 1000px; pointer-events: none; }
+  .teal { left: -360px; top: -500px; background: radial-gradient(circle, #38e0c438, transparent 65%); }
+  .violet { right: -340px; bottom: -550px; background: radial-gradient(circle, #a78bfa38, transparent 65%); }
+  .copy { position: absolute; left: 56px; top: 130px; width: 380px; z-index: 3; }
+  .logo { width: 280px; height: auto; display: block; margin-bottom: 34px; }
+  .version { display: inline-block; padding: 5px 18px; border-radius: 999px; color: #0b1020;
+    background: linear-gradient(100deg, #38e0c4, #7c8cff); font-size: 22px; font-weight: 700; margin-bottom: 22px; }
+  h1 { color: #f2f4ff; font-family: 'Inter Display', sans-serif; font-weight: 700;
+    font-size: 54px; line-height: 1.1; letter-spacing: -0.025em; }
+  h1 span { background: linear-gradient(100deg, #38e0c4, #7c8cff 65%, #a78bfa);
+    background-clip: text; -webkit-background-clip: text; color: transparent; }
+  .summary { margin-top: 24px; color: #bdc6e8; font-size: 19px; line-height: 1.5; }
+  .desktop { position: absolute; left: 456px; top: 112px; width: 720px; border-radius: 12px;
+    box-shadow: 0 30px 90px #000a, 0 0 0 1px #7c8cff55; }
+</style>
+</head>
+<body>
+<main class="frame">
+  <div class="glow teal"></div><div class="glow violet"></div>
+  <div class="copy">
+    <img class="logo" src="../../assets/readme/fluux-logo.svg" alt="Fluux">
+    <div class="version">0.19.0</div>
+    <h1>A fresh look,<br><span>easier recall</span></h1>
+    <p class="summary">A redesigned chat.<br>Saved messages and forwarding.<br>Search filters.</p>
+  </div>
+  <img class="desktop" src="../../screenshots/showcase/01-chat-dark.png" alt="A conversation in the redesigned Fluux chat, with the message box floating above the messages">
+</main>
+</body>
+</html>
