@@ -1881,6 +1881,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Sök avsändare…",
+            "noSenders": "Inga matchande avsändare",
             "title": "Filter",
             "from": "Från",
             "anyone": "Alla",

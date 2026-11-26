@@ -1884,6 +1884,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Meklēt sūtītājus…",
+            "noSenders": "Nav atbilstošu sūtītāju",
             "title": "Filtri",
             "from": "No",
             "anyone": "Ikviens",

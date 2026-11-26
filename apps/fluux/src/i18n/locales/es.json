@@ -1885,6 +1885,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Buscar remitentes…",
+            "noSenders": "No hay remitentes coincidentes",
             "title": "Filtros",
             "from": "De",
             "anyone": "Cualquiera",

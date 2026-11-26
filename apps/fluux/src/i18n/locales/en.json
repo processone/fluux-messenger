@@ -1881,6 +1881,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Search senders…",
+            "noSenders": "No matching senders",
             "title": "Filters",
             "from": "From",
             "anyone": "Anyone",

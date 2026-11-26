@@ -1881,6 +1881,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Leita að sendendum…",
+            "noSenders": "Engir sendendur fundust",
             "title": "Síur",
             "from": "Frá",
             "anyone": "Hver sem er",

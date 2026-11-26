@@ -1881,6 +1881,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Търсене на подател…",
+            "noSenders": "Няма съвпадащи податели",
             "title": "Филтри",
             "from": "От",
             "anyone": "Всеки",

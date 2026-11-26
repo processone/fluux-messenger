@@ -1883,6 +1883,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "חיפוש שולחים…",
+            "noSenders": "אין שולחים תואמים",
             "title": "מסננים",
             "from": "מאת",
             "anyone": "כל אחד",

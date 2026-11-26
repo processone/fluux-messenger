@@ -1,6 +1,7 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { SearchView } from './SearchView'
+import { chatStore } from '@fluux/sdk'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -52,6 +53,7 @@ describe('SearchView filters', () => {
     search.picked = []
     search.rooms = new Map()
     search.filtersBuilding = false
+    chatStore.setState({ conversationEntities: new Map() })
   })
 
   it('shows a chip per operator, and removing one keeps the rest of the query', () => {
@@ -155,7 +157,184 @@ describe('SearchView filters', () => {
     expect(search.picked).toEqual(['from:"room:team%40conference.example.test:bob-id:Bob"'])
     search.rooms = new Map()
     fireEvent.click(screen.getByRole('button', { name: 'search.panel.title' }))
+    expect(screen.getByRole('button', { name: 'search.panel.from Bob' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'search.panel.from Bob' }))
     expect(screen.getByRole('option', { name: 'Bob' })).toBeTruthy()
+  })
+
+  describe('approved type-to-filter sender picker', () => {
+    const seedSenders = () => {
+      chatStore.setState({ conversationEntities: new Map([
+        ['jo@example.test', { id: 'jo@example.test', name: 'Jo Lévy', type: 'chat' }],
+      ]) })
+      search.rooms = new Map([
+        ['team@conference.example.test', { jid: 'team@conference.example.test', name: 'Équipe produit', nickname: 'Me', occupants: new Map([
+          ['Camille', { nick: 'Camille', occupantId: 'camille-team' }],
+        ]) }],
+        ['help@conference.example.test', { jid: 'help@conference.example.test', name: 'Aide', nickname: 'Me', occupants: new Map([
+          ['Camille', { nick: 'Camille', occupantId: 'camille-help' }],
+        ]) }],
+      ])
+    }
+    const openPicker = () => {
+      fireEvent.click(screen.getByRole('button', { name: 'search.panel.title' }))
+      const dialog = within(screen.getByRole('dialog'))
+      fireEvent.click(dialog.getByRole('button', { name: /^search.panel.from / }))
+      return dialog
+    }
+
+    it('filters names, room labels and addresses without searching, then applies the exact chosen room identity', async () => {
+      seedSenders()
+      search.query = 'notes'
+      render(<SearchView />)
+      const query = input()
+      const dialog = openPicker()
+      const picker = dialog.getByRole('combobox', { name: 'search.panel.from' })
+      const callsBeforeTyping = [...search.calls]
+      for (const [text, names] of [
+        ['  EQUIPE  ', ['Camille · Équipe produit']],
+        ['léVY', ['Jo Lévy · jo@example.test']],
+        ['JO@EXAMPLE.TEST', ['Jo Lévy · jo@example.test']],
+        ['cam', ['Camille · Équipe produit', 'Camille · Aide']],
+      ] as const) {
+        fireEvent.change(picker, { target: { value: text } })
+        expect(within(dialog.getByRole('listbox')).getAllByRole('option').map(row => row.textContent)).toEqual(['search.panel.anyone', 'search.panel.me', ...names])
+      }
+      expect(search.calls).toEqual(callsBeforeTyping)
+      expect(search.picked).toEqual([])
+      expect(query).toHaveValue('notes')
+      fireEvent.click(dialog.getByRole('option', { name: 'Camille · Aide' }))
+      expect(dialog.queryByRole('listbox')).toBeNull()
+      expect(dialog.getByRole('button', { name: 'search.panel.from Camille · Aide' })).toHaveFocus()
+      expect(search.picked).toEqual([])
+      fireEvent.click(dialog.getByRole('button', { name: 'search.panel.apply' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(search.picked).toEqual(['from:"room:help%40conference.example.test:camille-help:Camille"'])
+      expect(query).toHaveValue('notes')
+    })
+
+    it.each(['team@conference.example.test', 'jo@example.test'])('keeps matches within conversation scope %s', scope => {
+      seedSenders()
+      search.scope = scope
+      render(<SearchView />)
+      const dialog = openPicker()
+      expect(within(dialog.getByRole('listbox')).getAllByRole('option').map(row => row.textContent)).toEqual([
+        'search.panel.anyone', 'search.panel.me', scope.startsWith('team') ? 'Camille' : 'Jo Lévy · jo@example.test',
+      ])
+    })
+
+    it('announces no matches, keeps the draft through composition and closes only the picker on Escape', async () => {
+      search.query = 'notes from:departed@example.test'
+      render(<SearchView />)
+      const query = input()
+      const dialog = openPicker()
+      const picker = dialog.getByRole('combobox', { name: 'search.panel.from' })
+      fireEvent.change(picker, { target: { value: 'nobody-matches' } })
+      expect(dialog.getByRole('status')).toHaveTextContent('search.panel.noSenders')
+      expect(within(dialog.getByRole('listbox')).getAllByRole('option')).toHaveLength(2)
+      fireEvent.keyDown(picker, { key: 'Enter' })
+      expect(dialog.getByRole('combobox', { name: 'search.panel.from' })).toBe(picker)
+      fireEvent.keyDown(picker, { key: 'ArrowDown' })
+      expect(picker).toHaveFocus()
+      fireEvent.keyDown(picker, { key: 'Enter', isComposing: true })
+      fireEvent.keyDown(picker, { key: 'Escape', isComposing: true })
+      expect(dialog.getByRole('combobox', { name: 'search.panel.from' })).toBe(picker)
+      fireEvent.keyDown(picker, { key: 'Escape' })
+      expect(dialog.queryByRole('combobox', { name: 'search.panel.from' })).toBeNull()
+      expect(dialog.getByRole('button', { name: 'search.panel.from departed@example.test' })).toHaveFocus()
+      fireEvent.click(dialog.getByRole('button', { name: 'search.panel.apply' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(search.picked).toEqual(['from:departed@example.test'])
+      expect(query).toHaveValue('notes')
+    })
+
+    it('preserves an untouched multi-sender set after opening and filtering the picker', async () => {
+      search.query = 'notes from:alice from:bob is:mine has:link'
+      render(<SearchView />)
+      const dialog = openPicker()
+      fireEvent.change(dialog.getByRole('combobox', { name: 'search.panel.from' }), { target: { value: 'alice' } })
+      fireEvent.blur(dialog.getByRole('combobox', { name: 'search.panel.from' }), { relatedTarget: dialog.getByLabelText('search.panel.date') })
+      expect(dialog.getByRole('listbox')).toBeInTheDocument()
+      fireEvent.click(dialog.getByRole('button', { name: 'search.panel.apply' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(search.picked).toEqual(['from:alice', 'from:bob', 'is:mine', 'has:link'])
+    })
+
+    it.each(['pointer', 'keyboard'])('replaces unrecognized ROOM text with an explicitly chosen room identity by %s', async method => {
+      const roomValue = 'room:team%40conference.example.test:camille-team:camille'
+      const plainValue = 'ROOM:team%40conference.example.test:camille-team:camille'
+      search.rooms = new Map([['team@conference.example.test', {
+        jid: 'team@conference.example.test', name: 'Équipe produit', nickname: 'Me',
+        occupants: new Map([['camille', { nick: 'camille', occupantId: 'camille-team' }]]),
+      }]])
+      search.query = `notes from:"${plainValue}"`
+      render(<SearchView />)
+      const dialog = openPicker()
+      expect(dialog.getByRole('option', { name: plainValue })).toHaveAttribute('aria-selected', 'true')
+      const room = dialog.getByRole('option', { name: 'camille · Équipe produit' })
+      expect(room).toHaveAttribute('aria-selected', 'false')
+      if (method === 'pointer') fireEvent.click(room)
+      else {
+        const picker = dialog.getByRole('combobox', { name: 'search.panel.from' })
+        fireEvent.keyDown(picker, { key: 'ArrowUp' })
+        fireEvent.keyDown(picker, { key: 'Enter' })
+      }
+      fireEvent.click(dialog.getByRole('button', { name: 'search.panel.apply' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(search.picked).toEqual([`from:"${roomValue}"`])
+      expect(input()).toHaveValue('notes')
+    })
+
+    it('recognizes a differently cased direct address and preserves its original token on keyboard reselection', async () => {
+      seedSenders()
+      const filter = 'from:"JO@EXAMPLE.TEST"'
+      search.query = `notes ${filter}`
+      render(<SearchView />)
+      const dialog = openPicker()
+      const rows = within(dialog.getByRole('listbox')).getAllByRole('option')
+      expect(rows.filter(row => row.textContent?.toLowerCase().includes('jo@example.test'))).toHaveLength(1)
+      const contact = dialog.getByRole('option', { name: 'Jo Lévy · jo@example.test' })
+      expect(contact).toHaveAttribute('aria-selected', 'true')
+      const picker = dialog.getByRole('combobox', { name: 'search.panel.from' })
+      fireEvent.keyDown(picker, { key: 'ArrowUp' })
+      fireEvent.keyDown(picker, { key: 'Enter' })
+      fireEvent.click(dialog.getByRole('button', { name: 'search.panel.apply' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(search.picked).toEqual([filter])
+      expect(input()).toHaveValue('notes')
+    })
+
+    it.each([
+      ['is:mine', 'search.panel.me'],
+      ['from:ME', 'search.panel.me'],
+      ['from:alice', 'alice'],
+    ])('preserves the original token %s when the same sender is chosen again', async (filter, name) => {
+      search.query = `notes ${filter} has:link`
+      render(<SearchView />)
+      const dialog = openPicker()
+      fireEvent.click(dialog.getByRole('option', { name }))
+      fireEvent.click(dialog.getByRole('button', { name: 'search.panel.apply' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(search.picked).toEqual([filter, 'has:link'])
+      expect(input()).toHaveValue('notes')
+    })
+
+    it('selects a highlighted shortcut with Enter without submitting and resets only when asked', async () => {
+      search.query = 'notes from:alice has:link'
+      render(<SearchView />)
+      const dialog = openPicker()
+      const picker = dialog.getByRole('combobox', { name: 'search.panel.from' })
+      fireEvent.keyDown(picker, { key: 'ArrowDown' })
+      fireEvent.keyDown(picker, { key: 'ArrowDown' })
+      fireEvent.keyDown(picker, { key: 'Enter' })
+      expect(dialog.getByRole('button', { name: 'search.panel.from search.panel.me' })).toHaveFocus()
+      expect(search.picked).toEqual([])
+      fireEvent.click(dialog.getByRole('button', { name: 'search.panel.clear' }))
+      fireEvent.click(dialog.getByRole('button', { name: 'search.panel.apply' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(search.picked).toEqual([])
+      expect(input()).toHaveValue('notes')
+    })
   })
 
   it('keeps a localized typed date unchanged when opening the panel', () => {

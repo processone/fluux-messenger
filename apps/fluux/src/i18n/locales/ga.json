@@ -1887,6 +1887,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Cuardaigh seoltóirí…",
+            "noSenders": "Níl aon seoltóirí comhoiriúnacha ann",
             "title": "Scagairí",
             "from": "Ó",
             "anyone": "Duine ar bith",
