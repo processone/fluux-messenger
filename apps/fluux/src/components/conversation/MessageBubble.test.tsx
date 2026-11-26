@@ -1398,7 +1398,7 @@ it('FLM-245 updates only old/new held rows and preserves the toolbar handler ide
     const initial = props.map(p => renders.mock.calls.find(([value]) => value.myReactions === p.myReactions)![0])
     renders.mockClear()
     fireEvent.mouseMove(document.body, { clientX: 0, clientY: 0 })
-    fireEvent.mouseMove(screen.getByTestId('held-a'), { clientX: 100, clientY: 200 })
+    fireEvent.mouseDown(screen.getByTestId('held-a'), { button: 0, buttons: 1, clientX: 100, clientY: 200 })
     expect(screen.getByTestId('held-a').parentElement).toHaveAttribute('data-held', 'held-a')
     const count = (p: MessageBubbleProps) => renders.mock.calls.filter(([value]) => value.myReactions === p.myReactions).length
     const firstCounts = props.map(count)
@@ -1408,7 +1408,8 @@ it('FLM-245 updates only old/new held rows and preserves the toolbar handler ide
     expect(current.onEdit).toBe(initial[0].onEdit)
     expect(current.onDelete).toBe(initial[0].onDelete)
     renders.mockClear()
-    fireEvent.mouseMove(screen.getByTestId('held-b'), { clientX: 120, clientY: 250 })
+    fireEvent.mouseUp(screen.getByTestId('held-a'), { button: 0, buttons: 0 })
+    fireEvent.mouseDown(screen.getByTestId('held-b'), { button: 0, buttons: 1, clientX: 120, clientY: 250 })
     const secondCounts = props.map(count)
     expect(secondCounts).toEqual([1, 1, 0])
     console.info('FLM-245 actual row renders', JSON.stringify({ firstCounts, secondCounts }))

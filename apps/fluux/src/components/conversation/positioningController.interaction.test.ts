@@ -9,6 +9,11 @@ import { ViewportSession } from './viewportSession'
 const conversationId = 'emma@fluux.chat'
 // Baseline capture: the target top was 552px in a scroller beginning at 95px.
 const desired = { kind: 'anchor' as const, messageId: 'interaction-target', placement: { kind: 'top-offset' as const, offsetPx: pixelOffset(552 - 95) } }
+const typingDesired = {
+  ...desired, placement: { ...desired.placement, offsetPx: pixelOffset(342), typingClearance: {
+    bandHeightPx: 0, currentBandHeightPx: 0, controlTopPx: 313, controlBottomPx: 341, tailRowKey: 'typing-tail',
+  } },
+}
 function live(position: () => void = vi.fn()): LiveEdgeExecutor {
   return {
     reachability: () => ({ kind: 'global-live-edge', state: { kind: 'resident-tail', index: 35, mounted: true } }),
@@ -53,6 +58,33 @@ describe('interaction position ownership', () => {
     expect(position).toHaveBeenCalledOnce()
     expect(controller.snapshot().active?.request.generation).toBe(request.generation)
   })
+  it('updates measured typing clearance without replacing the held message or generation', () => {
+    const { controller } = setup()
+    const request = controller.beginInteractionHold({ conversationId, desired: typingDesired, executor: anchor() })!
+    controller.reconcileInteractionHold({ conversationId, typingBandHeight: 0, executor: anchor() })
+    expect(controller.snapshot().active!.request).toBe(request)
+    controller.reconcileInteractionHold({ conversationId, typingBandHeight: 46, executor: anchor() })
+    const active = controller.snapshot().active!.request
+    expect(active.generation).toBe(request.generation)
+    expect(active.desired).toEqual({ ...typingDesired, placement: {
+      ...typingDesired.placement, typingClearance: { ...typingDesired.placement.typingClearance, currentBandHeightPx: 46 },
+    } })
+    controller.reconcileInteractionHold({ conversationId, typingBandHeight: 0, executor: anchor() })
+    expect(controller.snapshot().active!.request.desired).toEqual(typingDesired)
+  })
+
+  it('refreshes control bounds without recapturing the anchor or the former tail', () => {
+    const { controller } = setup()
+    const request = controller.beginInteractionHold({ conversationId, desired: typingDesired, executor: anchor() })!
+    controller.reconcileInteractionHold({ conversationId, controlBounds: { topPx: 275, bottomPx: 303 }, executor: anchor() })
+    expect(controller.snapshot().active!.request.generation).toBe(request.generation)
+    expect(controller.snapshot().active!.request.desired).toEqual({ ...typingDesired, placement: {
+      ...typingDesired.placement, typingClearance: {
+        ...typingDesired.placement.typingClearance, controlTopPx: 275, controlBottomPx: 303,
+      },
+    } })
+  })
+
   it('corrects a new layout before paint even while the previous operation is still settling', () => {
     const { controller } = setup()
     const position = vi.fn()

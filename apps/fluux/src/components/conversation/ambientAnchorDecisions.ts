@@ -129,7 +129,7 @@ export function insertionAnchorApplies(
  *   resident bound an insertion evicts the oldest row and so moves the first id too.
  * - Rows that land above the row that was first, which stays resident, are above the reader
  *   whatever happened to the tail. That is a load-older batch no directional restore holds: the
- *   controller refused its request (a hover hold as it started) or released it (the reader moved
+ *   controller refused its request (an interaction hold as it started) or released it (the reader moved
  *   on). At the resident bound that batch also evicts the newest rows, so the bottom row moves
  *   too. The batch may also carry the row that was first and backfill its archive id, which
  *   renames its handle: where it sits is resolved alias-aware, not by comparing handles.

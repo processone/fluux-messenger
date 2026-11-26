@@ -54,6 +54,8 @@ export type BottomFractionAnchorPosition = {
   }
 }
 
+export type MessageRowOccurrence = { rowId: string; from: string; receivedAt: string }
+
 export type TopOffsetAnchorPosition = {
   kind: 'anchor'
   messageId: string
@@ -66,6 +68,15 @@ export type TopOffsetAnchorPosition = {
     offsetPx: PixelOffset
     /** A bottom-visible tail hold compensates its own growth from this captured row height. */
     rowHeightPx?: PixelOffset
+    /** Acquisition geometry, not the newest row: arrivals must not move an active action. */
+    typingClearance?: {
+      bandHeightPx: number
+      currentBandHeightPx: number
+      controlTopPx: number
+      controlBottomPx: number
+      tailRowKey?: string
+      tailOccurrence?: MessageRowOccurrence
+    }
   }
 }
 

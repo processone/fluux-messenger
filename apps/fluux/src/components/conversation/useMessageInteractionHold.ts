@@ -13,9 +13,6 @@ interface InteractionContext {
 export const MessageInteractionContext = createContext<InteractionContext | null>(null)
 const noSubscription = () => () => {}
 const notHeld = () => false
-// Blink's HandleMouseMoveForMiddleClickAutoscroll turns an initial press into a held pan only
-// outside kNoMiddleClickAutoscrollRadius (15 CSS px on either axis); smaller nudges latch on release.
-const MIDDLE_PAN_DEAD_ZONE = 15
 
 /** FLM-245 F4: ownership changes update only the old and new row, not every bubble. */
 export function useMessageInteractionHeld(ref: RefObject<HTMLElement | null>): boolean {
@@ -24,32 +21,41 @@ export function useMessageInteractionHeld(ref: RefObject<HTMLElement | null>): b
   return useSyncExternalStore(interaction?.subscribe ?? noSubscription, snapshot, notHeld)
 }
 
-interface InteractionPorts {
-  begin: (rowId: string) => boolean
-  release: (resume: boolean) => void
-  menuChanged?: (open: boolean) => void
-  /** Read the list-owned following intent before a hold temporarily clears it. */
-  isFollowing?: () => boolean
+function selectionTouches(row: HTMLElement): boolean {
+  const selection = document.getSelection()
+  return !!selection && !selection.isCollapsed &&
+    (row.contains(selection.anchorNode) || row.contains(selection.focusNode))
 }
 
-/** FLM-229: hover caused by moving content is not deliberate interaction. */
+interface InteractionPorts {
+  begin: (rowId: string, control?: HTMLElement) => boolean
+  release: (resume: boolean) => void
+  menuChanged?: (open: boolean) => void
+}
+
+/** Passive hover never acquires a positioning hold. */
 export function useMessageInteractionHold({
-  scrollRef, conversationId, enabled, begin, release, menuChanged, isFollowing,
+  scrollRef, conversationId, enabled, begin, release, menuChanged,
 }: InteractionPorts & {
   scrollRef: RefObject<HTMLElement | null>
   conversationId: string
   enabled: boolean
 }) {
-  const ports = useRef({ begin, release, menuChanged, isFollowing })
-  ports.current = { begin, release, menuChanged, isFollowing }
+  const ports = useRef({ begin, release, menuChanged })
+  ports.current = { begin, release, menuChanged }
   const [heldMessageId, setHeldMessageId] = useState<string | null>(null)
   const held = useRef<{ id: string; row: HTMLElement } | null>(null)
-  const followingBeforeHold = useRef(false)
   const listeners = useRef(new Set<() => void>())
   const pointerRow = useRef<HTMLElement | null>(null)
   const focusRow = useRef<HTMLElement | null>(null)
   const menu = useRef<{ row: HTMLElement; close: () => void } | null>(null)
-  const dragging = useRef(false)
+  const pressing = useRef(false)
+  const nativeDragging = useRef(false)
+  const capturedPress = useRef<{
+    control: HTMLButtonElement; pointerId: number; bounds: DOMRect; x: number; y: number
+  } | null>(null)
+  const cancelledClick = useRef<HTMLButtonElement | null>(null)
+  const touchPointer = useRef(false)
   const keyboard = useRef(true)
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -68,11 +74,19 @@ export function useMessageInteractionHold({
     leaveTimer.current = null
   }, [])
 
+  const releaseCapturedPress = useCallback((cancelClick: boolean) => {
+    const press = capturedPress.current
+    capturedPress.current = null
+    if (!press) return
+    if (cancelClick) cancelledClick.current = press.control
+    if (press.control.hasPointerCapture(press.pointerId)) press.control.releasePointerCapture(press.pointerId)
+  }, [])
+
   // Also called by the positioning controller before navigation takes the pixels.
   const cancel = useCallback(() => {
     clearLeave()
+    releaseCapturedPress(true)
     held.current = null
-    followingBeforeHold.current = false
     pointerRow.current = null
     focusRow.current = null
     // Hold cancellation is not a physical mouseup; a selection drag can still be running.
@@ -81,29 +95,30 @@ export function useMessageInteractionHold({
     closing?.close()
     if (closing) ports.current.menuChanged?.(false)
     notify()
-  }, [clearLeave, notify])
+  }, [clearLeave, notify, releaseCapturedPress])
 
-  const start = useCallback((row: HTMLElement, refresh = false) => {
+  const start = useCallback((row: HTMLElement, refresh = false, control?: HTMLElement) => {
     const id = readMessageRowId(row)
     if (!id || !row.querySelector('[data-message-toolbar]') ||
       !scrollRef.current || findMessageRowElement(scrollRef.current, id) !== row) return
     clearLeave()
     if (menu.current && menu.current.row !== row) return
     if (held.current?.row === row) {
-      if (refresh) ports.current.begin(held.current.id)
+      if (refresh || control) ports.current.begin(held.current.id, control)
       return
     }
-    const following = held.current ? followingBeforeHold.current : ports.current.isFollowing?.() ?? false
-    if (!ports.current.begin(id)) return
-    followingBeforeHold.current = following
+    if (!ports.current.begin(id, control)) return
     held.current = { id, row }
     notify()
   }, [clearLeave, scrollRef, notify])
 
+  const retainsHold = useCallback((row: HTMLElement) =>
+    nativeDragging.current || pressing.current && selectionTouches(row) || pointerRow.current === row ||
+    keyboard.current && focusRow.current === row || menu.current?.row === row, [])
+
   const maybeRelease = useCallback(() => {
     const target = held.current
-    if (!target || dragging.current || pointerRow.current === target.row ||
-      keyboard.current && focusRow.current === target.row || menu.current?.row === target.row) {
+    if (!target || retainsHold(target.row)) {
       clearLeave()
       return
     }
@@ -112,12 +127,11 @@ export function useMessageInteractionHold({
     leaveTimer.current = setTimeout(() => {
       leaveTimer.current = null
       const target = held.current
-      if (!target || dragging.current || pointerRow.current === target.row ||
-        keyboard.current && focusRow.current === target.row || menu.current?.row === target.row) return
+      if (!target || retainsHold(target.row)) return
       cancel()
       ports.current.release(true)
     }, 100)
-  }, [cancel, clearLeave])
+  }, [cancel, clearLeave, retainsHold])
 
   const setMenuOpen = useCallback((id: string, open: boolean, close: () => void, sourceRow?: HTMLElement) => {
     if (!enabled) return
@@ -138,104 +152,138 @@ export function useMessageInteractionHold({
 
   useEffect(() => {
     if (!enabled) return
-    let point: { x: number; y: number } | null = null
-    let suppressPointer = false
-    let middlePress: { x: number; y: number } | null = null
-    let middlePressMoved = false
     const rowFor = (target: EventTarget | null) => {
       // Confirmation dialogs are DOM descendants of a row, but are not its toolbar interaction.
       if (target instanceof Element && target.closest('[data-modal]')) return null
       const row = target instanceof Element ? target.closest<HTMLElement>('[data-message-row-id]') : null
       return row && scrollRef.current?.contains(row) ? row : null
     }
-    // Drafting at latest is passive over text, but directly entering the toolbar still holds.
-    // A hold clears the list's following flag, so retain its acquisition intent until release.
-    const hoverRowFor = (target: EventTarget | null) => {
-      const row = rowFor(target)
-      const active = document.activeElement
-      const drafting = active?.closest('.message-input') && !active.closest('[data-modal]') &&
-        scrollRef.current?.closest('[data-conversation-column]')?.contains(active)
-      const following = held.current ? followingBeforeHold.current : ports.current.isFollowing?.() ?? false
-      return row && drafting && following &&
-        !(target instanceof Element && target.closest('[data-message-toolbar]') &&
-          !target.closest('.composer-active')) ? null : row
+    const onPointerDown = (event: PointerEvent) => {
+      touchPointer.current = event.pointerType === 'touch'
+      if (touchPointer.current) keyboard.current = false
+      if (event.button !== 0 || !event.isPrimary) return
+      releaseCapturedPress(true)
+      cancelledClick.current = null
+      if (touchPointer.current || !hasHover() || !event.isTrusted) return
+      const source = event.composedPath()[0]
+      const control = source instanceof Element ? source.closest('button') : null
+      if (!(control instanceof HTMLButtonElement) || control.disabled ||
+        !(event.target instanceof Element) || !event.target.closest('[data-message-toolbar]') || !rowFor(event.target)) return
+      // Native capture keeps the original click target through layout motion without synthesizing a click.
+      capturedPress.current = { control, pointerId: event.pointerId, bounds: control.getBoundingClientRect(), x: event.clientX, y: event.clientY }
+      control.setPointerCapture(event.pointerId)
     }
-    // A control the hold itself reveals (the jump-to-latest FAB shows at 1px below the bottom only
-    // while a hold is on) keeps the held row. Releasing there would hide the FAB, drop the pointer
-    // back on the row and start a new hold: the two would trade the pointer on every move.
-    const pointerRowFor = (target: EventTarget | null) =>
-      target instanceof Element && target.closest('[data-interaction-bridge]')
-        ? held.current?.row ?? null
-        : hoverRowFor(target)
-    const onMove = (event: MouseEvent) => {
-      if (middlePress && (event.buttons & 4) !== 0 &&
-        (Math.abs(middlePress.x - event.clientX) > MIDDLE_PAN_DEAD_ZONE ||
-          Math.abs(middlePress.y - event.clientY) > MIDDLE_PAN_DEAD_ZONE)) middlePressMoved = true
-      const moved = point
-        ? point.x !== event.clientX || point.y !== event.clientY
-        : Boolean(event.movementX || event.movementY)
-      point = { x: event.clientX, y: event.clientY }
-      const row = hoverRowFor(event.target)
-      pointerRow.current = pointerRowFor(event.target)
-      if (moved && hasHover()) {
-        keyboard.current = false
-        // An ongoing selection/drag must not reacquire after its native scrolling takes over.
-        if (row && !dragging.current && event.buttons === 0 && !suppressPointer) start(row)
+    const outsidePress = (event: PointerEvent) => {
+      const press = capturedPress.current
+      if (!press || press.pointerId !== event.pointerId || event.clientX === press.x && event.clientY === press.y) return false
+      const inside = (rect: DOMRect) => event.clientX >= rect.left && event.clientX < rect.right &&
+        event.clientY >= rect.top && event.clientY < rect.bottom
+      return !inside(press.bounds) && !inside(press.control.getBoundingClientRect())
+    }
+    const onPointerMove = (event: PointerEvent) => {
+      const press = capturedPress.current
+      if (!press || press.pointerId !== event.pointerId || event.clientX === press.x && event.clientY === press.y) return
+      if (outsidePress(event) || (event.buttons & 1) === 0) {
+        releaseCapturedPress(true)
+        pressing.current = false
+        pointerRow.current = null
+        maybeRelease()
+      } else {
+        press.x = event.clientX
+        press.y = event.clientY
       }
+    }
+    const onPointerUp = (event: PointerEvent) => {
+      if (capturedPress.current?.pointerId !== event.pointerId) return
+      if (outsidePress(event)) releaseCapturedPress(true)
+      // The browser implicitly releases capture after pointerup, retaining its native click target.
+      else capturedPress.current = null
+    }
+    const onPointerCancel = (event: PointerEvent) => {
+      if (capturedPress.current?.pointerId !== event.pointerId) return
+      releaseCapturedPress(true)
+      pressing.current = false
+      pointerRow.current = null
+      maybeRelease()
+    }
+    const onClick = (event: MouseEvent) => {
+      if (event.detail === 0) return
+      const control = cancelledClick.current
+      cancelledClick.current = null
+      if (control && event.composedPath().includes(control)) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+      }
+    }
+    const onMove = (event: MouseEvent) => {
+      if (capturedPress.current) return
+      const row = rowFor(event.target)
+      if (pressing.current) pointerRow.current = held.current?.row === row ? row : null
+      else if (pointerRow.current !== row) pointerRow.current = null
       maybeRelease()
     }
     const onOut = (event: MouseEvent) => {
-      pointerRow.current = pointerRowFor(event.relatedTarget)
+      // WebKit can emit stationary layout boundary events before pending pointer capture takes effect.
+      if (capturedPress.current) return
+      if (rowFor(event.relatedTarget) !== pointerRow.current) pointerRow.current = null
       maybeRelease()
     }
     const onDown = (event: MouseEvent) => {
-      if (!hasHover()) return
+      if (touchPointer.current || !hasHover()) return
       keyboard.current = false
+      nativeDragging.current = false
       if (event.button === 1) {
-        // Resume saved following; native autoscroll consumes auxclick and keeps hover blocked.
-        suppressPointer = true
-        middlePress = { x: event.clientX, y: event.clientY }
-        middlePressMoved = false
         cancel()
         ports.current.release(true)
         return
       }
       if (event.button !== 0) return
-      suppressPointer = false
       const row = rowFor(event.target)
       if (row) {
         pointerRow.current = row
-        start(row)
-        dragging.current = true
+        const source = event.composedPath()[0]
+        const control = event.target instanceof Element && event.target.closest('[data-message-toolbar]') && source instanceof Element
+          ? source.closest<HTMLElement>('button,input,textarea,select') ?? undefined : undefined
+        start(row, false, control)
+        if (held.current?.row !== row) releaseCapturedPress(false)
+        pressing.current = true
       }
     }
-    const onUp = (event: MouseEvent) => {
-      dragging.current = false
-      // Autoscroll can consume its stopping mousedown but still deliver mouseup.
-      if (event.button !== 1 || middlePress === null || middlePressMoved ||
-        !('onauxclick' in document.documentElement)) suppressPointer = false
-      middlePress = null
-      middlePressMoved = false
+    const onUp = () => {
+      pressing.current = false
+      nativeDragging.current = false
+      const row = held.current?.row
+      if (!row || !selectionTouches(row)) pointerRow.current = null
       maybeRelease()
     }
-    const onAuxClick = (event: MouseEvent) => {
-      if (event.button === 1) { suppressPointer = false; middlePress = null; middlePressMoved = false }
-    }
-    const onDragFinish = (event: DragEvent) => {
-      dragging.current = false
-      suppressPointer = false
-      middlePress = null
-      middlePressMoved = false
-      pointerRow.current = rowFor(document.elementFromPoint?.(event.clientX, event.clientY) ??
-        (event.type === 'drop' ? event.target : null))
+    const onSelectionChange = () => {
+      if (!pressing.current && document.getSelection()?.isCollapsed) {
+        pointerRow.current = null
+      }
       maybeRelease()
     }
-    const onKey = () => { keyboard.current = true; suppressPointer = false; middlePress = null; middlePressMoved = false }
+    const onDragStart = (event: DragEvent) => {
+      nativeDragging.current = !!held.current && rowFor(event.target) === held.current.row
+      maybeRelease()
+    }
+    const onDragFinish = () => {
+      pressing.current = false
+      nativeDragging.current = false
+      pointerRow.current = null
+      maybeRelease()
+    }
+    const onKey = () => {
+      keyboard.current = true
+      // Pointer cancellation can leave the opener focused without another focusin event.
+      const active = document.activeElement
+      focusRow.current = active?.closest('[data-message-toolbar]') ? rowFor(active) : null
+      maybeRelease()
+    }
     const onFocus = (event: FocusEvent) => {
       const target = event.target instanceof Element ? event.target : null
       const row = target?.closest('[data-message-toolbar]') ? rowFor(target) : null
       focusRow.current = row
-      if (row && keyboard.current && hasHover()) start(row, true)
+      if (row && keyboard.current && hasHover()) start(row, true, target instanceof HTMLElement ? target : undefined)
       maybeRelease()
     }
     const onFocusOut = () => {
@@ -255,19 +303,22 @@ export function useMessageInteractionHold({
       }
     }
     const onBlur = () => {
-      dragging.current = false
+      pressing.current = false
+      nativeDragging.current = false
       cancel()
       ports.current.release(true)
-      point = null
-      suppressPointer = false
-      middlePress = null
-      middlePressMoved = false
     }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('pointermove', onPointerMove, true)
+    document.addEventListener('pointerup', onPointerUp, true)
+    document.addEventListener('pointercancel', onPointerCancel, true)
+    document.addEventListener('click', onClick, true)
     document.addEventListener('mousemove', onMove, true)
     document.addEventListener('mouseout', onOut, true)
     document.addEventListener('mousedown', onDown, true)
     document.addEventListener('mouseup', onUp, true)
-    document.addEventListener('auxclick', onAuxClick, true)
+    document.addEventListener('selectionchange', onSelectionChange)
+    document.addEventListener('dragstart', onDragStart, true)
     document.addEventListener('dragend', onDragFinish, true)
     document.addEventListener('drop', onDragFinish, true)
     document.addEventListener('keydown', onKey, true)
@@ -277,11 +328,17 @@ export function useMessageInteractionHold({
     document.addEventListener('input', onInput, true)
     window.addEventListener('blur', onBlur)
     return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('pointermove', onPointerMove, true)
+      document.removeEventListener('pointerup', onPointerUp, true)
+      document.removeEventListener('pointercancel', onPointerCancel, true)
+      document.removeEventListener('click', onClick, true)
       document.removeEventListener('mousemove', onMove, true)
       document.removeEventListener('mouseout', onOut, true)
       document.removeEventListener('mousedown', onDown, true)
       document.removeEventListener('mouseup', onUp, true)
-      document.removeEventListener('auxclick', onAuxClick, true)
+      document.removeEventListener('selectionchange', onSelectionChange)
+      document.removeEventListener('dragstart', onDragStart, true)
       document.removeEventListener('dragend', onDragFinish, true)
       document.removeEventListener('drop', onDragFinish, true)
       document.removeEventListener('keydown', onKey, true)
@@ -290,11 +347,12 @@ export function useMessageInteractionHold({
       document.removeEventListener('focusout', onFocusOut, true)
       document.removeEventListener('input', onInput, true)
       window.removeEventListener('blur', onBlur)
-      dragging.current = false
+      pressing.current = false
+      nativeDragging.current = false
       cancel()
       ports.current.release(false)
     }
-  }, [enabled, conversationId, scrollRef, start, cancel, maybeRelease])
+  }, [enabled, conversationId, scrollRef, start, cancel, maybeRelease, releaseCapturedPress])
 
   useLayoutEffect(() => {
     const target = held.current

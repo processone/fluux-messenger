@@ -198,8 +198,7 @@ async function setup(page: Page, kind: Kind) {
   await arrive(page, kind, [targetId], true)
   const target = page.locator(`.message-row[data-message-id="${targetId}"]`)
   await expect(target).toBeInViewport()
-  // FLM-230: warmup arrivals require ordinary following, not the deliberate hover hold.
-  // Place the pointer before explicit latest; keep the native pan and resize journey unchanged.
+  // Warmup requires ordinary following before the native pan and resize journey.
   await target.locator('[data-message-body]').hover()
   await page.keyboard.press('End')
   await expect(page.locator('[data-message-list]')).not.toHaveAttribute('data-message-interaction')

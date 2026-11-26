@@ -126,7 +126,7 @@ function windowShifted(
 export interface DirectionalHistoryRequestFacts {
   /**
    * The controller accepted the request and still holds it, not yet applied, so the load's restore
-   * can still hold the reader. A request it refused, under a hover hold for one, or superseded since
+   * can still hold the reader. A request it refused, under an interaction hold for one, or superseded since
    * cannot (FLM-210).
    */
   pending: (generation: number) => boolean

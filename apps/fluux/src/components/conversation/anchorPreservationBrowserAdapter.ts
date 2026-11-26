@@ -8,7 +8,8 @@ import type { AnchorPreservationRequest } from './scrollPositionModel'
 import type { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorBrowserAdapter'
 import { deriveReachabilityForDesired } from './scrollPositionFacts'
 import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
-import { findMessageRowElement } from './messageRowIdentity'
+import { getComposedActiveElement } from '@/hooks/composedFocus'
+import { findMessageRowElement, findMessageRowOccurrence } from './messageRowIdentity'
 
 /** Distinguishes fixed-anchor stimuli in frame-loop diagnostics. */
 export type AnchorPreservationLoopLabel =
@@ -115,12 +116,36 @@ export class AnchorPreservationBrowserAdapter {
       const bubble = row?.querySelector<HTMLElement>('[data-message-body]') ?? row
       if (!scroller || !row || !bubble) return { kind: 'unavailable' }
       const viewportRect = scroller.getBoundingClientRect()
-      const { offsetPx, rowHeightPx } = request.desired.placement
+      const { offsetPx, rowHeightPx, typingClearance } = request.desired.placement
       const topTarget = scroller.scrollTop + bubble.getBoundingClientRect().top - viewportRect.top - offsetPx
       // Compensate only growth of the held row, not a smaller viewport or newly arriving rows.
-      // Historical reading has no growth baseline and keeps its exact captured top offset.
+      // Historical reading has no growth baseline; only control clearance can move its anchor.
       const rowGrowth = rowHeightPx === undefined ? 0 : Math.max(0, row.getBoundingClientRect().height - rowHeightPx)
-      const target = Math.max(0, topTarget + rowGrowth)
+      let clearance = 0
+      if (typingClearance && (typingClearance.currentBandHeightPx > 0 || typingClearance.currentBandHeightPx !== typingClearance.bandHeightPx)) {
+        const { controlTopPx, controlBottomPx, tailRowKey, tailOccurrence } = typingClearance
+        const bubbleTop = bubble.getBoundingClientRect().top
+        const baselineTop = offsetPx - rowGrowth
+        const panel = row.querySelector<HTMLElement>('[data-message-panel]')
+        const panelRect = panel?.getBoundingClientRect()
+        const focus = panel?.contains(document.activeElement) ? getComposedActiveElement()?.getBoundingClientRect() : null
+        const activeRect = panelRect && panelRect.height <= scroller.clientHeight ? panelRect : focus
+        const activeTop = activeRect ? baselineTop + activeRect.top - bubbleTop : controlTopPx - rowGrowth
+        const activeBottom = activeRect ? baselineTop + activeRect.bottom - bubbleTop : controlBottomPx - rowGrowth
+        // The active control wins if the old tail and the control cannot fit together.
+        const upper = Math.max(0, activeTop)
+        clearance = Math.max(0, activeBottom - scroller.clientHeight)
+        const tail = tailRowKey ? findMessageRowOccurrence(scroller, tailRowKey, tailOccurrence) : null
+        const tailRect = tail?.getBoundingClientRect()
+        const tailBottom = tailRect ? baselineTop + tailRect.bottom - bubbleTop : null
+        if (tailRect && tailRect.height <= scroller.clientHeight && tailBottom !== null && tailBottom - scroller.clientHeight <= upper) {
+          clearance = Math.max(clearance, tailBottom - scroller.clientHeight)
+        }
+        clearance = Math.min(upper, clearance)
+      }
+      const desiredTarget = Math.max(0, topTarget + rowGrowth + clearance)
+      // Plain WebKit can round scrollTop down to an integer CSS pixel, leaving the tail clipped.
+      const target = clearance > 0 ? Math.ceil(desiredTarget) : desiredTarget
       // A growing viewport can clamp away the held offset (for example when typing stops).
       // Reserve only the missing scroll range, under this same positioning lease.
       const padding = parseFloat(getComputedStyle(scroller).paddingBottom) || 0

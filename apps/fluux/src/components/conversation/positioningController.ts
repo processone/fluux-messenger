@@ -215,6 +215,8 @@ export class PositioningController {
 
   reconcileInteractionHold(input: {
     conversationId: string
+    typingBandHeight?: number
+    controlBounds?: { topPx: number; bottomPx: number }
     executor: AnchorPreservationExecutor
   }): boolean {
     const active = this.model.active
@@ -222,7 +224,20 @@ export class PositioningController {
     // A new layout must land before paint even while a prior settle loop is still running.
     // Keep the generation, but replace its leased operation rather than waiting another frame.
     this.runner.cancel('anchor-preservation', 'superseded')
-    const request = active.request as InteractionPositionRequest
+    let request = active.request as InteractionPositionRequest
+    const placement = request.desired.placement
+    if (placement.kind === 'top-offset' && placement.typingClearance) {
+      const previous = placement.typingClearance
+      const currentBandHeightPx = input.typingBandHeight ?? previous.currentBandHeightPx
+      const controlTopPx = input.controlBounds?.topPx ?? previous.controlTopPx
+      const controlBottomPx = input.controlBounds?.bottomPx ?? previous.controlBottomPx
+      if (currentBandHeightPx !== previous.currentBandHeightPx || controlTopPx !== previous.controlTopPx || controlBottomPx !== previous.controlBottomPx) {
+        request = { ...request, desired: { ...request.desired, placement: {
+          ...placement, typingClearance: { ...previous, currentBandHeightPx, controlTopPx, controlBottomPx },
+        } } }
+        this.model = { ...this.model, active: { ...active, request } }
+      }
+    }
     const run = installAnchorRun(this.runner, request, input.executor)
     this.model = advancePhaseIfCurrent(this.model, input.conversationId, request.generation, { kind: 'reconciling' })
     driveAnchor(this.runner, run)
