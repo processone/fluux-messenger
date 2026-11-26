@@ -610,10 +610,10 @@ export function createStoreBindings(
     stores.room.setRoomMAMError(roomJid, error, requestId)
   })
 
-  on('room:history-messages', ({ roomJid, messages, page, complete, direction, preserveGapMarker, isFetchLatest, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId, walkOriginTs, healGapsOnly }) => {
+  on('room:history-messages', ({ roomJid, messages, page, complete, direction, preserveGapMarker, isFetchLatest, emptyRoomArchive, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId, walkOriginTs, healGapsOnly }) => {
     flushOccupants(roomJid)
     const stores = getStores()
-    stores.room.mergeRoomMAMMessages(roomJid, messages, page, complete, direction, { isFetchLatest, preserveGapMarker, extras: { initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId, walkOriginTs, healGapsOnly } })
+    stores.room.mergeRoomMAMMessages(roomJid, messages, page, complete, direction, { isFetchLatest, preserveGapMarker, extras: { emptyRoomArchive, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter, walkOldestId, walkOriginTs, healGapsOnly } })
   })
 
   // Room twin of chat:mam-anchor-purged (see above).

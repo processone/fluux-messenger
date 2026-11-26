@@ -186,8 +186,6 @@ export function clearHistoryCompleteIfOldestDropped<T>(
  * @param disjointFromResidentWindow - The backward page resumed from a cursor below the
  *   resident window (see {@link isDisjointFromResidentWindow}); its `complete` describes
  *   the archive bottom, not the user's visible timeline.
- * @param emptyArchiveConfirmed - This query proved the archive empty, without
- *   cursors or modifications. Other queries revoke the previous empty baseline.
  */
 export function setMAMQueryCompleted(
   states: Map<string, HistoryQueryState>,
@@ -198,8 +196,7 @@ export function setMAMQueryCompleted(
   newestFetchedTimestamp?: number,
   preserveGapMarker = false,
   isFetchLatest = false,
-  disjointFromResidentWindow = false,
-  emptyArchiveConfirmed = false
+  disjointFromResidentWindow = false
 ): Map<string, HistoryQueryState> {
   const newStates = new Map(states)
   const current = newStates.get(id) || DEFAULT_MAM_STATE
@@ -237,7 +234,6 @@ export function setMAMQueryCompleted(
       : current.forwardGapTimestamp
 
   newStates.set(id, {
-    ...(emptyArchiveConfirmed ? { emptyArchiveConfirmed: true } : {}),
     isLoading: current.loadingRequestId ? current.isLoading : false,
     loadingRequestId: current.loadingRequestId,
     error: null,

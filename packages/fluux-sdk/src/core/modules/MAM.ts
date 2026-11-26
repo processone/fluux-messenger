@@ -918,6 +918,7 @@ export class MAM extends BaseModule {
     const maxAutoPages = dateLookup ? 1 : isForward ? (maxAutoPagesOpt ?? MAM_ROOM_FORWARD_MAX_PAGES)
       : !before ? MAM_BACKWARD_SIGNAL_RETRY_PAGES : MAM_BACKWARD_SCROLL_UP_MAX_PAGES
     const allMessages: RoomMessage[] = []
+    let rawResultCount = 0
     let isComplete = false
     let lastPage: PageInfo = {}
     // pageInfo.last of the FIRST backward page — the newest archive entry seen by
@@ -1044,6 +1045,7 @@ export class MAM extends BaseModule {
           const { complete, page: pageInfo } = this.parseMAMResponse(response)
           if (response.getChild('fin', NS_MAM)) this.observeArchive(JSON.stringify([true, roomJid]), session.isCurrent)
 
+          rawResultCount += rawEntries.length
           // Peer markers and targets share this page, but markers are not rows.
           // Drain buffer: E2EE decrypt first, then modification detection, then parse.
           const correctionStart = modifications.corrections.length
@@ -1205,6 +1207,8 @@ export class MAM extends BaseModule {
           direction: 'backward',
           preserveGapMarker,
           isFetchLatest: !before && end === undefined,
+          emptyRoomArchive: max > 0 && !before && end === undefined && !preserveGapMarker &&
+            isComplete && rawResultCount === 0,
           initialBefore: before ?? '',
           fetchLatestTopId,
           sawCoverageTop,

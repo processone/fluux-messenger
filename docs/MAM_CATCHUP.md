@@ -391,6 +391,17 @@ Triggered 10 seconds after background sync starts, giving rooms time to finish j
 - Runs at **concurrency 2**.
 - The 10-second timer is cancelled on disconnect and cleaned up on subscription teardown.
 
+A complete, positive-sized, unbounded room fetch-latest that returned no raw
+archive entries records session-only empty-archive proof. Filtering standalone
+markers or other signals does not make a nonempty walk empty. A successfully
+cached live room row with a room archive ID can materialize the first coverage
+record from that proof and schedule the normal guarded unread recount. Its ID
+supplies `bottomId`, `countBottomId` and `topId`; a bare remote marker never
+establishes coverage or clears the badge itself. Resident-window changes preserve
+the proof, while another archive merge, a session reset, room removal or lost
+membership revokes it. Recorded gaps, delayed rows and failed writes prevent
+this bootstrap.
+
 On an SM resume the delayed pass never runs, so room coverage comes from the
 resume seed instead: rooms joined, MAM-enabled, inactive, and **not** already
 caught up to live are queried with `catchUpRoom`. Caught-up rooms are skipped:

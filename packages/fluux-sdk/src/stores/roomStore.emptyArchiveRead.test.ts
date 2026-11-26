@@ -3,6 +3,7 @@ import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { roomStore, _resetRoomReadStateForTesting } from './roomStore'
 import { connectionStore } from './connectionStore'
+import { chatStore } from './chatStore'
 import * as messageCache from '../utils/messageCache'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
 import type { Room, RoomMessage } from '../core/types'
@@ -28,7 +29,8 @@ function message(id: string, seconds: number): RoomMessage {
 
 function emptyFetch(options: { complete?: boolean; bounded?: boolean } = {}): void {
   roomStore.getState().mergeRoomMAMMessages(ROOM, [], { count: 0 }, options.complete ?? true,
-    'backward', { isFetchLatest: true, preserveGapMarker: options.bounded ?? false })
+    'backward', { isFetchLatest: true, preserveGapMarker: options.bounded ?? false,
+      extras: { emptyRoomArchive: true } })
 }
 
 async function receive(row: RoomMessage): Promise<void> {
@@ -50,7 +52,6 @@ function holdNextWrite(): () => void {
 async function remoteRead(row: RoomMessage): Promise<void> {
   roomStore.getState().applyRemoteDisplayed(ROOM, row.stanzaId!)
   await vi.waitFor(() => expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe(row.id))
-  await roomStore.getState().recomputeUnreadForRoom(ROOM)
 }
 
 // Intent: the fresh-room remote-read defect must be fixed without weakening
@@ -91,6 +92,15 @@ describe('empty initial room archive followed by an inactive remote read', () =>
     expect(roomStore.getState().activeRoomJid).toBe(OTHER_ROOM)
   })
 
+  it('does not attach room empty-archive proof to a chat merge', () => {
+    chatStore.getState().reset()
+    chatStore.getState().addConversation({ id: 'bob@example.com', name: 'Bob', type: 'chat', unreadCount: 0 })
+    chatStore.getState().mergeMAMMessages('bob@example.com', [], { count: 0 }, true, 'backward', {
+      isFetchLatest: true, extras: { emptyRoomArchive: true },
+    })
+    expect(chatStore.getState().getMAMQueryState('bob@example.com').emptyArchiveProof).toBeUndefined()
+  })
+
   it('keeps unread for a marker with no resolvable room archive row', async () => {
     emptyFetch()
     await receive(message('unread', 1))
@@ -122,9 +132,10 @@ describe('empty initial room archive followed by an inactive remote read', () =>
     expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(1)
   })
 
-  it('revokes the empty baseline after a later incomplete catch-up', async () => {
+  it('revokes the empty baseline on a later catch-up even after caught-up state returns', async () => {
     emptyFetch()
     roomStore.getState().mergeRoomMAMMessages(ROOM, [], {}, false, 'forward')
+    roomStore.getState().mergeRoomMAMMessages(ROOM, [], {}, true, 'forward', { preserveGapMarker: true })
     const row = message('after-gap', 3)
     await receive(row)
     await remoteRead(row)
@@ -163,6 +174,44 @@ describe('empty initial room archive followed by an inactive remote read', () =>
     await vi.waitFor(async () => expect(await messageCache.getMessageByStanzaId('room', ROOM, row.stanzaId!)).not.toBeNull())
     await vi.waitFor(() => expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(0))
   })
+
+  it('keeps archive proof when closing the room during its first live cache write', async () => {
+    roomStore.getState().setActiveRoom(ROOM)
+    emptyFetch()
+    const baseline = roomStore.getState().getRoomMAMQueryState(ROOM)
+    const finish = holdNextWrite()
+    const row = message('closed-during-write', 1)
+    await roomStore.getState().addMessage(ROOM, row)
+    roomStore.getState().setActiveRoom(OTHER_ROOM)
+    expect(roomStore.getState().getRoomMAMQueryState(ROOM)).not.toBe(baseline)
+    finish()
+    await vi.waitFor(() => expect(roomStore.getState().getRoomCoverage(ROOM)?.bottomId).toBe(row.stanzaId))
+    await remoteRead(row)
+    await vi.waitFor(() => expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(0))
+    expect(roomStore.getState().activeRoomJid).toBe(OTHER_ROOM)
+  })
+
+  it.each(['remove', 'leave', 'membership-loss', 'session-membership-reset'] as const)(
+    'revokes the empty baseline on %s before a pending or new membership write', async boundary => {
+      emptyFetch()
+      const finish = holdNextWrite()
+      await roomStore.getState().addMessage(ROOM, message('old-membership', 1))
+      if (boundary === 'remove') roomStore.getState().removeRoom(ROOM)
+      else if (boundary === 'leave') roomStore.getState().setRoomJoined(ROOM, false)
+      else if (boundary === 'membership-loss') roomStore.getState().updateRoom(ROOM, { joined: false })
+      else roomStore.getState().markAllRoomsNotJoined()
+      if (boundary === 'remove') roomStore.getState().addRoom(room(ROOM))
+      else roomStore.getState().setRoomJoined(ROOM, true)
+      finish()
+      await vi.waitFor(async () => expect(await messageCache.getMessageByStanzaId('room', ROOM, 'archive-old-membership')).not.toBeNull())
+      expect(roomStore.getState().getRoomCoverage(ROOM)).toBeUndefined()
+      const row = message('new-membership', 3)
+      await receive(row)
+      await remoteRead(row)
+      expect(roomStore.getState().getRoomCoverage(ROOM)).toBeUndefined()
+      expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBeGreaterThan(0)
+    },
+  )
 
   it('does not resurrect the empty baseline when a live write finishes after a session reset', async () => {
     emptyFetch()
