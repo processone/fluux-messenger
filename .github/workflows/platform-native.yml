@@ -116,6 +116,9 @@ jobs:
           executable=$(node scripts/native-tests/preview-identity-build.mjs)
           printf 'executable=%s\n' "$executable" >> "$GITHUB_OUTPUT"
       - name: Test notification diagnostic and preview decisions
+        # About 4 minutes on hosted runners. Each child the tests start has its own deadline; this
+        # limit also ends anything those deadlines miss long before the job's 60 minutes.
+        timeout-minutes: 15
         env:
           FLUUX_PREVIEW_IDENTITY_ORACLE: ${{ steps.notification-oracle.outputs.executable }}
         run: |

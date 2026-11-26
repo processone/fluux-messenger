@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 
 function compileNotificationTests(scratch, main, ios = false, realEngine = false) {
   const binary = join(scratch, ios ? 'notification-test.dylib' : 'notification-test')
-  const target = ios ? ['-emit-library', '-sdk', execFileSync('xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-path'], { encoding: 'utf8' }).trim(),
+  const target = ios ? ['-emit-library', '-sdk', execFileSync('xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-path'], { encoding: 'utf8', timeout: 60000 }).trim(),
     '-target', `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-ios15.0-simulator`] : []
   execFileSync('xcrun', ['swiftc', '-swift-version', '5',
     ...target,
@@ -40,7 +40,7 @@ test('iOS local tap fixtures match the locked notification plugin payload', { sk
     assert.ok(notification, 'The app must resolve a notification plugin')
     const plugin = join(dirname(notification.manifest_path), 'ios', 'Sources')
     execFileSync('xcrun', ['swiftc', '-swift-version', '5', '-emit-module', '-emit-library', '-static', '-module-name', 'Tauri',
-      fileURLToPath(new URL('./native-tests/NotificationTap/Tauri.swift', import.meta.url)), '-emit-module-path', join(scratch, 'Tauri.swiftmodule'), '-o', join(scratch, 'libTauri.a')])
+      fileURLToPath(new URL('./native-tests/NotificationTap/Tauri.swift', import.meta.url)), '-emit-module-path', join(scratch, 'Tauri.swiftmodule'), '-o', join(scratch, 'libTauri.a')], { timeout: 120000 })
     // Only the plugin's data declarations are needed on macOS; its UIKit host
     // runs separately in the unsigned NotificationTap simulator fixture.
     const host = readFileSync(join(plugin, 'NotificationPlugin.swift'), 'utf8')
@@ -49,7 +49,7 @@ test('iOS local tap fixtures match the locked notification plugin payload', { sk
     execFileSync('xcrun', ['swiftc', '-swift-version', '5', '-I', scratch, '-L', scratch, '-lTauri', '-module-cache-path', join(scratch, 'cache'),
       join(scratch, 'NotificationTypes.swift'), join(plugin, 'Notification.swift'), join(plugin, 'NotificationHandler.swift'), join(plugin, 'NotificationManager.swift'),
       fileURLToPath(new URL('./native-tests/NotificationTapPayloadTests.swift', import.meta.url)), '-o', binary], { timeout: 120000 })
-    const output = execFileSync(binary, [fileURLToPath(new URL('./native-tests/NotificationTap/payloads.json', import.meta.url))], { encoding: 'utf8' })
+    const output = execFileSync(binary, [fileURLToPath(new URL('./native-tests/NotificationTap/payloads.json', import.meta.url))], { encoding: 'utf8', timeout: 60000 })
     assert.match(output, /payload contract passed/)
     console.log(output.trim())
   } finally { rmSync(scratch, { recursive: true, force: true }) }
@@ -107,7 +107,7 @@ test('iOS notification conversation grouping', { skip: process.platform !== 'dar
     const binary = compileNotificationTests(scratch, 'NotificationServiceTests.swift')
     for (const scenario of ['room-first', 'room-participants', 'signed-out', 'account-guard', 'stalled-mirror-cleanup', 'widget-reload', 'uncovered-body', 'skip-journal', 'server-plaintext', 'direct', 'room', 'existing', 'missing', 'mirror', 'intents', 'suggestion-launch', 'conversations', 'muc-nick']) {
       await t.test(scenario, () => {
-        const output = execFileSync(binary, [scenario]).toString()
+        const output = execFileSync(binary, [scenario], { timeout: 60000 }).toString()
         assert.match(output, /passed/)
         if (scenario === 'room-first') console.log(output.trim())
       })
@@ -125,7 +125,7 @@ test('iOS unread widget list follows the badge and holds no message text', { ski
     const binary = compileNotificationTests(scratch, 'UnreadListTests.swift')
     for (const scenario of ['badge-write-observations', 'round-trip', 'no-message-text', 'push-adds-row', 'push-events', 'write-failure', 'room-rule', 'other-account', 'cap', 'concurrent-pushes', 'latest-total-wins', 'app-file-authority', 'queued-app-frame', 'clock-rollback', 'membership-reconcile', 'read-wins', 'lock-refused', 'labels-follow-entry-date', 'mismatched-owner', 'midnights', 'clear-wins', 'clear']) {
       await t.test(scenario, () => {
-        const output = execFileSync(binary, [scenario]).toString()
+        const output = execFileSync(binary, [scenario], { timeout: 60000 }).toString()
         assert.match(output, /passed/)
         if (scenario === 'app-file-authority' || scenario === 'membership-reconcile') console.log(output.trim())
       })
@@ -139,7 +139,7 @@ test('iOS widget push decisions reach the bounded content-free export', { skip: 
     const binary = compileNotificationTests(scratch, 'NotificationWidgetDiagnosticTests.swift')
     for (const scenario of ['success', 'already-listed', 'account-mismatch', 'not-counted', 'badge-unavailable', 'list-unavailable', 'diagnostic-unavailable', 'app-read-clear', 'app-read-still-listed', 'app-publication-guards', 'app-read-current', 'app-read-queued', 'badge-other-account', 'badge-legacy', 'both-owners-differ', 'count-mismatch', 'push-reconciles-read-row', 'already-counted-missing-row', 'already-counted-stale-row', 'already-counted-current', 'already-counted-list-owner-mismatch']) {
       await t.test(scenario, () => {
-        const result = spawnSync(binary, [scenario], { encoding: 'utf8' })
+        const result = spawnSync(binary, [scenario], { encoding: 'utf8', timeout: 60000 })
         assert.equal(result.status, 0, result.error?.message ?? `${result.stdout}\n${result.stderr}`)
         const output = result.stdout
         assert.match(output, /passed|notification delivered/)
@@ -152,7 +152,7 @@ test('iOS widget push decisions reach the bounded content-free export', { skip: 
 test('notification extension FAST token store', { skip: process.platform !== 'darwin' }, () => {
   const scratch = mkdtempSync(join(tmpdir(), 'fluux-token-test-'))
   try {
-    assert.match(execFileSync(compileNotificationTests(scratch, 'PreviewTokenTests.swift')).toString(), /passed/)
+    assert.match(execFileSync(compileNotificationTests(scratch, 'PreviewTokenTests.swift'), [], { timeout: 60000 }).toString(), /passed/)
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })
 
@@ -176,7 +176,7 @@ test('shared notification content contract on native iOS paths', { skip: process
       if (fixture.ios?.words) assert.deepEqual(fixture.ios.words, frenchWords, `${fixture.id}: app wording must come from its translation source`)
     }
     const binary = compileNotificationTests(scratch, 'NotificationContentTests.swift')
-    const output = execFileSync(binary, [fileURLToPath(new URL('../tests/fixtures/notification-content.json', import.meta.url))], { encoding: 'utf8' })
+    const output = execFileSync(binary, [fileURLToPath(new URL('../tests/fixtures/notification-content.json', import.meta.url))], { encoding: 'utf8', timeout: 60000 })
     assert.match(output, /passed/)
     console.log(output.trim())
   } finally { rmSync(scratch, { recursive: true, force: true }) }
