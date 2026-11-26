@@ -118,7 +118,11 @@ for (const lang of ['en', 'fr'] as const) {
           await capture(page, `find-${caller}-${lang}-${mode}-320-large-${query || 'empty'}`)
         }
         await input.fill('the')
-        await expect(bar.locator('span')).toHaveText(/\d+\/\d+/)
+        // A new query exposes its count before the newest-match selection commits.
+        await expect.poll(async () => {
+          const [current, total] = (await bar.locator('span').innerText()).split('/').map(Number)
+          return total > 1 && current === total
+        }).toBe(true)
         const count = (await bar.locator('span').innerText()).split('/').map(Number)
         expect(count[1]).toBeGreaterThan(1)
         await input.press('Enter')
