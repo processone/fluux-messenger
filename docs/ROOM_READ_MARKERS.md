@@ -49,6 +49,7 @@ commits, updated readers reject a different legacy or version-2 value even befor
 the first recovery read. Failed recovery retains this restriction until a supported
 account fence exists; an older migration stamp alone cannot protect version-2 input.
 Compact Off recovery also keeps that restriction until its replacement fence commits.
+An unmatched retained input stays a restriction, never a permission link in that fence.
 A matching witnessed input preserves independent choices through failed background
 conversion or an unsuccessful On for another room, without granting the failed On.
 Completion refusal after a saved fence leaves the protected replacement intact.
@@ -59,12 +60,13 @@ Refused unrelated conversion is reported without discarding its valid choices.
 If an unrelated record cannot be classified while legacy import remains open,
 a writable target-account fence protects erasure while shared sealing stays
 incomplete until that record can be read; no unverified exception is created.
-Direct fallback never converts unrelated preferences. If the target fence is
-refused, it can remove the target's own exception from the existing shared guard;
-other accounts' choices and protection remain unchanged. If import is still open,
-the fallback carries existing validated choices into the target-excluding seal
-without replacing unrelated preferences or fences. Unrelated conversion waits
-for a coordinated storage turn.
+Direct fallback only erases the target's records and attempts its account fence;
+it never replaces the shared guard. If that fence is refused and the shared guard
+still permits the target, recovery obtains a new storage turn before updating
+shared protection. Recovery checks for a later target choice or clear before
+removing anything again. Other accounts' shared-only Off and completed clears
+therefore survive. If coordination remains unavailable, cleanup reports failure
+without writing a stale shared snapshot.
 When that fence permits deferral, all unrelated accounts are classified before
 any conversion starts, so an earlier paused account cannot be left converted
 without its compatibility barrier by a later unreadable account.
@@ -72,8 +74,8 @@ Successful guard replacement permits only the exact effective choices of unaffec
 refused; it never permits the erased account to import old consent. Those
 exceptions disappear when their account saves or clears its choice. Unknown
 older guards remain sealed. A refused replacement retains the existing seal or
-a writable account fence and reports incomplete cleanup. When all barrier writes
-are denied and no usable prior barrier exists, durable revocation cannot be
+a writable account fence and reports incomplete cleanup. When no safe barrier can
+be saved and no usable prior barrier exists, durable revocation cannot be
 guaranteed; cleanup reports failure rather than claiming completion. Successful
 cleanup leaves no target-account data in the guard; failed cleanup can retain
 protection records. Full clearing retries its shared seal after ordinary data frees

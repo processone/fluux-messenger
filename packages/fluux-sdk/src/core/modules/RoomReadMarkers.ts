@@ -294,6 +294,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
   const writeBarrier = (key: string, value: string) => {
     try { localStorage.setItem(key, value); return true } catch { return false }
   }
+  let needsCoordinatedSeal = false
   const remove = (coordinated = true) => {
     if (!allAccounts) {
       for (const kind of ['consent', 'watermarks', 'continuity'] as const) localStorage.removeItem(storageKey(scoped!, kind))
@@ -302,11 +303,8 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       if (!coordinated) {
         if (targetSealed) return false
         const guard = readClearGuard()
-        if (guard.legacy[scoped!]) {
-          delete guard.legacy[scoped!]
-          writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy: guard.legacy }))
-        }
-        if (!guard.open) return false
+        needsCoordinatedSeal = guard.open || !!guard.legacy[scoped!]
+        return false
       }
       let preserved = true
       const legacy: Record<string, LegacyPermission> = Object.create(null)
@@ -334,14 +332,6 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           saved = classified.get(other) ?? readSavedRoomConsent(other)
           localIdentity = saved.localIdentity
           if (saved.needsMigration) {
-            if (!coordinated) {
-              // Open import needs a target seal, but an unlocked fallback may only carry existing choices, not convert them.
-              if (saved.legacyChoice && !saved.linkedInput && saved.rooms.length) legacy[other] = {
-                ...(saved.sharedPermission ?? {}), choice: saved.legacyChoice,
-                generation: saved.localIdentity ? undefined : saved.generation, local: saved.localIdentity,
-              }
-              continue
-            }
             if (saved.linkedInput && saved.sharedPermission) {
               // Shared-only protection must reach the linked fence before either protector can retire.
               if (!persistRoomConsent(other, saved, saved.rooms, migrationEdits(saved), saved.epoch, true)) preserved = false
@@ -437,7 +427,18 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
   try { return await withConsentStorage(remove) } catch {
     // A denied coordination database must not stop the caller from erasing its
     // remaining account data. Report failure even when direct removal succeeds.
-    try { remove(false) } catch { return false }
+    try {
+      remove(false)
+      if (needsCoordinatedSeal && scoped) {
+        const fence = localStorage.getItem(storageKey(scoped, 'migration'))
+        await withConsentStorage(() => {
+          // A fresh target choice or later clear owns its boundary; recovery must not erase it again.
+          if (localStorage.getItem(storageKey(scoped, 'continuity')) !== null
+            || localStorage.getItem(storageKey(scoped, 'migration')) !== fence) return false
+          return remove()
+        })
+      }
+    } catch { return false }
     return false
   }
 }
@@ -571,7 +572,8 @@ export class RoomReadMarkers extends BaseModule {
           const input = latest.legacyChoice && (revoked.length || hasConfirmedLegacyInput(latest)) ? latest.raw ?? undefined
             : readConsentFence(latest.fence) ? undefined : readConsentContinuity(account)?.input
           const generation = latest.generation ?? generateUUID()
-          const inputId = writeConsentContinuity(account, generation, input, latest.needsMigration).inputId
+          const proof = writeConsentContinuity(account, generation, input, latest.needsMigration)
+          const inputId = latest.legacyChoice ? proof.inputId : undefined
           localStorage.setItem(storageKey(account, 'migration'), '~' + JSON.stringify([generation, compactEpoch, [...new Set([...latest.revoked, ...revoked])], retainedEdits, 1, inputId]))
           localStorage.setItem(storageKey(account, 'consent'), roomConsentValue({ ...latest, generation }, rooms, retainedEdits, compactEpoch))
           completeConsentConversion(account, generation)
