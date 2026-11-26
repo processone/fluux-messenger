@@ -407,10 +407,20 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i)
         if (!key?.startsWith(STORAGE_PREFIX)) continue
+        let restrictedAccount: string | undefined
         try {
           const parts: unknown = JSON.parse(key.slice(STORAGE_PREFIX.length))
-          if (Array.isArray(parts) && parts.length === 2 && typeof parts[0] === 'string' && parts[0] !== scoped && parts[1] === 'consent') accounts.push(parts[0])
+          if (Array.isArray(parts) && parts.length === 2 && typeof parts[0] === 'string' && parts[0] !== scoped) {
+            if (parts[1] === 'consent') accounts.push(parts[0])
+            if (parts[1] === 'restriction') restrictedAccount = parts[0]
+          }
         } catch { /* The shared clear guard is not an account record. */ }
+        if (restrictedAccount) {
+          try {
+            // Rotating shared identity would deactivate another account's surviving denial, even without readable consent.
+            if (readClearRestriction(restrictedAccount, localStorage.getItem(storageKey(restrictedAccount, 'migration')), readClearGuard())) return false
+          } catch { return false }
+        }
       }
       const classified = new Map<string, SavedConsent>()
       const targetProtected = targetSealed || retainedRestriction === true || reservedRestriction
@@ -507,6 +517,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
     try { fullGuard ??= readClearGuard() } catch { /* Unknown shared protection cannot be replaced. */ }
     const fenced = new Set<string>()
     const seal = () => {
+      if (!coordinated) return false
       try {
         if (!fullGuard || [...accounts].some(account => !removedConsents.has(account) && !fenced.has(account))) return false
         if (retrying && (accounts.size !== boundaries.size || JSON.stringify(readClearGuard()) !== JSON.stringify(fullGuard))) return false
@@ -535,7 +546,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
     let compacted = false
     const compactFences = () => {
       for (const account of accounts) {
-        if (!fenced.has(account) && !ownsBoundary(account)) continue
+        if ((!coordinated || retrying) && !fenced.has(account) && !ownsBoundary(account)) continue
         if (writeBarrier(storageKey(account, 'migration'), clearFence())) {
           fenced.add(account)
           compacted = true
