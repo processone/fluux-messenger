@@ -99,17 +99,24 @@ export const MessageToolbar = memo(function MessageToolbar({
   const { t } = useTranslation()
   const [actionFocused, setActionFocused] = useState(false)
   const [pointerPressed, setPointerPressed] = useState(false)
-  // A keyboard-visible control must remain interactive until its native click is dispatched.
+  const pressedPointerId = useRef<number | null>(null)
+  // A pressed control must stay visible when layout moves it away from a stationary pointer.
   useEffect(() => {
     if (!pointerPressed) return
     let releaseTimer: ReturnType<typeof setTimeout> | undefined
-    const clear = () => setPointerPressed(false)
+    const clear = () => { pressedPointerId.current = null; setPointerPressed(false) }
+    const onPointerCancel = (event: PointerEvent) => {
+      if (event.pointerId === pressedPointerId.current) clear()
+    }
     const afterMouseUp = () => { releaseTimer = setTimeout(clear, 0) }
     document.addEventListener('mouseup', afterMouseUp, true)
+    // Departure can release capture before cancellation, leaving the event outside this toolbar.
+    document.addEventListener('pointercancel', onPointerCancel, true)
     window.addEventListener('blur', clear)
     return () => {
       clearTimeout(releaseTimer)
       document.removeEventListener('mouseup', afterMouseUp, true)
+      document.removeEventListener('pointercancel', onPointerCancel, true)
       window.removeEventListener('blur', clear)
     }
   }, [pointerPressed])
@@ -200,8 +207,11 @@ export const MessageToolbar = memo(function MessageToolbar({
     // the surrounding padding stays inert so underlying text remains selectable.
     <div
       data-message-toolbar
+      onPointerDownCapture={event => {
+        if (event.button === 0 && event.isPrimary) pressedPointerId.current = event.pointerId
+      }}
       onMouseDownCapture={event => {
-        setPointerPressed(event.button === 0 && actionFocused)
+        setPointerPressed(event.button === 0)
         keyboardFocus.current = false
         setActionFocused(false)
       }}

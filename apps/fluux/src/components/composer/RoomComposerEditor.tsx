@@ -215,8 +215,7 @@ export function RoomComposerEditor(props: RoomComposerEditorProps) {
           handlers.onChange({ target: input })
           // Lexical handles line breaks (in keydown, in Chromium) and cancels beforeinput
           // for deletes and multi-character insertions, so the browser fires no input event. Emit it as a textarea
-          // would, for the listeners that treat typing as composing (the message
-          // list's hover hold, which otherwise keeps the list off the bottom).
+          // would, so message-action ownership receives composing updates without a native input event.
           root.dispatchEvent(new Event('input', { bubbles: true }))
           return
         }

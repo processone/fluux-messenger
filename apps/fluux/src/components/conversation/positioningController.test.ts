@@ -1684,10 +1684,9 @@ describe('positioning controller directional-history ownership', () => {
     })
   })
 
-  // FLM-210 (CI, chromium and webkit): the pointer rested on a row as a load-older began, so a hover
-  // hold refused the load's request. The coordinator hands a shift to the load only while its own
-  // request is still pending here; otherwise ambient insertion handling must hold the reader.
-  it('reports a load pending only for its own accepted request, until a hover hold supersedes it', () => {
+  // An interaction hold refuses the load's request. Only an accepted pending request can own
+  // its shift; otherwise ambient insertion preservation must keep the reading position.
+  it('reports a load pending only for its own accepted request, until an interaction hold supersedes it', () => {
     const history = directionalHarness()
     const controller = new PositioningController()
     observeLiveEntry(controller)
@@ -1696,7 +1695,7 @@ describe('positioning controller directional-history ownership', () => {
     expect(controller.isDirectionalHistoryPending(conversationId, request.generation + 1)).toBe(false)
     expect(controller.isDirectionalHistoryPending('other@example.test', request.generation)).toBe(false)
 
-    const hovered: AnchorPreservationExecutor = {
+    const held: AnchorPreservationExecutor = {
       observeGeometry: () => {},
       reachability: () => ({ kind: 'available', index: 5, mounted: true, placement: 'viable' }),
       beginLoop: () => null,
@@ -1707,10 +1706,10 @@ describe('positioning controller directional-history ownership', () => {
       conversationId,
       desired: {
         kind: 'anchor',
-        messageId: 'hovered-row',
+        messageId: 'held-row',
         placement: { kind: 'top-offset', offsetPx: pixelOffset(120) },
       },
-      executor: hovered,
+      executor: held,
     })
     expect(hold).not.toBeNull()
     expect(controller.isDirectionalHistoryPending(conversationId, request.generation)).toBe(false)
