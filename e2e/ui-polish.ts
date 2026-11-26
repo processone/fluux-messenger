@@ -13,12 +13,7 @@ const previewCopy = { en: 'Message previews appear here.', fr: 'L’aperçu des 
 test.use({ reducedMotion: 'reduce' })
 
 async function boot(page: Page, lang: string, mode: string) {
-  await page.addInitScript(lang => {
-    localStorage.setItem('i18nextLng', lang)
-    // The demo raises a message notice that moves under the Find bar one frame after the
-    // bar grows, so a geometry read can catch it on top. toast-placement.ts owns notices.
-    localStorage.setItem('fluux-in-app-banner', 'false')
-  }, lang)
+  await page.addInitScript(lang => localStorage.setItem('i18nextLng', lang), lang)
   await bootDemo(page, '/demo.html?tutorial=false')
   await page.evaluate(mode => {
     const w = window as any
