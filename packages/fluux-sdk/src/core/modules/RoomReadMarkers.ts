@@ -314,25 +314,51 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
   if (!allAccounts && !scoped) return true
   storageRevision++
   let mutated = false
-  const erase = (key: string) => { localStorage.removeItem(key); mutated = true }
+  let erased = true
+  const erase = (key: string) => {
+    try { localStorage.removeItem(key); mutated = true; return true } catch { erased = false; return false }
+  }
   const writeBarrier = (key: string, value: string) => {
     try { localStorage.setItem(key, value); mutated = true; return true } catch { return false }
   }
+  const advancedRestrictions = new Set<string>()
   const reserveRestriction = (account: string, fence: string | null, clearToken: string | null) => {
     const raw = JSON.stringify({ generation: generateUUID(), input: restrictionInput(fence, clearToken) })
-    return writeBarrier(storageKey(account, 'restriction'), raw) ? raw : null
+    if (!writeBarrier(storageKey(account, 'restriction'), raw)) return null
+    const boundary = boundaries.get(account)
+    if (boundary) boundary.restriction = raw
+    advancedRestrictions.add(account)
+    return raw
   }
-  const boundaries = new Map<string, { fence: string | null; guard: ClearGuard } | null>()
+  const boundaries = new Map<string, { fence: string | null; guard: ClearGuard; restriction?: string | null } | null>()
   const captureBoundary = (account: string) => {
     if (!boundaries.has(account)) {
-      try { boundaries.set(account, { fence: localStorage.getItem(storageKey(account, 'migration')), guard: readClearGuard() }) }
+      try {
+        const boundary: NonNullable<ReturnType<typeof boundaries.get>> = { fence: localStorage.getItem(storageKey(account, 'migration')), guard: readClearGuard() }
+        try { boundary.restriction = localStorage.getItem(storageKey(account, 'restriction')) } catch { /* Unknown slot ownership cannot authorize a later cleanup turn. */ }
+        boundaries.set(account, boundary)
+      }
       catch { boundaries.set(account, null) }
     }
     return boundaries.get(account)
   }
-  let needsCoordinatedSeal = false
-  let retryProof: string | null = null
-  let retryFence: string | null | undefined
+  const ownsBoundary = (account: string) => {
+    const boundary = boundaries.get(account)
+    if (!boundary || boundary.restriction === undefined) return false
+    const guard = readClearGuard()
+    return localStorage.getItem(storageKey(account, 'restriction')) === boundary.restriction
+      && localStorage.getItem(storageKey(account, 'migration')) === boundary.fence
+      && (guard.generation === boundary.guard.generation || guard.open || !!guard.legacy[account])
+      && JSON.stringify(guard.legacy[account]) === JSON.stringify(boundary.guard.legacy[account])
+  }
+  const retireProtectedProof = (account: string) => {
+    try {
+      const guard = readClearGuard()
+      if ((!guard.open && !guard.legacy[account]) || readClearRestriction(account, localStorage.getItem(storageKey(account, 'migration')), guard)) erase(storageKey(account, 'continuity'))
+    } catch { /* Unverified protection cannot replace an exact-input restriction. */ }
+  }
+  let needsRecovery = false
+  let fullGuard: ClearGuard | undefined
   const remove = (coordinated = true, retrying = false) => {
     if (!allAccounts) {
       const boundary = captureBoundary(scoped!)
@@ -340,32 +366,33 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       let reservedProof: ReturnType<typeof readClearRestriction>
       try { reservedProof = boundary ? readClearRestriction(scoped!, boundary.fence, boundary.guard) : undefined } catch { reservedProof = undefined }
       let reservedRestriction = !!reservedProof
-      const targetSealed = writeBarrier(storageKey(scoped!, 'migration'), clearFence())
-      if (!retrying) {
-        erase(storageKey(scoped!, 'watermarks'))
-        if (retainedRestriction === false) erase(storageKey(scoped!, 'continuity'))
-      }
+      let targetSealed = writeBarrier(storageKey(scoped!, 'migration'), clearFence())
+      if (!retrying) erase(storageKey(scoped!, 'watermarks'))
       if (targetSealed) {
         erase(storageKey(scoped!, 'continuity'))
         erase(storageKey(scoped!, 'restriction'))
       }
-      // Consent removal ends unlocked destructive cleanup; a later save owns its new proof and fence.
-      erase(storageKey(scoped!, 'consent'))
+      // Unlocked retirement cannot expose still-present legacy input or delete a proof saved after erasure.
+      if (!retrying) erase(storageKey(scoped!, 'consent'))
+      if (coordinated && !targetSealed) {
+        targetSealed = writeBarrier(storageKey(scoped!, 'migration'), clearFence())
+        if (targetSealed) {
+          erase(storageKey(scoped!, 'continuity'))
+          erase(storageKey(scoped!, 'restriction'))
+        }
+      }
       if (coordinated && !retrying && !targetSealed && boundary) {
         reservedRestriction = !!reserveRestriction(scoped!, boundary.fence, boundary.guard.generation) || reservedRestriction
       }
       // Without a storage turn, target protection must not rewrite another account's newer choice.
       if (!coordinated) {
         if (targetSealed) return false
-        const guard = readClearGuard()
-        needsCoordinatedSeal = guard.open || !!guard.legacy[scoped!]
-        if (needsCoordinatedSeal) {
-          // A denial-only slot cannot overwrite a choice committed while this unlocked fallback waits.
-          retryFence = boundary?.fence
-          if (boundary) retryProof = reserveRestriction(scoped!, boundary.fence, boundary.guard.generation) ?? reservedProof?.raw ?? null
-        }
+        needsRecovery = true
+        // A denial-only slot cannot overwrite a choice committed while this unlocked fallback waits.
+        if (boundary) reserveRestriction(scoped!, boundary.fence, boundary.guard.generation)
         return false
       }
+      retireProtectedProof(scoped!)
       let preserved = true
       const legacy: Record<string, LegacyPermission> = Object.create(null)
       const accounts: string[] = []
@@ -455,8 +482,8 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       return preserved
     }
     const keys: string[] = []
-    const accounts = new Set<string>()
-    for (let i = 0; i < localStorage.length; i++) {
+    const accounts = new Set<string>(retrying ? boundaries.keys() : scoped ? [scoped] : [])
+    if (!retrying) for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (!key?.startsWith(STORAGE_PREFIX) || key === CLEAR_GENERATION_KEY) continue
       keys.push(key)
@@ -465,16 +492,20 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         if (Array.isArray(parts) && parts.length === 2 && typeof parts[0] === 'string') accounts.add(parts[0])
       } catch { /* Non-account feature keys are still erased. */ }
     }
-    for (const account of accounts) captureBoundary(account)
+    if (retrying) for (const account of accounts) if (!ownsBoundary(account)) accounts.delete(account)
+    if (!retrying) for (const account of accounts) captureBoundary(account)
+    fullGuard ??= readClearGuard()
+    const canSeal = !retrying || (accounts.size === boundaries.size && JSON.stringify(readClearGuard()) === JSON.stringify(fullGuard))
+    const seal = () => canSeal && writeBarrier(CLEAR_GENERATION_KEY, generateUUID())
+    if (!coordinated) needsRecovery = true
     // Replace the seal before deleting any existing protection.
-    let sealed = writeBarrier(CLEAR_GENERATION_KEY, generateUUID())
-    if (!sealed) {
+    let sealed = seal()
+    if (!sealed && !retrying) {
       try { for (const account of Object.keys(readClearGuard().legacy)) accounts.add(account) }
       catch { /* Unreadable permissions cannot be reconstructed; the clear reports failure. */ }
     }
     const fences = new Set([...accounts].map(account => storageKey(account, 'migration')))
-    const restrictions = new Set([...accounts].flatMap(account => [storageKey(account, 'restriction'), ...(readEmptyConsentRestriction(account) !== false ? [storageKey(account, 'continuity')] : [])]))
-    const advancedRestrictions = new Set<string>()
+    const restrictions = new Set([...accounts].flatMap(account => [storageKey(account, 'restriction'), storageKey(account, 'continuity')]))
     const refreshRestrictions = () => {
       for (const account of accounts) {
         const boundary = captureBoundary(account)
@@ -508,34 +539,33 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       if (!sealed && (fences.has(key) || restrictions.has(key))) continue
       erase(key)
     }
+    if (coordinated) for (const account of accounts) retireProtectedProof(account)
     if (!sealed) {
       refreshRestrictions()
-      sealed = writeBarrier(CLEAR_GENERATION_KEY, generateUUID())
+      sealed = seal()
     }
     if (sealed) {
       if (coordinated) for (const key of [...fences, ...restrictions]) erase(key)
     } else {
       if (coordinated) compactFences()
       refreshRestrictions()
-      if (!compacted || !writeBarrier(CLEAR_GENERATION_KEY, generateUUID())) return false
+      if (!compacted || !seal()) return false
       if (coordinated) for (const key of [...fences, ...restrictions]) erase(key)
     }
+    if (!coordinated) needsRecovery = false
     return true
   }
-  try { return await withConsentStorage(remove) } catch {
+  try { const result = await withConsentStorage(remove); return result && erased } catch {
     // An abort after the callback cannot give its old destructive work a second, unlocked turn.
     if (mutated) return false
     // A denied coordination database must not stop the caller from erasing its
     // remaining account data. Report failure even when direct removal succeeds.
     try {
       remove(false)
-      if (needsCoordinatedSeal && scoped) {
+      if (needsRecovery) {
         await withConsentStorage(() => {
-          const guard = readClearGuard()
-          if (!guard.open && !guard.legacy[scoped]) return false
-          // A fresh target choice or later clear owns its boundary; recovery must not erase it again.
-          if (localStorage.getItem(storageKey(scoped, 'restriction')) !== retryProof
-            || localStorage.getItem(storageKey(scoped, 'migration')) !== retryFence) return false
+          // Only unchanged accounts can receive post-deletion barriers; ordinary erasure never repeats.
+          if (!allAccounts && (!scoped || !ownsBoundary(scoped))) return false
           return remove(true, true)
         })
       }

@@ -79,9 +79,13 @@ identity, not room names. The clear captures its metadata boundary before
 removing consent and never adopts a later fence for recovery. A committed room
 choice changes that fence and remains valid even if it arrives immediately
 after consent removal or immediately before or after the reservation write.
-Unlocked cleanup removes watermarks and continuity before consent, and a full
-sweep processes consent last. Unlocked compaction also precedes consent removal;
-only a coordinated turn may compact or retire proofs afterward. An unrelated seal
+Unlocked cleanup removes watermarks before consent and retains exact or uncertain
+continuity until a barrier protects retirement. A full sweep processes consent last
+and retains continuity when its early seal fails. Initial unlocked compaction
+precedes consent removal; only an ownership-checked coordinated turn may retry
+compaction or retire proof afterward. A fence that becomes writable after deletion
+is retried in the original coordinated turn or a guarded follow-up, never by
+repeating ordinary erasure. An unrelated seal
 cannot retire denial while retaining the target's old permission exception.
 The restriction defines a new ownership boundary without granting permission:
 pre-clear opt-ins and self-marker work cannot restore erased records, while
@@ -90,7 +94,9 @@ Recovery and repeated clears retain denial until an account fence or shared seal
 commits. Each new clear advances either verified denial form when writable,
 rejecting earlier opt-ins and self-marker work without rejecting fresh work.
 Full clearing retries the refresh after ordinary deletion and compaction free
-space, stopping after one successful advance per account. Full-clear compaction
+space, stopping after one successful advance per account across initial cleanup
+and follow-up. Its known accounts include the supplied account even before its
+first room-read key exists. Full-clear compaction
 retires each account's restriction only after its replacement fence is saved. If reservation is refused, guarded coordinated sealing
 still runs when available; cleanup never claims that an unsaved reservation
 protected the wait. If refresh of an existing verified denial is refused,
@@ -113,19 +119,25 @@ be saved and no usable prior barrier exists, durable revocation cannot be
 guaranteed; cleanup reports failure rather than claiming completion. Successful
 cleanup leaves no target-account data in the guard; failed cleanup can retain
 protection records. Full clearing retries its shared seal after ordinary data frees
-storage, including after compacting history fences. A refused growing save
+storage, including after compacting history fences. A guarded full-clear follow-up
+uses only its unchanged known accounts; it never rescans and erases newer records.
+It cannot replace the shared seal over an account that changed ownership.
+A refused growing save
 retains a compact revocation boundary wherever storage allows it. Uncoordinated
 recovery may change only the initiating unchanged storage boundary; it cannot
 recreate cleared records or erase newer choices. Transaction abort never replays
 destructive cleanup outside its storage turn once local mutation has begun.
-A denial before mutation can still use direct cleanup. A failed Off instead obtains a
+A denial before mutation can still use direct cleanup. A refused individual
+removal does not stop the remaining independent deletions in the same turn;
+cleanup reports partial failure without replaying that turn. A failed Off instead obtains a
 fresh storage turn to revoke only its still-owned choices, preserving newer
 independent opt-ins. Normal and compact recovery fences retain revocations and ordering history;
 they cannot authorize an unsaved On. Confirmed preferences remain the
 only source of permission, with revocations overlaid after partial writes.
 An independently erasable continuity proof binds the account identity to its
-preference; clearing removes readable preference-bearing proof even when the
-import fence cannot be replaced. Empty-input proof remains usable denial until
+preference; clearing retires preference-bearing proof behind a verified denial
+or retained import seal even when the account fence cannot be replaced.
+An unprotected exact input remains until a coordinated turn can retire it safely. Empty-input proof remains usable denial until
 a replacement commits. If its role cannot be read, clearing retains the uncertain
 record and reports incomplete cleanup when replacement remains unavailable.
 During a partial legacy Off, the proof also binds the exact previously validated
