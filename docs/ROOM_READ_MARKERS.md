@@ -84,7 +84,11 @@ scoped conversion retains that exception’s revocations and ordering. When both
 a linked fence and shared exception survive, room revisions combine both
 histories without replacing either. Scoped conversion mirrors their merged
 revocations and revisions into the fence before pruning the exception or
-cleaning linked input, so refused cleanup cannot restore an older room On. Migration
+cleaning linked input, so refused cleanup cannot restore an older room On.
+A refused replacement fence retains the existing shared exception until a
+readable replacement mirrors its revocations and ordering. An unreadable
+unrelated preference retains its existing exception unchanged, not a newly
+bound identity; target erasure remains independent of that uncertainty. Migration
 retires shared authority only after a linked replacement is saved, and delayed
 failure cleanup checks the account’s shared protection as well as its token.
 A retained exception links newly reserved local proof even when replacement

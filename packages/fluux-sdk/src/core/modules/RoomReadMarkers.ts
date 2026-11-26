@@ -325,15 +325,31 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           }
         } catch {
           preserved = false
+          const permission = readClearGuard().legacy[other]
+          // Unreadable preferences are uncertainty, not evidence that an unrelated exception can retire.
+          if (!saved) {
+            if (permission) legacy[other] = permission
+            continue
+          }
+          let proof: ReturnType<typeof readConsentContinuity>
           try {
-            const proof = readConsentContinuity(other)
+            proof = readConsentContinuity(other)
             hasLocalProof = !!proof
             localIdentity = proof?.id
           } catch { return false }
           // An unreferenceable local proof must not become shared, non-erasable identity.
           if (hasLocalProof && !localIdentity) return false
-          // Only unchanged, previously valid surviving choices may bypass sealing.
-          if (saved?.legacyChoice && !saved.linkedInput && saved.rooms.length && localStorage.getItem(storageKey(other, 'consent')) === saved.raw) legacy[other] = { ...(saved.sharedPermission?.choice === saved.legacyChoice ? saved.sharedPermission : {}), choice: saved.legacyChoice, generation: localIdentity ? undefined : saved.generation, local: localIdentity }
+          const replacement = readConsentFence(localStorage.getItem(storageKey(other, 'migration')))
+          const mirrored = replacement?.generation === saved.generation && replacement?.epoch === saved.epoch && proof?.generation === saved.generation && !!replacement?.input
+            && replacement.input === proof?.inputId && proof?.input === saved.raw
+            && saved.revoked.every(room => replacement.revoked?.includes(room))
+            && Object.entries(saved.edits).every(([room, edit]) => replacement.edits?.[room] === edit)
+          // A linked input alone cannot replace shared-only Off or its ordering revision.
+          if (permission && permission.choice === saved.legacyChoice && (!permission.local || permission.local === saved.localIdentity) && !mirrored) {
+            legacy[other] = { ...permission, generation: localIdentity ? undefined : permission.generation, local: localIdentity ?? permission.local }
+          } else if (!mirrored && saved.legacyChoice && !saved.linkedInput && saved.rooms.length && localStorage.getItem(storageKey(other, 'consent')) === saved.raw) {
+            legacy[other] = { ...(saved.sharedPermission?.choice === saved.legacyChoice ? saved.sharedPermission : {}), choice: saved.legacyChoice, generation: localIdentity ? undefined : saved.generation, local: localIdentity }
+          }
         }
       }
       if (!writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: generateUUID(), legacy }))) return false
