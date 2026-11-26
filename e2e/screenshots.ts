@@ -12,6 +12,11 @@
 
 import { expect, test, type Browser, type Page } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'fs'
+import type { DemoClient } from '@fluux/sdk/demo'
+import type { subscribeDiagnostics } from '@fluux/sdk'
+import type { chatStore } from '@fluux/sdk/stores'
+import { waitForActions } from './harness/messageInteraction'
+import { LAUNCH_ROOM, OLIVIA } from '../apps/fluux/src/demo/showcase/constants'
 
 const DEMO_URL = '/demo.html?tutorial=false'
 const OUTPUT_DIR = 'screenshots'
@@ -251,22 +256,6 @@ test('08 — Settings Appearance (dark)', async ({ page }) => {
   await page.getByText('Appearance').first().click()
   await page.waitForTimeout(800)
   await capture(page, '08-settings-dark')
-})
-
-test('09 — Search (dark)', async ({ page }) => {
-  await waitForDemoReady(page)
-  await navigateTo(page, 'search')
-  // Type a search query to show results
-  const input = page.locator('input[type="text"]').first()
-  await input.fill('design')
-  await page.waitForTimeout(1500)
-  // Click the first search result to show the preview panel
-  const firstResult = page.locator('[data-search-result-id]').first()
-  if (await firstResult.isVisible()) {
-    await firstResult.click()
-    await page.waitForTimeout(800)
-  }
-  await capture(page, '09-search-dark')
 })
 
 test('10 — Command Palette (dark)', async ({ page }) => {
@@ -931,6 +920,100 @@ async function openShowcase(page: Page, colorScheme: 'dark' | 'light' = 'dark') 
   await waitForDemoReady(page, colorScheme, SHOWCASE_URL, 'Emma Ward')
 }
 
+/** The Saved list with its "Venue confirmed" entry selected and shown in its conversation. */
+async function openSavedVenue(page: Page) {
+  await openShowcase(page)
+  await navigateTo(page, 'saved')
+  await expect(page.getByTestId('saved-row')).toHaveCount(5)
+  await page.getByTestId('saved-row').filter({ hasText: 'Venue confirmed' }).click()
+  await expect(page.getByRole('button', { name: 'Go to message', exact: true })).toBeVisible()
+  const preview = page.getByTestId('saved-preview')
+  await expect(preview.locator('[data-message-id="showcase-emma-1"].message-highlight-persistent')).toBeInViewport()
+  await expect(preview.getByText('Could we have the poster ready by tomorrow?')).toBeInViewport()
+}
+
+/** Search "poster", narrowed to images with the Filters panel, with the matching message previewed. */
+async function searchPosterImages(page: Page) {
+  await openShowcase(page)
+  await navigateTo(page, 'search')
+  const input = page.getByRole('combobox')
+  await input.fill('poster')
+  // By message id: each row also quotes its neighbours, so row text names both messages.
+  const textOnlyHit = page.locator('[data-search-result-id$="showcase-emma-2"]')
+  const posterHit = page.locator('[data-search-result-id$="showcase-emma-4"]')
+  await expect(textOnlyHit).toBeVisible()
+  await expect(posterHit).toBeVisible()
+  await page.getByRole('button', { name: 'Filters', exact: true }).click()
+  const filters = page.getByRole('dialog', { name: 'Filters' })
+  await filters.getByRole('checkbox', { name: 'Images', exact: true }).check()
+  await filters.getByRole('button', { name: 'Apply', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Remove With an image' })).toBeVisible()
+  await expect(textOnlyHit).toHaveCount(0)
+  await posterHit.click()
+  await expect(page.getByText('You are viewing a search result preview')).toBeVisible()
+  await expect(input).toHaveValue('poster')
+  const poster = page.locator('[data-message-id="showcase-emma-4"].message-highlight-persistent img[alt="launch-night-poster.jpg"]')
+  await expect(poster).toBeInViewport({ ratio: 1 })
+  await expect(poster).not.toHaveJSProperty('naturalWidth', 0)
+}
+
+/**
+ * Forward Launch Crew's livestream update from the app, then deliver that same stanza back as a
+ * message from Olivia: the demo transport drops what it is given to send, so nobody else can send it.
+ */
+async function receiveForward(page: Page) {
+  type Scope = Window & {
+    __demoClient: DemoClient
+    __chatStore: typeof chatStore
+    __fluuxDiagnostics: typeof subscribeDiagnostics
+    __forward?: { attrs: Record<string, string> }
+  }
+  await openShowcase(page)
+  await page.evaluate(() => {
+    const scope = window as unknown as Scope
+    scope.__fluuxDiagnostics(event => {
+      if (event.kind !== 'application-stanza-out') return
+      if (event.stanza.name === 'message' && event.stanza.getChild('forwarded', 'urn:xmpp:forward:0')) scope.__forward = event.stanza
+    })
+  })
+  await navigateTo(page, 'rooms')
+  await selectItem(page, 'Launch Crew')
+  const original = page.locator('[data-message-id="showcase-launch-3"][data-message-body]')
+  await original.scrollIntoViewIfNeeded()
+  await original.hover()
+  await waitForActions(page, 'showcase-launch-3')
+  await original.getByRole('button', { name: 'Forward message', exact: true }).click()
+  const picker = page.getByRole('dialog', { name: 'Forward message', exact: true })
+  await picker.getByLabel('Chat or room').fill('Olivia')
+  await picker.getByLabel('Chat or room').press('Enter')
+  await picker.getByRole('textbox', { name: /comment/i }).fill('Good news for Thursday: Liam has the stream covered 🎥')
+  await picker.getByRole('button', { name: 'Send', exact: true }).click()
+  await expect(picker).toBeHidden()
+  await expect.poll(() => page.evaluate(() => (window as unknown as Scope).__forward?.attrs.to)).toBe(OLIVIA)
+
+  await navigateTo(page, 'messages')
+  await selectItem(page, 'Olivia Park')
+  await page.evaluate(peer => {
+    const scope = window as unknown as Scope
+    const stanza = scope.__forward
+    if (!stanza) throw new Error('The app sent no forward')
+    // The outgoing copy leaves the thread, so the frame is what a recipient sees.
+    scope.__chatStore.getState().removeMessage(peer, stanza.attrs.id)
+    Object.assign(stanza.attrs, { from: `${peer}/phone`, to: 'you@fluux.chat/demo', id: 'showcase-forward' })
+    ;(scope.__demoClient.messages as unknown as { handle(stanza: unknown): void }).handle(stanza)
+  }, OLIVIA)
+
+  const row = page.locator('[data-message-id="showcase-forward"][data-message-body]')
+  await expect(row).toContainText('Good news for Thursday: Liam has the stream covered')
+  await expect(page.locator('[data-forwarded-copy]')).toHaveCount(1)
+  const card = row.locator('[data-forwarded-copy]')
+  await expect(card).toContainText('Liam')
+  await expect(card).toContainText('Launch Crew')
+  await expect(card).toContainText('Livestream is ready, and the backup stream too')
+  await expect(card.locator('[data-forward-differs]')).toHaveCount(0)
+  return card
+}
+
 test.describe('Showcase', () => {
   test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 })
 
@@ -980,25 +1063,28 @@ test.describe('Showcase', () => {
   })
 
   test('showcase — saved messages (dark)', async ({ page }) => {
-    await openShowcase(page)
-    await navigateTo(page, 'saved')
-    await expect(page.getByTestId('saved-row')).toHaveCount(5)
+    await openSavedVenue(page)
     await capture(page, 'showcase/06-saved-dark')
   })
 
   test('showcase — search (dark)', async ({ page }) => {
-    await openShowcase(page)
-    await navigateTo(page, 'search')
-    await page.locator('input[type="text"]').first().fill('poster')
-    await page.waitForTimeout(1500)
-    const firstResult = page.locator('[data-search-result-id]').first()
-    await firstResult.click()
-    await page.waitForTimeout(800)
+    await searchPosterImages(page)
     await capture(page, 'showcase/07-search-dark')
+  })
+
+  test('showcase — received forward (dark)', async ({ page }) => {
+    const card = await receiveForward(page)
+    await capture(page, 'showcase/08-forward-dark')
+
+    // The card in the picture opens the seeded original, in a room the recipient has joined.
+    await card.getByText('Launch Crew').click()
+    await expect(page.getByRole('button', { name: 'Show room info: Launch Crew' })).toBeVisible()
+    await expect(page.locator('[data-message-id="showcase-launch-3"].message-highlight')).toBeInViewport()
+    expect(new URL(page.url()).hash).toContain(encodeURIComponent(LAUNCH_ROOM))
   })
 })
 
-// ── Saved messages and in-conversation search (overview set) ───────
+// ── Saved messages and search (overview set) ───────────────────────
 // The showcase data opens with five saved messages (apps/fluux/src/demo/showcase/saved.ts)
 // and a poster thread to search; captured at the overview set's default size.
 test.describe('Saved messages and find', () => {
@@ -1006,10 +1092,13 @@ test.describe('Saved messages and find', () => {
     await page.addInitScript(() => localStorage.setItem('sidebar-width', '340'))
   })
 
+  test('09 — Search (dark)', async ({ page }) => {
+    await searchPosterImages(page)
+    await capture(page, '09-search-dark')
+  })
+
   test('34 — Saved messages (dark)', async ({ page }) => {
-    await openShowcase(page)
-    await navigateTo(page, 'saved')
-    await expect(page.getByTestId('saved-row')).toHaveCount(5)
+    await openSavedVenue(page)
     await capture(page, '34-saved-dark')
   })
 
