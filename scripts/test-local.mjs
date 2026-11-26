@@ -243,6 +243,8 @@ export function createPlan(changes, cwd = root) {
       : path.startsWith(`${app}/src/`) || path.startsWith(`${app}/scripts/`) ? 'app' : undefined
     if (workspace && /\.(ts|tsx)$/.test(path)) {
       if (workspace === 'sdk') {
+        // build.rs generates Rust timeout constants from this SDK source.
+        if (path === `${sdk}/src/core/modules/connectionTimeouts.ts`) cargo(mainManifest, reason)
         related.sdk.add(path); related.app.add(path)
         if (/(\/src\/(index|[^/]+\/index)\.ts$|\/src\/(core|stores|cache|crypto)\/|sasl|auth|connection|persist|openpgp|omemo)/i.test(path)) {
           fullJs(reason)
