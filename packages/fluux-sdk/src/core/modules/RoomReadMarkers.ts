@@ -288,7 +288,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
   const remove = () => {
     if (!allAccounts) {
       for (const kind of ['consent', 'watermarks', 'continuity'] as const) localStorage.removeItem(storageKey(scoped!, kind))
-      writeBarrier(storageKey(scoped!, 'migration'), clearFence())
+      const targetSealed = writeBarrier(storageKey(scoped!, 'migration'), clearFence())
       let preserved = true
       const legacy: Record<string, LegacyPermission> = Object.create(null)
       const accounts: string[] = []
@@ -325,10 +325,13 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           }
         } catch {
           preserved = false
-          const permission = readClearGuard().legacy[other]
+          const guard = readClearGuard()
+          const permission = guard.legacy[other]
           // Unreadable preferences are uncertainty, not evidence that an unrelated exception can retire.
           if (!saved) {
             if (permission) legacy[other] = permission
+            // Sealing open import would erase an unclassified choice; the saved target barrier already protects erasure.
+            else if (guard.open && targetSealed) return false
             continue
           }
           let proof: ReturnType<typeof readConsentContinuity>

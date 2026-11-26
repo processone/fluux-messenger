@@ -1989,6 +1989,78 @@ describe('RoomReadMarkers', () => {
     } finally { vi.stubGlobal('localStorage', storage); opening?.release(); await pending; peer.cancelPending(); observer.cancelPending() }
   })
 
+  it.each((['consent', 'continuity'] as const).flatMap(denied => [false, true].flatMap(unknownFirst => [false, true].map(uncoordinated => [denied, unknownFirst, uncoordinated] as const))))('keeps first scoped sealing incomplete for an unreadable legacy account (%s, unknown first: %s, coordination refused: %s)', async (denied, unknownFirst, uncoordinated) => {
+    // Approved isolation and erasure rules require uncertainty to preserve unrelated choices without reopening the target.
+    const storage = localStorage
+    const targetJid = 'other@localhost'
+    const independentJid = 'third@localhost'
+    const keyFor = (owner: string, kind: string) => `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([owner, kind])}`
+    const legacy = JSON.stringify({ enabled: true, rooms: [roomJid] })
+    const target = new RoomReadMarkers({ ...dependencies, getCurrentJid: () => `${targetJid}/browser` }, () => focused)
+    const independent = new RoomReadMarkers({ ...dependencies, getCurrentJid: () => `${independentJid}/browser` }, () => focused)
+    storage.setItem(keyFor(targetJid, 'consent'), legacy)
+    for (const owner of unknownFirst ? [jid, independentJid] : [independentJid, jid]) storage.setItem(keyFor(owner, 'consent'), legacy)
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'getItem'
+      ? (name: string) => { if (name === keyFor(jid, denied)) throw new DOMException('Account unreadable', 'SecurityError'); return base.getItem(name) }
+      : Reflect.get(base, key, base) }))
+    const opening = uncoordinated ? pauseNextConsentOpen(true) : undefined
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      const clearing = clearRoomReadMarkersLocalData(targetJid)
+      if (opening) { await opening.ready; opening.release() }
+      expect(await clearing).toBe(false)
+      expect(storage.getItem(keyFor(targetJid, 'consent'))).toBeNull()
+      expect(storage.getItem(keyFor(targetJid, 'continuity'))).toBeNull()
+      expect(storage.getItem(consentKey)).toBe(legacy)
+      vi.stubGlobal('localStorage', storage)
+      expect(await observer.reload()).toBe(true)
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(observer.isEnabledFor(roomJid)).toBe(true)
+      expect(await independent.reload()).toBe(true)
+      expect(independent.isEnabledFor(roomJid)).toBe(true)
+      storage.setItem(keyFor(targetJid, 'consent'), legacy)
+      expect(await target.reload()).toBe(true)
+      target.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await target.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(target.isEnabledFor(roomJid)).toBe(false)
+      expect(await target.setRoomEnabled(roomJid, true)).toBe(true)
+      await target.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { vi.stubGlobal('localStorage', storage); opening?.release(); observer.cancelPending(); independent.cancelPending(); target.cancelPending() }
+  })
+
+  it.each((['consent', 'continuity'] as const).flatMap(denied => [false, true].map(uncoordinated => [denied, uncoordinated] as const)))('still seals scoped erasure when its account barrier is refused (%s, coordination refused: %s)', async (denied, uncoordinated) => {
+    // Approved erasure rule: open import can survive uncertainty only behind a saved target barrier.
+    const storage = localStorage
+    const targetJid = 'other@localhost'
+    const keyFor = (owner: string, kind: string) => `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([owner, kind])}`
+    const legacy = JSON.stringify({ enabled: true, rooms: [roomJid] })
+    storage.setItem(consentKey, legacy)
+    storage.setItem(keyFor(targetJid, 'consent'), legacy)
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'getItem'
+      ? (name: string) => { if (name === keyFor(jid, denied)) throw new DOMException('Account unreadable', 'SecurityError'); return base.getItem(name) }
+      : key === 'setItem' ? (name: string, value: string) => { if (name === keyFor(targetJid, 'migration')) throw new DOMException('Target barrier refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    const opening = uncoordinated ? pauseNextConsentOpen(true) : undefined
+    const target = new RoomReadMarkers({ ...dependencies, getCurrentJid: () => `${targetJid}/browser` }, () => focused)
+    try {
+      const clearing = clearRoomReadMarkersLocalData(targetJid)
+      if (opening) { await opening.ready; opening.release() }
+      expect(await clearing).toBe(false)
+      expect(storage.getItem(keyFor(targetJid, 'consent'))).toBeNull()
+      vi.stubGlobal('localStorage', storage)
+      storage.setItem(keyFor(targetJid, 'consent'), legacy)
+      expect(await target.reload()).toBe(true)
+      target.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await target.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+      expect(target.isEnabledFor(roomJid)).toBe(false)
+    } finally { vi.stubGlobal('localStorage', storage); opening?.release(); target.cancelPending() }
+  })
+
   it.each([false, true].flatMap(local => (['shared', 'revoked', 'linked'] as const).flatMap(mode => [false, true].map(proofDenied => [local, mode, proofDenied] as const))))('preserves an unreadable unrelated exception through scoped erasure (local proof: %s, %s, proof unreadable: %s)', async (local, mode, proofDenied) => {
     // Approved isolation rule: an unreadable preference cannot be treated as an erased independent choice.
     const { storage, proofKey } = mode === 'revoked' ? await prepareSharedRevocation(local) : await prepareSharedLegacy(local)

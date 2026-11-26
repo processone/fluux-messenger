@@ -40,9 +40,14 @@ start another save. Saving and account clearing are asynchronous. Conversion
 never reuses a pending view; a fresh focused observation is required afterward.
 
 Scoped clearing removes the target account's records before attempting to convert
-unaffected preferences. Each conversion stores its self-contained choice before
-its compatibility fence, so either refused write leaves valid consent intact.
+unaffected preferences. Conversion without overlapping protection stores its
+self-contained choice before its compatibility fence. Overlapping linked and
+shared protection instead mirrors combined revocations and ordering into the fence first, before
+retiring either protector, so refusal preserves the surviving choices.
 Refused unrelated conversion is reported without discarding its valid choices.
+If an unrelated record cannot be classified while legacy import remains open,
+a writable target-account fence protects erasure while shared sealing stays
+incomplete until that record can be read; no unverified exception is created.
 Successful guard replacement permits only the exact effective choices of unaffected accounts whose conversion was
 refused; it never permits the erased account to import old consent. Those
 exceptions disappear when their account saves or clears its choice. Unknown
