@@ -62,14 +62,21 @@ a writable target-account fence protects erasure while shared sealing stays
 incomplete until that record can be read; no unverified exception is created.
 Direct fallback only erases the target's records and attempts its account fence;
 it never replaces the shared guard. If that fence is refused and the shared guard
-still permits the target, an erasable exact-input restriction rejects stale
-legacy or version-2 import while recovery obtains a new storage turn. Automatic
-reload cannot turn that restriction into On; a fresh explicit room choice can
-replace it. Recovery checks for a later target choice or clear before removing
-anything again and stops when a later shared seal already excludes the target.
-Fresh self-marker watermarks after that later clear remain intact. Other
-accounts' shared-only Off and completed clears also survive. If coordination remains unavailable, cleanup reports failure
-without writing a stale shared snapshot.
+still permits the target, a writable erasable exact-input restriction rejects
+stale legacy or version-2 import while recovery obtains a new storage turn.
+That restriction defines a new ownership boundary without granting permission:
+pre-clear opt-ins and self-marker work cannot restore erased records, while
+fresh post-clear work uses the new boundary. Automatic reload cannot turn the
+restriction into On; a fresh explicit room choice can replace it.
+Recovery retains its restriction until an account fence or shared seal commits.
+If the temporary restriction is refused, guarded coordinated sealing still runs
+when available; cleanup never claims that an unsaved reservation protected the wait.
+Recovery compares the exact proof it wrote and the fence captured before that
+write, never a later tab's proof or fence. It stops when a later seal already
+excludes the target and never deletes fresh watermarks during its retry.
+Other accounts' shared-only Off and completed clears also survive. If no safe
+barrier can be saved, cleanup reports failure without writing a stale shared
+snapshot or claiming durable protection.
 When that fence permits deferral, all unrelated accounts are classified before
 any conversion starts, so an earlier paused account cannot be left converted
 without its compatibility barrier by a later unreadable account.

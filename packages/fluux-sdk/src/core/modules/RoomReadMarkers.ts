@@ -130,8 +130,9 @@ function writeConsentContinuity(account: string, generation: string, input?: str
   const retainedConversion = previous?.generation === generation ? previous.conversion : undefined
   const conversion = converting === true ? '!' + generateUUID()
     : converting === 'complete' && retainedConversion?.startsWith('!') ? retainedConversion.slice(1) : retainedConversion
-  localStorage.setItem(storageKey(account, 'continuity'), JSON.stringify({ generation, input, inputId, id, conversion }))
-  return { inputId, id }
+  const raw = JSON.stringify({ generation, input, inputId, id, conversion })
+  localStorage.setItem(storageKey(account, 'continuity'), raw)
+  return { inputId, id, raw }
 }
 function completeConsentConversion(account: string, generation: string, retireInput = false) {
   // A committed choice survives refused completion; pending observations stay blocked until a coordinated read retries it.
@@ -182,7 +183,7 @@ function readSavedRoomConsent(account: string): SavedConsent {
   }
   return {
     raw, fence, clearToken, sharedPermission: permission, rooms, cleared,
-    generation: current ? record.generation as string : history?.generation
+    generation: continuity?.input === '' ? continuity.generation : current ? record.generation as string : history?.generation
       ? raw !== null && continuity?.generation === history.generation ? history.generation : 'absent:' + history.generation
       : choice !== undefined && allowed ? continuity?.generation ?? inherited?.generation ?? JSON.stringify([account, clearToken, fenceEpoch ?? '']) : JSON.stringify([account, clearToken, fenceEpoch ?? '']),
     epoch: fenceEpoch ?? (current ? record.epoch as string : inherited?.epoch ?? ''),
@@ -296,10 +297,14 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
   }
   let needsCoordinatedSeal = false
   let retryProof: string | null = null
-  const remove = (coordinated = true) => {
+  let retryFence: string | null = null
+  const remove = (coordinated = true, retrying = false) => {
     if (!allAccounts) {
-      for (const kind of ['consent', 'watermarks', 'continuity'] as const) localStorage.removeItem(storageKey(scoped!, kind))
+      for (const kind of ['consent', 'watermarks', 'continuity'] as const) {
+        if (!retrying || kind === 'consent') localStorage.removeItem(storageKey(scoped!, kind))
+      }
       const targetSealed = writeBarrier(storageKey(scoped!, 'migration'), clearFence())
+      if (targetSealed && retrying) localStorage.removeItem(storageKey(scoped!, 'continuity'))
       // Without a storage turn, target protection must not rewrite another account's newer choice.
       if (!coordinated) {
         if (targetSealed) return false
@@ -307,8 +312,9 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         needsCoordinatedSeal = guard.open || !!guard.legacy[scoped!]
         if (needsCoordinatedSeal) {
           // Empty input cannot authorize legacy consent; a fresh explicit edit can replace this erasable restriction.
-          writeConsentContinuity(scoped!, generateUUID(), '', true)
-          retryProof = localStorage.getItem(storageKey(scoped!, 'continuity'))
+          retryFence = localStorage.getItem(storageKey(scoped!, 'migration'))
+          try { retryProof = writeConsentContinuity(scoped!, generateUUID(), '', true).raw }
+          catch { retryProof = null }
         }
         return false
       }
@@ -395,6 +401,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       }
       if (!writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: generateUUID(), legacy }))) return false
       localStorage.removeItem(storageKey(scoped!, 'migration'))
+      if (retrying) localStorage.removeItem(storageKey(scoped!, 'continuity'))
       return preserved
     }
     const keys: string[] = []
@@ -436,14 +443,13 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
     try {
       remove(false)
       if (needsCoordinatedSeal && scoped) {
-        const fence = localStorage.getItem(storageKey(scoped, 'migration'))
         await withConsentStorage(() => {
           const guard = readClearGuard()
           if (!guard.open && !guard.legacy[scoped]) return false
           // A fresh target choice or later clear owns its boundary; recovery must not erase it again.
           if (localStorage.getItem(storageKey(scoped, 'continuity')) !== retryProof
-            || localStorage.getItem(storageKey(scoped, 'migration')) !== fence) return false
-          return remove()
+            || localStorage.getItem(storageKey(scoped, 'migration')) !== retryFence) return false
+          return remove(true, true)
         })
       }
     } catch { return false }
