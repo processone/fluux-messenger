@@ -171,8 +171,10 @@ qualification rules.
 
 ### Test concurrency
 
-`npm test` runs the local-selector policy tests, the [Tauri feature guard](#windows-keyboard-focus)
-and platform policy, then the SDK and application suites in sequence. By default, each suite
+`npm test` runs the portable Rust cache-pilot policies, the local-selector policy
+tests, the [Tauri feature guard](#windows-keyboard-focus) and platform policy,
+then the SDK and application suites in sequence. The cache-pilot policies use
+recorded tool identities and require no native toolchain. By default, each suite
 uses at most two workers and keeps one available CPU out of the worker budget
 when possible, with a minimum of one worker. This leaves CPU and memory headroom
 for cryptographic tests and other development tasks.
@@ -415,6 +417,15 @@ when rebuilding in another worktree, with no clear benefit for small source
 edits. This did not justify adding sccache installation and configuration to the
 development workflow. Keep the toolchain's default linker and the existing
 `Swatinem/rust-cache` setup in CI; the experiment did not evaluate CI performance.
+
+The [unsigned Linux intermediate-cache pilot](benchmarks/rust-intermediate-pilot.md)
+is an explicit opt-in evaluation, separate from this default workflow. It shares
+only qualified registry dependencies, never reuses checkout-sensitive units,
+executes tests privately, and must demonstrate equivalent native checks and at
+least 30% median fresh-copy savings including queueing before reuse is retained. Its
+portable policy checks run in the JavaScript gate; real tool/build comparisons
+run only through the opt-in protocol. It changes no default Cargo path or check
+selection.
 
 ## Experimental Android APK build
 
