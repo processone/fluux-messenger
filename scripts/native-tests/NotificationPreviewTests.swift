@@ -55,6 +55,29 @@ import UserNotifications
         late?(Self.result())
         revoked.finish()
         precondition(revokedCalls == 1)
+        // A lookup that shows no preview names what the archive held, so an export can tell
+        // an empty archive from an already-handled or unreadable message.
+        func event(_ kind: String) -> PreviewEvent {
+            PreviewEvent(uid: UUID().uuidString, id: "", kind: kind, body: kind == "newMessage" ? "synthetic plaintext" : nil, mutation: nil, target: nil, text: nil)
+        }
+        let outcomes: [(String, PreviewResult, PreviewDecision)] = [
+            ("lookup failed", PreviewResult(events: [], complete: false), .lookupFailed),
+            ("empty archive", PreviewResult(events: [], complete: true), .archiveEmpty),
+            ("all handled", PreviewResult(events: [event("alreadyHandled"), event("alreadyHandled")], complete: true), .allHandled),
+            ("unreadable", PreviewResult(events: [event("alreadyHandled"), event("unknown")], complete: true), .unreadable),
+            ("unreadable in a bounded scan", PreviewResult(events: [event("unknown")], complete: false), .unreadable),
+            ("readable but not selected", PreviewResult(events: [event("unknown"), event("newMessage")], complete: true), .nothingNew),
+        ]
+        for (name, result, expected) in outcomes {
+            let delivery = PreviewDelivery()
+            var decisions: [PreviewDecision] = []
+            delivery.diagnostic = { decision, _ in decisions.append(decision) }
+            var body = ""
+            delivery.begin(original) { body = $0.body }
+            delivery.finish(result: result, isCurrent: { true }, select: { _ in PreviewSelection() })
+            precondition(decisions == [expected], "\(name): \(decisions)")
+            precondition(body == original.body, "\(name) must keep the transport-safe body")
+        }
         // FLM-294 R6: setup/settings time consumes the original delivery budget.
         var uptime: TimeInterval = 100
         let delayed = PreviewDelivery(uptime: { uptime })

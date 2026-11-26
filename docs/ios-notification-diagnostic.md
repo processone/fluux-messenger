@@ -30,8 +30,18 @@ app launch. A file the user saves or sends is outside Fluux's control.
 
 This diagnostic does not change notification presentation, suppress alerts,
 identify event classes missing from a push, or establish the cause of a past
-burst. In particular, `nothingNew` means the existing preview selection found no
-new displayable body; it does not prove the server's reason for sending a push.
+burst. A lookup that returned without a preview records what the archive held for
+that correspondent, from the kinds of its events alone:
+
+- `lookupFailed`: the lookup ended early (sign-in, query or its deadline) and returned no events.
+- `archiveEmpty`: the archive answered completely and held no message in the window.
+- `allHandled`: every message found was already known to the app or an earlier push.
+- `unreadable`: a message was found that is not yet handled and could not be decrypted,
+  verified or read as plain text, and no readable one came with it.
+- `nothingNew`: a readable message was found, but the selection kept none (a duplicate,
+  a read message or one an earlier push claimed).
+
+None of these proves the server's reason for sending a push.
 `noEngineResult`, `deadline`, and `systemExpiry` distinguish missing engine output
 from the local deadline and iOS extension expiry. `noEngineResult` means the push
 reached the preview engine and the engine returned no output. A push the extension

@@ -116,9 +116,21 @@ final class PreviewDelivery {
         } else {
             let reason = result == nil ? "no engine result" : !isCurrent() ? "capability changed"
                 : "nothing new to show (\(result?.events.count ?? 0) events)"
-            diagnostic(expiration ?? (result == nil ? .noEngineResult : !isCurrent() ? .capabilityChanged : .nothingNew), elapsed)
+            diagnostic(expiration ?? (!isCurrent() && result != nil ? .capabilityChanged : result?.withoutPreview ?? .noEngineResult), elapsed)
             trace("fallback, \(reason), \(selected?.removeRequests.count ?? 0) replaced, \(elapsed) ms")
             completion(content)
         }
+    }
+}
+
+extension PreviewResult {
+    /// Why a lookup that returned shows no preview, from the kinds of its events alone.
+    /// The engine reports a failed lookup as no events from an incomplete scan.
+    var withoutPreview: PreviewDecision {
+        if events.isEmpty { return complete ? .archiveEmpty : .lookupFailed }
+        if events.allSatisfy({ $0.kind == "alreadyHandled" }) { return .allHandled }
+        // A readable event the ledger did not select is a duplicate, a read message or a claimed one.
+        let readable = events.contains { $0.kind != "alreadyHandled" && $0.kind != "unknown" }
+        return readable ? .nothingNew : .unreadable
     }
 }
