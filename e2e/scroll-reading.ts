@@ -4530,8 +4530,9 @@ test('direct chat keyboard selection preserves opaque literal row IDs', async ({
 test('room history crosses hidden spam pages with one load action and preserves visible rows', async ({ page }, testInfo) => {
   await bootDemo(page, '/demo.html?tutorial=false&window=30')
   const roomJid = 'spam-history@conference.fluux.chat'
-  await page.evaluate(jid => {
+  const historyProbe = await page.evaluateHandle(jid => {
     const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore
+    const probe = { reads: 0, readsAtActivation: null as number | null }
     const message = (id: string, second: number): RoomMessage => ({
       type: 'groupchat', roomJid: jid, id, stanzaId: `archive-${id}`, originId: undefined,
       from: `${jid}/Alice`, nick: 'Alice', occupantId: 'alice',
@@ -4547,30 +4548,41 @@ test('room history crosses hidden spam pages with one load action and preserves 
     const original = store.getState().loadOlderMessagesFromCache
     store.setState({ loadOlderMessagesFromCache: async (id, limit) => {
       if (id !== jid) return original(id, limit)
+      probe.reads += 1
       const batch = pages.shift() ?? []
       store.getState().mergeRoomMAMMessages(id, batch, {}, pages.length === 0, 'backward')
       return batch
     } })
     store.getState().setActiveRoom(jid)
     window.location.hash = '#/rooms/' + encodeURIComponent(jid)
+    return probe
   }, roomJid)
-  const button = page.getByRole('button', { name: 'Load earlier messages' })
-  await expect(button).toBeAttached()
-  // Keyboard activation does not add a separate wheel gesture that could initiate another load.
-  await button.evaluate(element => (element as HTMLButtonElement).focus({ preventScroll: true }))
-  await page.keyboard.press('Enter')
-  await expect.poll(() => page.evaluate(jid => {
+  const scroller = page.locator('[data-message-list]')
+  await expect(scroller.locator('.message-row[data-message-id="anchor-19"]')).toBeInViewport()
+  // The room opens at the latest message. Home reaches the virtualized history header without loading a page.
+  await page.keyboard.press('Home')
+  const button = scroller.getByRole('button', { name: 'Load earlier messages' })
+  await expect(button).toBeInViewport()
+  const readHistory = () => page.evaluate(jid => {
     const state = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
     const messages = state.messages.get(jid) ?? []
     return {
-      found: messages.some(m => m.id === 'before-spam'),
+      oldest: messages[0]?.id,
       anchors: messages.filter(m => m.id.startsWith('anchor-')).length,
       bounded: messages.length <= 30,
       loading: state.getRoomMAMQueryState(jid).isLoading,
     }
-  }, roomJid)).toEqual({ found: true, anchors: 20, bounded: true, loading: false })
+  }, roomJid)
+  // Capture before React handles the click so a late load from Home cannot count as Enter's work.
+  await button.evaluate((element, probe) => {
+    element.addEventListener('click', () => { probe.readsAtActivation = probe.reads }, { capture: true, once: true })
+    ;(element as HTMLButtonElement).focus({ preventScroll: true })
+  }, historyProbe)
+  await page.keyboard.press('Enter')
+  expect(await historyProbe.evaluate(probe => probe.readsAtActivation), 'cache reads before Enter activated the button').toBe(0)
+  await expect.poll(readHistory).toEqual({ oldest: 'before-spam', anchors: 20, bounded: true, loading: false })
   await expect(page.getByText(/Message removed by|Message deleted/)).toHaveCount(0)
-  await page.locator('[data-message-list]').evaluate(element => { element.scrollTop = 0 })
+  await scroller.evaluate(element => { element.scrollTop = 0 })
   await expect(page.getByText('Conversation before the spam', { exact: true })).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('spam-history-desktop.png') })
   await page.setViewportSize({ width: 390, height: 844 })
