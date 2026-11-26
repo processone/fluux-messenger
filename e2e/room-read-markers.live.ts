@@ -378,6 +378,7 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await openRoom(alice); await roomConsent(alice, true, 'room-details-reenabled')
     await openRoom(bob)
     const resumedId = await archiveId(content[2])
+    await alice.page.bringToFront()
     await expect.poll(() => displayed(alice).some(frame => frame.includes(resumedId))).toBe(true)
     const { publicKey } = await generateKey({ type: 'ecc', curve: 'curve25519Legacy',
       userIDs: [{ name: 'Disposable room proof' }], format: 'object' })
@@ -400,8 +401,9 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await expect.poll(() => alice.received.some(frame => frame.includes(encryptedId))).toBe(true)
     const encryptedRow = alice.page.locator(`[data-stanza-id="${await archiveId(encryptedId)}"]`)
     await expect(encryptedRow).toBeInViewport()
-    await expect(encryptedRow.getByText('Encrypted message: OpenPGP not supported', { exact: true })).toBeVisible()
+    await expect(encryptedRow.getByText('Encryption disabled. Enable it in the settings', { exact: true })).toBeVisible()
     await expect(encryptedRow).not.toContainText('Protected room payload fallback')
+    await shot(alice.page, 'encrypted-row')
     await noPublication(alice, encryptedHeld, 'encrypted-row')
     await member.send(xml('presence', { to: `${room}/EncryptedSender`, type: 'unavailable' }))
     await expect.poll(() => alice.received.some(frame => frame.includes(`${room}/EncryptedSender`) && /type=['"]unavailable['"]/.test(frame))).toBe(true)
@@ -415,6 +417,7 @@ test('two real clients share only opted-in focused reading, keep identity and re
     await expect(unread).toBeVisible()
     const mds = 'urn:xmpp:mds:displayed:0'
     const syncId = await archiveId(syncBody)
+    await owner.send(xml('presence'))
     await owner.iqCaller.request(xml('iq', { type: 'set' }, xml('pubsub', { xmlns: PUBSUB },
       xml('publish', { node: mds }, xml('item', { id: room }, xml('displayed', { xmlns: mds },
         xml('stanza-id', { xmlns: 'urn:xmpp:sid:0', by: room, id: syncId })))))))
