@@ -179,12 +179,20 @@ function readSavedRoomConsent(account: string): SavedConsent {
   const validEdits = record?.edits && typeof record.edits === 'object' && !Array.isArray(record.edits)
     && Object.values(record.edits).every(edit => typeof edit === 'string')
   const overlay = history?.revoked !== undefined && !!history.generation
-  const current = !restriction && (guard.legacy[account]?.choice !== '' || !!history?.generation) && record?.version === 3 && validRooms && typeof record.generation === 'string' && !!record.generation
+  const denial = guard.legacy[account]?.choice === '' ? guard.legacy[account] : undefined
+  let followsDenial = !denial
+  if (denial && typeof record?.generation === 'string') {
+    try {
+      const identity: unknown = JSON.parse(record.generation)
+      followsDenial = Array.isArray(identity) && identity[0] === (denial.generation ?? null)
+    } catch { /* Opaque pre-clear identity cannot establish a save after this denial. */ }
+  }
+  const current = !restriction && (!denial || (followsDenial && !!history?.generation)) && record?.version === 3 && validRooms && typeof record.generation === 'string' && !!record.generation
     && (!history?.generation || (record.generation === history.generation && continuity?.generation === history.generation))
     && typeof record.epoch === 'string' && validEdits && (overlay || fenceEpoch === undefined || record.epoch === fenceEpoch)
     && (overlay || !history?.edits || (Object.keys(history.edits).length === Object.keys(record.edits as object).length
       && Object.entries(history.edits).every(([room, edit]) => (record.edits as Record<string, string>)[room] === edit)))
-  // A confirmed fence-backed choice supersedes target-only denial; legacy input cannot.
+  // Only a confirmed fence-backed save against this denial supersedes it; earlier saves and legacy input cannot.
   const denied = guard.legacy[account]?.choice === '' && !current
   const cleared = !overlay && !!fenceEpoch && !current
   const oldRooms = validRooms ? [...new Set(record!.rooms as string[])] : []
@@ -410,6 +418,8 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       // Target-only denial preserves unrelated slots, including ones installed after enumeration.
       const legacy: Record<string, LegacyPermission> = Object.fromEntries(Object.entries(guard.legacy).filter(([, permission]) => permission.choice === ''))
       legacy[scoped!] = { choice: '', generation: generateUUID() }
+      // Advance the target before unrelated reads can defer conversion, preserving every peer entry.
+      writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy: { ...guard.legacy, [scoped!]: legacy[scoped!] } }))
       const restricted = new Set<string>()
       const accounts: string[] = []
       for (let i = 0; i < localStorage.length; i++) {
@@ -447,6 +457,17 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           saved = classified.get(other) ?? readSavedRoomConsent(other)
           localIdentity = saved.localIdentity
           if (saved.needsMigration) {
+            if (saved.sharedPermission?.choice && saved.sharedPermission.choice !== saved.legacyChoice) {
+              // A restrictive Off still needs its input barrier; unconfirmed On cannot replace the surviving choice.
+              const candidate = JSON.parse(saved.raw ?? 'null') as { version?: unknown; enabled?: unknown; rooms?: unknown } | null
+              const off = candidate?.version === undefined && candidate?.enabled === false
+                || (candidate?.version === 2 || candidate?.version === undefined && candidate?.enabled === true) && Array.isArray(candidate?.rooms) && candidate.rooms.length === 0
+              if (!off) {
+                legacy[other] = saved.sharedPermission
+                preserved = false
+                continue
+              }
+            }
             if (saved.linkedInput && saved.sharedPermission) {
               // Shared-only protection must reach the linked fence before either protector can retire.
               if (!persistRoomConsent(other, saved, saved.rooms, migrationEdits(saved), saved.epoch, true)) preserved = false

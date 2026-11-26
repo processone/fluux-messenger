@@ -100,8 +100,10 @@ shared permission; it never overwrites a later clear's denial before retry check
 Recovery and repeated clears retain denial until an account fence or shared seal
 commits and the preference has been removed. A refused preference deletion keeps
 its account-level denial: a shared import seal alone cannot deny a surviving
-current-format On. A scoped target entry rejects legacy input and unfenced current
-On; a confirmed fence-backed save supersedes it. Its opaque identity combines
+current-format On. A scoped target entry rejects legacy input and any earlier current-format
+On, including an intact earlier fence. Only a confirmed fence-backed save whose
+identity includes this target denial supersedes it. The target boundary is
+attempted before unrelated reads can defer conversion, preserving all peer entries. Its opaque identity combines
 with any active restriction and fence epoch, so another target clear invalidates
 older work even if only one denial form can advance. In a coordinated turn,
 full clearing installs account fences
@@ -129,7 +131,9 @@ Shared exceptions permit only the exact effective choices of unaffected accounts
 whose conversion was refused; a target-only entry grants no permission. An open
 profile still admits unclassified accounts without exceptions, never a mismatched
 exception or erased target. Refused conversion retains an existing exception even
-when a different legacy room list is present; its denial and ordering still apply
+when a different legacy room list is present; unconfirmed On is not
+witnessed over the surviving choice. A recognizable Off still acquires its
+exact-input restriction so older On cannot replace it. Its denial and ordering still apply
 without granting that different input permission. Permission-bearing exceptions
 retire only after conversion or a choice safely replaces their protection.
 Scoped clearing replaces the target's exception with denial even if preference
