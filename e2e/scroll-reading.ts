@@ -4554,23 +4554,29 @@ test('room history crosses hidden spam pages with one load action and preserves 
     store.getState().setActiveRoom(jid)
     window.location.hash = '#/rooms/' + encodeURIComponent(jid)
   }, roomJid)
-  const button = page.getByRole('button', { name: 'Load earlier messages' })
-  await expect(button).toBeAttached()
-  // Keyboard activation does not add a separate wheel gesture that could initiate another load.
-  await button.evaluate(element => (element as HTMLButtonElement).focus({ preventScroll: true }))
-  await page.keyboard.press('Enter')
-  await expect.poll(() => page.evaluate(jid => {
+  const scroller = page.locator('[data-message-list]')
+  await expect(scroller.locator('.message-row[data-message-id="anchor-19"]')).toBeInViewport()
+  // The room opens at the latest message. Home reaches the virtualized history header without loading a page.
+  await page.keyboard.press('Home')
+  const button = scroller.getByRole('button', { name: 'Load earlier messages' })
+  await expect(button).toBeInViewport()
+  const readHistory = () => page.evaluate(jid => {
     const state = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
     const messages = state.messages.get(jid) ?? []
     return {
-      found: messages.some(m => m.id === 'before-spam'),
+      oldest: messages[0]?.id,
       anchors: messages.filter(m => m.id.startsWith('anchor-')).length,
       bounded: messages.length <= 30,
       loading: state.getRoomMAMQueryState(jid).isLoading,
     }
-  }, roomJid)).toEqual({ found: true, anchors: 20, bounded: true, loading: false })
+  }, roomJid)
+  expect(await readHistory()).toEqual({ oldest: 'anchor-0', anchors: 20, bounded: true, loading: false })
+  // Keyboard activation does not add a separate wheel gesture that could initiate another load.
+  await button.evaluate(element => (element as HTMLButtonElement).focus({ preventScroll: true }))
+  await page.keyboard.press('Enter')
+  await expect.poll(readHistory).toEqual({ oldest: 'before-spam', anchors: 20, bounded: true, loading: false })
   await expect(page.getByText(/Message removed by|Message deleted/)).toHaveCount(0)
-  await page.locator('[data-message-list]').evaluate(element => { element.scrollTop = 0 })
+  await scroller.evaluate(element => { element.scrollTop = 0 })
   await expect(page.getByText('Conversation before the spam', { exact: true })).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('spam-history-desktop.png') })
   await page.setViewportSize({ width: 390, height: 844 })
