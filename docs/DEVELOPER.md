@@ -347,6 +347,9 @@ check. Choose two new results directories outside the project. For example,
 after setting `results` to that external parent directory:
 
 ```bash
+(
+set -eu
+: "${results:?Set results to a new external output directory}"
 node scripts/native-tests/linux-gui/build.mjs
 app="$PWD/apps/fluux/src-tauri/target/debug/fluux"
 check_native_source() {
@@ -360,19 +363,32 @@ const build = JSON.parse(readFileSync(`${process.argv[2]}.linux-gui-build.json`,
 assert.equal(build.commit, git('rev-parse', 'HEAD'), 'Source revision changed; rebuild before reusing')
 NODE
 }
-check_native_source && node scripts/native-tests/linux-gui/run.mjs --app "$app" --evidence "$results/smoke"
-check_native_source && node scripts/native-tests/linux-gui/run.mjs --app "$app" --evidence "$results/failure" --fail-after-session
+check_native_source
+node scripts/native-tests/linux-gui/run.mjs --app "$app" --evidence "$results/smoke"
+check_native_source
+if node scripts/native-tests/linux-gui/run.mjs --app "$app" --evidence "$results/failure" --fail-after-session; then
+  echo 'Expected the post-assertion cleanup failure' >&2
+  exit 1
+fi
+grep -Fq 'Requested failure-cleanup proof after native assertions' "$results/failure/native.log"
+)
 ```
 
-The second check must exit nonzero after its native assertions. Inspect both
+The subshell stops on producer, source-guard or normal-smoke failure, so a
+failed rebuild cannot fall through to an older executable. The second check
+must exit nonzero **and** record the requested post-assertion failure in
+`native.log`; an unrelated startup failure is not cleanup proof. Inspect both
 `cleanup.json` files for removed profiles and no surviving owned processes.
 Both `identity.json` files must record the same build commit and executable
 SHA-256. Neither consumer invokes Cargo. The launcher checks the executable
 digest, Dev identity and production-TLS variant; the explicit source guard above
 adds the clean-tree and exact-revision checks, which the launcher itself does
 not enforce. A modified timeout source must fail that guard before launch;
-after any source change, commit and rerun the build rather than editing its
-provenance record. Changed toolchain/SDK/flags also require a new build even
+a clean checkout at a different commit must fail the commit comparison even
+with that same artifact. Check this independently in a disposable checkout,
+pointing `app` at the original executable and running only the source guard,
+not the build or native consumers. After any source change, commit and rerun
+the build rather than editing its provenance record. Changed toolchain/SDK/flags also require a new build even
 when the source guard passes. Keep this limitation explicit in evidence.
 
 GitHub remains the full-suite runner: the light `branch-check.yml` must pass for
