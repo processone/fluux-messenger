@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { constants, closeSync, cpSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { delimiter, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { constants, closeSync, chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const CAP = 10 * 1024 ** 3
@@ -12,7 +12,7 @@ const script = fileURLToPath(import.meta.url)
 const root = resolve(dirname(script), '..')
 const native = 'apps/fluux/src-tauri'
 const hash = value => createHash('sha256').update(value).digest('hex')
-const within = (parent, child) => { const path = relative(parent, child); return path === '' || (path !== '..' && !path.startsWith('../') && !isAbsolute(path)) }
+const within = (parent, child) => { const path = relative(parent, child); return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path)) }
 
 function read(command, args, cwd = root) {
   const result = spawnSync(command, args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 ** 2 })
@@ -138,7 +138,7 @@ function inspectCompatibility(options) {
   if (sdkFlags.split(/\s+/).some(flag => flag.startsWith('-L')) || libraries.some(path => !isAbsolute(path))) throw new Error('Unqualified native library search path')
   const buildEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(CARGO|RUST|TAURI|PATH)/.test(key) && !['CARGO_TARGET_DIR', 'CARGO_BUILD_BUILD_DIR'].includes(key)).sort())
   return {
-    format: 2, features: options.features, target: options.host, profile: 'dev',
+    format: 3, features: options.features, target: options.host, profile: 'dev',
     cargo: read('cargo', ['-vV']), rustc: read('rustc', ['-vV']),
     tools: tools.map(path => [path, digestTree(path)]),
     sdk: { flags: sdkFlags, headers: headers.map(path => [path, digestTree(path)]), libraries: linkedLibraries([...tools, ...libraries]).map(path => [path, digestTree(path)]), linkInputs: linkInputs.map(path => [path, digestTree(path)]), rust: digestTree(join(sysroot, 'lib/rustlib', options.host, 'lib')) },
@@ -168,24 +168,93 @@ function linkedLibraries(paths) {
   return [...result].sort()
 }
 
-function seedDependencies(source, destination, host) {
-  const metadata = JSON.parse(read('cargo', ['metadata', '--locked', '--offline', '--format-version', '1', '--manifest-path', `${native}/Cargo.toml`, '--filter-platform', host]))
-  const packages = metadata.packages.filter(pkg => pkg.source?.startsWith('registry+'))
-  const names = new Set(packages.map(pkg => pkg.name))
-  const crates = new Set(packages.flatMap(pkg => pkg.targets.map(target => target.name.replaceAll('-', '_'))))
+function registryPackages(host, features) {
+  const args = ['metadata', '--locked', '--offline', '--format-version', '1', '--manifest-path', `${native}/Cargo.toml`, '--filter-platform', host]
+  if (features) args.push('--features', features)
+  const metadata = JSON.parse(read('cargo', args))
+  const localNames = new Set(metadata.packages.filter(pkg => !pkg.source?.startsWith('registry+')).map(pkg => pkg.name))
+  return metadata.packages.filter(pkg => pkg.source?.startsWith('registry+') && !localNames.has(pkg.name))
+}
+
+export function registryUnits(source, packages, host) {
+  const result = []
   for (const prefix of ['debug', `${host}/debug`]) {
-    for (const folder of ['.fingerprint', 'build', 'deps']) {
-      const from = join(source, prefix, folder)
-      if (!existsSync(from)) continue
-      for (const name of readdirSync(from)) {
-        const match = folder === 'deps' ? name.match(/^(?:lib)?(.+)-[a-f0-9]+(?:\..*)?$/) : name.match(/^(.+)-[a-f0-9]+$/)
-        if (!match || !(folder === 'deps' ? crates : names).has(match[1])) continue
-        const target = join(destination, prefix, folder, name)
-        mkdirSync(dirname(target), { recursive: true, mode: 0o700 })
-        cpSync(join(from, name), target, { recursive: true, force: false, errorOnExist: true })
+    for (const name of new Set(packages.map(pkg => pkg.name))) {
+      const directory = join(source, prefix, 'build', name)
+      if (!existsSync(directory)) continue
+      for (const unit of readdirSync(directory)) {
+        const path = join(directory, unit)
+        if (/^[a-f0-9]{16}$/.test(unit) && existsSync(join(path, 'fingerprint')) && (existsSync(join(path, 'out')) || existsSync(join(path, 'run')))) {
+          result.push({ packages: packages.filter(pkg => pkg.name === name).map(pkg => pkg.id), name, relative: join(prefix, 'build', name, unit) })
+        }
       }
     }
   }
+  return result
+}
+
+export function retainRegistryOnly(source, packages, host) {
+  unredirected(source)
+  bytes(source)
+  const names = new Set(packages.map(pkg => pkg.name))
+  // Workspace-relative fingerprints and incremental state cannot establish cross-copy freshness.
+  for (const prefix of ['debug', `${host}/debug`]) {
+    const profile = join(source, prefix)
+    if (!existsSync(profile)) continue
+    for (const name of readdirSync(profile)) {
+      if (!['build', '.cargo-build-lock'].includes(name)) rmSync(join(profile, name), { recursive: true, force: true })
+    }
+    const units = join(profile, 'build')
+    if (existsSync(units)) for (const name of readdirSync(units)) {
+      if (!names.has(name)) rmSync(join(units, name), { recursive: true, force: true })
+    }
+  }
+  if (existsSync(join(source, host))) for (const name of readdirSync(join(source, host))) {
+    if (!['debug', 'CACHEDIR.TAG'].includes(name)) rmSync(join(source, host, name), { recursive: true, force: true })
+  }
+  for (const name of readdirSync(source)) {
+    if (!['debug', host, 'CACHEDIR.TAG', '.rustc_info.json'].includes(name)) rmSync(join(source, name), { recursive: true, force: true })
+  }
+}
+
+export function seedDependencies(source, destination, packages, host) {
+  unredirected(source)
+  bytes(source)
+  const units = registryUnits(source, packages, host)
+  for (const unit of units) {
+    const target = join(destination, unit.relative)
+    mkdirSync(dirname(target), { recursive: true, mode: 0o700 })
+    cpSync(join(source, unit.relative), target, { recursive: true, force: false, errorOnExist: true, preserveTimestamps: true })
+  }
+  return units
+}
+
+export function freshSeedHits(artifacts, units, destination) {
+  return units.filter(unit => artifacts.some(artifact => artifact.fresh && unit.packages.includes(artifact.package_id)
+    && artifact.filenames.some(path => within(join(destination, unit.relative, 'out'), path))))
+}
+
+export function validateOutputTree(path) {
+  const info = lstatSync(path)
+  if (info.isSymbolicLink() || (!info.isFile() && !info.isDirectory())) throw new Error('Private output paths must not redirect')
+  if (info.isDirectory()) for (const name of readdirSync(path)) validateOutputTree(join(path, name))
+}
+
+export function publishIndependentExecutable(binary, target) {
+  unredirected(binary)
+  if (!within(target, binary) || !lstatSync(binary).isFile()) throw new Error('Final executable is outside private outputs')
+  const source = statSync(binary)
+  const temporary = `${binary}.pilot-${randomUUID()}`
+  let copied = false
+  try {
+    copyFileSync(binary, temporary, constants.COPYFILE_EXCL)
+    copied = true
+    chmodSync(temporary, source.mode & 0o777)
+    renameSync(temporary, binary)
+  } finally { if (copied) rmSync(temporary, { force: true }) }
+  const published = statSync(binary)
+  if (published.nlink !== 1 || (source.dev === published.dev && source.ino === published.ino)) throw new Error('Final executable still shares storage')
+  return { source: { device: source.dev, inode: source.ino }, published: { device: published.dev, inode: published.ino, links: published.nlink } }
 }
 
 function runTestExecutable(target, receipt, path, args) {
@@ -199,7 +268,7 @@ function runTestExecutable(target, receipt, path, args) {
 }
 
 export function cargoArguments(options) {
-  const args = [options.operation, '--locked', '--offline', '--manifest-path', `${native}/Cargo.toml`, '--bin', 'fluux', '--profile', 'dev', '--target', options.host, '-j', '2', '-v']
+  const args = [options.operation, '--locked', '--offline', '--manifest-path', `${native}/Cargo.toml`, '--bin', 'fluux', '--profile', 'dev', '--target', options.host, '--message-format', 'json-render-diagnostics', '-j', '2', '-v']
   if (options.features) args.push('--features', options.features)
   if (options.shared) args.push('--config', `target.${options.host}.linker=${JSON.stringify(options.nativeTools.cc)}`)
   if (options.operation === 'test') args.push('--config', `target.${options.host}.runner=${JSON.stringify([process.execPath, script, '--test-executable', options.target, options.testReceipt])}`)
@@ -210,14 +279,23 @@ function cargo(options, intermediate) {
   const args = cargoArguments(options)
   // A compiler or test failure is never retried or hidden as a cache miss.
   const tools = options.shared ? { RUSTC: options.nativeTools.rustc, CC: options.nativeTools.cc, CXX: options.nativeTools.cxx, AR: options.nativeTools.ar } : {}
-  return spawnSync('cargo', args, { cwd: root, stdio: 'inherit', env: { ...process.env, ...tools, CARGO_TARGET_DIR: options.target, CARGO_BUILD_BUILD_DIR: intermediate } }).status ?? 1
+  const result = spawnSync('cargo', args, { cwd: root, stdio: ['inherit', 'pipe', 'inherit'], encoding: 'utf8', maxBuffer: 32 * 1024 ** 2, env: { ...process.env, ...tools, CARGO_TARGET_DIR: options.target, CARGO_BUILD_BUILD_DIR: intermediate } })
+  process.stdout.write(result.stdout ?? '')
+  const artifacts = (result.stdout ?? '').split('\n').flatMap(line => {
+    try { const message = JSON.parse(line); return message.reason === 'compiler-artifact' ? [message] : [] } catch { return [] }
+  })
+  return { status: result.status ?? 1, artifacts }
 }
 
 function worker(options) {
+  validateOutputTree(options.target)
   const state = { lane: 'private', cargoStarted: false }
   writeFileSync(options.state, JSON.stringify(state))
   let intermediate = join(options.target, 'intermediates')
   let cache
+  let build
+  let packages = []
+  let units = []
   try {
     if (options.shared) {
       cache = managedCache(options.cacheParent)
@@ -231,12 +309,18 @@ function worker(options) {
         writeFileSync(join(entry, 'used'), '', { flag: 'wx', mode: 0o600 })
       }
       entries(cache)
-      const build = join(entry, 'build')
+      build = join(entry, 'build')
       privateDirectory(build)
+      packages = registryPackages(options.host, options.features)
+      retainRegistryOnly(build, packages, options.host)
+      units = registryUnits(build, packages, options.host)
+      state.availableRegistryUnits = units.length
       if (options.operation === 'test') {
         privateDirectory(intermediate)
         if (readdirSync(intermediate).length) throw new Error('Seeded tests require empty private intermediates')
-        seedDependencies(build, intermediate, options.host)
+        units = seedDependencies(build, intermediate, packages, options.host)
+        if (!units.length) throw new Error('No supported registry dependency units were copied')
+        state.seededUnits = units
         state.lane = 'private-seeded'
       } else {
         intermediate = build
@@ -248,13 +332,27 @@ function worker(options) {
     intermediate = join(options.target, `isolated-${randomUUID()}`)
     state.lane = 'private'
     cache = undefined
+    units = []
   }
+  validateOutputTree(options.target)
   // This receipt precedes every possible Cargo launch, so absent means no build ran.
   state.cargoStarted = true
   writeFileSync(options.state, JSON.stringify(state))
-  const status = cargo({ ...options, shared: state.lane !== 'private' }, intermediate)
+  const result = cargo({ ...options, shared: state.lane !== 'private' }, intermediate)
+  let status = result.status
+  state.freshRegistryHits = freshSeedHits(result.artifacts, units, intermediate)
+  if (!status && state.lane === 'private-seeded' && !state.freshRegistryHits.length) {
+    console.error('Copied registry units produced no Fresh dependency hit')
+    status = 1
+  }
+  if (!status && options.operation === 'build') {
+    try { state.finalStorage = publishIndependentExecutable(join(options.target, options.host, 'debug/fluux'), options.target) }
+    catch (error) { console.error(error.message); status = 1 }
+  }
+  writeFileSync(options.state, JSON.stringify(state))
   if (cache) {
     try {
+      retainRegistryOnly(build, packages, options.host)
       regular(join(cache, options.key, 'used'))
       writeFileSync(join(cache, options.key, 'used'), '')
       console.error(`Pilot retained bytes: ${prune(cache)}`)
@@ -294,7 +392,9 @@ export function parseOptions(args) {
 }
 
 export function launch(args, launchBuild) {
-  return launchBuild(parseOptions(args))
+  const options = parseOptions(args)
+  if (existsSync(options.target)) validateOutputTree(options.target)
+  return launchBuild(options)
 }
 
 function main() {
@@ -308,6 +408,7 @@ function main() {
     const version = read('cargo', ['--version']).match(/^cargo (\d+)\.(\d+)\./)
     if (!version || Number(version[1]) < 1 || (Number(version[1]) === 1 && Number(version[2]) < 100)) throw new Error('The pilot requires Cargo 1.100 or later')
     privateDirectory(options.target)
+    validateOutputTree(options.target)
     options.state = join(options.target, `pilot-${randomUUID()}.json`)
     options.testReceipt = join(options.target, `test-${randomUUID()}.json`)
     if (options.shared) {
@@ -334,7 +435,7 @@ function main() {
     const tests = existsSync(options.testReceipt) ? JSON.parse(readFileSync(options.testReceipt, 'utf8')) : undefined
     const binary = options.operation === 'build' ? join(options.target, options.host, 'debug/fluux') : undefined
     if (!status && (!state.cargoStarted || (options.operation === 'test' ? !tests : !existsSync(binary)))) status = 1
-    if (!status && binary && !within(options.target, realpathSync(binary))) throw new Error('Final binary redirected outside private outputs')
+    if (!status && binary && (!within(options.target, realpathSync(binary)) || statSync(binary).nlink !== 1 || !state.finalStorage)) throw new Error('Final binary lacks independent private storage')
     const report = { operation: options.operation, features: options.features, target: options.host, ...state, key: ['shared', 'private-seeded'].includes(state.lane) ? state.key : null, elapsedMs: performance.now() - started, status, binary, tests }
     if (options.report) writeFileSync(options.report, `${JSON.stringify(report, null, 2)}\n`)
     console.error(JSON.stringify(report))

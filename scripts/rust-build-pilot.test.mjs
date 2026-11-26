@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, copyFileSync, existsSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync, statSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, copyFileSync, chmodSync, existsSync, linkSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { test } from 'node:test'
-import { CAP, cargoArguments, compatibility, IDLE_MS, launch, managedCache, prune } from './rust-build-pilot.mjs'
+import { CAP, cargoArguments, compatibility, IDLE_MS, launch, managedCache, prune, publishIndependentExecutable, retainRegistryOnly, seedDependencies, freshSeedHits } from './rust-build-pilot.mjs'
 
 const recorded = JSON.parse(readFileSync(new URL('./fixtures/rust-build-pilot-tools.json', import.meta.url), 'utf8'))
 const nativeFs = { skip: process.platform === 'win32' }
-function withCache(action) {
-  const parent = mkdtempSync(join(tmpdir(), 'fluux-rust-policy-'))
+function withCache(action, temporaryParent = tmpdir()) {
+  const parent = realpathSync(mkdtempSync(join(temporaryParent, 'fluux-rust-policy-')))
   try { action(managedCache(parent), parent) } finally { rmSync(parent, { recursive: true, force: true }) }
 }
 function entry(cache, name, used) {
@@ -119,3 +119,95 @@ test('overlapping outputs prevent the build launcher from being called', () => {
   launch(['--cache', cache, '--target', `${cache}-private`, '--shared'], options => { launched = options.target === `${cache}-private` })
   assert.equal(launched, true)
 })
+
+// Source: the approved private outputs must not redirect Cargo writes before launch.
+test('nested output redirects stop both lanes before the launcher', nativeFs, () => withCache((cache, parent) => {
+  const outside = join(parent, 'outside')
+  mkdirSync(outside)
+  copyFileSync('apps/fluux/src-tauri/Cargo.lock', join(outside, 'Cargo.lock'))
+  const original = readFileSync(join(outside, 'Cargo.lock'))
+  for (const shared of [false, true]) for (const child of ['intermediates', recorded.target, `${recorded.target}/debug`, 'debug']) {
+    const target = join(parent, 'outputs')
+    mkdirSync(target, { mode: 0o700 })
+    const link = join(target, child)
+    mkdirSync(join(link, '..'), { recursive: true })
+    symlinkSync(outside, link, 'dir')
+    let launched = false
+    assert.throws(() => launch(['--target', target, ...(shared ? ['--shared', '--cache', cache] : [])], () => { launched = true }), /must not redirect/)
+    assert.equal(launched, false)
+    assert.deepEqual(readFileSync(join(outside, 'Cargo.lock')), original)
+    rmSync(target, { recursive: true })
+  }
+}))
+
+// Source: final executables must have independent storage before shared access ends.
+test('publishing replaces a cache hard link with an independent executable', nativeFs, () => withCache((cache, parent) => {
+  const source = join(cache, 'source-executable')
+  const target = join(parent, 'output')
+  mkdirSync(target, { mode: 0o700 })
+  copyFileSync('scripts/test-affected.sh', source)
+  chmodSync(source, 0o755)
+  const binary = join(target, 'fluux')
+  linkSync(source, binary)
+  assert.equal(statSync(source).ino, statSync(binary).ino)
+  const original = readFileSync(binary)
+  const receipt = publishIndependentExecutable(binary, target)
+  assert.notEqual(statSync(source).ino, statSync(binary).ino)
+  assert.equal(statSync(binary).nlink, 1)
+  assert.equal(statSync(binary).mode & 0o777, 0o755)
+  assert.equal(receipt.published.inode, statSync(binary).ino)
+  writeFileSync(source, readFileSync('scripts/rust-build-pilot.mjs'))
+  assert.deepEqual(readFileSync(binary), original)
+}))
+
+// Source: the existing Mac JavaScript gate must work through the standard temporary-path alias.
+test('fixtures canonicalize temporary aliases without weakening production rejection', nativeFs, () => withCache((cache, parent) => {
+  const alias = join(parent, 'temporary-alias')
+  symlinkSync(parent, alias, 'dir')
+  assert.throws(() => managedCache(alias), /must not redirect/)
+  withCache((nested, canonical) => {
+    assert.equal(realpathSync(canonical), canonical)
+    assert.equal(existsSync(join(nested, 'owner')), true)
+  }, alias)
+}))
+
+const layout = JSON.parse(readFileSync(new URL('./fixtures/rust-build-pilot-layout.json', import.meta.url), 'utf8'))
+function layoutUnit(source, unit) {
+  const path = join(source, unit.relative)
+  mkdirSync(join(path, 'fingerprint'), { recursive: true })
+  mkdirSync(join(path, 'out'))
+  writeFileSync(join(path, 'fingerprint', unit.fingerprintFile), unit.fingerprint)
+  return path
+}
+
+// Source: a supported-layout seed must copy registry units and match real Fresh artifacts.
+test('recorded current-layout fingerprints select registry seeds and distinguish Fresh from compiled readings', nativeFs, () => withCache((cache, parent) => {
+  const source = join(cache, 'build')
+  layoutUnit(source, layout.registryUnit)
+  layoutUnit(source, layout.workspaceUnit)
+  const destination = join(parent, 'private-intermediates')
+  mkdirSync(destination)
+  const units = seedDependencies(source, destination, layout.packages, layout.host)
+  assert.equal(units.length, 1)
+  assert.equal(units[0].name, 'itoa')
+  assert.equal(units[0].relative, layout.registryUnit.relative)
+  const copied = join(destination, layout.registryUnit.relative, 'fingerprint', layout.registryUnit.fingerprintFile)
+  assert.equal(readFileSync(copied, 'utf8'), layout.registryUnit.fingerprint)
+  assert.equal(existsSync(join(destination, layout.workspaceUnit.relative)), false)
+  const atDestination = artifact => ({ ...artifact, filenames: artifact.filenames.map(path => join(destination, path)) })
+  assert.equal(freshSeedHits([atDestination(layout.freshArtifact)], units, destination).length, 1)
+  assert.equal(freshSeedHits([atDestination(layout.compiledArtifact)], units, destination).length, 0)
+}))
+
+// Source: older checkout inputs must not inherit workspace fingerprints or incremental state.
+test('shared retention discards all recorded checkout units and incremental state', nativeFs, () => withCache(cache => {
+  const source = join(cache, 'build')
+  const registry = layoutUnit(source, layout.registryUnit)
+  const workspace = layoutUnit(source, layout.workspaceUnit)
+  const incremental = join(source, layout.host, 'debug/incremental')
+  mkdirSync(incremental)
+  retainRegistryOnly(source, layout.packages, layout.host)
+  assert.equal(existsSync(workspace), false)
+  assert.equal(existsSync(incremental), false)
+  assert.equal(existsSync(registry), true)
+}))

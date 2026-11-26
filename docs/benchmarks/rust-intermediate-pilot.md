@@ -24,12 +24,24 @@ Do not substitute `--lib`: the mobile library excludes its implementation on
 Linux and is not evidence of a desktop build or nonempty desktop test suite.
 
 Final desktop executables live in an explicit private output directory outside
-the cache. Builds reuse Cargo's intermediate directory. Tests instead seed an
-empty private intermediate directory with compatible registry dependency files
-only: no workspace crates, incremental state or test executables are copied.
-Cargo checks those dependency fingerprints normally. The shared dependency
-files remain stable and locked while the test build uses their build-script
-outputs. The configured test runner refuses execution outside private outputs,
+the cache. Before releasing the cache lock, the runner replaces Cargo's published
+hard link with independent executable storage and records both file identities.
+Both lanes reject redirected descendants of the output root before Cargo starts.
+Builds retain only compatible registry dependency units; the runner removes all
+checkout-sensitive units and incremental state before and after every shared
+build. Even an older checkout must regenerate its own native code, build-script
+values and embedded Git version. A warm repeat therefore still rebuilds local
+units. Tests seed an empty private intermediate directory with compatible
+registry units only: no workspace crates, incremental state or test executables
+are copied.
+Cargo checks those dependency fingerprints normally. The supported Cargo layout
+is `debug/build/<package>/<unit>/{fingerprint,out,run}`, with a host-target prefix
+where applicable. Copying no recognized unit is an isolated fallback, not a seed
+hit. Reports record copied units and match them against Cargo's actual `Fresh`
+artifact messages; a seeded test run without a matching dependency hit fails.
+The shared dependency files remain stable and locked while the test build uses
+their build-script outputs. Source timestamps are never rewritten; copied
+intermediate files retain their existing metadata. The configured test runner refuses execution outside private outputs,
 requires a nonempty native test inventory and records the executable path and
 inventory before running it. Private outputs and their cleanup belong to the
 caller. Existing complete native and platform gates still run outside this lane.
@@ -94,8 +106,9 @@ node scripts/rust-build-pilot.mjs --shared --cache "$PILOT_CACHE" \
 
 Save stdout/stderr as well as the JSON report. The report measures from before
 compatibility inspection until scheduler exit, including admission and lock wait.
-It records the lane actually used, not a claim that Cargo reused every crate.
-Count Cargo's actual `Fresh`, `Compiling` and `Running` readings. Successful test
+It records the lane actually used, copied-unit counts and matching `Fresh`
+registry artifacts, not a claim that Cargo reused every crate. Count Cargo's
+actual `Fresh`, `Compiling` and `Running` readings. Successful test
 reports must include the nonempty inventory and private executable receipt.
 
 ## Evaluation and retention decision
@@ -110,12 +123,19 @@ reports must include the nonempty inventory and private executable receipt.
    Require a nonempty inventory and record the private executed path. Perturb
    Rust source, the native build script, its SDK timeout input and Tauri config.
    Compare reused and private clean results, generated timeout values and
-   deliberate failures that must not become stale successes.
+   deliberate failures that must not become stale successes. In the shared build
+   lane, build a newer copy before an older-mtime copy containing different native
+   inputs and a different Git version. The older copy must match its clean build
+   without changing source timestamps. Test seeding must demonstrate at least one
+   dependency both copied from the registry cache and reported `Fresh` by Cargo.
 4. Compare real feature and flag variants with clean builds. Confirm key changes,
    forced host target, effective compiler/linker/SDK identities, private final
    artifacts and serialized access. Exercise unavailable/redirected lock fallback,
    actual lane reporting, unrelated-file protection, idle eviction and
-   oversized-entry-first removal.
+   oversized-entry-first removal. Compare executable device/inode/link readings
+   with the shared original before releasing the lock, then show that another
+   shared build cannot change the published executable. Exercise redirected
+   intermediate, target and profile descendants before Cargo can write to them.
 5. Retain reuse only if coverage is equivalent and the three cross-copy runs'
    median elapsed time, including queueing, is at most 70% of the three cold
    runs' median. Otherwise remove the candidate lane and preserve the result,

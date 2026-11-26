@@ -1,0 +1,38 @@
+{
+  "host": "x86_64-unknown-linux-gnu",
+  "packages": [
+    {
+      "id": "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.19",
+      "name": "itoa",
+      "source": "registry+https://github.com/rust-lang/crates.io-index"
+    }
+  ],
+  "registryUnit": {
+    "relative": "x86_64-unknown-linux-gnu/debug/build/itoa/a5337cc035221ef0",
+    "fingerprintFile": "lib-itoa.json",
+    "fingerprint": "{\"rustc\":2642861616376027855,\"features\":\"[]\",\"declared_features\":\"[\\\"no-panic\\\"]\",\"target\":18426369533666673425,\"profile\":11926785003450549200,\"path\":2462638210524233861,\"deps\":[],\"local\":[{\"CheckDepInfo\":{\"dep_info\":\"x86_64-unknown-linux-gnu/debug/build/itoa/a5337cc035221ef0/fingerprint/dep-lib-itoa\",\"fingerprint\":\"mtime\"}}],\"rustflags\":[],\"config\":9396254390672932401,\"compile_kind\":13270707523875659407}"
+  },
+  "workspaceUnit": {
+    "relative": "x86_64-unknown-linux-gnu/debug/build/registry-layout-probe/6d0f3baf160055e4",
+    "fingerprintFile": "bin-registry-layout-probe.json",
+    "fingerprint": "{\"rustc\":2642861616376027855,\"features\":\"[]\",\"declared_features\":\"[]\",\"target\":7203567328297647313,\"profile\":7333259681545804295,\"path\":4942398508502643691,\"deps\":[[5037372466785579007,\"itoa\",false,2901934199915402522]],\"local\":[{\"CheckDepInfo\":{\"dep_info\":\"x86_64-unknown-linux-gnu/debug/build/registry-layout-probe/6d0f3baf160055e4/fingerprint/dep-bin-registry-layout-probe\",\"fingerprint\":\"mtime\"}}],\"rustflags\":[],\"config\":9396254390672932401,\"compile_kind\":13270707523875659407}"
+  },
+  "freshArtifact": {
+    "reason": "compiler-artifact",
+    "package_id": "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.19",
+    "fresh": true,
+    "filenames": [
+      "x86_64-unknown-linux-gnu/debug/build/itoa/a5337cc035221ef0/out/libitoa-a5337cc035221ef0.rlib",
+      "x86_64-unknown-linux-gnu/debug/build/itoa/a5337cc035221ef0/out/libitoa-a5337cc035221ef0.rmeta"
+    ]
+  },
+  "compiledArtifact": {
+    "reason": "compiler-artifact",
+    "package_id": "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.19",
+    "fresh": false,
+    "filenames": [
+      "x86_64-unknown-linux-gnu/debug/build/itoa/a5337cc035221ef0/out/libitoa-a5337cc035221ef0.rlib",
+      "x86_64-unknown-linux-gnu/debug/build/itoa/a5337cc035221ef0/out/libitoa-a5337cc035221ef0.rmeta"
+    ]
+  }
+}
