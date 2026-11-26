@@ -172,6 +172,10 @@ selected job; this local command does not narrow CI. Browser/native checks remai
 required when their surfaces change. A skipped native test due to missing tools
 or fixtures is missing evidence, not successful validation.
 
+The opt-in [unsigned Linux Rust intermediate-cache pilot](docs/benchmarks/rust-intermediate-pilot.md)
+is a separate evaluation lane, not a replacement for these gates. It must meet
+its clean-build equivalence and fresh-copy timing thresholds before rollout.
+
 For optional offloading of heavy unit/browser sweeps, see
 [Requesting heavy tests on Windows](docs/WINDOWS_HEAVY_TESTS.md). Results are
 Windows evidence only and do not replace existing CI or Mac/device proof.
