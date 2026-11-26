@@ -420,6 +420,12 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
   }
   const retireProtectedProof = (account: string) => {
     try {
+      const history = readConsentFence(localStorage.getItem(storageKey(account, 'migration')))
+      // After consent removal, an unlinked revocation fence denies both legacy formats without the removable handoff proof.
+      if (removedConsents.has(account) && history?.generation && history.edits && history.revoked) {
+        erase(storageKey(account, 'continuity'))
+        return
+      }
       const guard = readClearGuard()
       if ((!guard.open && !guard.legacy[account]) || readClearRestriction(account, localStorage.getItem(storageKey(account, 'migration')), guard)) erase(storageKey(account, 'continuity'))
     } catch { /* Unverified protection cannot replace an exact-input restriction. */ }
@@ -849,9 +855,13 @@ export class RoomReadMarkers extends BaseModule {
       this.failConsentSave(account, !!change, durable)
     }
     try {
-      initial = captured ?? this.readSavedConsent(account)
-      onCaptured?.(initial)
-      const opening = initial
+      let opening = captured ?? this.readSavedConsent(account)
+      if (change && 'allOff' in change) {
+        const shared = readConfirmedSharedConsent(account, opening)
+        if (shared) opening = { ...opening, rooms: shared.rooms }
+      }
+      initial = opening
+      onCaptured?.(opening)
       return await withConsentStorage(() => {
         try {
           let saved = this.readSavedConsent(account)
@@ -875,7 +885,10 @@ export class RoomReadMarkers extends BaseModule {
             rooms = rooms.filter(room => room !== change.room)
             if (change.enabled) rooms.push(change.room)
             edits[change.room] = generateUUID()
-          } else if (change) { rooms = []; epoch = saved.epoch.startsWith('!') ? clearFence() : generateUUID() }
+          } else if (change) {
+            rooms = rooms.filter(room => !sameRoomChoice(opening, saved, room))
+            epoch = saved.epoch.startsWith('!') ? clearFence() : generateUUID()
+          }
           attempted = saved
           attemptedShared = !!shared
           changed = true
@@ -980,7 +993,11 @@ export class RoomReadMarkers extends BaseModule {
     if (enabled) return Promise.resolve(false)
     const account = this.account()
     let boundary: SavedConsent | undefined
-    try { boundary = this.readSavedConsent(account) } catch { /* Selected rooms are unknown until the operation captures them. */ }
+    try {
+      boundary = this.readSavedConsent(account)
+      const shared = readConfirmedSharedConsent(account, boundary)
+      if (shared) boundary = { ...boundary, rooms: shared.rooms }
+    } catch { boundary = undefined }
     const unknownKey = this.roomKey('')
     let unreadable: { history?: ConsentFence; generation?: string; clearToken: string | null } | undefined
     if (!boundary) {
@@ -995,7 +1012,7 @@ export class RoomReadMarkers extends BaseModule {
       if (this.account() !== account) { this.consentEdits.delete(unknownKey); return false }
       try {
         const latest = this.readSavedConsent(account)
-        let rooms = latest.rooms
+        let rooms = readConfirmedSharedConsent(account, latest)?.rooms ?? latest.rooms
         if (unreadable) {
           const history = unreadable.history
           const generation = history?.generation ?? unreadable.generation ?? JSON.stringify([account, unreadable.clearToken, history?.epoch ?? ''])

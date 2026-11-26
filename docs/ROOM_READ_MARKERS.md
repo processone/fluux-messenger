@@ -134,8 +134,14 @@ exception or erased target. Refused conversion retains an existing exception eve
 when a different legacy room list is present; unconfirmed On is not
 witnessed over the surviving choice. Automatic reload likewise defers before retiring that authority. Explicit room
 edits merge the independently confirmed shared choices, never the rejected list.
+Legacy all-Off captures those confirmed rooms for immediate suppression and
+recovery revocation, while preserving room edits committed after that capture.
 A matching shared choice survives a revocation fence only while its continuity
 still has that fence’s generation; erased continuity cannot restore permission.
+Once coordinated clearing removes consent, it retires that handoff proof when
+the existing revocation fence independently denies both legacy formats, even
+if all replacement barrier writes fail. Unlocked cleanup and refused consent
+removal do not authorize that retirement.
 When no exact input is available, the writer reserves continuity before fencing
 and retains shared authority until an observed input can safely replace it.
 An explicit re-enable lifts the shared revocation only after its preference
