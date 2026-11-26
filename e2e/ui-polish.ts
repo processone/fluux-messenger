@@ -116,13 +116,20 @@ for (const lang of ['en', 'fr'] as const) {
         const baseFont = await page.locator('html').evaluate(el => parseFloat(getComputedStyle(el).fontSize))
         await page.evaluate(() => (window as any).__settingsStore.getState().setFontSize(150))
         await expect(page.locator('html')).toHaveCSS('font-size', `${baseFont * 1.5}px`)
+        // The demo's own notice can expire before the bar grows; this one stays to be moved.
+        const noticeId = await page.evaluate(() => (window as any).__toastStore.getState().addToast('info', 'Pinned notice', 0))
+        const notice = page.locator('[data-toast-stack]').getByText('Pinned notice')
+        await expect(notice).toBeVisible()
         for (const query of ['', 'the', 'quartzbadger']) {
           await input.fill(query)
           if (query === 'quartzbadger') await expect(bar.locator('span')).toHaveText(words.search.noResults)
           if (query === 'the') await expect(bar.locator('span')).toHaveText(/\d+\/\d+/)
           await findGeometry(input)
+          const barBox = (await bar.boundingBox())!
+          expect((await notice.boundingBox())!.y).toBeGreaterThanOrEqual(barBox.y + barBox.height)
           await capture(page, `find-${caller}-${lang}-${mode}-320-large-${query || 'empty'}`)
         }
+        await page.evaluate(id => (window as any).__toastStore.getState().removeToast(id), noticeId)
         await input.fill('the')
         // A new query exposes its count before the newest-match selection commits.
         let matchCount = 0
