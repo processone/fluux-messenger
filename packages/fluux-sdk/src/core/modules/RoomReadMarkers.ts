@@ -149,8 +149,8 @@ function readClearRestriction(account: string, fence: string | null, guard: Clea
       && proof?.input === restrictionInput(fence, token) ? proof : undefined
   } catch { return undefined }
 }
-function hasEmptyConsentRestriction(account: string) {
-  try { return readConsentContinuity(account)?.input === '' } catch { return false }
+function readEmptyConsentRestriction(account: string) {
+  try { return readConsentContinuity(account)?.input === '' } catch { return undefined }
 }
 function completeConsentConversion(account: string, generation: string, retireInput = false) {
   // A committed choice survives refused completion; pending observations stay blocked until a coordinated read retries it.
@@ -319,24 +319,35 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
     const raw = JSON.stringify({ generation: generateUUID(), input: restrictionInput(fence, clearToken) })
     return writeBarrier(storageKey(account, 'restriction'), raw) ? raw : null
   }
+  const boundaries = new Map<string, { fence: string | null; guard: ClearGuard } | null>()
+  const captureBoundary = (account: string) => {
+    if (!boundaries.has(account)) {
+      try { boundaries.set(account, { fence: localStorage.getItem(storageKey(account, 'migration')), guard: readClearGuard() }) }
+      catch { boundaries.set(account, null) }
+    }
+    return boundaries.get(account)
+  }
   let needsCoordinatedSeal = false
   let retryProof: string | null = null
-  let retryFence: string | null = null
+  let retryFence: string | null | undefined
   const remove = (coordinated = true, retrying = false) => {
     if (!allAccounts) {
+      const boundary = captureBoundary(scoped!)
       localStorage.removeItem(storageKey(scoped!, 'consent'))
-      const retainedRestriction = hasEmptyConsentRestriction(scoped!)
+      const retainedRestriction = readEmptyConsentRestriction(scoped!)
+      let reservedRestriction = false
+      try { reservedRestriction = !!boundary && !!readClearRestriction(scoped!, boundary.fence, boundary.guard) } catch { reservedRestriction = false }
       if (!retrying) {
         localStorage.removeItem(storageKey(scoped!, 'watermarks'))
-        if (!retainedRestriction) localStorage.removeItem(storageKey(scoped!, 'continuity'))
+        if (retainedRestriction === false) localStorage.removeItem(storageKey(scoped!, 'continuity'))
       }
       const targetSealed = writeBarrier(storageKey(scoped!, 'migration'), clearFence())
       if (targetSealed) {
         localStorage.removeItem(storageKey(scoped!, 'continuity'))
         localStorage.removeItem(storageKey(scoped!, 'restriction'))
       }
-      if (coordinated && !retrying && !targetSealed && retainedRestriction) {
-        reserveRestriction(scoped!, localStorage.getItem(storageKey(scoped!, 'migration')), readClearGuard().generation)
+      if (coordinated && !retrying && !targetSealed && boundary && (retainedRestriction === true || reservedRestriction)) {
+        reserveRestriction(scoped!, boundary.fence, boundary.guard.generation)
       }
       // Without a storage turn, target protection must not rewrite another account's newer choice.
       if (!coordinated) {
@@ -345,8 +356,8 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         needsCoordinatedSeal = guard.open || !!guard.legacy[scoped!]
         if (needsCoordinatedSeal) {
           // A denial-only slot cannot overwrite a choice committed while this unlocked fallback waits.
-          retryFence = localStorage.getItem(storageKey(scoped!, 'migration'))
-          retryProof = reserveRestriction(scoped!, retryFence, guard.generation)
+          retryFence = boundary?.fence
+          if (boundary) retryProof = reserveRestriction(scoped!, boundary.fence, boundary.guard.generation)
         }
         return false
       }
@@ -362,7 +373,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         } catch { /* The shared clear guard is not an account record. */ }
       }
       const classified = new Map<string, SavedConsent>()
-      const targetProtected = targetSealed || readSavedRoomConsent(scoped!).restricted
+      const targetProtected = targetSealed || retainedRestriction === true || reservedRestriction
       if (targetProtected) {
         try {
           // Deferral must precede every preference-first conversion, not leave one without its import barrier.
@@ -449,6 +460,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         if (Array.isArray(parts) && parts.length === 2 && typeof parts[0] === 'string') accounts.add(parts[0])
       } catch { /* Non-account feature keys are still erased. */ }
     }
+    for (const account of accounts) captureBoundary(account)
     // Replace the seal before deleting any existing protection.
     let sealed = writeBarrier(CLEAR_GENERATION_KEY, generateUUID())
     if (!sealed) {
@@ -456,19 +468,31 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       catch { /* Unreadable permissions cannot be reconstructed; the clear reports failure. */ }
     }
     const fences = new Set([...accounts].map(account => storageKey(account, 'migration')))
-    const restrictions = new Set([...accounts].flatMap(account => [storageKey(account, 'restriction'), ...(hasEmptyConsentRestriction(account) ? [storageKey(account, 'continuity')] : [])]))
-    if (!sealed) for (const account of accounts) {
-      try {
-        if (hasEmptyConsentRestriction(account) || readClearRestriction(account, localStorage.getItem(storageKey(account, 'migration')), readClearGuard())) {
-          reserveRestriction(account, localStorage.getItem(storageKey(account, 'migration')), readClearGuard().generation)
-        }
-      } catch { continue }
+    const restrictions = new Set([...accounts].flatMap(account => [storageKey(account, 'restriction'), ...(readEmptyConsentRestriction(account) !== false ? [storageKey(account, 'continuity')] : [])]))
+    const advancedRestrictions = new Set<string>()
+    const refreshRestrictions = () => {
+      for (const account of accounts) {
+        const boundary = captureBoundary(account)
+        if (!boundary || advancedRestrictions.has(account)) continue
+        try {
+          const guard = readClearGuard()
+          if (localStorage.getItem(storageKey(account, 'migration')) !== boundary.fence
+            || (guard.generation !== boundary.guard.generation && !guard.open && !guard.legacy[account])) continue
+          if (readEmptyConsentRestriction(account) === true || readClearRestriction(account, boundary.fence, boundary.guard)) {
+            if (reserveRestriction(account, boundary.fence, boundary.guard.generation)) advancedRestrictions.add(account)
+          }
+        } catch { continue }
+      }
     }
+    if (!sealed) refreshRestrictions()
     for (const key of keys) {
       if (!sealed && (fences.has(key) || restrictions.has(key))) continue
       localStorage.removeItem(key)
     }
-    if (!sealed) sealed = writeBarrier(CLEAR_GENERATION_KEY, generateUUID())
+    if (!sealed) {
+      refreshRestrictions()
+      sealed = writeBarrier(CLEAR_GENERATION_KEY, generateUUID())
+    }
     if (sealed) {
       for (const key of [...fences, ...restrictions]) localStorage.removeItem(key)
     } else {
@@ -480,6 +504,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           localStorage.removeItem(storageKey(account, 'restriction'))
         }
       }
+      refreshRestrictions()
       if (!compacted || !writeBarrier(CLEAR_GENERATION_KEY, generateUUID())) return false
       for (const key of [...fences, ...restrictions]) localStorage.removeItem(key)
     }

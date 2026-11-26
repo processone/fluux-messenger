@@ -42,7 +42,8 @@ never reuses a pending view; a fresh focused observation is required afterward.
 Scoped clearing removes target consent and watermarks before attempting to convert
 unaffected preferences. It retains a verified denial-only restriction until an
 account fence or shared seal replaces it; another scoped or full clear follows
-the same rule. Conversion without overlapping protection stores its
+the same rule. An unreadable continuity record is uncertain, not absent, and
+remains until a saved replacement protects erasure. Conversion without overlapping protection stores its
 self-contained choice before its compatibility fence, retaining linked proof
 until that fence is saved. The erasable continuity record also binds the exact
 validated input before the preference changes. A refused fence restores the original
@@ -63,22 +64,29 @@ If an unrelated record cannot be classified while legacy import remains open,
 a writable target-account fence or verified denial restriction protects erasure.
 Sealing stays incomplete until that record can be read; no unverified exception
 is created. Either protector requires classifying all unrelated accounts before
-starting any conversion.
+starting any conversion. Target protection is checked through denial metadata,
+never by rereading its erased preference, so a refused preference read cannot
+block an otherwise writable shared seal.
 Direct fallback only erases the target's records and attempts its account fence;
 it never replaces the shared guard. If that fence is refused and the shared guard
 still permits the target, a writable erasable denial-only reservation rejects
 stale legacy or version-2 import while recovery obtains a new storage turn.
 The reservation uses the existing proof format in a separate account slot, never
 replacing consent-bearing continuity. It binds opaque fence ordering and shared
-identity, not room names. A committed room choice changes that fence and remains
-valid even if the unlocked reservation is written afterward. An unrelated seal
+identity, not room names. The clear captures its metadata boundary before
+removing consent and never adopts a later fence for recovery. A committed room
+choice changes that fence and remains valid even if it arrives before the old
+late-snapshot point or immediately before or after the reservation write. An unrelated seal
 cannot retire denial while retaining the target's old permission exception.
 The restriction defines a new ownership boundary without granting permission:
 pre-clear opt-ins and self-marker work cannot restore erased records, while
 fresh post-clear work uses the new boundary. Automatic reload cannot turn it On.
 Recovery and repeated clears retain denial until an account fence or shared seal
-commits. Full-clear compaction retires each account's restriction only after its
-replacement fence is saved. If reservation is refused, guarded coordinated sealing
+commits. Each new clear advances either verified denial form when writable,
+rejecting earlier opt-ins and self-marker work without rejecting fresh work.
+Full clearing retries the refresh after ordinary deletion and compaction free
+space, stopping after one successful advance per account. Full-clear compaction
+retires each account's restriction only after its replacement fence is saved. If reservation is refused, guarded coordinated sealing
 still runs when available; cleanup never claims that an unsaved reservation
 protected the wait. Recovery compares its exact reservation and pre-write fence,
 never a later tab's proof or fence. It stops when a later seal already excludes
@@ -108,9 +116,10 @@ independent opt-ins. Normal and compact recovery fences retain revocations and o
 they cannot authorize an unsaved On. Confirmed preferences remain the
 only source of permission, with revocations overlaid after partial writes.
 An independently erasable continuity proof binds the account identity to its
-preference; clearing removes that preference-bearing proof even when the import
-fence cannot be replaced. An empty-input proof that only denies import remains
-usable protection until a replacement commits.
+preference; clearing removes readable preference-bearing proof even when the
+import fence cannot be replaced. Empty-input proof remains usable denial until
+a replacement commits. If its role cannot be read, clearing retains the uncertain
+record and reports incomplete cleanup when replacement remains unavailable.
 During a partial legacy Off, the proof also binds the exact previously validated
 input, so untouched selections survive conversion refusal without authorizing a
 different replacement. Fences link that input by an opaque identifier, never a
