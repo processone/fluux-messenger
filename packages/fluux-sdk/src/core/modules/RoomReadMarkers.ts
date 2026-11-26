@@ -259,12 +259,13 @@ function readConfirmedSharedConsent(account: string, saved: SavedConsent, includ
 function sameConsentBoundary(left: SavedConsent, right: SavedConsent) {
   return left.generation === right.generation
 }
-function tryRevokeLegacy(account: string, saved: SavedConsent, revoked: string[], edits: Record<string, string>, epoch: string) {
+function tryRevokeLegacy(account: string, saved: SavedConsent, revoked: string[], edits: Record<string, string>, epoch: string, confirmed?: SavedConsent) {
   try {
     const guard = readClearGuard()
     const permission = guard.legacy[account]
     const current = readSavedRoomConsent(account)
-    const choice = saved.legacyChoice ?? (hasUnconfirmedSharedInput(saved) ? saved.sharedPermission.choice : undefined)
+    const choice = saved.legacyChoice ?? (confirmed && sameConsentBoundary(saved, confirmed) ? confirmed.legacyChoice : undefined)
+      ?? (hasUnconfirmedSharedInput(saved) ? saved.sharedPermission.choice : undefined)
     if (!choice || permission?.choice !== choice || current.raw !== saved.raw || !sameConsentBoundary(saved, current)) return false
     guard.legacy[account] = { ...permission, generation: current.localIdentity ? undefined : permission.generation, local: current.localIdentity ?? permission.local, revoked: [...new Set([...(permission.revoked ?? []), ...revoked])], edits, epoch }
     localStorage.setItem(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy: guard.legacy }))
@@ -820,7 +821,7 @@ export class RoomReadMarkers extends BaseModule {
       const epoch = 'room' in change ? latest.epoch : latest.epoch.startsWith('!') ? clearFence() : generateUUID()
       changed = true
       const compact = () => {
-        if (shared && tryRevokeLegacy(account, latest, revoked, edits, epoch)) return
+        if (shared && tryRevokeLegacy(account, latest, revoked, edits, epoch, shared)) return
         // Recovery preserves account identity so unrelated Off survives; the epoch rejects older On.
         const compactEpoch = clearFence()
         try {
@@ -834,7 +835,7 @@ export class RoomReadMarkers extends BaseModule {
           localStorage.setItem(storageKey(account, 'consent'), roomConsentValue({ ...latest, generation }, rooms, retainedEdits, compactEpoch))
           completeConsentConversion(account, generation)
         } catch {
-          if (!tryRevokeLegacy(account, latest, revoked, edits, epoch) && !rooms.length) removeConsentWithBarrier(account, compactEpoch)
+          if (!tryRevokeLegacy(account, latest, revoked, edits, epoch, shared) && !rooms.length) removeConsentWithBarrier(account, compactEpoch)
         }
       }
       if (mutating) compact()

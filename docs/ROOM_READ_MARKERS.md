@@ -139,7 +139,9 @@ in capture and recovery. Legacy all-Off additionally captures previously confirm
 rooms hidden by a recognizable stale Off for suppression and revocation, never
 as permission for that rejected input. It reuses its complete opening capture;
 normal commit and recovery still check the latest stored choices and preserve
-room edits committed after that capture.
+room edits committed after that capture. If stale Off remains stored through
+refused account-fence writes, recovery carries the verified exception into the
+shared revocation fallback; the stale input itself acquires no permission.
 A matching shared choice survives a revocation fence only while its continuity
 still has that fence’s generation; erased continuity cannot restore permission.
 Once coordinated clearing removes consent, it retires that handoff proof when
