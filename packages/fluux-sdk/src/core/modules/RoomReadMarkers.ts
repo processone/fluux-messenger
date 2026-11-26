@@ -300,12 +300,19 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           if (Array.isArray(parts) && parts.length === 2 && typeof parts[0] === 'string' && parts[0] !== scoped && parts[1] === 'consent') accounts.push(parts[0])
         } catch { /* The shared clear guard is not an account record. */ }
       }
+      const classified = new Map<string, SavedConsent>()
+      if (targetSealed) {
+        try {
+          // Deferral must precede every preference-first conversion, not leave one without its import barrier.
+          if (readClearGuard().open) for (const other of accounts) classified.set(other, readSavedRoomConsent(other))
+        } catch { return false }
+      }
       for (const other of accounts) {
         let saved: SavedConsent | undefined
         let localIdentity: string | undefined
         let hasLocalProof = true
         try {
-          saved = readSavedRoomConsent(other)
+          saved = classified.get(other) ?? readSavedRoomConsent(other)
           localIdentity = saved.localIdentity
           if (saved.needsMigration) {
             if (saved.linkedInput && saved.sharedPermission) {

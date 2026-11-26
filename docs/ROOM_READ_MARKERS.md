@@ -48,6 +48,9 @@ Refused unrelated conversion is reported without discarding its valid choices.
 If an unrelated record cannot be classified while legacy import remains open,
 a writable target-account fence protects erasure while shared sealing stays
 incomplete until that record can be read; no unverified exception is created.
+When that fence permits deferral, all unrelated accounts are classified before
+any conversion starts, so an earlier paused account cannot be left converted
+without its compatibility barrier by a later unreadable account.
 Successful guard replacement permits only the exact effective choices of unaffected accounts whose conversion was
 refused; it never permits the erased account to import old consent. Those
 exceptions disappear when their account saves or clears its choice. Unknown

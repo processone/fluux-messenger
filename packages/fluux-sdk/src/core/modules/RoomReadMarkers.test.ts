@@ -1989,6 +1989,57 @@ describe('RoomReadMarkers', () => {
     } finally { vi.stubGlobal('localStorage', storage); opening?.release(); await pending; peer.cancelPending(); observer.cancelPending() }
   })
 
+  it.each((['privacy', 'room'] as const).flatMap(paused => (['completion', 'fence'] as const).flatMap(refused => (['consent', 'continuity'] as const).flatMap(denied => [false, true].flatMap(unknownFirst => [false, true].map(uncoordinated => [paused, refused, denied, unknownFirst, uncoordinated] as const))))))('classifies before exposing a paused conversion to deferred sealing (%s, refused %s, unreadable %s, unknown first: %s, coordination refused: %s)', async (paused, refused, denied, unknownFirst, uncoordinated) => {
+    // Approved keep-paused-off rule: incomplete sealing cannot leave a confirmed Off without protection against legacy rewrites.
+    const storage = localStorage
+    const targetJid = 'other@localhost'
+    const pausedJid = 'third@localhost'
+    const keyFor = (owner: string, kind: string) => `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([owner, kind])}`
+    const legacyOn = JSON.stringify({ enabled: true, rooms: [roomJid] })
+    const legacyPaused = JSON.stringify({ enabled: paused !== 'privacy', rooms: paused === 'room' ? [] : [roomJid] })
+    storage.setItem(keyFor(targetJid, 'consent'), legacyOn)
+    for (const owner of unknownFirst ? [jid, pausedJid] : [pausedJid, jid]) storage.setItem(keyFor(owner, 'consent'), owner === jid ? legacyOn : legacyPaused)
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'getItem'
+      ? (name: string) => { if (name === keyFor(jid, denied)) throw new DOMException('Account unreadable', 'SecurityError'); return base.getItem(name) }
+      : key === 'setItem' ? (name: string, value: string) => {
+        if ((refused === 'completion' && name === keyFor(pausedJid, 'continuity') && !JSON.parse(value).conversion?.startsWith('!')) || (refused === 'fence' && name === keyFor(pausedJid, 'migration'))) throw new DOMException('Conversion barrier refused', 'SecurityError')
+        base.setItem(name, value)
+      } : Reflect.get(base, key, base) }))
+    const opening = uncoordinated ? pauseNextConsentOpen(true) : undefined
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    const pausedObserver = new RoomReadMarkers({ ...dependencies, getCurrentJid: () => `${pausedJid}/browser` }, () => focused)
+    const target = new RoomReadMarkers({ ...dependencies, getCurrentJid: () => `${targetJid}/browser` }, () => focused)
+    try {
+      const clearing = clearRoomReadMarkersLocalData(targetJid)
+      if (opening) { await opening.ready; opening.release() }
+      expect(await clearing).toBe(false)
+      const untouched = storage.getItem(keyFor(pausedJid, 'consent'))
+      expect(storage.getItem(keyFor(targetJid, 'consent'))).toBeNull()
+      vi.stubGlobal('localStorage', storage)
+      expect(await observer.reload()).toBe(true)
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(await pausedObserver.reload()).toBe(true)
+      expect(pausedObserver.isEnabledFor(roomJid)).toBe(false)
+      storage.setItem(keyFor(pausedJid, 'consent'), legacyOn)
+      expect(await pausedObserver.reload()).toBe(true)
+      pausedObserver.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await pausedObserver.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(pausedObserver.isEnabledFor(roomJid)).toBe(false)
+      expect(untouched).toBe(legacyPaused)
+      storage.setItem(keyFor(targetJid, 'consent'), legacyOn)
+      expect(await target.reload()).toBe(true)
+      target.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await target.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(await pausedObserver.setRoomEnabled(roomJid, true)).toBe(true)
+      await pausedObserver.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { vi.stubGlobal('localStorage', storage); opening?.release(); observer.cancelPending(); pausedObserver.cancelPending(); target.cancelPending() }
+  })
+
   it.each((['consent', 'continuity'] as const).flatMap(denied => [false, true].flatMap(unknownFirst => [false, true].map(uncoordinated => [denied, unknownFirst, uncoordinated] as const))))('keeps first scoped sealing incomplete for an unreadable legacy account (%s, unknown first: %s, coordination refused: %s)', async (denied, unknownFirst, uncoordinated) => {
     // Approved isolation and erasure rules require uncertainty to preserve unrelated choices without reopening the target.
     const storage = localStorage
