@@ -42,17 +42,23 @@ never reuses a pending view; a fresh focused observation is required afterward.
 Scoped clearing removes the target account's records before attempting to convert
 unaffected preferences. Conversion without overlapping protection stores its
 self-contained choice before its compatibility fence, retaining linked proof
-until that fence is saved. A refused fence restores the exact original preference
-before shared sealing is attempted; completion refusal after a saved fence leaves
-the protected replacement intact. Overlapping linked and
+until that fence is saved. The erasable continuity record also binds the exact
+validated input before the preference changes. A refused fence restores the original
+preference, but that restoration alone is not protection: until an import barrier
+commits, updated readers reject a different legacy or version-2 value even before
+the first recovery read. Failed recovery retains this restriction until a supported
+account fence exists; an older migration stamp alone cannot protect version-2 input.
+Completion refusal after a saved fence leaves the protected replacement intact.
+Overlapping linked and
 shared protection instead mirrors combined revocations and ordering into the fence first, before
 retiring either protector, so refusal preserves the surviving choices.
 Refused unrelated conversion is reported without discarding its valid choices.
 If an unrelated record cannot be classified while legacy import remains open,
 a writable target-account fence protects erasure while shared sealing stays
 incomplete until that record can be read; no unverified exception is created.
-Direct fallback stops after target erasure when its account fence is saved;
-unrelated preferences and shared protection wait for a coordinated storage turn.
+Direct fallback stops after target erasure when its account fence is saved or an
+existing shared seal already excludes the target account. Unrelated preferences
+and shared protection wait for a coordinated storage turn in either case.
 When that fence permits deferral, all unrelated accounts are classified before
 any conversion starts, so an earlier paused account cannot be left converted
 without its compatibility barrier by a later unreadable account.

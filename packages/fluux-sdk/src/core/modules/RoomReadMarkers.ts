@@ -165,8 +165,10 @@ function readSavedRoomConsent(account: string): SavedConsent {
   const oldRooms = validRooms ? [...new Set(record!.rooms as string[])] : []
   const retained = history?.revoked !== undefined && raw !== null && !!history.input && history.input === continuity?.inputId
     && continuity?.generation === history.generation && continuity?.input === raw
-  const previous = (retained || !history?.edits) && !cleared && record?.version === 2 && validRooms
-  const legacy = (retained || fence === null) && record?.version === undefined && typeof record?.enabled === 'boolean' && validRooms
+  // An input witnessed before a refused fence must not become a different legacy choice before recovery.
+  const matchesInput = continuity?.input === undefined || continuity.input === raw
+  const previous = matchesInput && (retained || !history?.edits) && !cleared && record?.version === 2 && validRooms
+  const legacy = matchesInput && (retained || fence === null) && record?.version === undefined && typeof record?.enabled === 'boolean' && validRooms
   const choice = previous || legacy ? JSON.stringify([previous ? 2 : 0, previous || record?.enabled === true, previous || record?.enabled === true ? oldRooms : []]) : undefined
   const permission = guard.legacy[account]
   const inherited = choice !== undefined && permission?.choice === choice && (!permission.local || permission.local === continuity?.id) ? permission : undefined
@@ -231,8 +233,13 @@ function persistRoomConsent(account: string, saved: SavedConsent, rooms: string[
   return !retireInput || completed
 }
 function removeConsentWithBarrier(account: string, epoch = clearFence()) {
-  try { localStorage.removeItem(storageKey(account, 'consent')); localStorage.removeItem(storageKey(account, 'continuity')) } catch { /* Local guards cover denied removal. */ }
-  try { localStorage.setItem(storageKey(account, 'migration'), epoch) } catch { /* The surviving fence still blocks legacy import and retains ordering. */ }
+  let removeProof = false
+  try { removeProof = readConsentContinuity(account)?.input === undefined || readConsentFence(localStorage.getItem(storageKey(account, 'migration'))) !== undefined } catch { /* An unverified barrier cannot replace a possible input restriction. */ }
+  try { localStorage.removeItem(storageKey(account, 'consent')); if (removeProof) localStorage.removeItem(storageKey(account, 'continuity')) } catch { /* Local guards cover denied removal. */ }
+  try {
+    localStorage.setItem(storageKey(account, 'migration'), epoch)
+    if (!removeProof) localStorage.removeItem(storageKey(account, 'continuity'))
+  } catch { /* A sole input restriction survives a refused replacement. */ }
 }
 // Conversion orders earlier On without pretending to be a newer user choice.
 function migrationEdits(saved: SavedConsent) {
@@ -290,7 +297,11 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       for (const kind of ['consent', 'watermarks', 'continuity'] as const) localStorage.removeItem(storageKey(scoped!, kind))
       const targetSealed = writeBarrier(storageKey(scoped!, 'migration'), clearFence())
       // Without a storage turn, target protection must not rewrite another account's newer choice.
-      if (!coordinated && targetSealed) return false
+      if (!coordinated) {
+        if (targetSealed) return false
+        const guard = readClearGuard()
+        if (!guard.open && !guard.legacy[scoped!]) return false
+      }
       let preserved = true
       const legacy: Record<string, LegacyPermission> = Object.create(null)
       const accounts: string[] = []
@@ -323,10 +334,10 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
             } else {
               const generation = saved.generation ?? generateUUID()
               const edits = migrationEdits(saved)
-              // Reserve the conversion boundary while retaining linked input until preference commit.
+              // Preserve the exact validated input until an import barrier protects the committed preference.
               const continuity = readConsentContinuity(other)
               hasLocalProof = !!continuity
-              const convertedProof = writeConsentContinuity(other, generation, continuity?.input, true)
+              const convertedProof = writeConsentContinuity(other, generation, continuity?.input ?? saved.raw ?? undefined, true)
               localIdentity = convertedProof.id; hasLocalProof = true
               const converted = roomConsentValue({ ...saved, generation }, saved.rooms, edits)
               localStorage.setItem(storageKey(other, 'consent'), converted)
