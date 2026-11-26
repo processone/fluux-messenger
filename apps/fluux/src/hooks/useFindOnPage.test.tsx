@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
+import { useLayoutEffect } from 'react'
 import { useFindOnPage } from './useFindOnPage'
 
 // Mock scrollToMessage — it manipulates the DOM which isn't available in tests
@@ -252,6 +253,25 @@ describe('useFindOnPage', () => {
 
       expect(result.current.currentMatchIndex).toBe(0)
       expect(mockScrollToMessage).not.toHaveBeenCalled()
+    })
+
+    // A search starts at its newest match (the Find bar's browser invariant reads
+    // the counter as soon as it appears), so no committed render may show another one.
+    it('never shows another position before the newest match', () => {
+      const messages = makeMessages('hello world', 'hello there', 'world peace', 'hello again')
+      const shown: string[] = []
+      const { result } = renderHook(() => {
+        const find = useFindOnPage(messages)
+        useLayoutEffect(() => {
+          if (find.matchIds.length > 0) shown.push(`${find.currentMatchIndex + 1}/${find.matchIds.length}`)
+        })
+        return find
+      })
+
+      act(() => result.current.setSearchText('hello'))
+      act(() => result.current.setSearchText('world'))
+
+      expect(shown).toEqual(['3/3', '2/2'])
     })
 
     it('resets index to newest match when search text changes', () => {

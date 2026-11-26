@@ -50,6 +50,8 @@ function launchRoom(): DemoRoomData {
       reactions: { '🔥': [ME, 'Emma', 'Liam'], '😍': ['Ava'] },
     }),
     m('3', 'Liam', 'Livestream is ready, and the backup stream too', hoursAgo(1.5), {
+      // An archived room message has a room id: a forward of it links back to this original.
+      stanzaId: 'showcase-launch-3',
       reactions: { '✅': [ME, 'Emma'] },
     }),
     m('4', 'Emma', '', hoursAgo(1), {

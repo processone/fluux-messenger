@@ -31,6 +31,12 @@ async function capture(page: Page, name: string) {
 async function findGeometry(input: Locator, singleRow = false) {
   await expect(input).toBeFocused()
   await syncEngineGeometry(input.page())
+  // Notices follow a grown bar a few frames later, and WebKit still lays them out at the old place,
+  // over the bar, after their style has changed (the reduced-motion rule keeps a short transition).
+  await expect.poll(() => input.evaluate(el => {
+    const notices = document.querySelector('[data-toast-stack]')
+    return !notices || notices.getBoundingClientRect().top >= el.closest('[data-find-on-page-bar]')!.getBoundingClientRect().bottom
+  }), 'notices are laid out below the Find bar').toBe(true)
   expect(await input.evaluate((el, singleRow) => {
     const container = el.closest('[data-find-on-page-bar]')!
     const bar = container.getBoundingClientRect()
@@ -110,15 +116,21 @@ for (const lang of ['en', 'fr'] as const) {
         const baseFont = await page.locator('html').evaluate(el => parseFloat(getComputedStyle(el).fontSize))
         await page.evaluate(() => (window as any).__settingsStore.getState().setFontSize(150))
         await expect(page.locator('html')).toHaveCSS('font-size', `${baseFont * 1.5}px`)
+        // The demo's own notice can expire before the bar grows; this one stays to be moved.
+        const noticeId = await page.evaluate(() => (window as any).__toastStore.getState().addToast('info', 'Pinned notice', 0))
+        const notice = page.locator('[data-toast-stack]').getByText('Pinned notice')
+        await expect(notice).toBeVisible()
         for (const query of ['', 'the', 'quartzbadger']) {
           await input.fill(query)
           if (query === 'quartzbadger') await expect(bar.locator('span')).toHaveText(words.search.noResults)
           if (query === 'the') await expect(bar.locator('span')).toHaveText(/\d+\/\d+/)
           await findGeometry(input)
+          const barBox = (await bar.boundingBox())!
+          expect((await notice.boundingBox())!.y).toBeGreaterThanOrEqual(barBox.y + barBox.height)
           await capture(page, `find-${caller}-${lang}-${mode}-320-large-${query || 'empty'}`)
         }
+        await page.evaluate(id => (window as any).__toastStore.getState().removeToast(id), noticeId)
         await input.fill('the')
-        // A new query exposes its count before the newest-match selection commits.
         let matchCount = 0
         await expect.poll(async () => {
           const [current, total] = (await bar.locator('span').innerText()).split('/').map(Number)

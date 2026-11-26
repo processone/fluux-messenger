@@ -83,18 +83,25 @@ export function useFindOnPage<T extends MessageLike>(
     return [trimmed.toLowerCase()]
   }, [searchText])
 
-  // Reset current match index and scroll to newest match when search text changes.
-  // We track searchText (not matchIds) to avoid resetting position when new messages arrive.
+  // The index resets during render because an effect runs after the commit, which
+  // would show the previous index against the new matches (1/19, or even 3/2).
+  // Keyed on the search text, not matchIds, so arriving messages keep the position.
+  const query = searchText.trim().toLowerCase()
+  const [indexedQuery, setIndexedQuery] = useState('')
+  if (query !== indexedQuery) {
+    setIndexedQuery(query)
+    setCurrentMatchIndex(Math.max(matchIds.length - 1, 0))
+  }
+
+  // Scroll to the newest match once per search text.
   const prevSearchTextRef = useRef('')
   useEffect(() => {
     const trimmed = searchText.trim().toLowerCase()
     if (trimmed === prevSearchTextRef.current) return
     prevSearchTextRef.current = trimmed
 
-    const startIndex = matchIds.length > 0 ? matchIds.length - 1 : 0
-    setCurrentMatchIndex(startIndex)
     if (matchIds.length > 0) {
-      scrollToMessage(messageRowRefFromRowId(matchIds[startIndex]))
+      scrollToMessage(messageRowRefFromRowId(matchIds[matchIds.length - 1]))
     }
   }, [matchIds, searchText])
 

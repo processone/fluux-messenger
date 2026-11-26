@@ -74,17 +74,23 @@ and the [blog thumbnail](./blog-hero-0.18.0.png).
 
 ## Saved Messages
 
-| Saved list | Save from the More menu |
+| Saved list and the message in context | Save from the More menu |
 | --- | --- |
-| <a href="./34-saved-dark.png"><img src="./34-saved-dark.png" width="400" alt="Saved messages list with five entries from chats and rooms"/></a> | <a href="./35-save-message-dark.png"><img src="./35-save-message-dark.png" width="400" alt="The More menu of a message offering Save message"/></a> |
+| <a href="./34-saved-dark.png"><img src="./34-saved-dark.png" width="400" alt="Saved messages list with five entries, beside the selected message highlighted in its conversation"/></a> | <a href="./35-save-message-dark.png"><img src="./35-save-message-dark.png" width="400" alt="The More menu of a message offering Save message"/></a> |
 | *A private list kept on your account and shared by all your devices* | *Save any message from its More menu* |
+
+## Forwarding
+
+<a href="./showcase/08-forward-dark.png"><img src="./showcase/08-forward-dark.png" width="100%" alt="A direct chat with Olivia Park holding a comment and a forwarded card naming Liam, the Launch Crew room, the time and the original text"/></a>
+
+*Forwarded from Liam in Launch Crew: the message names its source, and the card opens the original when it is available*
 
 ## Search & Navigation
 
 | Search                                                                                        | Command Palette                                                                                                          |
 |-----------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
-| <a href="./09-search-dark.png"><img src="./09-search-dark.png" width="400" alt="Search"/></a> | <a href="./10-command-palette-dark.png"><img src="./10-command-palette-dark.png" width="400" alt="Command Palette"/></a> |
-| *Full-text search with type filters and context preview*                                      | *Keyboard-accessible launcher for conversations and actions*                                                             |
+| <a href="./09-search-dark.png"><img src="./09-search-dark.png" width="400" alt="Search for poster filtered to messages with an image, with the matching message previewed"/></a> | <a href="./10-command-palette-dark.png"><img src="./10-command-palette-dark.png" width="400" alt="Command Palette"/></a> |
+| *Filters for sender, date and content, with a preview in context*                                      | *Keyboard-accessible launcher for conversations and actions*                                                             |
 
 | Find in Conversation |
 | --- |
