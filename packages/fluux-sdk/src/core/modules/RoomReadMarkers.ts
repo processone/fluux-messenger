@@ -295,6 +295,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
     try { localStorage.setItem(key, value); return true } catch { return false }
   }
   let needsCoordinatedSeal = false
+  let retryProof: string | null = null
   const remove = (coordinated = true) => {
     if (!allAccounts) {
       for (const kind of ['consent', 'watermarks', 'continuity'] as const) localStorage.removeItem(storageKey(scoped!, kind))
@@ -304,6 +305,11 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         if (targetSealed) return false
         const guard = readClearGuard()
         needsCoordinatedSeal = guard.open || !!guard.legacy[scoped!]
+        if (needsCoordinatedSeal) {
+          // Empty input cannot authorize legacy consent; a fresh explicit edit can replace this erasable restriction.
+          writeConsentContinuity(scoped!, generateUUID(), '', true)
+          retryProof = localStorage.getItem(storageKey(scoped!, 'continuity'))
+        }
         return false
       }
       let preserved = true
@@ -432,8 +438,10 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       if (needsCoordinatedSeal && scoped) {
         const fence = localStorage.getItem(storageKey(scoped, 'migration'))
         await withConsentStorage(() => {
+          const guard = readClearGuard()
+          if (!guard.open && !guard.legacy[scoped]) return false
           // A fresh target choice or later clear owns its boundary; recovery must not erase it again.
-          if (localStorage.getItem(storageKey(scoped, 'continuity')) !== null
+          if (localStorage.getItem(storageKey(scoped, 'continuity')) !== retryProof
             || localStorage.getItem(storageKey(scoped, 'migration')) !== fence) return false
           return remove()
         })

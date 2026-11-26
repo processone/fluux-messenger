@@ -62,10 +62,13 @@ a writable target-account fence protects erasure while shared sealing stays
 incomplete until that record can be read; no unverified exception is created.
 Direct fallback only erases the target's records and attempts its account fence;
 it never replaces the shared guard. If that fence is refused and the shared guard
-still permits the target, recovery obtains a new storage turn before updating
-shared protection. Recovery checks for a later target choice or clear before
-removing anything again. Other accounts' shared-only Off and completed clears
-therefore survive. If coordination remains unavailable, cleanup reports failure
+still permits the target, an erasable exact-input restriction rejects stale
+legacy or version-2 import while recovery obtains a new storage turn. Automatic
+reload cannot turn that restriction into On; a fresh explicit room choice can
+replace it. Recovery checks for a later target choice or clear before removing
+anything again and stops when a later shared seal already excludes the target.
+Fresh self-marker watermarks after that later clear remain intact. Other
+accounts' shared-only Off and completed clears also survive. If coordination remains unavailable, cleanup reports failure
 without writing a stale shared snapshot.
 When that fence permits deferral, all unrelated accounts are classified before
 any conversion starts, so an earlier paused account cannot be left converted

@@ -2153,6 +2153,82 @@ describe('RoomReadMarkers', () => {
     } finally { vi.stubGlobal('localStorage', storage); opening.release(); peer.cancelPending(); observer.cancelPending() }
   })
 
+  it.each((['open', 'exception'] as const).flatMap(profile => (['legacy', 'v2'] as const).map(rewrite => [profile, rewrite] as const)))('rejects automatic target reimport ahead of scoped recovery (%s, %s)', async (profile, rewrite) => {
+    // Approved erasure rule: automatic import is not a fresh explicit opt-in after local clearing.
+    const storage = localStorage
+    const stale = JSON.stringify(rewrite === 'legacy' ? { enabled: true, rooms: [roomJid] } : { version: 2, rooms: [roomJid] })
+    storage.setItem(consentKey, stale)
+    if (profile === 'exception') {
+      const proofKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'continuity'])}`
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === proofKey) throw new DOMException('Proof refused', 'SecurityError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      try { expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(false) }
+      finally { vi.stubGlobal('localStorage', storage) }
+    }
+    const baseline = send.mock.calls.length
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === migrationKey) throw new DOMException('Target fence refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    const open = idbConnection.openIndexedDB
+    const opening = pauseNextConsentOpen(true)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    let imported = false
+    try {
+      const clearing = clearRoomReadMarkersLocalData(jid)
+      await opening.ready
+      vi.mocked(idbConnection.openIndexedDB).mockImplementationOnce(async (...args) => {
+        vi.stubGlobal('localStorage', storage)
+        storage.setItem(consentKey, stale)
+        imported = await observer.reload()
+        return open(...args)
+      })
+      opening.release()
+      expect(await clearing).toBe(false)
+      vi.mocked(idbConnection.openIndexedDB).mockReset().mockImplementation(open)
+      expect(imported).toBe(true)
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(baseline)
+      expect(await observer.setRoomEnabled(roomJid, true)).toBe(true)
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(baseline + 1)
+    } finally { vi.stubGlobal('localStorage', storage); opening.release(); observer.cancelPending() }
+  })
+
+  it.each([false, true].flatMap(allAccounts => [false, true].map(archived => [allAccounts, archived] as const)))('keeps a fresh self-marker after a later target clear (all accounts: %s, archived: %s)', async (allAccounts, archived) => {
+    // Approved erasure boundary: a retry cannot erase reading evidence received after a later completed clear.
+    const captured = useCapturedSelfReading()
+    const storage = localStorage
+    const watermarkKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'watermarks'])}`
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === migrationKey) throw new DOMException('Target fence refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    const open = idbConnection.openIndexedDB
+    const opening = pauseNextConsentOpen(true)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    let received: string | null = null
+    try {
+      const clearing = clearRoomReadMarkersLocalData(jid)
+      await opening.ready
+      vi.mocked(idbConnection.openIndexedDB).mockImplementationOnce(async (...args) => {
+        vi.stubGlobal('localStorage', storage)
+        expect(await clearRoomReadMarkersLocalData(jid, allAccounts)).toBe(true)
+        observer.recordArchiveOrder(roomJid, [captured.row.stanzaId!])
+        await observer.receive(roomJid, captured.reflected, [], archived)
+        received = storage.getItem(watermarkKey)
+        expect(JSON.parse(received ?? 'null')?.sent[roomJid]?.archiveId).toBe(captured.row.stanzaId)
+        return open(...args)
+      })
+      opening.release()
+      expect(await clearing).toBe(false)
+      vi.mocked(idbConnection.openIndexedDB).mockReset().mockImplementation(open)
+      expect(storage.getItem(watermarkKey)).toBe(received)
+      expect(JSON.parse(storage.getItem(watermarkKey) ?? 'null')?.sent[roomJid]?.archiveId).toBe(captured.row.stanzaId)
+      expect(send).not.toHaveBeenCalled()
+    } finally { vi.stubGlobal('localStorage', storage); opening.release(); observer.cancelPending() }
+  })
+
   it('preserves a fresh target choice before coordinated seal recovery', async () => {
     // Approved erasure boundary: a completed new choice is not owned by an earlier failed clear.
     const storage = localStorage
