@@ -35,7 +35,7 @@
 import { test, expect, type Page, type Locator } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
 import { syncEngineGeometry } from './harness/compositorSync'
-import { wheelAwayFromBottom } from './harness/scrollHarness'
+import { activateChat, wheelAwayFromBottom } from './harness/scrollHarness'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1358,57 +1358,53 @@ test.describe('iOS keyboard backdrop color', () => {
     await expect.poll(() => lastBackground(page)).toBe('#0a3c28')
   })
 
+  // The keyboard corners should match the active conversation, then follow the visible row as WebKit pans.
   for (const scheme of ['dark', 'light'] as const) {
     test(`sends the screen color above the keyboard in ${scheme} mode`, async ({ page }) => {
-      await page.emulateMedia({ colorScheme: scheme })
-      await bootAsIosHost(page)
-      await page.evaluate(() => { location.hash = '#/messages/ava%40fluux.chat' })
-      // A system theme change is what first reaches the backdrop once the host reads as iOS.
       await page.emulateMedia({ colorScheme: scheme === 'dark' ? 'light' : 'dark' })
-      await page.emulateMedia({ colorScheme: scheme })
-      await expect(page.locator('textarea').first()).toBeVisible()
-      const card = page.locator('.composer-card')
-      await expect(card).toBeVisible()
+      await bootAsIosHost(page)
+      await activateChat(page, 'ava@fluux.chat')
+      const composer = page.getByPlaceholder(/Ava Martinez/)
+      await expect(composer).toBeVisible()
+      const pane = page.getByRole('main').filter({ has: composer })
 
-      // A fixed band of one color across the page between two heights, topmost in the hit test.
+      // The appearance change schedules a sample, but opening a conversation does not. Switch
+      // only after Ava's pane covers the shell, or the bridge can retain the shell's color.
+      await mark(page)
+      await page.emulateMedia({ colorScheme: scheme })
+      const root = expect(page.locator('html'))
+      await (scheme === 'light' ? root : root.not).toHaveClass(/\blight\b/)
+
+      // The pane's opaque fill extends behind the composer. Read it directly so neither the
+      // composer's shadow nor the available gutter width changes the expected color.
+      const { color, alpha } = await pane.evaluate(element => {
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = 1
+        const context = canvas.getContext('2d')!
+        context.fillStyle = getComputedStyle(element).backgroundColor
+        context.fillRect(0, 0, 1, 1)
+        const [r, g, b, alpha] = context.getImageData(0, 0, 1, 1).data
+        return { color: `#${[r, g, b].map(channel => channel.toString(16).padStart(2, '0')).join('')}`, alpha }
+      })
+      expect(alpha, 'the active conversation pane provides the opaque backdrop').toBe(255)
+      await expect.poll(() => lastBackground(page), { message: 'active conversation color' }).toBe(color)
+
       const paintBand = (top: number, height: number, color: string) => page.evaluate(([bandTop, bandHeight, value]) => {
         const band = document.createElement('div')
         band.style.cssText = `position:fixed;left:0;right:0;top:${bandTop}px;height:${bandHeight}px;background:${value};z-index:2147483647`
         document.body.appendChild(band)
       }, [top, height, color] as const)
-      // The conversation surface just above the composer. The composer's own shadow darkens the
-      // bottom edge of the page, which is not the screen color.
-      const screenAboveComposer = async () => {
-        const box = (await card.boundingBox())!
-        const png = await page.screenshot({ clip: { x: box.x + box.width + 6, y: box.y - 9, width: 1, height: 1 } })
-        return page.evaluate(async base64 => {
-          const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob())
-          const canvas = document.createElement('canvas')
-          canvas.width = canvas.height = 1
-          const context = canvas.getContext('2d')!
-          context.drawImage(bitmap, 0, 0)
-          const [r, g, b] = context.getImageData(0, 0, 1, 1).data
-          return `#${[r, g, b].map(channel => channel.toString(16).padStart(2, '0')).join('')}`
-        }, png.toString('base64'))
-      }
-
-      // With the theme's real styles, the color sent is the screen color above the composer.
-      await expect.poll(() => lastBackground(page)).toBe(await screenAboveComposer())
-
-      // Different surfaces at the bottom row of the 700px page and of the 640px page.
       await paintBand(640, 60, 'rgb(12, 40, 60)')
       await paintBand(580, 60, 'rgb(10, 60, 40)')
 
-      // Docking sends the color at the visible bottom row (700px page).
       await mark(page)
       await page.evaluate(() => { document.documentElement.dataset.keyboardDocked = 'true' })
-      await expect.poll(() => lastBackground(page)).toBe('#0c283c')
+      await expect.poll(() => lastBackground(page), { message: 'docked at 700px' }).toBe('#0c283c')
 
-      // The page moves after the dock notification. With the flag unchanged, the new visible
-      // bottom row (640px page) sits on the other surface, and that color must be sent.
+      // Keep docking unchanged so this send must come from the viewport moving, not the dock flag.
       await mark(page)
       await page.setViewportSize({ width: 390, height: 640 })
-      await expect.poll(() => lastBackground(page)).toBe('#0a3c28')
+      await expect.poll(() => lastBackground(page), { message: 'still docked after resizing to 640px' }).toBe('#0a3c28')
     })
   }
 })
