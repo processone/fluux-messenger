@@ -751,9 +751,9 @@ function pickFields<T extends object>(source: object, fields: readonly (keyof T 
 
 function clearEmptyRoomArchiveProof(states: Map<string, HistoryQueryState>, roomJid: string): Map<string, HistoryQueryState> {
   const current = states.get(roomJid)
-  if (!current?.emptyArchiveProof) return states
+  if (!current?.emptyArchiveProof && !current?.emptyArchiveQueryId) return states
   const next = new Map(states)
-  next.set(roomJid, { ...current, emptyArchiveProof: undefined })
+  next.set(roomJid, { ...current, emptyArchiveProof: undefined, emptyArchiveQueryId: undefined })
   return next
 }
 
@@ -2485,6 +2485,12 @@ export const roomStore = createStore<RoomState>()(
           })
           if (anchored) roomReadTracker.scheduleRecount(roomJid)
         }
+        // Deactivation can evict the row before its write, leaving a remote
+        // marker stashed after a cache miss. Recount alone cannot resolve it.
+        if (committed && stillCurrent() && archiveId &&
+          roomReadView(get(), roomJid)?.pendingRemoteMarker === archiveId) {
+          roomReadTracker.applyRemoteDisplayed(roomJid, archiveId, [messageToAdd])
+        }
         return committed
       })
       : undefined
@@ -3657,9 +3663,14 @@ export const roomStore = createStore<RoomState>()(
 
   // MAM state management (XEP-0313 for MUC rooms)
   setRoomMAMLoading: (roomJid, isLoading, requestId) => {
-    set((state) => ({
-      mamQueryStates: mamState.setMAMLoading(state.mamQueryStates, roomJid, isLoading, requestId),
-    }))
+    set((state) => {
+      const mamQueryStates = mamState.setMAMLoading(state.mamQueryStates, roomJid, isLoading, requestId)
+      if (isLoading && requestId) {
+        mamQueryStates.set(roomJid, { ...mamState.getMAMQueryState(mamQueryStates, roomJid),
+          emptyArchiveQueryId: state.roomEntities.get(roomJid)?.joined ? requestId : undefined })
+      }
+      return { mamQueryStates }
+    })
     if (!isLoading) roomReadTracker.resumeDeferredRecounts(roomJid)
   },
 

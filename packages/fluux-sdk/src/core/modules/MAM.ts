@@ -1208,7 +1208,8 @@ export class MAM extends BaseModule {
           preserveGapMarker,
           isFetchLatest: !before && end === undefined,
           emptyRoomArchive: max > 0 && !before && end === undefined && !preserveGapMarker &&
-            isComplete && rawResultCount === 0,
+            isComplete && rawResultCount === 0 &&
+            this.deps.stores?.room.getRoomMAMQueryState(roomJid).emptyArchiveQueryId === requestId,
           initialBefore: before ?? '',
           fetchLatestTopId,
           sawCoverageTop,
