@@ -2448,8 +2448,32 @@ export const roomStore = createStore<RoomState>()(
       }
     })
 
+    const emptyBaseline = get().mamQueryStates.get(roomJid)
+    const archiveId = messageToAdd.stanzaId
+    const stillCurrent = captureRoomCacheRead(roomJid)
     const durableWrite = acceptedMessage && !isNoLocalStore(messageToAdd)
-      ? messageCache.saveMessageWithResult('room', messageToAdd)
+      ? messageCache.saveMessageWithResult('room', messageToAdd).then((committed) => {
+        // An empty archive has no RSM cursor. Materialize its coverage only from
+        // a durable live row, before endArrival retires that row's overlay.
+        if (committed && stillCurrent() && emptyBaseline?.emptyArchiveConfirmed &&
+          !emptyBaseline.isLoading && emptyBaseline.isCaughtUpToLive &&
+          !messageToAdd.isDelayed && archiveId) {
+          let anchored = false
+          set((state) => {
+            if (state.mamQueryStates.get(roomJid) !== emptyBaseline ||
+              state.roomCoverage.has(roomJid) || getGapList(state.roomGaps, roomJid).length > 0) return state
+            const roomCoverage = new Map(state.roomCoverage)
+            roomCoverage.set(roomJid, {
+              bottomId: archiveId, countBottomId: archiveId, topId: archiveId,
+            })
+            saveCoverageToStorage(roomCoverage, undefined, { roomJid, kind: 'created' })
+            anchored = true
+            return { roomCoverage }
+          })
+          if (anchored) roomReadTracker.scheduleRecount(roomJid)
+        }
+        return committed
+      })
       : undefined
     roomReadTracker.endArrival(arrivalNote, { accepted: acceptedMessage, durableWrite })
     if (durableWrite) {

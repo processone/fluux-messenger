@@ -269,6 +269,10 @@ export interface HistoryPagingSearchOptions {
  * @category MAM
  */
 export interface HistoryQueryState {
+  /** Session-only proof of an empty, complete fetch-latest. A later archive
+   *  merge or session reset revokes it; a durable live row can materialize its
+   *  first coverage anchor without inventing an archive cursor for emptiness. */
+  emptyArchiveConfirmed?: boolean
   loadingRequestId?: string
   /** True while query is in progress */
   isLoading: boolean

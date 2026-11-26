@@ -291,6 +291,9 @@ export function createArchiveMerge<M extends Message | RoomMessage>(
             preserveGapMarker,
             isFetchLatest,
             mamState.isDisjointFromResidentWindow(facts.existing, extras?.initialBefore, isFetchLatest),
+            direction === 'backward' && isFetchLatest && complete && !preserveGapMarker &&
+              fetched.length === 0 && !page.first && !page.last &&
+              !extras?.walkCarriedModifications && !gatedOnDurableWrite,
           )
 
           // The newest PROVEN in-memory boundary. Undefined when nothing is resident.
