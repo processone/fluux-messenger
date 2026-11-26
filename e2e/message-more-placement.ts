@@ -3,6 +3,7 @@ import type { roomStore } from '@fluux/sdk/stores'
 import type { DemoClient } from '@fluux/sdk/demo'
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
+import { stableFrames } from './harness/messageInteraction'
 
 type Demo = Window & { __demoClient: DemoClient; __roomStore: typeof roomStore; __settingsStore: typeof useSettingsStore }
 const ROOM = 'team@conference.fluux.chat'
@@ -38,6 +39,9 @@ for (const virtualized of [true, false]) for (const latest of [true, false]) {
       location.hash = `#/rooms/${encodeURIComponent(ROOM)}`
     }, ROOM)
     const list = page.locator('[data-message-list]')
+    // Initial virtualizer estimates can report the live edge before the final row mounts.
+    await expect(page.locator('[data-message-id="menu-compose-latest"][data-message-body]')).toBeInViewport({ ratio: 1 })
+    await stableFrames(page, 'menu-compose-latest')
     await expect.poll(() => list.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThanOrEqual(1)
     await expect(list.locator('[data-virtualizer-spacer]')).toHaveCount(virtualized ? 1 : 0)
     const id = latest ? 'menu-compose-latest' : 'menu-compose-higher'
