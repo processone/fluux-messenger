@@ -50,9 +50,14 @@ A compatibility key separates features, explicit development profile, host
 target, Cargo/rustc identities, actual compiler/linker binaries, native SDK
 headers and resolved shared libraries, Rust standard libraries, installed system
 packages, tracked Cargo manifests/lockfiles and build environment variables.
-The shared lane pins its identified host linker. Unknown compiler, linker,
-wrapper, SDK/search-path overrides and nonempty checkout/ancestor/Cargo-home
-configuration use the isolated lane instead of a guessed compatibility key.
+Both reused and private comparison lanes qualify and pin identical Rust/C/C++
+tools and the host linker. Each report records tool identities, an SDK digest
+and `qualification.comparisonKey`; paired timing and freshness runs must have
+matching qualified identities. Unknown compiler, linker, wrapper, SDK/search-path
+overrides and nonempty checkout/ancestor/Cargo-home configuration use isolated,
+unqualified settings instead of a guessed key and cannot count as a comparison.
+This includes plain, host/target-prefixed and target-suffixed `PKG_CONFIG`
+overrides supported by the native dependencies.
 Native source freshness remains Cargo's responsibility. Neither timestamps nor
 fingerprints are rewritten. Conservative qualification may miss reuse on purpose.
 
@@ -71,7 +76,9 @@ Setup/key/lock failures before Cargo starts fall back to private intermediates.
 A per-invocation worker receipt distinguishes a failed lock launch from a Cargo
 failure and records the actual lane: `shared`, `private-seeded`, `private` or
 `not-started`. A compiler/test failure is returned unchanged, never retried as a
-cache miss. Cleanup failure fails the run instead of claiming bounded retention.
+cache miss. After Cargo completes, receipt-publication errors still trigger
+registry-only cleanup and pruning under the lock. Cleanup and publication errors
+fail an otherwise successful run without replacing an existing Cargo failure.
 
 ## Bounds
 
@@ -89,7 +96,10 @@ lock and ownership marker are never evicted.
 
 Provide absolute paths in `PRIVATE_OUTPUT`, `PILOT_CACHE` and `RUN_REPORT` for
 private outputs, a trusted private cache parent outside disposable checkouts,
-and evidence respectively:
+and evidence respectively. The report parent must be an existing owned directory
+without aliases or redirects. The report must be outside both outputs and cache, including nested
+paths. Reports publish through a new file and atomic replacement, so an existing
+hard link cannot overwrite another output or cached file:
 
 ```sh
 # Private cold comparison; no cache access.
@@ -115,7 +125,9 @@ reports must include the nonempty inventory and private executable receipt.
 
 1. Materialize independent source checkouts at one committed version, without
    copying targets or manipulating timestamps. Use the same offline registry,
-   host environment and worker count throughout. Log the actual desktop target.
+   host environment and worker count throughout. Log the actual desktop target
+   and require matching qualified tool identities, SDK digest and comparison key
+   in every reused/clean pair, including the native freshness checks.
 2. Interleave three empty private cold desktop builds and three fresh-copy shared
    desktop builds against one populated cache. Log the seed separately; it is
    not a cross-copy hit. Repeat the last shared build warm.
@@ -136,6 +148,10 @@ reports must include the nonempty inventory and private executable receipt.
    with the shared original before releasing the lock, then show that another
    shared build cannot change the published executable. Exercise redirected
    intermediate, target and profile descendants before Cargo can write to them.
+   Reject overlapping/redirected report paths before launch and prove that report
+   publication cannot modify an existing linked output. Exercise receipt-write
+   failure after a completed build and verify that cleanup still runs under the
+   lock and the original Cargo failure status remains intact.
 5. Retain reuse only if coverage is equivalent and the three cross-copy runs'
    median elapsed time, including queueing, is at most 70% of the three cold
    runs' median. Otherwise remove the candidate lane and preserve the result,

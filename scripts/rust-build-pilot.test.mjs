@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { mkdtempSync, mkdirSync, copyFileSync, chmodSync, existsSync, linkSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { test } from 'node:test'
-import { CAP, cargoArguments, compatibility, IDLE_MS, launch, managedCache, prune, publishIndependentExecutable, retainRegistryOnly, seedDependencies, freshSeedHits } from './rust-build-pilot.mjs'
+import { CAP, cargoArguments, compatibility, IDLE_MS, launch, managedCache, prune, publishIndependentExecutable, retainRegistryOnly, seedDependencies, freshSeedHits, qualifyEnvironment, cargoSettings, publishReport, finishBuild } from './rust-build-pilot.mjs'
 
 const recorded = JSON.parse(readFileSync(new URL('./fixtures/rust-build-pilot-tools.json', import.meta.url), 'utf8'))
 const nativeFs = { skip: process.platform === 'win32' }
@@ -210,4 +211,86 @@ test('shared retention discards all recorded checkout units and incremental stat
   assert.equal(existsSync(workspace), false)
   assert.equal(existsSync(incremental), false)
   assert.equal(existsSync(registry), true)
+}))
+
+// Source: compatible reuse must qualify every pkg-config override read by native dependencies.
+test('qualification rejects plain, build-kind and target-suffixed SDK overrides', () => {
+  assert.doesNotThrow(() => qualifyEnvironment(recorded.buildEnv))
+  const variables = { PKG_CONFIG: 'pkg-config', PKG_CONFIG_PATH: '/usr/lib/pkgconfig', PKG_CONFIG_LIBDIR: '/usr/lib/pkgconfig', PKG_CONFIG_SYSROOT_DIR: '/', PKG_CONFIG_ALLOW_CROSS: '1' }
+  for (const [base, value] of Object.entries(variables)) {
+    for (const key of [base, `HOST_${base}`, `TARGET_${base}`, `${base}_${recorded.target}`, `${base}_${recorded.target.replaceAll('-', '_')}`]) {
+      assert.throws(() => qualifyEnvironment({ ...recorded.buildEnv, [key]: value }), /Unqualified native/)
+    }
+  }
+})
+
+// Source: the approved comparison must vary reuse, not effective compiler/linker settings.
+test('clean and reused build/test commands pin identical qualified tools', () => {
+  const nativeTools = { rustc: 'rustc', cc: 'cc', cxx: 'c++', ar: 'ar' }
+  for (const operation of ['build', 'test']) {
+    const options = { operation, host: recorded.target, nativeTools, target: resolve(tmpdir(), 'private-output'), testReceipt: resolve(tmpdir(), 'executed.json') }
+    const privateBuild = resolve(tmpdir(), 'private-intermediate')
+    const sharedBuild = resolve(tmpdir(), 'shared-intermediate')
+    const clean = cargoSettings({ ...options, shared: false }, privateBuild, {})
+    const reused = cargoSettings({ ...options, shared: true }, sharedBuild, {})
+    assert.deepEqual(clean.args, reused.args)
+    assert.equal(clean.args.includes(`target.${recorded.target}.linker="cc"`), true)
+    for (const settings of [clean, reused]) {
+      const { RUSTC, CC, CXX, AR } = settings.env
+      assert.deepEqual({ RUSTC, CC, CXX, AR }, { RUSTC: 'rustc', CC: 'cc', CXX: 'c++', AR: 'ar' })
+    }
+    assert.equal(clean.env.CARGO_BUILD_BUILD_DIR, privateBuild)
+    assert.equal(reused.env.CARGO_BUILD_BUILD_DIR, sharedBuild)
+  }
+})
+
+// Source: evidence must not overwrite build outputs, managed files or redirected paths.
+test('report destinations reject output/cache overlap and redirects before launch', nativeFs, () => withCache((cache, parent) => {
+  const target = join(parent, 'private-output')
+  const evidence = join(parent, 'reports')
+  mkdirSync(target, { mode: 0o700 })
+  mkdirSync(evidence)
+  mkdirSync(join(evidence, 'nested'))
+  const binary = join(target, 'fluux')
+  copyFileSync('scripts/test-affected.sh', binary)
+  const original = readFileSync(binary)
+  const fileAlias = join(evidence, 'alias.json')
+  symlinkSync(binary, fileAlias)
+  const directoryAlias = join(parent, 'reports-alias')
+  symlinkSync(evidence, directoryAlias, 'dir')
+  for (const report of [binary, join(target, 'new.json'), join(cache, 'owner'), fileAlias, join(directoryAlias, 'new.json'), join(directoryAlias, 'nested/new.json'), 'relative.json']) {
+    let launched = false
+    assert.throws(() => launch(['--target', target, '--shared', '--cache', cache, '--report', report], () => { launched = true }))
+    assert.equal(launched, false)
+    assert.deepEqual(readFileSync(binary), original)
+  }
+  let launched = false
+  launch(['--target', target, '--cache', cache, '--report', join(evidence, 'safe.json')], () => { launched = true })
+  assert.equal(launched, true)
+}))
+
+// Source: report publication must not modify an existing linked output or cache file.
+test('report publication replaces its file without changing another hard link', nativeFs, () => withCache((cache, parent) => {
+  const source = join(cache, 'cached-data')
+  copyFileSync('apps/fluux/src-tauri/Cargo.lock', source)
+  const original = createHash('sha256').update(readFileSync(source)).digest('hex')
+  const report = join(parent, 'report.json')
+  linkSync(source, report)
+  publishReport(report, layout.freshArtifact)
+  assert.deepEqual(JSON.parse(readFileSync(report, 'utf8')), layout.freshArtifact)
+  assert.equal(createHash('sha256').update(readFileSync(source)).digest('hex'), original)
+  assert.notEqual(statSync(source).ino, statSync(report).ino)
+  assert.equal(statSync(report).nlink, 1)
+}))
+
+// Source: receipt errors must not skip bounded cleanup or replace Cargo's failure status.
+test('receipt publication failure still prunes the cache and preserves Cargo failure', nativeFs, () => withCache((cache, parent) => {
+  const receipt = join(parent, 'unwritable-receipt')
+  mkdirSync(receipt)
+  for (const [index, status] of [0, 101].entries()) {
+    const cached = entry(cache, index ? 'b' : 'a', new Date())
+    const outcome = finishBuild(status, () => writeFileSync(receipt, JSON.stringify(layout.freshArtifact)), () => prune(cache, Date.now(), 0))
+    assert.equal(outcome, status || 1)
+    assert.equal(existsSync(cached), false)
+  }
 }))

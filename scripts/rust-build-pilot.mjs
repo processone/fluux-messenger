@@ -107,12 +107,16 @@ function digestTree(path) {
   return hash(JSON.stringify(readdirSync(path).sort().map(name => [name, digestTree(join(path, name))])))
 }
 
-function inspectCompatibility(options) {
+export function qualifyEnvironment(env) {
   // Unknown compiler/SDK overrides remain usable privately, never under a guessed key.
-  const overrides = Object.keys(process.env).filter(key => /^(RUSTC|RUSTDOC|CC($|_)|CXX($|_)|AR($|_|FLAGS)|LD($|_)|CFLAGS|CPPFLAGS|CXXFLAGS|LDFLAGS|SDKROOT|PKG_CONFIG|LIBRARY_PATH|CPATH|C_INCLUDE_PATH|CPLUS_INCLUDE_PATH|COMPILER_PATH|GCC_EXEC_PREFIX|CROSS_COMPILE|CRATE_CC|SYSTEM_DEPS|OPENSSL|HOST_(CC|CXX|AR|CFLAGS|CXXFLAGS)|TARGET_(CC|CXX|AR|CFLAGS|CXXFLAGS)|CARGO_TARGET_.*_(LINKER|RUNNER)|CARGO_BUILD_(RUSTC|RUSTDOC))/.test(key)
+  const overrides = Object.keys(env).filter(key => /^(RUSTC|RUSTDOC|CC($|_)|CXX($|_)|AR($|_|FLAGS)|LD($|_)|CFLAGS|CPPFLAGS|CXXFLAGS|LDFLAGS|SDKROOT|PKG_CONFIG|LIBRARY_PATH|CPATH|C_INCLUDE_PATH|CPLUS_INCLUDE_PATH|COMPILER_PATH|GCC_EXEC_PREFIX|CROSS_COMPILE|CRATE_CC|SYSTEM_DEPS|OPENSSL|HOST_(CC|CXX|AR|CFLAGS|CXXFLAGS|PKG_CONFIG)|TARGET_(CC|CXX|AR|CFLAGS|CXXFLAGS|PKG_CONFIG)|CARGO_TARGET_.*_(LINKER|RUNNER)|CARGO_BUILD_(RUSTC|RUSTDOC))/.test(key)
     || /_(LIB_DIR|INCLUDE_DIR|SDK|SDK_DIR|SDK_ROOT)$/.test(key))
-  const flags = Object.entries(process.env).filter(([key]) => key.includes('RUSTFLAGS')).map(([, value]) => value).join(' ')
+  const flags = Object.entries(env).filter(([key]) => key.includes('RUSTFLAGS')).map(([, value]) => value).join(' ')
   if (overrides.length || /linker|sysroot|link-arg|(^|[\s\x1f])-L/.test(flags)) throw new Error('Unqualified native compiler or SDK override')
+}
+
+function inspectCompatibility(options) {
+  qualifyEnvironment(process.env)
   const files = read('git', ['ls-files', '-z']).split('\0').filter(Boolean)
   const inputs = files.filter(path => /(^|\/)Cargo\.(toml|lock)$|^rust-toolchain/.test(path)).map(path => [path, hash(readFileSync(join(root, path)))])
   const configRoots = new Set([process.env.CARGO_HOME ?? join(process.env.HOME, '.cargo')])
@@ -270,21 +274,37 @@ function runTestExecutable(target, receipt, path, args) {
 export function cargoArguments(options) {
   const args = [options.operation, '--locked', '--offline', '--manifest-path', `${native}/Cargo.toml`, '--bin', 'fluux', '--profile', 'dev', '--target', options.host, '--message-format', 'json-render-diagnostics', '-j', '2', '-v']
   if (options.features) args.push('--features', options.features)
-  if (options.shared) args.push('--config', `target.${options.host}.linker=${JSON.stringify(options.nativeTools.cc)}`)
+  if (options.nativeTools) args.push('--config', `target.${options.host}.linker=${JSON.stringify(options.nativeTools.cc)}`)
   if (options.operation === 'test') args.push('--config', `target.${options.host}.runner=${JSON.stringify([process.execPath, script, '--test-executable', options.target, options.testReceipt])}`)
   return args
 }
 
+export function cargoSettings(options, intermediate, env = process.env) {
+  const tools = options.nativeTools ? { RUSTC: options.nativeTools.rustc, CC: options.nativeTools.cc, CXX: options.nativeTools.cxx, AR: options.nativeTools.ar } : {}
+  return { args: cargoArguments(options), env: { ...env, ...tools, CARGO_TARGET_DIR: options.target, CARGO_BUILD_BUILD_DIR: intermediate } }
+}
+
 function cargo(options, intermediate) {
-  const args = cargoArguments(options)
+  const settings = cargoSettings(options, intermediate)
   // A compiler or test failure is never retried or hidden as a cache miss.
-  const tools = options.shared ? { RUSTC: options.nativeTools.rustc, CC: options.nativeTools.cc, CXX: options.nativeTools.cxx, AR: options.nativeTools.ar } : {}
-  const result = spawnSync('cargo', args, { cwd: root, stdio: ['inherit', 'pipe', 'inherit'], encoding: 'utf8', maxBuffer: 32 * 1024 ** 2, env: { ...process.env, ...tools, CARGO_TARGET_DIR: options.target, CARGO_BUILD_BUILD_DIR: intermediate } })
-  process.stdout.write(result.stdout ?? '')
+  const result = spawnSync('cargo', settings.args, { cwd: root, stdio: ['inherit', 'pipe', 'inherit'], encoding: 'utf8', maxBuffer: 32 * 1024 ** 2, env: settings.env })
   const artifacts = (result.stdout ?? '').split('\n').flatMap(line => {
     try { const message = JSON.parse(line); return message.reason === 'compiler-artifact' ? [message] : [] } catch { return [] }
   })
-  return { status: result.status ?? 1, artifacts }
+  return { status: result.status ?? 1, artifacts, stdout: result.stdout ?? '' }
+}
+
+export function finishBuild(status, persist, cleanup) {
+  try { persist() } catch (error) {
+    console.error(`Pilot result publication failed: ${error.message}`)
+    status ||= 1
+  } finally {
+    try { cleanup() } catch (error) {
+      console.error(`Pilot cache cleanup failed: ${error.message}`)
+      status ||= 1
+    }
+  }
+  return status
 }
 
 function worker(options) {
@@ -297,18 +317,28 @@ function worker(options) {
   let packages = []
   let units = []
   try {
+    const details = inspectCompatibility(options)
+    state.key = compatibility(details)
+    state.qualification = { qualified: true, comparisonKey: state.key, tools: details.tools, sdk: compatibility(details.sdk), cargo: details.cargo, rustc: details.rustc }
+  } catch (error) {
+    delete options.nativeTools
+    options.shared = false
+    state.qualification = { qualified: false, reason: error.message }
+    console.error(`Pilot tool qualification failed; using private settings: ${error.message}`)
+  }
+  try {
     if (options.shared) {
       cache = managedCache(options.cacheParent)
       if (cache !== options.cache) throw new Error('Cache namespace changed')
-      options.key = compatibility(inspectCompatibility(options))
-      state.key = options.key
+      options.key = state.key
       prune(cache)
       const entry = join(cache, options.key)
       if (!existsSync(entry)) {
         mkdirSync(entry, { mode: 0o700 })
         writeFileSync(join(entry, 'used'), '', { flag: 'wx', mode: 0o600 })
       }
-      entries(cache)
+      privateDirectory(entry)
+      regular(join(entry, 'used'))
       build = join(entry, 'build')
       privateDirectory(build)
       packages = registryPackages(options.host, options.features)
@@ -335,39 +365,63 @@ function worker(options) {
     units = []
   }
   validateOutputTree(options.target)
-  // This receipt precedes every possible Cargo launch, so absent means no build ran.
+  // This receipt precedes compilation, so its absence means no build ran.
   state.cargoStarted = true
   writeFileSync(options.state, JSON.stringify(state))
-  const result = cargo({ ...options, shared: state.lane !== 'private' }, intermediate)
-  let status = result.status
-  state.freshRegistryHits = freshSeedHits(result.artifacts, units, intermediate)
-  if (!status && state.lane === 'private-seeded' && !state.freshRegistryHits.length) {
-    console.error('Copied registry units produced no Fresh dependency hit')
-    status = 1
-  }
-  if (!status && options.operation === 'build') {
-    try { state.finalStorage = publishIndependentExecutable(join(options.target, options.host, 'debug/fluux'), options.target) }
-    catch (error) { console.error(error.message); status = 1 }
-  }
-  writeFileSync(options.state, JSON.stringify(state))
-  if (cache) {
-    try {
-      retainRegistryOnly(build, packages, options.host)
-      regular(join(cache, options.key, 'used'))
-      writeFileSync(join(cache, options.key, 'used'), '')
-      console.error(`Pilot retained bytes: ${prune(cache)}`)
-    } catch (error) {
-      console.error(`Pilot cache cleanup failed: ${error.message}`)
-      return status || 1
+  let result = { status: 1, artifacts: [], stdout: '' }
+  try { result = cargo(options, intermediate) }
+  catch (error) { console.error(`Pilot Cargo launch failed: ${error.message}`) }
+  return finishBuild(result.status, () => {
+    process.stdout.write(result.stdout)
+    state.freshRegistryHits = freshSeedHits(result.artifacts, units, intermediate)
+    if (!result.status && state.lane === 'private-seeded' && !state.freshRegistryHits.length) throw new Error('Copied registry units produced no Fresh dependency hit')
+    if (!result.status && options.operation === 'build') state.finalStorage = publishIndependentExecutable(join(options.target, options.host, 'debug/fluux'), options.target)
+    writeFileSync(options.state, JSON.stringify(state))
+  }, () => {
+    if (cache) {
+      try { retainRegistryOnly(build, packages, options.host) }
+      finally {
+        try {
+          regular(join(cache, options.key, 'used'))
+          writeFileSync(join(cache, options.key, 'used'), '')
+        } finally { console.error(`Pilot retained bytes: ${prune(cache)}`) }
+      }
     }
-  }
-  return status
+  })
 }
 
 function comparablePath(path) {
   if (existsSync(path)) return realpathSync(path)
   const parent = dirname(path)
   return parent === path ? path : join(comparablePath(parent), relative(parent, path))
+}
+
+function reportFile(path) {
+  if (!isAbsolute(path)) throw new Error('Use an absolute report file')
+  const parent = dirname(path)
+  unredirected(parent)
+  if (!lstatSync(parent).isDirectory() || lstatSync(parent).uid !== process.getuid()) throw new Error('Report parent must be an owned directory')
+  const info = lstatSync(path, { throwIfNoEntry: false })
+  if (info && (!info.isFile() || info.isSymbolicLink() || info.uid !== process.getuid())) throw new Error('Report path must not redirect')
+}
+
+function validateReportDestination(path, target, cache) {
+  reportFile(path)
+  for (const root of [target, cache].filter(Boolean)) {
+    const canonical = comparablePath(resolve(root))
+    if (within(canonical, path) || within(path, canonical)) throw new Error('Report must not overlap outputs or cache')
+  }
+}
+
+export function publishReport(path, report) {
+  reportFile(path)
+  const temporary = `${path}.pilot-${randomUUID()}`
+  const fd = openSync(temporary, 'wx', 0o600)
+  try {
+    try { writeFileSync(fd, `${JSON.stringify(report, null, 2)}\n`) }
+    finally { closeSync(fd) }
+    renameSync(temporary, path)
+  } finally { rmSync(temporary, { force: true }) }
 }
 
 export function parseOptions(args) {
@@ -388,6 +442,7 @@ export function parseOptions(args) {
     const target = comparablePath(options.target)
     if (within(cache, target) || within(target, cache)) throw new Error('Final outputs and shared cache must not overlap')
   }
+  if (options.report) validateReportDestination(options.report, options.target, options.cache)
   return options
 }
 
@@ -400,8 +455,8 @@ export function launch(args, launchBuild) {
 function main() {
   if (process.argv[2] === '--worker') return worker(JSON.parse(process.argv[3]))
   if (process.argv[2] === '--test-executable') return runTestExecutable(process.argv[3], process.argv[4], process.argv[5], process.argv.slice(6))
+  const started = performance.now()
   return launch(process.argv.slice(2), options => {
-    const started = performance.now()
     if (process.platform !== 'linux') throw new Error('Only unsigned Linux host builds are supported')
     options.host = read(process.env.RUSTC ?? 'rustc', ['-vV']).match(/^host: (.+)$/m)?.[1]
     if (!options.host) throw new Error('Cannot resolve the compiler host target')
@@ -437,7 +492,10 @@ function main() {
     if (!status && (!state.cargoStarted || (options.operation === 'test' ? !tests : !existsSync(binary)))) status = 1
     if (!status && binary && (!within(options.target, realpathSync(binary)) || statSync(binary).nlink !== 1 || !state.finalStorage)) throw new Error('Final binary lacks independent private storage')
     const report = { operation: options.operation, features: options.features, target: options.host, ...state, key: ['shared', 'private-seeded'].includes(state.lane) ? state.key : null, elapsedMs: performance.now() - started, status, binary, tests }
-    if (options.report) writeFileSync(options.report, `${JSON.stringify(report, null, 2)}\n`)
+    if (options.report) {
+      validateReportDestination(options.report, options.target, options.cacheParent ?? options.cache)
+      publishReport(options.report, report)
+    }
     console.error(JSON.stringify(report))
     return status
   })
