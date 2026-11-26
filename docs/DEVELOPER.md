@@ -351,6 +351,7 @@ after setting `results` to that external parent directory:
 set -eu
 : "${results:?Set results to a new external output directory}"
 node scripts/native-tests/linux-gui/build.mjs
+git clean -f -- apps/fluux/src-tauri/gen/schemas/linux-schema.json
 app="$PWD/apps/fluux/src-tauri/target/debug/fluux"
 check_native_source() {
   node --input-type=module - "$app" <<'NODE'
@@ -373,6 +374,12 @@ fi
 grep -Fq 'Requested failure-cleanup proof after native assertions' "$results/failure/native.log"
 )
 ```
+
+The producer requires a clean tree before building. Tauri generates an
+untracked Linux permission schema during that build; the narrowly scoped
+`git clean` removes only that generated file, never a tracked schema or other
+source changes. The subsequent source guards still reject every other dirty
+path.
 
 The subshell stops on producer, source-guard or normal-smoke failure, so a
 failed rebuild cannot fall through to an older executable. The second check
