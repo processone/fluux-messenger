@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { constants, closeSync, chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { delimiter, dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const CAP = 10 * 1024 ** 3
@@ -21,6 +21,13 @@ function read(command, args, cwd = root) {
 }
 
 function unredirected(path) {
+  // Whole-path normalization can erase a symlink before '..'; inspect each prefix first.
+  const origin = isAbsolute(path) ? parse(path).root : ''
+  let prefix = origin || process.cwd()
+  for (const component of path.slice(origin.length).split(sep)) {
+    prefix = join(prefix, component)
+    if (lstatSync(prefix, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error('Pilot paths must not redirect')
+  }
   if (realpathSync(path) !== resolve(path) || lstatSync(path).isSymbolicLink()) throw new Error('Pilot paths must not redirect')
 }
 

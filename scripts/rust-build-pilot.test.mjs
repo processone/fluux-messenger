@@ -163,6 +163,56 @@ for (const [kind, prepare] of [['output', privateDirectory], ['cache', managedCa
   }))
 }
 
+function withParentAlias(action) {
+  withCache((cache, parent) => {
+    const outside = join(parent, 'outside')
+    const child = join(outside, 'child')
+    mkdirSync(child, { recursive: true, mode: 0o700 })
+    copyFileSync('apps/fluux/src-tauri/Cargo.lock', join(outside, 'existing.json'))
+    const original = createHash('sha256').update(readFileSync(join(outside, 'existing.json'))).digest('hex')
+    const alias = join(parent, 'alias')
+    symlinkSync(child, alias, 'dir')
+    action({ parent, outside, original, alias })
+  })
+}
+
+// Source: private destinations must not write through aliases hidden by parent segments.
+for (const [kind, prepare] of [['output', privateDirectory], ['cache', managedCache]]) {
+  test(`${kind} parent segments cannot hide an alias before directory creation`, nativeFs, () => withParentAlias(({ parent, outside, original, alias }) => {
+    // Joining would erase the alias before the validator receives the original components.
+    const destination = `${alias}/../missing`
+    let failure
+    try { prepare(destination) } catch (error) { failure = error }
+    assert.deepEqual(readdirSync(outside).sort(), ['child', 'existing.json'])
+    assert.equal(createHash('sha256').update(readFileSync(join(outside, 'existing.json'))).digest('hex'), original)
+    assert.match(failure?.message ?? '', /must not redirect/)
+    const ordinary = join(parent, 'ordinary')
+    mkdirSync(ordinary)
+    const valid = `${ordinary}/../${kind}-valid/nested`
+    prepare(valid)
+    assert.equal(statSync(valid).mode & 0o777, 0o700)
+    if (kind === 'cache') assert.equal(existsSync(join(valid, NAMESPACE, 'owner')), true)
+  }))
+}
+
+// Source: report publication must leave outside files and directories untouched for rejected paths.
+for (const filename of ['new.json', 'existing.json']) {
+  test(`report parent segments cannot hide an alias when publishing ${filename}`, nativeFs, () => withParentAlias(({ parent, outside, original, alias }) => {
+    let failure
+    try { publishReport(`${alias}/../${filename}`, recorded) } catch (error) { failure = error }
+    assert.deepEqual(readdirSync(outside).sort(), ['child', 'existing.json'])
+    assert.equal(createHash('sha256').update(readFileSync(join(outside, 'existing.json'))).digest('hex'), original)
+    assert.match(failure?.message ?? '', /must not redirect/)
+    let launched = false
+    assert.throws(() => launch(['--target', join(parent, 'outputs'), '--report', `${alias}/../${filename}`], () => { launched = true }), /must not redirect/)
+    assert.equal(launched, false)
+    const ordinary = join(parent, 'ordinary')
+    mkdirSync(ordinary)
+    publishReport(`${ordinary}/../safe.json`, recorded)
+    assert.deepEqual(JSON.parse(readFileSync(join(parent, 'safe.json'), 'utf8')), recorded)
+  }))
+}
+
 // Source: final executables must have independent storage before shared access ends.
 test('publishing replaces a cache hard link with an independent executable', nativeFs, () => withCache((cache, parent) => {
   const source = join(cache, 'source-executable')
@@ -359,7 +409,7 @@ else if (process.env.PILOT_RECEIPT_CASE === 'unreadable-state') {
 process.exit(result.status ?? 1)
 `)
   chmodSync(scheduler, 0o700)
-  for (const mode of ['partial-state', 'unreadable-state', 'partial-tests', 'report-write', 'complete', 'shared-complete']) {
+  for (const mode of ['partial-state', 'unreadable-state', 'partial-tests', 'report-write', 'complete', 'shared-complete', 'redirected-cache-complete']) {
     for (const status of [0, 17, 101]) {
       const target = join(parent, `${mode}-${status}`)
       const calls = join(parent, `${mode}-${status}.calls`)
@@ -368,6 +418,13 @@ process.exit(result.status ?? 1)
       if (mode === 'report-write') args.push('--report', join(parent, 'r'.repeat(255)))
       if (mode.endsWith('complete')) args.push('--report', report)
       if (mode === 'shared-complete') args.push('--shared', '--cache', cache)
+      const outside = join(parent, `${mode}-${status}-outside`)
+      if (mode === 'redirected-cache-complete') {
+        mkdirSync(join(outside, 'child'), { recursive: true, mode: 0o700 })
+        const alias = join(parent, `${mode}-${status}-alias`)
+        symlinkSync(join(outside, 'child'), alias, 'dir')
+        args.push('--shared', '--cache', `${alias}/../missing`)
+      }
       const result = spawnSync(process.execPath, args, { encoding: 'utf8', env: { ...process.env, PATH: bin, RUSTC: join(bin, 'rustc'), HOST_PKG_CONFIG_PATH: '/usr/lib/pkgconfig', PILOT_CALLS: calls, PILOT_RECEIPT_CASE: mode, PILOT_CHILD_STATUS: String(status) } })
       assert.equal(result.status, status || 1, `${mode}, child ${status}: ${result.stderr}`)
       if (mode.endsWith('complete')) {
@@ -375,6 +432,11 @@ process.exit(result.status ?? 1)
         assert.equal(reading.status, status || 1)
         assert.equal(reading.elapsedMs, reading.wallMs - reading.preparationMs)
         assert.equal(reading.preparationMs > 0, mode === 'complete')
+        if (mode === 'redirected-cache-complete') {
+          assert.deepEqual(readdirSync(outside), ['child'])
+          assert.equal(reading.lane, 'private')
+          assert.match(result.stderr, /Pilot disabled; using private intermediates: Pilot paths must not redirect/)
+        }
       } else assert.match(result.stderr, /Pilot completion failed:/)
       assert.equal(readFileSync(calls, 'utf8'), 'launch\n')
       t.diagnostic(`Stand-in ${mode}: scheduler ${status}, CLI ${result.status}; ${result.stderr.trim().split('\n').at(-1)}`)
