@@ -80,7 +80,11 @@ When local identity exists, the exception references its opaque, erasable proof
 ID instead of copying identity; a replacement proof cannot reactivate it. If continuity remains unwritable during Off, the exact
 shared exception can retain room revocations and ordering while preserving
 untouched choices; deleting local proof still invalidates earlier work. Repeated
-scoped conversion retains that exception’s revocations and ordering. Migration
+scoped conversion retains that exception’s revocations and ordering. When both
+a linked fence and shared exception survive, room revisions combine both
+histories without replacing either. Scoped conversion mirrors their merged
+revocations and revisions into the fence before pruning the exception or
+cleaning linked input, so refused cleanup cannot restore an older room On. Migration
 retires shared authority only after a linked replacement is saved, and delayed
 failure cleanup checks the account’s shared protection as well as its token.
 A retained exception links newly reserved local proof even when replacement
@@ -90,7 +94,10 @@ that fails before writing leaves other confirmed choices unchanged. Refused
 new On writes also preserve the existing confirmed current-format record.
 Focused observations retain their conversion boundary through discovery and
 dispatch; another tab’s conversion requires a fresh observation even when
-account identity and effective choices do not change. The erasable continuity
+account identity and effective choices do not change. Each observation snapshot
+reads the conversion token before and after its preference read; a change
+between those reads rejects the observation instead of mixing two conversions.
+The erasable continuity
 record reserves a pending conversion token before preference commit without
 retiring linked input, then completes it after the preference is committed.
 Observations captured while the token is pending cannot publish, even after

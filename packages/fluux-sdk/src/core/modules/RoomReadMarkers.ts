@@ -132,11 +132,11 @@ function writeConsentContinuity(account: string, generation: string, input?: str
   localStorage.setItem(storageKey(account, 'continuity'), JSON.stringify({ generation, input, inputId, id, conversion }))
   return { inputId, id }
 }
-function completeConsentConversion(account: string, generation: string) {
+function completeConsentConversion(account: string, generation: string, retireInput = false) {
   // A committed choice survives refused completion; pending observations stay blocked until a coordinated read retries it.
   try {
     const proof = readConsentContinuity(account)
-    if (proof?.generation === generation && proof.conversion?.startsWith('!')) writeConsentContinuity(account, generation, proof.input, 'complete')
+    if (proof?.generation === generation && proof.conversion?.startsWith('!')) writeConsentContinuity(account, generation, retireInput ? undefined : proof.input, 'complete')
     return true
   } catch { return false }
 }
@@ -172,13 +172,18 @@ function readSavedRoomConsent(account: string): SavedConsent {
   const inherited = choice !== undefined && permission?.choice === choice && (!permission.local || permission.local === continuity?.id) ? permission : undefined
   const allowed = retained || guard.open || !!inherited
   const rooms = current || (allowed && (previous || (legacy && record?.enabled === true))) ? oldRooms.filter(room => !history?.revoked?.includes(room) && !inherited?.revoked?.includes(room)) : []
+  const edits = { ...(history?.edits ?? (current ? record.edits as Record<string, string> : {})) }
+  // Either protector can hold a newer Off; an idempotent union changes on either edit and survives mirroring before pruning.
+  for (const [room, edit] of Object.entries(inherited?.edits ?? {})) {
+    edits[room] = [...new Set([...(edits[room]?.split('+') ?? []), ...edit.split('+')])].sort().join('+')
+  }
   return {
     raw, fence, clearToken, sharedPermission: permission, rooms, cleared,
     generation: current ? record.generation as string : history?.generation
       ? raw !== null && continuity?.generation === history.generation ? history.generation : 'absent:' + history.generation
       : choice !== undefined && allowed ? continuity?.generation ?? inherited?.generation ?? JSON.stringify([account, clearToken, fenceEpoch ?? '']) : JSON.stringify([account, clearToken, fenceEpoch ?? '']),
     epoch: fenceEpoch ?? (current ? record.epoch as string : inherited?.epoch ?? ''),
-    edits: { ...inherited?.edits, ...(history?.edits ?? (current ? record.edits as Record<string, string> : {})) },
+    edits,
     revoked: [...new Set([...(history?.revoked ?? []), ...(inherited?.revoked ?? [])])],
     needsMigration: !cleared && raw !== null && !current,
     legacyChoice: allowed ? choice : undefined,
@@ -204,7 +209,7 @@ function tryRevokeLegacy(account: string, saved: SavedConsent, revoked: string[]
 function roomConsentValue(saved: SavedConsent, rooms: string[], edits = saved.edits, epoch = saved.epoch) {
   return JSON.stringify({ version: 3, generation: saved.generation ?? generateUUID(), epoch, edits, rooms })
 }
-function persistRoomConsent(account: string, saved: SavedConsent, rooms: string[], edits = saved.edits, epoch = saved.epoch) {
+function persistRoomConsent(account: string, saved: SavedConsent, rooms: string[], edits = saved.edits, epoch = saved.epoch, retireInput = false) {
   const generation = saved.generation ?? generateUUID()
   const revoked = [...new Set([...saved.revoked, ...saved.rooms.filter(room => !rooms.includes(room)),
     ...Object.keys(edits).filter(room => !rooms.includes(room) && edits[room] !== saved.edits[room])])]
@@ -217,13 +222,13 @@ function persistRoomConsent(account: string, saved: SavedConsent, rooms: string[
   pruneLegacyPermission(account)
   if (input === undefined) writeConsentContinuity(account, generation, undefined, saved.needsMigration)
   localStorage.setItem(storageKey(account, 'consent'), roomConsentValue({ ...saved, generation }, rooms, edits, epoch))
-  completeConsentConversion(account, generation)
+  const completed = completeConsentConversion(account, generation, retireInput)
   const remaining = revoked.filter(room => !rooms.includes(room))
   // A revocation is lifted only after its new On exists in the permission record.
   if (remaining.length !== revoked.length) {
     try { localStorage.setItem(storageKey(account, 'migration'), consentFenceValue(edits, epoch, generation, remaining)) } catch { return false }
   }
-  return true
+  return !retireInput || completed
 }
 function removeConsentWithBarrier(account: string, epoch = clearFence()) {
   try { localStorage.removeItem(storageKey(account, 'consent')); localStorage.removeItem(storageKey(account, 'continuity')) } catch { /* Local guards cover denied removal. */ }
@@ -303,18 +308,28 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           saved = readSavedRoomConsent(other)
           localIdentity = saved.localIdentity
           if (saved.needsMigration) {
-            const generation = saved.generation ?? generateUUID()
-            const edits = migrationEdits(saved)
-            // Reserve the conversion boundary while retaining linked input until preference commit.
-            const continuity = readConsentContinuity(other)
-            hasLocalProof = !!continuity
-            localIdentity = writeConsentContinuity(other, generation, continuity?.input, true).id; hasLocalProof = true
-            localStorage.setItem(storageKey(other, 'consent'), roomConsentValue({ ...saved, generation }, saved.rooms, edits))
-            writeConsentContinuity(other, generation, undefined, 'complete')
-            localStorage.setItem(storageKey(other, 'migration'), consentFenceValue(edits, saved.epoch, generation, saved.revoked))
+            if (saved.linkedInput && saved.sharedPermission) {
+              // Shared-only protection must reach the linked fence before either protector can retire.
+              if (!persistRoomConsent(other, saved, saved.rooms, migrationEdits(saved), saved.epoch, true)) preserved = false
+            } else {
+              const generation = saved.generation ?? generateUUID()
+              const edits = migrationEdits(saved)
+              // Reserve the conversion boundary while retaining linked input until preference commit.
+              const continuity = readConsentContinuity(other)
+              hasLocalProof = !!continuity
+              localIdentity = writeConsentContinuity(other, generation, continuity?.input, true).id; hasLocalProof = true
+              localStorage.setItem(storageKey(other, 'consent'), roomConsentValue({ ...saved, generation }, saved.rooms, edits))
+              writeConsentContinuity(other, generation, undefined, 'complete')
+              localStorage.setItem(storageKey(other, 'migration'), consentFenceValue(edits, saved.epoch, generation, saved.revoked))
+            }
           }
         } catch {
           preserved = false
+          try {
+            const proof = readConsentContinuity(other)
+            hasLocalProof = !!proof
+            localIdentity = proof?.id
+          } catch { return false }
           // An unreferenceable local proof must not become shared, non-erasable identity.
           if (hasLocalProof && !localIdentity) return false
           // Only unchanged, previously valid surviving choices may bypass sealing.
@@ -1050,13 +1065,19 @@ export class RoomReadMarkers extends BaseModule {
 
   private captureConversionBoundary() {
     const account = this.account()
-    try {
+    const snapshot = () => {
+      // Preference and continuity are separate reads; a conversion between them cannot become focused-view evidence.
+      const conversion = readConsentContinuity(account)?.conversion
       const saved = this.readSavedConsent(account)
-      if (saved.conversion?.startsWith('!')) return () => false
+      return conversion === saved.conversion && !conversion?.startsWith('!') ? saved : undefined
+    }
+    try {
+      const saved = snapshot()
+      if (!saved) return () => false
       return () => {
         try {
-          const latest = this.readSavedConsent(account)
-          return this.account() === account && latest.needsMigration === saved.needsMigration && latest.conversion === saved.conversion
+          const latest = snapshot()
+          return !!latest && this.account() === account && latest.needsMigration === saved.needsMigration && latest.conversion === saved.conversion
         } catch { return false }
       }
     } catch { return () => false }
