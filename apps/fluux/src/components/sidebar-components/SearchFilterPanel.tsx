@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { localDayBounds, localDayValue, parseSearchFilters, parseRoomSender, type HasValue } from '@fluux/sdk'
+import { localDayBounds, localDayValue, parseSearchFilters, type HasValue } from '@fluux/sdk'
 import { ModalShell } from '../ModalShell'
 import { TextInput } from '../ui/TextInput'
 import { filterChipLabel, type SenderOption } from './searchOperators'
+import { SearchSenderPicker } from './SearchSenderPicker'
 
 interface Props {
   filters: readonly string[]
@@ -53,16 +54,9 @@ export function SearchFilterPanel({ filters, senders, onApply, onClose }: Props)
   }
   return <ModalShell title={t('search.panel.title')} dialogLabel={t('search.panel.title')} onClose={onClose} align="top">
     <form className="p-4 space-y-4 overflow-y-auto" onSubmit={event => { event.preventDefault(); apply() }}>
-      <div className="space-y-1">
-        <label htmlFor="search-filter-from" className="block text-sm font-medium text-fluux-text">{t('search.panel.from')}</label>
-        <select id="search-filter-from" className={fieldClass} value={from} onChange={event => { setFrom(event.target.value); setEdited(previous => ({ ...previous, from: true })) }}>
-          <option value="">{t('search.panel.anyone')}</option>
-          <option value="me">{t('search.panel.me')}</option>
-          {multipleSenders && <option value="__multiple">{senderFilters.map(filter => filterChipLabel(filter, t, i18n.language)).join(' · ')}</option>}
-          {from && from !== 'me' && !(multipleSenders && from === '__multiple') && !senders.some(sender => sender.value === from) && <option value={from}>{parseRoomSender(from)?.nick ?? from}</option>}
-          {senders.map(sender => <option key={sender.value} value={sender.value}>{sender.label}</option>)}
-        </select>
-      </div>
+      <SearchSenderPicker value={from} senders={senders}
+        summary={multipleSenders && from === '__multiple' ? senderFilters.map(filter => filterChipLabel(filter, t, i18n.language)).join(' · ') : undefined}
+        onChange={value => { setFrom(value); setEdited(previous => ({ ...previous, from: true })) }} />
       <div className="space-y-1">
         <label htmlFor="search-filter-date" className="block text-sm font-medium text-fluux-text">{t('search.panel.date')}</label>
         <select id="search-filter-date" className={fieldClass} value={date} onChange={event => { setDate(event.target.value); setEdited(previous => ({ ...previous, date: true })) }}>

@@ -1883,6 +1883,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Pretraži pošiljatelje…",
+            "noSenders": "Nema odgovarajućih pošiljatelja",
             "title": "Filtri",
             "from": "Od",
             "anyone": "Bilo tko",

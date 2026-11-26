@@ -1881,6 +1881,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "搜索发送者…",
+            "noSenders": "没有匹配的发送者",
             "title": "筛选",
             "from": "发件人",
             "anyone": "任何人",

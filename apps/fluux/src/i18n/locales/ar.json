@@ -1889,6 +1889,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "البحث عن مرسل…",
+            "noSenders": "لا يوجد مرسلون مطابقون",
             "title": "عوامل التصفية",
             "from": "من",
             "anyone": "أي شخص",

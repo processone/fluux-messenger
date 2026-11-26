@@ -1881,6 +1881,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "보낸 사람 검색…",
+            "noSenders": "일치하는 보낸 사람이 없습니다",
             "title": "필터",
             "from": "보낸 사람",
             "anyone": "모든 사람",

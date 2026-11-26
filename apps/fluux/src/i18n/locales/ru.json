@@ -1885,6 +1885,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Поиск отправителей…",
+            "noSenders": "Нет подходящих отправителей",
             "title": "Фильтры",
             "from": "От",
             "anyone": "Любой",
