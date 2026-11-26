@@ -48,6 +48,9 @@ preference, but that restoration alone is not protection: until an import barrie
 commits, updated readers reject a different legacy or version-2 value even before
 the first recovery read. Failed recovery retains this restriction until a supported
 account fence exists; an older migration stamp alone cannot protect version-2 input.
+Compact Off recovery also keeps that restriction until its replacement fence commits.
+A matching witnessed input preserves independent choices through failed background
+conversion or an unsuccessful On for another room, without granting the failed On.
 Completion refusal after a saved fence leaves the protected replacement intact.
 Overlapping linked and
 shared protection instead mirrors combined revocations and ordering into the fence first, before
@@ -56,9 +59,12 @@ Refused unrelated conversion is reported without discarding its valid choices.
 If an unrelated record cannot be classified while legacy import remains open,
 a writable target-account fence protects erasure while shared sealing stays
 incomplete until that record can be read; no unverified exception is created.
-Direct fallback stops after target erasure when its account fence is saved or an
-existing shared seal already excludes the target account. Unrelated preferences
-and shared protection wait for a coordinated storage turn in either case.
+Direct fallback never converts unrelated preferences. If the target fence is
+refused, it can remove the target's own exception from the existing shared guard;
+other accounts' choices and protection remain unchanged. If import is still open,
+the fallback carries existing validated choices into the target-excluding seal
+without replacing unrelated preferences or fences. Unrelated conversion waits
+for a coordinated storage turn.
 When that fence permits deferral, all unrelated accounts are classified before
 any conversion starts, so an earlier paused account cannot be left converted
 without its compatibility barrier by a later unreadable account.

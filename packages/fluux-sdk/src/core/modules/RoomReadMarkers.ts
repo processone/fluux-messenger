@@ -84,11 +84,12 @@ interface SavedConsent {
   needsMigration: boolean
   legacyChoice?: string
   linkedInput: boolean
+  witnessedInput: boolean
   localIdentity?: string
   conversion?: string
 }
 function hasConfirmedLegacyInput(saved: SavedConsent | undefined) {
-  return !!saved?.legacyChoice && (saved.linkedInput || !!saved.revoked.length || saved.sharedPermission?.choice === saved.legacyChoice)
+  return !!saved?.legacyChoice && (saved.witnessedInput || saved.linkedInput || !!saved.revoked.length || saved.sharedPermission?.choice === saved.legacyChoice)
 }
 interface ConsentFence { epoch: string; edits?: Record<string, string>; generation?: string; revoked?: string[]; input?: string }
 function readConsentFence(raw: string | null): ConsentFence | undefined {
@@ -190,6 +191,7 @@ function readSavedRoomConsent(account: string): SavedConsent {
     needsMigration: !cleared && raw !== null && !current,
     legacyChoice: allowed ? choice : undefined,
     linkedInput: retained,
+    witnessedInput: raw !== null && continuity?.input === raw,
     localIdentity: continuity?.id,
     conversion: continuity?.conversion,
   }
@@ -300,7 +302,11 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       if (!coordinated) {
         if (targetSealed) return false
         const guard = readClearGuard()
-        if (!guard.open && !guard.legacy[scoped!]) return false
+        if (guard.legacy[scoped!]) {
+          delete guard.legacy[scoped!]
+          writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy: guard.legacy }))
+        }
+        if (!guard.open) return false
       }
       let preserved = true
       const legacy: Record<string, LegacyPermission> = Object.create(null)
@@ -328,6 +334,14 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           saved = classified.get(other) ?? readSavedRoomConsent(other)
           localIdentity = saved.localIdentity
           if (saved.needsMigration) {
+            if (!coordinated) {
+              // Open import needs a target seal, but an unlocked fallback may only carry existing choices, not convert them.
+              if (saved.legacyChoice && !saved.linkedInput && saved.rooms.length) legacy[other] = {
+                ...(saved.sharedPermission ?? {}), choice: saved.legacyChoice,
+                generation: saved.localIdentity ? undefined : saved.generation, local: saved.localIdentity,
+              }
+              continue
+            }
             if (saved.linkedInput && saved.sharedPermission) {
               // Shared-only protection must reach the linked fence before either protector can retire.
               if (!persistRoomConsent(other, saved, saved.rooms, migrationEdits(saved), saved.epoch, true)) preserved = false
@@ -554,7 +568,8 @@ export class RoomReadMarkers extends BaseModule {
         const compactEpoch = clearFence()
         try {
           const retainedEdits = Object.fromEntries(rooms.flatMap(room => latest.edits[room] ? [[room, latest.edits[room]]] : []))
-          const input = latest.legacyChoice && (revoked.length || hasConfirmedLegacyInput(latest)) ? latest.raw ?? undefined : undefined
+          const input = latest.legacyChoice && (revoked.length || hasConfirmedLegacyInput(latest)) ? latest.raw ?? undefined
+            : readConsentFence(latest.fence) ? undefined : readConsentContinuity(account)?.input
           const generation = latest.generation ?? generateUUID()
           const inputId = writeConsentContinuity(account, generation, input, latest.needsMigration).inputId
           localStorage.setItem(storageKey(account, 'migration'), '~' + JSON.stringify([generation, compactEpoch, [...new Set([...latest.revoked, ...revoked])], retainedEdits, 1, inputId]))

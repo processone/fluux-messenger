@@ -2056,6 +2056,59 @@ describe('RoomReadMarkers', () => {
     } finally { vi.stubGlobal('localStorage', storage); opening?.release(); observer.cancelPending(); independent.cancelPending(); target.cancelPending() }
   })
 
+  it.each(['room', 'all'] as const)('retains the sole paused-input restriction through compact %s Off refusal', async api => {
+    // Approved paused-Off rule: neither Off API may release a witnessed input before a barrier commits.
+    const storage = localStorage
+    const guardKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:clear-generation`
+    const original = JSON.stringify({ enabled: false, rooms: [roomJid] })
+    const stale = JSON.stringify({ enabled: true, rooms: [roomJid] })
+    storage.setItem(consentKey, original)
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === migrationKey || name === guardKey) throw new DOMException('Barrier refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(false)
+      storage.setItem(consentKey, stale)
+      expect(await (api === 'room' ? markers.setRoomEnabled(roomJid, false) : markers.setEnabled(false))).toBe(false)
+      storage.setItem(consentKey, stale)
+      vi.stubGlobal('localStorage', storage)
+      expect(await observer.reload()).toBe(true)
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+      expect(await observer.setRoomEnabled(roomJid, true)).toBe(true)
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+    } finally { vi.stubGlobal('localStorage', storage); observer.cancelPending() }
+  })
+
+  it.each((['reload', 'new On'] as const).flatMap(api => (['fence', 'preference'] as const).map(refusal => [api, refusal] as const)))('preserves witnessed independent On through failed %s with refused %s', async (api, refusal) => {
+    // Approved independent-choice rule: retry failure cannot erase the exact validated On or grant a failed new On.
+    const storage = localStorage
+    const guardKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:clear-generation`
+    const original = JSON.stringify({ enabled: true, rooms: [roomJid] })
+    storage.setItem(consentKey, original)
+    let retry = false
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => {
+        if (name === guardKey || (name === migrationKey && (!retry || refusal === 'fence')) || (retry && refusal === 'preference' && name === consentKey)) throw new DOMException('Replacement refused', 'SecurityError')
+        base.setItem(name, value)
+      } : Reflect.get(base, key, base) }))
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(false)
+      retry = true
+      expect(await (api === 'reload' ? markers.reload() : markers.setRoomEnabled(replayFixture.room, true))).toBe(false)
+      vi.stubGlobal('localStorage', storage)
+      expect(await observer.reload()).toBe(true)
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(observer.isEnabledFor(replayFixture.room)).toBe(false)
+    } finally { vi.stubGlobal('localStorage', storage); observer.cancelPending() }
+  })
+
   it.each((['privacy', 'room', 'v2'] as const).flatMap(input => (['legacy', 'v2'] as const).flatMap(rewrite => (rewrite === 'v2' ? [false, true] : [false]).flatMap(oldStamp => (['unread', 'refused recovery', 'completed without barrier'] as const).map(recovery => [input, rewrite, recovery, oldStamp] as const)))))('keeps witnessed input restricted until an import barrier commits (%s input, %s rewrite, %s, old stamp: %s)', async (input, rewrite, recovery, oldStamp) => {
     // Paused rooms stay Off before recovery, through repeated refusal, and after token completion without a fence.
     const storage = localStorage
@@ -2098,13 +2151,19 @@ describe('RoomReadMarkers', () => {
     } finally { vi.stubGlobal('localStorage', storage); observer.cancelPending() }
   })
 
-  it.each([['open', false], ['sealed', false], ['sealed', true]] as const)('leaves another tab’s recorded Off intact during direct scoped fallback (%s profile, target fence refused: %s)', async (profile, targetRefused) => {
+  it.each([['open', false], ['open', true], ['sealed', false], ['sealed', true], ['target exception', true]] as const)('leaves another tab’s recorded Off intact during direct scoped fallback (%s profile, target fence refused: %s)', async (profile, targetRefused) => {
     // Approved Off-wins rule: a failed coordination opening gives fallback no turn to replace unrelated preferences.
     const storage = localStorage
     const proofKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'continuity'])}`
     const guardKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:clear-generation`
-    if (profile === 'sealed') await prepareSharedLegacy(true)
-    else storage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid, replayFixture.room] }))
+    if (profile !== 'open') {
+      await prepareSharedLegacy(profile !== 'target exception')
+      if (profile === 'target exception') {
+        const guard = JSON.parse(storage.getItem(guardKey)!)
+        guard.legacy['other@localhost'] = { ...guard.legacy[jid] }
+        storage.setItem(guardKey, JSON.stringify(guard))
+      }
+    } else storage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid, replayFixture.room] }))
     const baseline = send.mock.calls.length
     const keys = [consentKey, migrationKey, proofKey, guardKey]
     const before = keys.map(key => [key, storage.getItem(key)] as const)
@@ -2128,6 +2187,11 @@ describe('RoomReadMarkers', () => {
       await opening.ready; opening.release()
       expect(await clearing).toBe(false)
       // These are actual SDK Off writes; fallback that stops first lets the peer finish afterward.
+      if (!applied && profile === 'target exception') {
+        const guard = JSON.parse(after.find(([key]) => key === guardKey)![1]!)
+        delete guard.legacy['other@localhost']
+        after[after.findIndex(([key]) => key === guardKey)] = [guardKey, JSON.stringify(guard)]
+      }
       if (!applied) applyOff()
       vi.stubGlobal('localStorage', storage)
       expect(await observer.reload()).toBe(true)
@@ -2136,7 +2200,13 @@ describe('RoomReadMarkers', () => {
       expect(send).toHaveBeenCalledTimes(baseline)
       expect(observer.isEnabledFor(roomJid)).toBe(false)
       expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
-      expect(keys.map(key => [key, storage.getItem(key)] as const)).toEqual(after)
+      if (profile === 'target exception') {
+        const guard = JSON.parse(after.find(([key]) => key === guardKey)![1]!)
+        delete guard.legacy['other@localhost']
+        after[after.findIndex(([key]) => key === guardKey)] = [guardKey, JSON.stringify(guard)]
+      }
+      const unchanged = profile === 'open' && targetRefused ? keys.filter(key => key !== guardKey) : keys
+      expect(unchanged.map(key => [key, storage.getItem(key)] as const)).toEqual(after.filter(([key]) => unchanged.includes(key)))
       expect(await observer.setRoomEnabled(roomJid, true)).toBe(true)
       await observer.viewed(roomJid, rows[1])
       expect(send).toHaveBeenCalledTimes(baseline + 1)
