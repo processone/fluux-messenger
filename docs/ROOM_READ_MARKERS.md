@@ -85,10 +85,13 @@ and retains continuity when its early seal fails. Initial unlocked compaction
 precedes consent removal; only an ownership-checked coordinated turn may retry
 compaction or retire proof afterward. A fence that becomes writable after deletion
 is retried in the original coordinated turn or a guarded follow-up, never by
-repeating ordinary erasure. Scoped sealing defers before unrelated conversion
-when another account has active or unreadable denial, including a denial-only
-account without a preference key. Rotating shared identity must not reactivate
-its retained current On or invalidate its waiting explicit choice.
+repeating ordinary erasure. Full recovery carries only the exact fence value it
+successfully saved and the restriction removal it completed, never a later reread.
+Scoped sealing preserves the shared generation and its open or sealed status.
+It uses a non-authorizing entry in the existing account map to deny the target,
+without changing another account's denial or waiting explicit choice. This also
+protects denial installed after enumeration. Active or unreadable unrelated
+restriction slots are left unchanged rather than converted.
 The restriction defines a new ownership boundary without granting permission:
 pre-clear opt-ins and self-marker work cannot restore erased records, while
 fresh post-clear work uses the new boundary. Automatic reload cannot turn it On.
@@ -97,10 +100,13 @@ shared permission; it never overwrites a later clear's denial before retry check
 Recovery and repeated clears retain denial until an account fence or shared seal
 commits and the preference has been removed. A refused preference deletion keeps
 its account-level denial: a shared import seal alone cannot deny a surviving
-current-format On. In a coordinated turn, full clearing installs account fences
+current-format On. A scoped target entry rejects legacy input and unfenced current
+On; a confirmed fence-backed save supersedes it. Its opaque identity combines
+with any active restriction and fence epoch, so another target clear invalidates
+older work even if only one denial form can advance. In a coordinated turn,
+full clearing installs account fences
 before early sealing, or defers sealing until all unfenced preferences have been
-removed, so token
-rotation cannot deactivate their only denial. Each new clear advances either verified denial form when writable,
+removed, so token rotation cannot deactivate their only denial. Each new clear advances either verified denial form when writable,
 rejecting earlier opt-ins and self-marker work without rejecting fresh work.
 Full clearing retries the refresh after ordinary deletion and compaction free
 space, stopping after one successful advance per account across initial cleanup
@@ -119,15 +125,18 @@ snapshot or claiming durable protection.
 When either target protector permits deferral, all unrelated accounts are classified
 before any conversion starts, so an earlier paused account cannot be left converted
 without its compatibility barrier by a later unreadable account.
-Successful guard replacement permits only the exact effective choices of unaffected accounts whose conversion was
-refused; it never permits the erased account to import old consent. Those
-exceptions disappear when their account saves or clears its choice. Unknown
+Shared exceptions permit only the exact effective choices of unaffected accounts
+whose conversion was refused; a target-only entry grants no permission. An open
+profile still admits unclassified accounts without exceptions, never a mismatched
+exception or erased target. Exceptions disappear when their account saves its
+choice; scoped clearing replaces the target's exception with denial. Unknown
 older guards remain sealed. A refused replacement retains the existing seal or
 a writable account fence and reports incomplete cleanup. When no safe barrier can
 be saved and no usable prior barrier exists, durable revocation cannot be
 guaranteed; cleanup reports failure rather than claiming completion. Successful
-cleanup leaves no target-account data in the guard; failed cleanup can retain
-protection records. Full clearing retries its shared seal after ordinary data frees
+scoped cleanup retains only the target's non-authorizing account identity in the
+guard, without room names or the erased preference. Full clearing removes account
+entries when its shared seal commits; failed cleanup can retain protection records. Full clearing retries its shared seal after ordinary data frees
 storage, including after compacting history fences. A guarded full-clear follow-up
 uses only its unchanged known accounts; it never rescans and erases newer records.
 It cannot replace the shared seal over an account that changed ownership.

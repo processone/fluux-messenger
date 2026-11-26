@@ -45,7 +45,7 @@ function readClearGuard(): ClearGuard {
   if (raw === null) return { generation: null, legacy: {}, open: true }
   try {
     const value = JSON.parse(raw) as { generation?: unknown; legacy?: unknown }
-    if (typeof value.generation === 'string' && !!value.generation && value.legacy && typeof value.legacy === 'object' && !Array.isArray(value.legacy)) {
+    if ((value.generation === null || typeof value.generation === 'string' && !!value.generation) && value.legacy && typeof value.legacy === 'object' && !Array.isArray(value.legacy)) {
       const legacy: Record<string, LegacyPermission> = Object.create(null)
       for (const [account, entry] of Object.entries(value.legacy)) {
         if (typeof entry === 'string') legacy[account] = { choice: entry }
@@ -59,7 +59,7 @@ function readClearGuard(): ClearGuard {
           legacy[account] = { choice: permission.choice, generation: permission.generation as string | undefined, local: permission.local as string | undefined, revoked: permission.revoked as string[] | undefined, edits: permission.edits as Record<string, string> | undefined, epoch: permission.epoch as string | undefined }
         }
       }
-      return { generation: value.generation, legacy, open: false }
+      return { generation: value.generation, legacy, open: value.generation === null }
     }
   } catch { /* Earlier guards stored only the generation. */ }
   return { generation: raw, legacy: {}, open: false }
@@ -178,23 +178,25 @@ function readSavedRoomConsent(account: string): SavedConsent {
   const validEdits = record?.edits && typeof record.edits === 'object' && !Array.isArray(record.edits)
     && Object.values(record.edits).every(edit => typeof edit === 'string')
   const overlay = history?.revoked !== undefined && !!history.generation
-  const current = !restriction && record?.version === 3 && validRooms && typeof record.generation === 'string' && !!record.generation
+  const current = !restriction && (guard.legacy[account]?.choice !== '' || !!history?.generation) && record?.version === 3 && validRooms && typeof record.generation === 'string' && !!record.generation
     && (!history?.generation || (record.generation === history.generation && continuity?.generation === history.generation))
     && typeof record.epoch === 'string' && validEdits && (overlay || fenceEpoch === undefined || record.epoch === fenceEpoch)
     && (overlay || !history?.edits || (Object.keys(history.edits).length === Object.keys(record.edits as object).length
       && Object.entries(history.edits).every(([room, edit]) => (record.edits as Record<string, string>)[room] === edit)))
+  // A confirmed fence-backed choice supersedes target-only denial; legacy input cannot.
+  const denied = guard.legacy[account]?.choice === '' && !current
   const cleared = !overlay && !!fenceEpoch && !current
   const oldRooms = validRooms ? [...new Set(record!.rooms as string[])] : []
   const retained = history?.revoked !== undefined && raw !== null && !!history.input && history.input === continuity?.inputId
     && continuity?.generation === history.generation && continuity?.input === raw
   // An input witnessed before a refused fence must not become a different legacy choice before recovery.
-  const matchesInput = !restriction && (continuity?.input === undefined || continuity.input === raw)
+  const matchesInput = !restriction && !denied && (continuity?.input === undefined || continuity.input === raw)
   const previous = matchesInput && (retained || !history?.edits) && !cleared && record?.version === 2 && validRooms
   const legacy = matchesInput && (retained || fence === null) && record?.version === undefined && typeof record?.enabled === 'boolean' && validRooms
   const choice = previous || legacy ? JSON.stringify([previous ? 2 : 0, previous || record?.enabled === true, previous || record?.enabled === true ? oldRooms : []]) : undefined
   const permission = guard.legacy[account]
   const inherited = choice !== undefined && permission?.choice === choice && (!permission.local || permission.local === continuity?.id) ? permission : undefined
-  const allowed = retained || guard.open || !!inherited
+  const allowed = retained || (guard.open && !permission) || !!inherited
   const rooms = current || (allowed && (previous || (legacy && record?.enabled === true))) ? oldRooms.filter(room => !history?.revoked?.includes(room) && !inherited?.revoked?.includes(room)) : []
   const edits = { ...(history?.edits ?? (current ? record.edits as Record<string, string> : {})) }
   // Either protector can hold a newer Off; an idempotent union changes on either edit and survives mirroring before pruning.
@@ -203,7 +205,7 @@ function readSavedRoomConsent(account: string): SavedConsent {
   }
   return {
     raw, fence, clearToken, sharedPermission: permission, rooms, cleared,
-    generation: restriction ? restriction.generation : continuity?.input === '' ? continuity.generation : current ? record.generation as string : history?.generation
+    generation: denied ? JSON.stringify([permission.generation, restriction?.generation, fenceEpoch]) : restriction ? restriction.generation : continuity?.input === '' ? continuity.generation : current ? record.generation as string : history?.generation
       ? raw !== null && continuity?.generation === history.generation ? history.generation : 'absent:' + history.generation
       : choice !== undefined && allowed ? continuity?.generation ?? inherited?.generation ?? JSON.stringify([account, clearToken, fenceEpoch ?? '']) : JSON.stringify([account, clearToken, fenceEpoch ?? '']),
     epoch: fenceEpoch ?? (current ? record.epoch as string : inherited?.epoch ?? ''),
@@ -402,7 +404,11 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       retireProtectedProof(scoped!)
       if (!removedConsents.has(scoped!) && !targetSealed) return false
       let preserved = true
-      const legacy: Record<string, LegacyPermission> = Object.create(null)
+      const guard = readClearGuard()
+      // Target-only denial preserves unrelated slots, including ones installed after enumeration.
+      const legacy: Record<string, LegacyPermission> = Object.fromEntries(Object.entries(guard.legacy).filter(([, permission]) => permission.choice === ''))
+      legacy[scoped!] = { choice: '', generation: generateUUID() }
+      const restricted = new Set<string>()
       const accounts: string[] = []
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i)
@@ -417,9 +423,9 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         } catch { /* The shared clear guard is not an account record. */ }
         if (restrictedAccount) {
           try {
-            // Rotating shared identity would deactivate another account's surviving denial, even without readable consent.
-            if (readClearRestriction(restrictedAccount, localStorage.getItem(storageKey(restrictedAccount, 'migration')), readClearGuard())) return false
-          } catch { return false }
+            // Unrelated denial must not be converted into a different choice.
+            if (readClearRestriction(restrictedAccount, localStorage.getItem(storageKey(restrictedAccount, 'migration')), guard)) restricted.add(restrictedAccount)
+          } catch { restricted.add(restrictedAccount) }
         }
       }
       const classified = new Map<string, SavedConsent>()
@@ -427,10 +433,11 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       if (targetProtected) {
         try {
           // Deferral must precede every preference-first conversion, not leave one without its import barrier.
-          if (readClearGuard().open) for (const other of accounts) classified.set(other, readSavedRoomConsent(other))
+          if (guard.open) for (const other of accounts) if (!restricted.has(other)) classified.set(other, readSavedRoomConsent(other))
         } catch { return false }
       }
       for (const other of accounts) {
+        if (restricted.has(other)) continue
         let saved: SavedConsent | undefined
         let localIdentity: string | undefined
         let hasLocalProof = true
@@ -493,7 +500,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           }
         }
       }
-      if (!writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: generateUUID(), legacy }))) return false
+      if (!writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy }))) return false
       if (removedConsents.has(scoped!)) {
         erase(storageKey(scoped!, 'migration'))
         erase(storageKey(scoped!, 'continuity'))
@@ -528,6 +535,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
     if (!retrying) {
       try { for (const account of Object.keys(readClearGuard().legacy)) accounts.add(account) }
       catch { /* Unreadable permissions cannot be reconstructed; the clear reports failure. */ }
+      for (const account of accounts) captureBoundary(account)
     }
     const fences = new Set([...accounts].map(account => storageKey(account, 'migration')))
     const restrictions = new Set([...accounts].flatMap(account => [storageKey(account, 'restriction'), storageKey(account, 'continuity')]))
@@ -547,11 +555,14 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
     const compactFences = () => {
       for (const account of accounts) {
         if ((!coordinated || retrying) && !fenced.has(account) && !ownsBoundary(account)) continue
-        if (writeBarrier(storageKey(account, 'migration'), clearFence())) {
+        const fence = clearFence()
+        if (writeBarrier(storageKey(account, 'migration'), fence)) {
+          const boundary = boundaries.get(account)
+          if (boundary) boundary.fence = fence
           fenced.add(account)
           compacted = true
           erase(storageKey(account, 'continuity'))
-          erase(storageKey(account, 'restriction'))
+          if (erase(storageKey(account, 'restriction')) && boundary) boundary.restriction = null
         }
       }
     }
