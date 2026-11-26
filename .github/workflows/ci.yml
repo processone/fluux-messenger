@@ -643,7 +643,7 @@ jobs:
 
       - name: Windows GUI isolated bootstrap tests
         working-directory: apps/fluux/src-tauri
-        run: cargo test --locked --features production-tls,windows-gui-test --bin fluux windows_gui_test::
+        run: 'cargo test --locked --features production-tls,windows-gui-test --bin fluux windows_gui_test::'
 
       # Windows notification activation is cfg-gated and cannot be type-checked
       # by the Ubuntu Rust job. Keep a native compiler backstop on every PR.
