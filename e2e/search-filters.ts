@@ -118,9 +118,16 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
       }
       const bottom = await scroller.evaluate(element => element.scrollTop)
       await page.mouse.move(bounds!.x + 20, bounds!.y + 20)
+      // WebKit wheel motion continues after the first changed offset; hover must follow its completion.
+      const wheelEnd = await scroller.evaluateHandle(element => ({
+        done: new Promise<number>(resolve => {
+          element.addEventListener('scrollend', () => resolve(element.scrollTop), { once: true })
+        }),
+      }))
       await page.mouse.wheel(0, -37)
-      await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeLessThan(bottom)
-      const manualScroll = await scroller.evaluate(element => element.scrollTop)
+      const manualScroll = await wheelEnd.evaluate(({ done }) => done)
+      await wheelEnd.dispose()
+      expect(manualScroll).toBeLessThan(bottom)
       await page.mouse.move(bounds!.x + 24, bounds!.y + 3)
       expect(await scroller.evaluate(element => element.scrollTop)).toBe(manualScroll)
       await picker.press('Tab')
