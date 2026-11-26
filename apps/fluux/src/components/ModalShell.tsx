@@ -8,6 +8,8 @@ interface ModalShellProps {
   dialogLabel?: string
   align?: 'center' | 'top'
   onClose: () => void
+  /** Cancel in-flight work before the dismiss animation starts. */
+  onDismissRequest?: () => void
   /** Block every dismissal before the exit transition while an operation runs. */
   dismissable?: boolean
   /** Tailwind width class for the panel, e.g. 'max-w-sm' (default), 'max-w-md', 'w-80' */
@@ -18,6 +20,8 @@ interface ModalShellProps {
    *  read-only modal; defaults to `'auto'` (first focusable child). See
    *  {@link ModalOverlay}. */
   initialFocus?: 'auto' | 'panel'
+  /** Override the default return to the opener for a picker with a disappearing opener. */
+  restoreFocus?: (opener: HTMLElement | null) => void
   children: React.ReactNode
 }
 
@@ -32,16 +36,18 @@ export function ModalShell({
   dialogLabel,
   align,
   onClose,
+  onDismissRequest,
   dismissable = true,
   width = 'max-w-sm',
   panelClassName,
   initialFocus,
+  restoreFocus,
   children,
 }: ModalShellProps) {
   const { t } = useTranslation()
 
   return (
-    <ModalOverlay align={align} onClose={onClose} dismissable={dismissable} onEscape={dismissable ? undefined : () => {}} width={width} panelClassName={panelClassName} initialFocus={initialFocus} panelProps={dialogLabel ? { role: 'dialog', 'aria-modal': true, 'aria-label': dialogLabel } : undefined}>
+    <ModalOverlay onDismissRequest={onDismissRequest} align={align} onClose={onClose} dismissable={dismissable} onEscape={dismissable ? undefined : () => {}} width={width} panelClassName={panelClassName} initialFocus={initialFocus} restoreFocus={restoreFocus} panelProps={dialogLabel ? { role: 'dialog', 'aria-modal': true, 'aria-label': dialogLabel } : undefined}>
       {({ close }) => (
         <>
           {/* Header */}

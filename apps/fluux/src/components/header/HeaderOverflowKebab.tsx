@@ -1,9 +1,10 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MoreVertical, ChevronLeft, ChevronRight, Check, type LucideIcon } from 'lucide-react'
 import { TouchMenu } from '../ui/TouchMenu'
 import { useHasHover } from '@/hooks/useHasHover'
 import { useAnchoredMenu, useClickOutside } from '@/hooks'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import type { HeaderActionGroup, HeaderActionItem } from './headerOverflow'
 
@@ -74,6 +75,8 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
   const hasHover = useHasHover()
   const containerRef = useRef<HTMLDivElement>(null)
   const menu = useAnchoredMenu(isOpen && hasHover)
+  // Responsive menu rows can be hidden; opening focus must skip them too.
+  useFocusTrap(menu.menuRef, { active: isOpen && hasHover, includeShadowRoots: true })
 
   useClickOutside(containerRef, () => setIsOpen(false), isOpen && hasHover)
 
@@ -96,11 +99,17 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
     else submenuTriggerRef.current?.focus({ preventScroll: true })
   }, [isOpen, hasHover, inSub, menuView])
 
+  const preserveActivation = (event: KeyboardEvent) => {
+    // Space on a menu button must not move focus to the composer before activation.
+    if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+  }
+
   if (entries.length === 0) return null
 
   const trigger = (
     <button
       ref={menu.triggerRef}
+      data-header-overflow-trigger
       type="button"
       onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setIsOpen((v) => !v) }}
       aria-label={ariaLabel}
@@ -115,7 +124,7 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
   // --- Hover / fine pointer: anchored dropdown ---------------------------------
   if (hasHover) {
     return (
-      <div className="relative" ref={containerRef}>
+      <div className="relative" ref={containerRef} onKeyDown={preserveActivation}>
         {trigger}
         {isOpen && (
           <div
@@ -174,7 +183,7 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
 
   // --- Touch: anchored menu with one level of submenus --------------------
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative" ref={containerRef} onKeyDown={preserveActivation}>
       {trigger}
       <TouchMenu anchor={menu.triggerRef.current} open={isOpen} onClose={close}
         title={inSub ? activeSubmenu.group.title : ariaLabel} ariaLabel={ariaLabel}

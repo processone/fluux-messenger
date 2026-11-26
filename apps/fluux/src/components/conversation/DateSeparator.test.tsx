@@ -46,9 +46,23 @@ describe('DateSeparator', () => {
 
     const pill = screen.getByRole('button', { name: 'chat.jumpToDate.fromPill' })
     expect(pill.tagName).toBe('BUTTON')
+    expect(pill).toHaveAttribute('aria-haspopup', 'dialog')
+    expect(pill.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     expect(pill).toHaveTextContent('Formatted: 2024-01-15')
     fireEvent.click(pill)
     expect(onSelect).toHaveBeenCalledWith('2024-01-15')
+    expect(pill).toHaveFocus()
+  })
+
+  // Native activation must not become the timeline's message-selection shortcut.
+  it.each(['Enter', ' '])('keeps %s activation inside the day pill', (key) => {
+    const timelineKey = vi.fn()
+    render(<div onKeyDown={timelineKey}><DateSeparator date="2024-01-15" onSelect={() => {}} /></div>)
+    const pill = screen.getByRole('button', { name: 'chat.jumpToDate.fromPill' })
+    fireEvent.keyDown(pill, { key })
+    expect(timelineKey).not.toHaveBeenCalled()
+    fireEvent.keyDown(pill, { key: 'Escape' })
+    expect(timelineKey).toHaveBeenCalledOnce()
   })
 
   it('stays plain text without onSelect', () => {

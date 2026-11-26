@@ -25,6 +25,8 @@ interface ModalOverlayProps {
   /** Dismiss the modal. Backdrop click and Escape route through the exit
    *  transition, then invoke this. */
   onClose: () => void
+  /** Cancel in-flight work before the dismiss animation starts. */
+  onDismissRequest?: () => void
   /** Vertical placement: 'center' (default) or 'top' (drops in from ~15vh,
    *  used by the command palette). */
   align?: 'center' | 'top'
@@ -37,6 +39,8 @@ interface ModalOverlayProps {
   /** Focus target restored when the OS window refocuses; defaults to the panel.
    *  See useRestoreFocus for the rationale. */
   focusRef?: RefObject<HTMLElement | null>
+  /** Replaces opener restoration, including when a foreground modal loses its opener in this panel. */
+  restoreFocus?: (opener: HTMLElement | null) => void
   /** Where focus lands when the modal opens (ignored when `focusRef` is set):
    *  - `'auto'` (default): the first focusable child, so form modals focus their
    *    input. Read-only modals whose first focusable is a content control (a
@@ -91,11 +95,13 @@ const ALIGN_CLASS = {
  */
 export function ModalOverlay({
   onClose,
+  onDismissRequest,
   align = 'center',
   width = 'max-w-sm',
   panelClassName,
   panelInClass,
   focusRef,
+  restoreFocus,
   initialFocus = 'auto',
   panelProps,
   onPanelKeyDown,
@@ -114,13 +120,17 @@ export function ModalOverlay({
   // The transition-aware dismiss. Always closes when invoked (e.g. an explicit
   // Cancel / X button via the children render-prop) — `dismissable` gates only
   // the implicit backdrop-click and Escape affordances below, not this.
-  const close = useCallback(() => requestClose(onClose), [requestClose, onClose])
+  const close = useCallback(() => {
+    onDismissRequest?.()
+    requestClose(onClose)
+  }, [requestClose, onClose, onDismissRequest])
 
-  // Trap Tab focus inside the panel and return focus to the opener on close.
+  // Trap Tab inside the panel; restore the opener by default, or let the custom callback decide.
   // `focusRef` wins; otherwise `initialFocus='panel'` lands on the container so a
   // display-only modal never rings a content control on open.
   useFocusTrap(panelRef, {
     initialFocusRef: focusRef ?? (initialFocus === 'panel' ? panelRef : undefined),
+    restoreFocus,
   })
   // Keep keyboard focus inside the modal across OS window blur/refocus.
   useRestoreFocus(panelRef, focusRef)

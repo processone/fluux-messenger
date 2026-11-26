@@ -48,6 +48,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { fabAnimationClass } from './fabAnimationClass'
 import { FloatingDateHeader } from './FloatingDateHeader'
+import { refreshDatePillsCoveredByFind } from './datePillFocus'
 import { JumpToLastReadPill } from './JumpToLastReadPill'
 import { getTopVisibleDate } from './getTopVisibleDate'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
@@ -874,6 +875,11 @@ export function MessageList<T extends BaseMessage>({
       scrollToBottom()
     }
   }
+
+  // Committed row offsets can move a date pill without resizing it or the spacer.
+  useLayoutEffect(() => {
+    if (virtualized) refreshDatePillsCoveredByFind(scrollContainerRef.current)
+  })
 
   return (
     <ForwardMessageProvider conversationId={conversationId}>
