@@ -1,7 +1,7 @@
 name: Branch check
 
 # The light check for a task branch: build, typecheck, lint and unit tests,
-# plus Rust only when Rust changed. The browser suites run later, on the
+# plus Rust when native inputs changed. The browser suites run later, on the
 # batch pull request (ci.yml and platform-native.yml).
 #
 # Only inf/** branches match. Batch branches (infinitary-batch/**) must not:
@@ -41,6 +41,7 @@ jobs:
         id: classify
         shell: bash
         run: |
+          scripts/ci-changed-scopes.test.sh
           git fetch --no-tags origin main:refs/remotes/origin/main
           git diff --no-renames --name-only origin/main...HEAD > changed-files.txt
           echo "Changed files ($(wc -l < changed-files.txt)):"

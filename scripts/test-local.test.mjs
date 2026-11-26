@@ -95,6 +95,20 @@ test('real accessibility change selects app imports, changed tests, languages an
   assert.ok(wording.args.includes('--test-name-pattern'))
 })
 
+// Rust embeds these SDK constants through build.rs, so deletion and rename
+// endpoints need the native consumer as well as the existing SDK consumers.
+test('SDK timeout source selects the Rust build-script consumer', () => {
+  const path = 'packages/fluux-sdk/src/core/modules/connectionTimeouts.ts'
+  for (const status of ['M', 'D', 'R']) {
+    const plan = createPlan([{ path, status }])
+    const cargo = plan.steps.filter(step => step.command === 'cargo')
+    assert.deepEqual(cargo.map(step => step.args), [
+      ['test', '--locked', '--manifest-path', 'apps/fluux/src-tauri/Cargo.toml'],
+    ])
+    for (const id of ['full:sdk', 'full:app', 'test:platform']) assert.ok(ids(plan).includes(id))
+  }
+})
+
 test('real photo change keeps native suites and configuration/permission fallback', () => {
   const plan = planFor(photos)
   for (const id of ['test:ios-photos', 'test:ios-share', 'test:ios-extensions', 'test:ios-project', 'test:ios-generated-files', 'test:platform', 'full:app', 'full:sdk', 'check:tls-build']) {

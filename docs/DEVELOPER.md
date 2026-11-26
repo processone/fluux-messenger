@@ -112,6 +112,7 @@ script `scripts/test-affected.sh` uses this same implementation, not another rul
 | Ordinary SDK TypeScript and examples | Fresh SDK build; related SDK **and app** tests using absolute source paths |
 | SDK entry points, shared core/stores/cache, authentication, connection, E2EE | Full SDK + app; platform and compiled Node/package consumer checks |
 | Locale JSON | Language tests and the existing native wording-generation contract |
+| SDK `src/core/modules/connectionTimeouts.ts` | SDK/app and compiled consumers as above, plus the application Cargo suite: `build.rs` reads these constants |
 | Rust application | Whole application crate, locked dependencies; platform contracts |
 | macOS widget sources/fixtures | Unsigned `macos-widgets.test.mjs`, widgets plugin and platform contracts; signed gallery/container/notarization proof remains separate ([guide](MACOS_WIDGET.md)) |
 | macOS communication sources/fixtures | Unsigned `macos-communication.test.mjs`, `macos-communication` native crate and platform contracts |
@@ -311,6 +312,38 @@ runtime keeps its default behavior.
 The disposable lab app that exercises the recovery against a real window is
 documented in
 [`scripts/lab/startup-recovery`](../scripts/lab/startup-recovery/README.md).
+
+### Build routing and task-local native reuse
+
+Start with `npm run test:local -- --list --base origin/main` and run the selected
+checks rather than building the native shell for every edit. Ordinary web tests,
+type checks and `npm run build` do not require a Tauri build. A packaged Tauri
+build still needs Cargo even if only frontend assets changed; do not skip its
+native build based solely on whether a `.rs` file changed. Unknown paths and
+rename/deletion endpoints retain conservative selection.
+
+Run web, browser and Linux checks on a Linux worker first; Windows checks
+require a Windows environment. Reserve Mac workers for macOS/iOS-only proof
+and focused native checks. Do not treat missing Mac or
+device prerequisites as a pass or silently drop selected checks.
+
+Within one task, build a native variant once and point compatible focused
+checks at that exact build when their existing launchers support it. Keep the
+working copy and outputs private to the task. Record the source revision,
+frontend assets, target, profile, features, configuration, toolchain and system
+SDK/flags used. Rebuild when any input changes, including SDK timeout constants
+or native fixtures. Dev/ring and production/AWS-LC, different targets and signing
+identities are not interchangeable. Keep Cargo freshness checks and execute
+every selected test; reusing a build never means reusing a test result. A launcher
+that builds for itself must retain that step unless it explicitly accepts a
+compatible prebuilt artifact. No global target directory or cross-task reuse is
+introduced here.
+
+GitHub remains the full-suite runner: the light `branch-check.yml` must pass for
+each branch, and every batch keeps the full gates. A change sent back from a
+batch must run both `ci.yml` and `platform-native.yml` by manual trigger at the
+repaired version before rejoining. Local selection and task-local build reuse
+do not replace any of those runs.
 
 ### Local Rust build caching
 
