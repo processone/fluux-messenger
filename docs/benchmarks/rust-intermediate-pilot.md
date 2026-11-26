@@ -172,7 +172,42 @@ and output-separation safeguards. Linux branch and batch checks run them without
 requiring native tools. They do not replace real Cargo comparisons. Existing
 branch, batch, platform and release gates remain unchanged in scope.
 
-No result is claimed yet. Independent review precedes live proof; reviewed timing
-and freshness evidence determines whether the candidate is kept. Other operating
-systems, packaging, production-TLS and application/device qualification are not
-implied by this unsigned desktop experiment.
+## Reviewed result
+
+The qualified unsigned Linux host experiment met the retention criteria. Keep
+this lane opt-in; this result does not enable a default or qualify another host.
+The registry was already available offline in both lanes.
+
+| Paired run | Cold elapsed time | Fresh-copy elapsed time |
+| --- | ---: | ---: |
+| 1 | 630.08 s | 50.28 s |
+| 2 | 230.01 s | 33.41 s |
+| 3 | 208.97 s | 34.68 s |
+| Median | 230.01 s | 34.68 s |
+
+The median reduction was **84.92%**, including admission and lock wait. Each
+fresh-copy build recorded 848 registry artifacts Cargo treated as fresh and
+rebuilt 33 artifacts. The separate seed and 32.36-second warm repeat do not count
+toward the threshold. Only explicit private qualification was excluded, as
+specified above; requested reuse excluded no preparation. Compared tool and SDK
+identities matched, and published executables had independent storage.
+
+Clean and private-seeded original suites each passed 482 tests with the same four
+pre-existing ignores and no filtering. Seeded tests executed a private binary
+and recorded 832 copied registry units Cargo treated as fresh. Changed-input
+suites each passed 483 tests, including a compiled-input observation. An older
+checkout built after a newer one matched its clean build's Git marker, SDK
+timeout and Tauri product name without rewriting source timestamps. Deliberate
+Rust and build-script errors failed in both lanes as intended.
+
+The comparison also demonstrated distinct feature/flag keys, kernel lock
+exclusion, idle eviction, private fallback and native failure status preservation
+through an unreadable receipt. Default 10 GiB aggregate and oversized-first
+retention checks used hard-linked snapshots of real Cargo files, never consumed
+by Cargo; they establish the logical retention policy, not a physical-disk quota.
+Other report-error permutations used command-boundary stand-ins and are not
+claimed as native runs. All disposable experiment outputs and control processes
+were removed after preserving the evidence.
+
+This result does not qualify packaging, installed-app behavior, production TLS
+runtime, macOS or mobile. Existing platform and batch gates remain required.
