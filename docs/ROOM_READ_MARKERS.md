@@ -90,8 +90,14 @@ cannot retire denial while retaining the target's old permission exception.
 The restriction defines a new ownership boundary without granting permission:
 pre-clear opt-ins and self-marker work cannot restore erased records, while
 fresh post-clear work uses the new boundary. Automatic reload cannot turn it On.
+Before refreshing a reservation, clearing checks the initiating slot, fence and
+shared permission; it never overwrites a later clear's denial before retry checks.
 Recovery and repeated clears retain denial until an account fence or shared seal
-commits. Each new clear advances either verified denial form when writable,
+commits and the preference has been removed. A refused preference deletion keeps
+its account-level denial: a shared import seal alone cannot deny a surviving
+current-format On. Full clearing installs account fences before early sealing,
+or defers sealing until all unfenced preferences have been removed, so token
+rotation cannot deactivate their only denial. Each new clear advances either verified denial form when writable,
 rejecting earlier opt-ins and self-marker work without rejecting fresh work.
 Full clearing retries the refresh after ordinary deletion and compaction free
 space, stopping after one successful advance per account across initial cleanup
@@ -122,6 +128,9 @@ protection records. Full clearing retries its shared seal after ordinary data fr
 storage, including after compacting history fences. A guarded full-clear follow-up
 uses only its unchanged known accounts; it never rescans and erases newer records.
 It cannot replace the shared seal over an account that changed ownership.
+An unreadable shared guard remains ineligible for replacement without stopping
+independent consent and watermark deletion. An unreadable account boundary is
+excluded from recovery without stopping other verified accounts' barriers.
 A refused growing save
 retains a compact revocation boundary wherever storage allows it. Uncoordinated
 recovery may change only the initiating unchanged storage boundary; it cannot
