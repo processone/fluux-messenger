@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, fireEvent, screen } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { formatMessagePreview } from '@fluux/sdk'
 import { LiveEdgeGrowthContext } from '@/components/conversation/liveEdgeGrowthContext'
 import { useWrappedCodeBlocksStore } from '@/stores/wrappedCodeBlocksStore'
+import { setPlatformForTesting } from '@/platform'
 import { extractLinks, renderStyledMessage, renderQuotePreview } from './messageStyles'
 
 describe('renderStyledMessage', () => {
@@ -1233,8 +1234,15 @@ describe('preview / renderer parity for code spans', () => {
 const wrapKey = (id: string) => ({ scope: null, id, from: null, instant: null })
 const WRAP_M1 = wrapKey('m1')
 
+function desktopViewerHost() {
+  let restore: () => void
+  beforeEach(() => { restore = setPlatformForTesting({ shell: 'desktop' }) })
+  afterEach(() => restore())
+}
+
 // Source: FLM-399 — "Wrap lines" button on every message code block.
 describe('code block wrap button', () => {
+  desktopViewerHost()
   const longLine = 'I am Adrien from ProcessOne, following up on Jérôme email. We would be glad to have process'
   const body = (n = 1) => Array.from({ length: n }, (_, i) => '```\n' + longLine + i + '\n```').join('\n')
 
@@ -1283,13 +1291,13 @@ describe('code block wrap button', () => {
     expect(writeText).toHaveBeenCalledWith(longLine + '0')
   })
 
-  it('opens the enlarged view in the block mode, with its own button', () => {
+  it('opens the desktop enlarged view in the block mode, with its own button', () => {
     render(<div>{renderStyledMessage(body(), undefined, undefined, undefined, undefined, undefined, WRAP_M1)}</div>)
     fireEvent.click(screen.getByTitle('chat.wrapLines'))
     fireEvent.click(screen.getByTitle('Expand code'))
     const modalPre = [...document.querySelectorAll('pre')].find((p) => p.className.includes('min-h-full'))!
     expect(modalPre.className).toContain('whitespace-pre-wrap')
-    // Unwrap from the enlarged view: both views follow
+    // Desktop shares the inline preference; the phone viewer keeps its own.
     fireEvent.click(screen.getAllByTitle('chat.unwrapLines')[1])
     expect(modalPre.className).not.toContain('whitespace-pre-wrap')
     expect(useWrappedCodeBlocksStore.getState().isWrapped(WRAP_M1, 0)).toBe(false)
@@ -1305,6 +1313,7 @@ describe('code block wrap button', () => {
 // Source: review FLM-404 R4 — code controls must not trigger the row's click
 // (a search preview closes and navigates away on a row click).
 describe('code block controls inside a clickable row', () => {
+  desktopViewerHost()
   beforeEach(() => useWrappedCodeBlocksStore.getState().clear())
   const renderRow = () => {
     const onRowClick = vi.fn()
@@ -1336,9 +1345,10 @@ describe('code block controls inside a clickable row', () => {
   })
 })
 
-// Source: FLM-399 spec (at the live edge the list stays there after a wrap) / review FLM-404 R5:
-// the block hands its change to the list's live-edge runner, from the block and the enlarged view.
+// Inline and desktop enlarged-view wrapping can grow the message row, so both
+// must use the list's live-edge runner. Phone viewer wrapping leaves the row alone.
 describe('code block wrap and the live edge', () => {
+  desktopViewerHost()
   beforeEach(() => useWrappedCodeBlocksStore.getState().clear())
 
   it('runs the wrap through the list runner, and the change still happens', () => {

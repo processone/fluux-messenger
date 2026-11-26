@@ -73,6 +73,13 @@ export function isIosDevice(): boolean {
   return navigator.platform === 'MacIntel' && (navigator.maxTouchPoints ?? 0) > 1
 }
 
+/** Device identity stays mobile when a phone rotates or gains a mouse; touch desktops stay desktop. */
+export function isMobileDevice(): boolean {
+  const { shell } = platform()
+  if (shell !== 'web') return shell === 'mobile'
+  return isIosDevice() || (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent ?? ''))
+}
+
 let current: PlatformCapabilities | null = null
 
 /**
