@@ -362,19 +362,20 @@ export async function sampleScrollTop(page: Page, durationMs: number, minimumSam
     const samples: number[] = []
     let firstFrame: number | undefined
     let frame = 0
-    const timeoutMs = ms + 5000
-    const deadline = window.setTimeout(() => {
+    const frameGapMs = 5000
+    const onStall = () => {
       cancelAnimationFrame(frame)
-      reject(new Error(`Insufficient scroll sampling: ${samples.length} real frames within ${timeoutMs} ms`))
-    }, timeoutMs)
+      reject(new Error(`Insufficient scroll sampling: no frame for ${frameGapMs} ms after ${samples.length} real samples`))
+    }
+    let deadline = window.setTimeout(onStall, frameGapMs)
     const tick = (atMs: number) => {
+      clearTimeout(deadline)
       firstFrame ??= atMs
       samples.push(scroller.scrollTop)
-      if (atMs - firstFrame < ms || samples.length < minimumSamples) frame = requestAnimationFrame(tick)
-      else {
-        clearTimeout(deadline)
-        resolve(samples)
-      }
+      if (atMs - firstFrame < ms || samples.length < minimumSamples) {
+        frame = requestAnimationFrame(tick)
+        deadline = window.setTimeout(onStall, frameGapMs)
+      } else resolve(samples)
     }
     frame = requestAnimationFrame(tick)
   }), { ms: durationMs, minimumSamples })

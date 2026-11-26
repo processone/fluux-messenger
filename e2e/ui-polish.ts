@@ -119,16 +119,17 @@ for (const lang of ['en', 'fr'] as const) {
         }
         await input.fill('the')
         // A new query exposes its count before the newest-match selection commits.
+        let matchCount = 0
         await expect.poll(async () => {
           const [current, total] = (await bar.locator('span').innerText()).split('/').map(Number)
-          return total > 1 && current === total
+          if (total <= 1 || current !== total) return false
+          matchCount = total
+          return true
         }).toBe(true)
-        const count = (await bar.locator('span').innerText()).split('/').map(Number)
-        expect(count[1]).toBeGreaterThan(1)
         await input.press('Enter')
-        await expect(bar.locator('span')).toHaveText(`${count[0] % count[1] + 1}/${count[1]}`)
+        await expect(bar.locator('span')).toHaveText(`1/${matchCount}`)
         await input.press('Shift+Enter')
-        await expect(bar.locator('span')).toHaveText(count.join('/'))
+        await expect(bar.locator('span')).toHaveText(`${matchCount}/${matchCount}`)
         await input.press('Escape')
         await expect(bar).toHaveCount(0)
         await page.evaluate(() => (window as any).__settingsStore.getState().setFontSize(100))
