@@ -1,4 +1,4 @@
-import { useCallback, useRef, memo, Suspense, lazy, useState, useEffect } from 'react'
+import { useCallback, useRef, memo, Suspense, lazy, useState, useEffect, useLayoutEffect } from 'react'
 import { useFloatingLayerBounds } from '@/hooks/useFloatingLayerBounds'
 import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import { useTranslation } from 'react-i18next'
@@ -134,9 +134,23 @@ export const MessageToolbar = memo(function MessageToolbar({
   const pickerDropUpRef = useRef(false)
   const heldPickerBoundsRef = useRef<{ dropUp: boolean; maxHeight: number } | null>(null)
   const heldPickerBounds = interactionHeld ? heldPickerBoundsRef.current : null
-  const moreMenuDropUpRef = useRef(false)
+  const [moreMenuDropUp, setMoreMenuDropUp] = useState(false)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
   const morePanelRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const panel = morePanelRef.current
+    const anchor = moreMenuRef.current
+    if (!showMoreMenu || !panel || !anchor) return
+    const rect = anchor.getBoundingClientRect()
+    const list = anchor.closest('[data-message-list]')?.getBoundingClientRect()
+    const above = rect.top - Math.max(0, list?.top ?? 0)
+    const below = Math.min(window.innerHeight, list?.bottom ?? window.innerHeight) - rect.bottom
+    const style = getComputedStyle(panel)
+    const height = panel.getBoundingClientRect().height + (parseFloat(style.marginTop) || parseFloat(style.marginBottom) || 0)
+    // The scrollport clips this panel before the window does. Measure wrapped labels
+    // before paint, once per opening, so held actions do not move under the pointer.
+    setMoreMenuDropUp(below < height && above > below)
+  }, [showMoreMenu])
   useFloatingLayerBounds(morePanelRef, showMoreMenu)
 
   // Close reaction picker
@@ -362,14 +376,7 @@ export const MessageToolbar = memo(function MessageToolbar({
           <button
             type="button"
             ref={moreButtonRef}
-            onClick={() => {
-              if (!showMoreMenu && moreButtonRef.current) {
-                const rect = moreButtonRef.current.getBoundingClientRect()
-                const spaceBelow = window.innerHeight - rect.bottom
-                moreMenuDropUpRef.current = spaceBelow < 100
-              }
-              setShowMoreMenu(!showMoreMenu)
-            }}
+            onClick={() => setShowMoreMenu(!showMoreMenu)}
             className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'} ${!canOpenMore ? 'opacity-50 cursor-not-allowed' : ''}`}
             aria-label={t('chat.moreOptions')}
             disabled={!canOpenMore}
@@ -380,7 +387,7 @@ export const MessageToolbar = memo(function MessageToolbar({
 
         {/* More options dropdown menu */}
         {showMoreMenu && (slots.delete || slots.copy || slots.save) && (
-          <div ref={morePanelRef} data-message-panel="more" className={`absolute end-0 ${slots.copy || slots.save ? 'min-w-[224px]' : 'min-w-[160px]'} fluux-popover rounded-lg z-30 overflow-hidden ${moreMenuDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+          <div ref={morePanelRef} data-message-panel="more" className={`absolute end-0 ${slots.copy || slots.save ? 'min-w-[224px]' : 'min-w-[160px]'} fluux-popover rounded-lg z-30 overflow-hidden ${moreMenuDropUp ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
             {slots.save && (
               <button
                 type="button"
