@@ -55,6 +55,7 @@ for (const virtualized of [true, false]) for (const latest of [true, false]) {
     const reading = await menu.evaluate(element => {
       const list = element.closest('[data-message-list]')!
       const panel = element.getBoundingClientRect()
+      const trigger = element.parentElement!.querySelector('button')!.getBoundingClientRect()
       const bounds = list.getBoundingClientRect()
       const compose = document.querySelector('.composer-card')!.getBoundingClientRect()
       const hit = (x: number, y: number, target: Element) => target.contains(document.elementFromPoint(x, y))
@@ -70,14 +71,15 @@ for (const virtualized of [true, false]) for (const latest of [true, false]) {
             bottomHit: hit(line.x + line.width / 2, line.bottom - 1, action),
           })) }
       })
-      return { up: element.classList.contains('bottom-full'), top: panel.top, bottom: panel.bottom,
+      return { triggerTop: trigger.top, triggerBottom: trigger.bottom, top: panel.top, bottom: panel.bottom,
         listTop: bounds.top, listBottom: bounds.bottom, composeTop: compose.top, actions }
     })
     await testInfo.attach('menu-geometry', { body: JSON.stringify(reading, null, 2), contentType: 'application/json' })
     await testInfo.attach('menu', { body: await page.screenshot(), contentType: 'image/png' })
-    expect(reading.up).toBe(latest)
     expect(reading.top).toBeGreaterThanOrEqual(reading.listTop - 1)
     expect(reading.bottom).toBeLessThanOrEqual(Math.min(reading.listBottom, reading.composeTop) + 1)
+    if (latest) expect(reading.bottom).toBeLessThanOrEqual(reading.triggerTop)
+    else expect(reading.top).toBeGreaterThanOrEqual(reading.triggerBottom)
     expect(reading.actions.map(action => action.label)).toEqual(['Enregistrer le message', 'Copier le lien du message'])
     for (const action of reading.actions) {
       expect(action.enabled).toBe(true)
