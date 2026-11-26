@@ -31,6 +31,12 @@ async function capture(page: Page, name: string) {
 async function findGeometry(input: Locator, singleRow = false) {
   await expect(input).toBeFocused()
   await syncEngineGeometry(input.page())
+  // Notices follow a grown bar a few frames later, and WebKit still lays them out at the old place,
+  // over the bar, after their style has changed (the reduced-motion rule keeps a short transition).
+  await expect.poll(() => input.evaluate(el => {
+    const notices = document.querySelector('[data-toast-stack]')
+    return !notices || notices.getBoundingClientRect().top >= el.closest('[data-find-on-page-bar]')!.getBoundingClientRect().bottom
+  }), 'notices are laid out below the Find bar').toBe(true)
   expect(await input.evaluate((el, singleRow) => {
     const container = el.closest('[data-find-on-page-bar]')!
     const bar = container.getBoundingClientRect()
