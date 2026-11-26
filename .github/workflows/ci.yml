@@ -179,6 +179,9 @@ jobs:
       - name: Test inspector scope selection
         run: node --test scripts/inspector/ci-scope.test.mjs
 
+      - name: Test Rust build pilot safeguards
+        run: npm run test:rust-build-pilot
+
       # The comparison every browser gate runs before it builds: tested on fixtures,
       # before `npm ci`, because it needs no dependencies.
       - name: Test the install check
