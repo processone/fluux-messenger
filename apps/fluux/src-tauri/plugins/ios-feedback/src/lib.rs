@@ -1,4 +1,5 @@
-//! Native iOS gesture feedback, app-switcher snapshot privacy in the app's light/dark theme, and
+//! Native iOS gesture feedback, app-switcher snapshot privacy in the app's light/dark theme, the
+//! web view color behind the keyboard's rounded corners (`set_appearance`'s `background`), and
 //! the hinge of a foldable iPhone reported to the page (`HingeReporter.swift`).
 #[cfg(target_os = "ios")]
 mod platform {
@@ -27,15 +28,17 @@ mod platform {
     #[derive(serde::Serialize)]
     struct Appearance {
         style: Option<AppearanceStyle>,
+        background: Option<String>,
     }
     #[tauri::command]
     async fn set_appearance<R: Runtime>(
         app: tauri::AppHandle<R>,
         style: Option<AppearanceStyle>,
+        background: Option<String>,
     ) -> Result<(), String> {
         app.state::<Feedback<R>>()
             .0
-            .run_mobile_plugin_async("setAppearance", Appearance { style })
+            .run_mobile_plugin_async("setAppearance", Appearance { style, background })
             .await
             .map_err(|e| e.to_string())
     }
