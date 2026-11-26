@@ -131,7 +131,6 @@ for (const lang of ['en', 'fr'] as const) {
         }
         await page.evaluate(id => (window as any).__toastStore.getState().removeToast(id), noticeId)
         await input.fill('the')
-        // A new query exposes its count before the newest-match selection commits.
         let matchCount = 0
         await expect.poll(async () => {
           const [current, total] = (await bar.locator('span').innerText()).split('/').map(Number)
