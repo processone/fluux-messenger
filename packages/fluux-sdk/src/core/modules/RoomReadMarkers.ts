@@ -119,16 +119,26 @@ function readConsentContinuity(account: string): { generation: string; input?: s
   } catch { /* Invalid proof cannot establish preference continuity. */ }
   return undefined
 }
-function writeConsentContinuity(account: string, generation: string, input?: string, converting = false) {
+function writeConsentContinuity(account: string, generation: string, input?: string, converting: boolean | 'complete' = false) {
   const previous = readConsentContinuity(account)
   // Ordinary input changes keep identity; erasure removes the opaque proof reference.
   const id = previous?.generation === generation && previous.id ? previous.id : generateUUID()
   const inputId = input === undefined ? undefined
     : previous?.generation === generation && previous.input === input && previous.inputId ? previous.inputId : generateUUID()
-  // Advance before preference commit without retiring the input that still authorizes untouched rooms.
-  const conversion = converting ? generateUUID() : previous?.generation === generation ? previous.conversion : undefined
+  // The pending prefix rejects views captured before preference commit while linked input still authorizes untouched rooms.
+  const retainedConversion = previous?.generation === generation ? previous.conversion : undefined
+  const conversion = converting === true ? '!' + generateUUID()
+    : converting === 'complete' && retainedConversion?.startsWith('!') ? retainedConversion.slice(1) : retainedConversion
   localStorage.setItem(storageKey(account, 'continuity'), JSON.stringify({ generation, input, inputId, id, conversion }))
   return { inputId, id }
+}
+function completeConsentConversion(account: string, generation: string) {
+  // A committed choice survives refused completion; pending observations stay blocked until a coordinated read retries it.
+  try {
+    const proof = readConsentContinuity(account)
+    if (proof?.generation === generation && proof.conversion?.startsWith('!')) writeConsentContinuity(account, generation, proof.input, 'complete')
+    return true
+  } catch { return false }
 }
 function readSavedRoomConsent(account: string): SavedConsent {
   const raw = localStorage.getItem(storageKey(account, 'consent'))
@@ -207,6 +217,7 @@ function persistRoomConsent(account: string, saved: SavedConsent, rooms: string[
   pruneLegacyPermission(account)
   if (input === undefined) writeConsentContinuity(account, generation, undefined, saved.needsMigration)
   localStorage.setItem(storageKey(account, 'consent'), roomConsentValue({ ...saved, generation }, rooms, edits, epoch))
+  completeConsentConversion(account, generation)
   const remaining = revoked.filter(room => !rooms.includes(room))
   // A revocation is lifted only after its new On exists in the permission record.
   if (remaining.length !== revoked.length) {
@@ -299,7 +310,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
             hasLocalProof = !!continuity
             localIdentity = writeConsentContinuity(other, generation, continuity?.input, true).id; hasLocalProof = true
             localStorage.setItem(storageKey(other, 'consent'), roomConsentValue({ ...saved, generation }, saved.rooms, edits))
-            if (continuity && (continuity.generation !== generation || continuity.input !== undefined)) writeConsentContinuity(other, generation)
+            writeConsentContinuity(other, generation, undefined, 'complete')
             localStorage.setItem(storageKey(other, 'migration'), consentFenceValue(edits, saved.epoch, generation, saved.revoked))
           }
         } catch {
@@ -486,6 +497,7 @@ export class RoomReadMarkers extends BaseModule {
           const inputId = writeConsentContinuity(account, generation, input, latest.needsMigration).inputId
           localStorage.setItem(storageKey(account, 'migration'), '~' + JSON.stringify([generation, compactEpoch, [...new Set([...latest.revoked, ...revoked])], retainedEdits, 1, inputId]))
           localStorage.setItem(storageKey(account, 'consent'), roomConsentValue({ ...latest, generation }, rooms, retainedEdits, compactEpoch))
+          completeConsentConversion(account, generation)
         } catch {
           if (!tryRevokeLegacy(account, latest, revoked, edits, epoch) && !rooms.length) removeConsentWithBarrier(account, compactEpoch)
         }
@@ -515,7 +527,7 @@ export class RoomReadMarkers extends BaseModule {
       return await withConsentStorage(() => {
         try {
           const saved = this.readSavedConsent(account)
-          if (!change && !saved.needsMigration) return true
+          if (!change && !saved.needsMigration) return saved.cleared || saved.raw === null || !saved.generation ? true : completeConsentConversion(account, saved.generation)
           if (change && 'room' in change && change.enabled) {
             if (!saved.needsMigration && saved.rooms.includes(change.room)) return true
             const changedAccount = opening.generation ? opening.generation !== saved.generation
@@ -579,7 +591,8 @@ export class RoomReadMarkers extends BaseModule {
   reload() {
     this.consentRevision++; this.queued.clear(); this.accounts.delete(this.account()); this.notify()
     try {
-      if (this.readSavedConsent().needsMigration) return this.migrateConsent()
+      const saved = this.readSavedConsent()
+      if (saved.needsMigration || saved.conversion?.startsWith('!')) return this.migrateConsent()
     } catch { return Promise.resolve(false) }
     return Promise.resolve(true)
   }
@@ -604,7 +617,7 @@ export class RoomReadMarkers extends BaseModule {
     if (this.account()) {
       try {
         const saved = this.readSavedConsent()
-        if (saved.needsMigration) void this.migrateConsent()
+        if (saved.needsMigration || saved.conversion?.startsWith('!')) void this.migrateConsent()
         if (!saved.needsMigration || hasConfirmedLegacyInput(saved)) consent = { enabled: saved.rooms.length > 0, rooms: saved.rooms }
       } catch { /* A read failure hides sharing without discarding durable choices. */ }
     }
@@ -1039,6 +1052,7 @@ export class RoomReadMarkers extends BaseModule {
     const account = this.account()
     try {
       const saved = this.readSavedConsent(account)
+      if (saved.conversion?.startsWith('!')) return () => false
       return () => {
         try {
           const latest = this.readSavedConsent(account)

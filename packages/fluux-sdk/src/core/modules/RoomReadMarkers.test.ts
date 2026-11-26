@@ -2092,7 +2092,7 @@ describe('RoomReadMarkers', () => {
   })
 
   it.each([false, true].flatMap(local => (['shared', 'linked'] as const).flatMap(form => (['target', 'storage', 'discovery retry'] as const).flatMap(held => [false, true].map(rewrite => [local, form, held, rewrite] as const)))))('requires a fresh confirmed view after another tab converts (local proof: %s, %s, %s, legacy rewrite: %s)', async (local, form, held, rewrite) => {
-    const { storage } = await prepareSharedLegacy(local)
+    const { storage, proofKey } = await prepareSharedLegacy(local)
     if (form === 'linked') {
       vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
         ? (name: string, value: string) => { if (name === consentKey) throw new DOMException('Preference refused', 'SecurityError'); base.setItem(name, value) }
@@ -2101,6 +2101,11 @@ describe('RoomReadMarkers', () => {
       finally { vi.stubGlobal('localStorage', storage) }
     }
     const legacy = storage.getItem(consentKey)!
+    // Finish a refused setup conversion before holding an eligible pre-conversion view.
+    if (JSON.parse(storage.getItem(proofKey) ?? 'null')?.conversion?.startsWith('!')) {
+      expect(await markers.reload()).toBe(true)
+      storage.setItem(consentKey, legacy)
+    }
     markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
     const migration = pauseNextConsentOpen()
     let release!: () => void
@@ -2140,6 +2145,11 @@ describe('RoomReadMarkers', () => {
   it.each([false, true])('keeps compact conversion durable across a legacy rewrite (local proof: %s)', async local => {
     const { storage, proofKey } = await prepareSharedLegacy(local, [roomJid])
     const legacy = storage.getItem(consentKey)!
+    // Finish a refused setup conversion before holding an eligible pre-conversion view.
+    if (JSON.parse(storage.getItem(proofKey) ?? 'null')?.conversion?.startsWith('!')) {
+      expect(await markers.reload()).toBe(true)
+      storage.setItem(consentKey, legacy)
+    }
     markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
     const migration = pauseNextConsentOpen()
     let release!: () => void
@@ -2167,6 +2177,126 @@ describe('RoomReadMarkers', () => {
       await markers.viewed(roomJid, rows[1])
       expect(send).toHaveBeenCalledTimes(2)
     } finally { vi.stubGlobal('localStorage', storage); release(); migration.release(); await viewed; await markers.reload(); peer.cancelPending() }
+  })
+
+  it.each([false, true].flatMap(local => (['shared', 'linked'] as const).flatMap(form => (['normal', 'compact', 'scoped', 'refused completion', 'refused scoped cleanup'] as const).map(writer => [local, form, writer] as const))))('rejects views captured between conversion reservation and preference commit (local proof: %s, %s, %s)', async (local, form, writer) => {
+    // The approved fresh-view rule includes observations captured inside the conversion, not just before it.
+    const { storage, proofKey } = await prepareSharedLegacy(local)
+    if (form === 'linked') {
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === consentKey) throw new DOMException('Preference refused', 'SecurityError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      try { expect(await markers.reload()).toBe(false) }
+      finally { vi.stubGlobal('localStorage', storage) }
+    }
+    const legacy = storage.getItem(consentKey)!
+    const previous = JSON.parse(storage.getItem(proofKey) ?? 'null')?.conversion
+    markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+    let held: ReturnType<typeof pauseNextConsentOpen> | undefined
+    let viewed: Promise<void> | undefined
+    let captured = false
+    let refuseFirst = writer === 'compact'
+    let reserved: string | undefined
+    let committed: string | undefined
+    const peer = new RoomReadMarkers(dependencies, () => focused)
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => {
+        if (name === proofKey && refuseFirst) { refuseFirst = false; throw new DOMException('First write refused', 'SecurityError') }
+        if (name === proofKey && captured && ((writer === 'refused completion' && JSON.parse(value).conversion !== reserved) || (writer === 'refused scoped cleanup' && JSON.parse(value).input === undefined))) throw new DOMException('Completion refused', 'SecurityError')
+        if (name === consentKey && !captured && JSON.parse(base.getItem(proofKey) ?? 'null')?.conversion !== previous && base.getItem(consentKey) === legacy) {
+          captured = true
+          reserved = JSON.parse(base.getItem(proofKey)!).conversion
+          held = pauseNextConsentOpen()
+          markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+          viewed = markers.viewed(roomJid, rows[1])
+        }
+        base.setItem(name, value)
+        if (name === consentKey && captured && committed === undefined) {
+          committed = base.getItem(consentKey)!
+          base.setItem(consentKey, legacy)
+        }
+      }
+      : Reflect.get(base, key, base) }))
+    try {
+      if (writer === 'scoped' || writer === 'refused scoped cleanup') expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(writer === 'scoped')
+      else if (writer === 'compact') expect(await peer.setRoomEnabled(replayFixture.room, false)).toBe(false)
+      else expect(await peer.reload()).toBe(true)
+      expect(captured).toBe(true)
+      expect(committed).toBeDefined()
+      expect(JSON.parse(committed!).version).toBe(3)
+      await viewed
+      expect(send).toHaveBeenCalledTimes(1)
+      vi.stubGlobal('localStorage', storage)
+      if (writer === 'scoped' || (writer === 'refused scoped cleanup' && form === 'shared')) storage.setItem(consentKey, committed!)
+      held?.release()
+      expect(await markers.reload()).toBe(true)
+      await markers.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { vi.stubGlobal('localStorage', storage); held?.release(); await viewed; await markers.reload(); peer.cancelPending() }
+  })
+
+  it.each([false, true].flatMap(local => (['normal', 'compact', 'scoped'] as const).map(writer => [local, writer] as const)))('admits a fresh view after committed conversion without another proof write (local proof: %s, %s)', async (local, writer) => {
+    // A pending phase must end at commit, not make ordinary sharing depend on a later migration.
+    const { storage, proofKey } = await prepareSharedLegacy(local)
+    const peer = new RoomReadMarkers(dependencies, () => focused)
+    let refuseFirst = writer === 'compact'
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === proofKey && refuseFirst) { refuseFirst = false; throw new DOMException('First write refused', 'SecurityError') } base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    try {
+      if (writer === 'scoped') expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(true)
+      else if (writer === 'compact') expect(await peer.setRoomEnabled(replayFixture.room, false)).toBe(false)
+      else expect(await peer.reload()).toBe(true)
+      vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+        ? (name: string, value: string) => { if (name === proofKey) throw new DOMException('Further proof writes refused', 'SecurityError'); base.setItem(name, value) }
+        : Reflect.get(base, key, base) }))
+      markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await markers.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { vi.stubGlobal('localStorage', storage); await markers.reload(); peer.cancelPending() }
+  })
+
+  it.each([false, true].flatMap(local => [false, true].map(erased => [local, erased] as const)))('retries refused completion without rewriting confirmed choices or recreating erased proof (local proof: %s, erased: %s)', async (local, erased) => {
+    // Refused completion cannot authorize a view or undo a later erasure; successful retry preserves the committed choice.
+    const { storage, proofKey } = await prepareSharedLegacy(local)
+    const peer = new RoomReadMarkers(dependencies, () => focused)
+    let reserved: string | undefined
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => {
+        if (name === proofKey) {
+          const token = JSON.parse(value).conversion as string | undefined
+          if (token?.startsWith('!')) reserved = token
+          else if (reserved) throw new DOMException('Completion refused', 'SecurityError')
+        }
+        base.setItem(name, value)
+      }
+      : Reflect.get(base, key, base) }))
+    try {
+      expect(await peer.reload()).toBe(true)
+      const committed = storage.getItem(consentKey)
+      const proof = JSON.parse(storage.getItem(proofKey)!)
+      markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await markers.viewed(roomJid, rows[1])
+      expect(await markers.reload()).toBe(false)
+      expect(send).toHaveBeenCalledTimes(1)
+      vi.stubGlobal('localStorage', storage)
+      if (erased) expect(await clearRoomReadMarkersLocalData(jid)).toBe(true)
+      expect(await markers.reload()).toBe(true)
+      if (erased) {
+        expect(storage.getItem(consentKey)).toBeNull()
+        expect(storage.getItem(proofKey)).toBeNull()
+        expect(markers.isEnabledFor(roomJid)).toBe(false)
+      } else {
+        expect(storage.getItem(consentKey)).toBe(committed)
+        const completed = JSON.parse(storage.getItem(proofKey)!)
+        expect(completed).toEqual({ ...proof, conversion: expect.any(String) })
+        expect(completed.conversion).not.toBe(proof.conversion)
+        expect(markers.isEnabledFor(replayFixture.room)).toBe(true)
+      }
+      markers.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await markers.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(erased ? 1 : 2)
+    } finally { vi.stubGlobal('localStorage', storage); await markers.reload(); peer.cancelPending() }
   })
 
   it.each([false, true].flatMap(local => (['normal', 'scoped'] as const).map(writer => [local, writer] as const)))('does not commit conversion when its durable boundary cannot be saved (local proof: %s, %s)', async (local, writer) => {
@@ -2210,7 +2340,7 @@ describe('RoomReadMarkers', () => {
       const converted = JSON.parse(storage.getItem(proofKey)!).conversion
       expect(converted).toEqual(expect.any(String))
       expect(converted).not.toBe(before)
-      expect(writes).toEqual(state === 'linked' ? [proofKey, consentKey, proofKey, migrationKey] : [proofKey, consentKey, migrationKey])
+      expect(writes).toEqual([proofKey, consentKey, proofKey, migrationKey])
       if (state === 'linked') expect(inputAtCommit).toEqual([legacy])
       expect(markers.isEnabledFor(replayFixture.room)).toBe(true)
       expect(markers.isEnabledFor(roomJid)).toBe(state !== 'linked')

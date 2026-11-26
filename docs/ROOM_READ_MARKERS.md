@@ -91,9 +91,14 @@ new On writes also preserve the existing confirmed current-format record.
 Focused observations retain their conversion boundary through discovery and
 dispatch; another tab’s conversion requires a fresh observation even when
 account identity and effective choices do not change. The erasable continuity
-record advances a conversion token before preference commit without retiring
-linked input; ordinary writes retain it, so an exact older preference rewrite
-cannot restore a pre-conversion observation.
+record reserves a pending conversion token before preference commit without
+retiring linked input, then completes it after the preference is committed.
+Observations captured while the token is pending cannot publish, even after
+an exact older preference rewrite. Refused completion leaves publication
+blocked; coordinated reads retry completion only for a confirmed current
+preference. Ordinary writes retain the completed boundary. Scoped conversion
+completes the token with linked-input cleanup; refusal leaves it pending,
+without discarding committed independent choices.
 Already-linked inputs need no duplicate exception in the shared clear guard.
 Pure migration never publishes from its first write.
 Refusal of a final On lift leaves its revocation in place without deleting other
