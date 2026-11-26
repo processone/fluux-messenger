@@ -132,10 +132,13 @@ whose conversion was refused; a target-only entry grants no permission. An open
 profile still admits unclassified accounts without exceptions, never a mismatched
 exception or erased target. Refused conversion retains an existing exception even
 when a different legacy room list is present; unconfirmed On is not
-witnessed over the surviving choice. A recognizable Off still acquires its
-exact-input restriction so older On cannot replace it. Its denial and ordering still apply
+witnessed over the surviving choice. Ordinary reload and new On likewise defer
+before any write or failed-save cleanup could retire that shared authority.
+A recognizable Off still acquires its exact-input restriction so older On cannot replace it. Its denial and ordering still apply
 without granting that different input permission. Permission-bearing exceptions
 retire only after conversion or a choice safely replaces their protection.
+Scoped cleanup retains unscanned peer entries even when their preference is
+absent during another clear; only verified replacement permits retirement.
 Scoped clearing replaces the target's exception with denial even if preference
 removal failed, while still reporting incomplete erasure. Denial-only entries need
 not be pruned before a confirmed fence-backed local On can save. Unknown

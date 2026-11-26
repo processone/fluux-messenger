@@ -90,6 +90,16 @@ interface SavedConsent {
   conversion?: string
   restricted?: boolean
 }
+function hasUnconfirmedSharedInput(saved: SavedConsent): saved is SavedConsent & { sharedPermission: LegacyPermission } {
+  // Known erasure already supersedes shared authority; unrecognized input cannot.
+  if (saved.restricted || !saved.sharedPermission?.choice || saved.sharedPermission.choice === saved.legacyChoice) return false
+  try {
+    const candidate = JSON.parse(saved.raw ?? 'null') as { version?: unknown; enabled?: unknown; rooms?: unknown } | null
+    const off = candidate?.version === undefined && candidate?.enabled === false
+      || (candidate?.version === 2 || candidate?.version === undefined && candidate?.enabled === true) && Array.isArray(candidate?.rooms) && candidate.rooms.length === 0
+    return !off
+  } catch { return true }
+}
 function hasConfirmedLegacyInput(saved: SavedConsent | undefined) {
   return !!saved?.legacyChoice && (saved.witnessedInput || saved.linkedInput || !!saved.revoked.length || saved.sharedPermission?.choice === saved.legacyChoice)
 }
@@ -416,7 +426,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       let preserved = true
       const guard = readClearGuard()
       // Target-only denial preserves unrelated slots, including ones installed after enumeration.
-      const legacy: Record<string, LegacyPermission> = Object.fromEntries(Object.entries(guard.legacy).filter(([, permission]) => permission.choice === ''))
+      const legacy: Record<string, LegacyPermission> = { ...guard.legacy }
       legacy[scoped!] = { choice: '', generation: generateUUID() }
       // Advance the target before unrelated reads can defer conversion, preserving every peer entry.
       writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy: { ...guard.legacy, [scoped!]: legacy[scoped!] } }))
@@ -457,16 +467,10 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           saved = classified.get(other) ?? readSavedRoomConsent(other)
           localIdentity = saved.localIdentity
           if (saved.needsMigration) {
-            if (saved.sharedPermission?.choice && saved.sharedPermission.choice !== saved.legacyChoice) {
-              // A restrictive Off still needs its input barrier; unconfirmed On cannot replace the surviving choice.
-              const candidate = JSON.parse(saved.raw ?? 'null') as { version?: unknown; enabled?: unknown; rooms?: unknown } | null
-              const off = candidate?.version === undefined && candidate?.enabled === false
-                || (candidate?.version === 2 || candidate?.version === undefined && candidate?.enabled === true) && Array.isArray(candidate?.rooms) && candidate.rooms.length === 0
-              if (!off) {
-                legacy[other] = saved.sharedPermission
-                preserved = false
-                continue
-              }
+            if (hasUnconfirmedSharedInput(saved)) {
+              legacy[other] = saved.sharedPermission
+              preserved = false
+              continue
             }
             if (saved.linkedInput && saved.sharedPermission) {
               // Shared-only protection must reach the linked fence before either protector can retire.
@@ -490,6 +494,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
               }
               writeConsentContinuity(other, generation, undefined, 'complete')
             }
+            if (guard.legacy[other]?.choice) delete legacy[other]
           }
         } catch {
           preserved = false
@@ -516,7 +521,8 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
             && saved.revoked.every(room => replacement.revoked?.includes(room))
             && Object.entries(saved.edits).every(([room, edit]) => replacement.edits?.[room] === edit)
           // A linked input alone cannot replace shared-only Off or its ordering revision.
-          if (permission && !mirrored) {
+          if (mirrored && permission?.choice) delete legacy[other]
+          else if (permission && !mirrored) {
             legacy[other] = permission.choice === saved.legacyChoice && (!permission.local || permission.local === saved.localIdentity)
               ? { ...permission, generation: localIdentity ? undefined : permission.generation, local: localIdentity ?? permission.local }
               : permission
@@ -805,6 +811,8 @@ export class RoomReadMarkers extends BaseModule {
       return await withConsentStorage(() => {
         try {
           const saved = this.readSavedConsent(account)
+          // No unlinked write or failed-save cleanup may retire another room’s shared authority.
+          if (!optingOut && saved.needsMigration && hasUnconfirmedSharedInput(saved)) return false
           if (!change && !saved.needsMigration) return saved.cleared || saved.raw === null || !saved.generation ? true : completeConsentConversion(account, saved.generation)
           if (change && 'room' in change && change.enabled) {
             if (!saved.needsMigration && saved.rooms.includes(change.room)) return true
