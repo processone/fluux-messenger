@@ -1,0 +1,19 @@
+{
+  "format": 2,
+  "features": "",
+  "target": "x86_64-unknown-linux-gnu",
+  "profile": "dev",
+  "cargo": "cargo 1.100.0 (3acc79c0c 2026-11-05)\nrelease: 1.100.0\ncommit-hash: 3acc79c0c841844675bc53a605922dbfc441e750\ncommit-date: 2026-11-05\nhost: x86_64-unknown-linux-gnu\nlibgit2: 1.9.6 (sys:0.21.0 vendored)\nlibcurl: 8.21.0-DEV (sys:0.4.90+curl-8.21.0 vendored ssl:OpenSSL/3.6.3)\nssl: OpenSSL 3.6.3 9 Jun 2026\nos: Ubuntu 26.4.0 (resolute) [64-bit]",
+  "rustc": "rustc 1.100.0 (0ef1bc386 2026-11-09)\nbinary: rustc\ncommit-hash: 0ef1bc386059596dada8fb65b50425aab2ea637a\ncommit-date: 2026-11-09\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0\nLLVM version: 23.1.5",
+  "tools": {
+    "rustc": "5073422953727c9427a76b7fce03aa9404da46315e5a1e4965389512a41e8db0",
+    "cargo": "84d55d77232a921da96bcf2e1f78532ef5c5221803aae4448d9e220d48ebd808",
+    "cc": "b5f1b773a7c733738352000c92a077dc5852a1a2fc6d836b1e411be1e9ec5f88",
+    "ld": "97f48d93b8b076a92d2809ec29dcb17f0f37c8827358f832255e2ed22fef6075"
+  },
+  "sdk": {
+    "gtkHeader": "cb6a4f259123d2766790876cdf230aa12b36ba91f46a3b7ac7f8510e69792296",
+    "webkitLibrary": "07bb59117eeb892e03476c7139aed275e5816b8c2637acef03d352d130b6f691"
+  },
+  "buildEnv": {}
+}
