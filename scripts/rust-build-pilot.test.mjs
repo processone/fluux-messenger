@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, copyFileSync, chmodSync, existsSync, linkSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync, statSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, copyFileSync, chmodSync, existsSync, linkSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync, statSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { test } from 'node:test'
-import { CAP, cargoArguments, compatibility, IDLE_MS, launch, managedCache, prune, publishIndependentExecutable, retainRegistryOnly, seedDependencies, freshSeedHits, qualifyEnvironment, cargoSettings, publishReport, finishBuild, workerQualification } from './rust-build-pilot.mjs'
+import { CAP, NAMESPACE, cargoArguments, compatibility, IDLE_MS, launch, managedCache, prune, publishIndependentExecutable, retainRegistryOnly, seedDependencies, freshSeedHits, qualifyEnvironment, cargoSettings, publishReport, finishBuild, workerQualification, privateDirectory } from './rust-build-pilot.mjs'
 
 const recorded = JSON.parse(readFileSync(new URL('./fixtures/rust-build-pilot-tools.json', import.meta.url), 'utf8'))
 const nativeFs = { skip: process.platform === 'win32' }
@@ -141,6 +141,27 @@ test('nested output redirects stop both lanes before the launcher', nativeFs, ()
     rmSync(target, { recursive: true })
   }
 }))
+
+// Source: private outputs/cache must stay untouched through rejected aliases, even with missing descendants.
+for (const [kind, prepare] of [['output', privateDirectory], ['cache', managedCache]]) {
+  test(`missing ${kind} descendants reject an existing alias without creating directories`, nativeFs, () => withCache((cache, parent) => {
+    const outside = join(parent, 'outside')
+    mkdirSync(outside, { mode: 0o700 })
+    copyFileSync('apps/fluux/src-tauri/Cargo.lock', join(outside, 'Cargo.lock'))
+    const original = readFileSync(join(outside, 'Cargo.lock'))
+    const alias = join(parent, 'alias')
+    symlinkSync(outside, alias, 'dir')
+    for (const suffix of ['missing', 'missing/nested']) {
+      assert.throws(() => prepare(join(alias, suffix)), /must not redirect/)
+      assert.deepEqual(readdirSync(outside), ['Cargo.lock'])
+      assert.deepEqual(readFileSync(join(outside, 'Cargo.lock')), original)
+    }
+    const valid = join(parent, `${kind}-valid`, 'nested')
+    prepare(valid)
+    assert.equal(statSync(valid).mode & 0o777, 0o700)
+    if (kind === 'cache') assert.equal(existsSync(join(valid, NAMESPACE, 'owner')), true)
+  }))
+}
 
 // Source: final executables must have independent storage before shared access ends.
 test('publishing replaces a cache hard link with an independent executable', nativeFs, () => withCache((cache, parent) => {

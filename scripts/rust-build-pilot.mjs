@@ -24,8 +24,12 @@ function unredirected(path) {
   if (realpathSync(path) !== resolve(path) || lstatSync(path).isSymbolicLink()) throw new Error('Pilot paths must not redirect')
 }
 
-function privateDirectory(path) {
+export function privateDirectory(path) {
   if (!path || !isAbsolute(path)) throw new Error('Use an absolute private directory')
+  // Validate the existing prefix before mkdir can follow an alias into missing descendants.
+  let prefix = path
+  while (!lstatSync(prefix, { throwIfNoEntry: false })) prefix = dirname(prefix)
+  unredirected(prefix)
   mkdirSync(path, { recursive: true, mode: 0o700 })
   unredirected(path)
   const info = lstatSync(path)
