@@ -125,7 +125,6 @@ DirectionalHistoryWindowCoordinator.observeWindow a@example.test
 PositioningController.isSavedPositionPending a@example.test
 PositioningController.savedPositionStatus a@example.test
 PositioningController.isDirectionalHistoryPending a@example.test
-PositioningController.reconcileInteractionHold a@example.test
 PositioningController.hasInteractionHold
 PositioningController.reconcileLiveEdge a@example.test
 PositioningController.isInputHeld a@example.test
@@ -283,7 +282,6 @@ PositioningController.refreshLiveEdge a@example.test
 PositioningController.isSavedPositionPending a@example.test
 PositioningController.savedPositionStatus a@example.test
 PositioningController.isDirectionalHistoryPending a@example.test
-PositioningController.reconcileInteractionHold a@example.test
 PositioningController.hasInteractionHold
 PositioningController.reconcileLiveEdge a@example.test
 PositioningController.isInputHeld a@example.test
@@ -359,13 +357,11 @@ PositioningController.refreshLiveEdge a@example.test
 PositioningController.isSavedPositionPending a@example.test
 PositioningController.savedPositionStatus a@example.test
 PositioningController.isDirectionalHistoryPending a@example.test
-PositioningController.reconcileInteractionHold a@example.test
 PositioningController.hasInteractionHold
 PositioningController.snapshot
 ViewportSession.snapshotFor a@example.test
 ViewportSession.isCurrent a@example.test
 PositioningController.snapshot
-PositioningController.reconcileInteractionHold a@example.test
 PositioningController.hasInteractionHold
 PositioningController.reconcileLiveEdge a@example.test
 PositioningController.isInputHeld a@example.test
@@ -428,13 +424,11 @@ PositioningController.refreshLiveEdge a@example.test
 PositioningController.isSavedPositionPending a@example.test
 PositioningController.savedPositionStatus a@example.test
 PositioningController.isDirectionalHistoryPending a@example.test
-PositioningController.reconcileInteractionHold a@example.test
 PositioningController.hasInteractionHold
 PositioningController.snapshot
 ViewportSession.snapshotFor a@example.test
 ViewportSession.isCurrent a@example.test
 PositioningController.snapshot
-PositioningController.reconcileInteractionHold a@example.test
 PositioningController.hasInteractionHold
 PositioningController.reconcileLiveEdge a@example.test
 PositioningController.isInputHeld a@example.test
@@ -573,8 +567,7 @@ PositioningController.isSavedPositionPending a@example.test
 PositioningController.savedPositionStatus a@example.test
 PositioningController.isDirectionalHistoryPending a@example.test
 PositioningController.hasInteractionHold
-PositioningController.reconcileInteractionHold a@example.test
-PositioningController.hasInteractionHold
+  (x2)
 PositioningController.reconcileLiveEdge a@example.test
 PositioningController.isInputHeld a@example.test
 PositioningController.rearmLiveEdgeFromGeometry a@example.test
@@ -598,7 +591,6 @@ DirectionalHistoryWindowCoordinator.observeWindow a@example.test
 PositioningController.isSavedPositionPending a@example.test
 PositioningController.savedPositionStatus a@example.test
 PositioningController.isDirectionalHistoryPending a@example.test
-PositioningController.reconcileInteractionHold a@example.test
 PositioningController.hasInteractionHold
 PositioningController.reconcileLiveEdge a@example.test
 PositioningController.isInputHeld a@example.test
@@ -1424,7 +1416,6 @@ DirectionalHistoryWindowCoordinator.observeWindow e@example.test
 PositioningController.isSavedPositionPending e@example.test
 PositioningController.savedPositionStatus e@example.test
 PositioningController.isDirectionalHistoryPending e@example.test
-PositioningController.reconcileInteractionHold e@example.test
 PositioningController.hasInteractionHold
 PositioningController.reconcileLiveEdge e@example.test
 PositioningController.isInputHeld e@example.test
@@ -1517,7 +1508,6 @@ DirectionalHistoryWindowCoordinator.observeWindow e@example.test
 PositioningController.isSavedPositionPending e@example.test
 PositioningController.savedPositionStatus e@example.test
 PositioningController.isDirectionalHistoryPending e@example.test
-PositioningController.reconcileInteractionHold e@example.test
 PositioningController.hasInteractionHold
 PositioningController.reconcileLiveEdge e@example.test
 PositioningController.isInputHeld e@example.test
