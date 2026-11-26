@@ -42,8 +42,10 @@ never reuses a pending view; a fresh focused observation is required afterward.
 Scoped clearing removes target consent and watermarks before attempting to convert
 unaffected preferences. It retains a verified denial-only restriction until an
 account fence or shared seal replaces it; another scoped or full clear follows
-the same rule. An unreadable continuity record is uncertain, not absent, and
-remains until a saved replacement protects erasure. Conversion without overlapping protection stores its
+the same rule. A first clear also installs denial when its account fence cannot be
+saved, including when a retained linked proof cannot be read. An unreadable
+continuity record is uncertain, not absent, and remains until a saved replacement
+protects erasure. Conversion without overlapping protection stores its
 self-contained choice before its compatibility fence, retaining linked proof
 until that fence is saved. The erasable continuity record also binds the exact
 validated input before the preference changes. A refused fence restores the original
@@ -75,8 +77,11 @@ The reservation uses the existing proof format in a separate account slot, never
 replacing consent-bearing continuity. It binds opaque fence ordering and shared
 identity, not room names. The clear captures its metadata boundary before
 removing consent and never adopts a later fence for recovery. A committed room
-choice changes that fence and remains valid even if it arrives before the old
-late-snapshot point or immediately before or after the reservation write. An unrelated seal
+choice changes that fence and remains valid even if it arrives immediately
+after consent removal or immediately before or after the reservation write.
+Unlocked cleanup removes watermarks and continuity before consent, and a full
+sweep processes consent last. Unlocked compaction also precedes consent removal;
+only a coordinated turn may compact or retire proofs afterward. An unrelated seal
 cannot retire denial while retaining the target's old permission exception.
 The restriction defines a new ownership boundary without granting permission:
 pre-clear opt-ins and self-marker work cannot restore erased records, while
@@ -88,7 +93,9 @@ Full clearing retries the refresh after ordinary deletion and compaction free
 space, stopping after one successful advance per account. Full-clear compaction
 retires each account's restriction only after its replacement fence is saved. If reservation is refused, guarded coordinated sealing
 still runs when available; cleanup never claims that an unsaved reservation
-protected the wait. Recovery compares its exact reservation and pre-write fence,
+protected the wait. If refresh of an existing verified denial is refused,
+recovery can still obtain the available seal against that exact unchanged slot
+and original fence. Recovery compares its exact reservation and pre-write fence,
 never a later tab's proof or fence. It stops when a later seal already excludes
 the target and never deletes fresh watermarks during its retry.
 Other accounts' shared-only Off and completed clears also survive. If no safe
@@ -110,7 +117,8 @@ storage, including after compacting history fences. A refused growing save
 retains a compact revocation boundary wherever storage allows it. Uncoordinated
 recovery may change only the initiating unchanged storage boundary; it cannot
 recreate cleared records or erase newer choices. Transaction abort never replays
-destructive cleanup outside its storage turn. A failed Off instead obtains a
+destructive cleanup outside its storage turn once local mutation has begun.
+A denial before mutation can still use direct cleanup. A failed Off instead obtains a
 fresh storage turn to revoke only its still-owned choices, preserving newer
 independent opt-ins. Normal and compact recovery fences retain revocations and ordering history;
 they cannot authorize an unsaved On. Confirmed preferences remain the

@@ -110,14 +110,15 @@ function readConsentFence(raw: string | null): ConsentFence | undefined {
 function consentFenceValue(edits: Record<string, string>, epoch: string, generation: string, revoked: string[], input?: string) {
   return JSON.stringify({ version: 3, epoch, edits, generation, revoked, input })
 }
-function readConsentContinuity(account: string, kind: 'continuity' | 'restriction' = 'continuity'): { generation: string; input?: string; inputId?: string; id?: string; conversion?: string } | undefined {
+function readConsentContinuity(account: string, kind: 'continuity' | 'restriction' = 'continuity'): { generation: string; input?: string; inputId?: string; id?: string; conversion?: string; raw: string } | undefined {
   const raw = localStorage.getItem(storageKey(account, kind))
+  if (raw === null) return undefined
   try {
-    const value = JSON.parse(raw ?? 'null') as { generation?: unknown; input?: unknown; inputId?: unknown; id?: unknown; conversion?: unknown } | null
+    const value = JSON.parse(raw) as { generation?: unknown; input?: unknown; inputId?: unknown; id?: unknown; conversion?: unknown } | null
     if (typeof value?.generation === 'string' && value.generation && (value.input === undefined || typeof value.input === 'string')
       && (value.inputId === undefined || (typeof value.inputId === 'string' && !!value.inputId))
       && (value.id === undefined || (typeof value.id === 'string' && !!value.id))
-      && (value.conversion === undefined || (typeof value.conversion === 'string' && !!value.conversion))) return value as { generation: string; input?: string; inputId?: string; id?: string; conversion?: string }
+      && (value.conversion === undefined || (typeof value.conversion === 'string' && !!value.conversion))) return { ...(value as { generation: string; input?: string; inputId?: string; id?: string; conversion?: string }), raw }
   } catch { /* Invalid proof cannot establish preference continuity. */ }
   return undefined
 }
@@ -312,8 +313,10 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
   const scoped = account ? getBareJid(account) : null
   if (!allAccounts && !scoped) return true
   storageRevision++
+  let mutated = false
+  const erase = (key: string) => { localStorage.removeItem(key); mutated = true }
   const writeBarrier = (key: string, value: string) => {
-    try { localStorage.setItem(key, value); return true } catch { return false }
+    try { localStorage.setItem(key, value); mutated = true; return true } catch { return false }
   }
   const reserveRestriction = (account: string, fence: string | null, clearToken: string | null) => {
     const raw = JSON.stringify({ generation: generateUUID(), input: restrictionInput(fence, clearToken) })
@@ -333,21 +336,23 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
   const remove = (coordinated = true, retrying = false) => {
     if (!allAccounts) {
       const boundary = captureBoundary(scoped!)
-      localStorage.removeItem(storageKey(scoped!, 'consent'))
       const retainedRestriction = readEmptyConsentRestriction(scoped!)
-      let reservedRestriction = false
-      try { reservedRestriction = !!boundary && !!readClearRestriction(scoped!, boundary.fence, boundary.guard) } catch { reservedRestriction = false }
-      if (!retrying) {
-        localStorage.removeItem(storageKey(scoped!, 'watermarks'))
-        if (retainedRestriction === false) localStorage.removeItem(storageKey(scoped!, 'continuity'))
-      }
+      let reservedProof: ReturnType<typeof readClearRestriction>
+      try { reservedProof = boundary ? readClearRestriction(scoped!, boundary.fence, boundary.guard) : undefined } catch { reservedProof = undefined }
+      let reservedRestriction = !!reservedProof
       const targetSealed = writeBarrier(storageKey(scoped!, 'migration'), clearFence())
-      if (targetSealed) {
-        localStorage.removeItem(storageKey(scoped!, 'continuity'))
-        localStorage.removeItem(storageKey(scoped!, 'restriction'))
+      if (!retrying) {
+        erase(storageKey(scoped!, 'watermarks'))
+        if (retainedRestriction === false) erase(storageKey(scoped!, 'continuity'))
       }
-      if (coordinated && !retrying && !targetSealed && boundary && (retainedRestriction === true || reservedRestriction)) {
-        reserveRestriction(scoped!, boundary.fence, boundary.guard.generation)
+      if (targetSealed) {
+        erase(storageKey(scoped!, 'continuity'))
+        erase(storageKey(scoped!, 'restriction'))
+      }
+      // Consent removal ends unlocked destructive cleanup; a later save owns its new proof and fence.
+      erase(storageKey(scoped!, 'consent'))
+      if (coordinated && !retrying && !targetSealed && boundary) {
+        reservedRestriction = !!reserveRestriction(scoped!, boundary.fence, boundary.guard.generation) || reservedRestriction
       }
       // Without a storage turn, target protection must not rewrite another account's newer choice.
       if (!coordinated) {
@@ -357,7 +362,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         if (needsCoordinatedSeal) {
           // A denial-only slot cannot overwrite a choice committed while this unlocked fallback waits.
           retryFence = boundary?.fence
-          if (boundary) retryProof = reserveRestriction(scoped!, boundary.fence, boundary.guard.generation)
+          if (boundary) retryProof = reserveRestriction(scoped!, boundary.fence, boundary.guard.generation) ?? reservedProof?.raw ?? null
         }
         return false
       }
@@ -444,9 +449,9 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         }
       }
       if (!writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: generateUUID(), legacy }))) return false
-      localStorage.removeItem(storageKey(scoped!, 'migration'))
-      localStorage.removeItem(storageKey(scoped!, 'continuity'))
-      localStorage.removeItem(storageKey(scoped!, 'restriction'))
+      erase(storageKey(scoped!, 'migration'))
+      erase(storageKey(scoped!, 'continuity'))
+      erase(storageKey(scoped!, 'restriction'))
       return preserved
     }
     const keys: string[] = []
@@ -478,39 +483,48 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           const guard = readClearGuard()
           if (localStorage.getItem(storageKey(account, 'migration')) !== boundary.fence
             || (guard.generation !== boundary.guard.generation && !guard.open && !guard.legacy[account])) continue
-          if (readEmptyConsentRestriction(account) === true || readClearRestriction(account, boundary.fence, boundary.guard)) {
-            if (reserveRestriction(account, boundary.fence, boundary.guard.generation)) advancedRestrictions.add(account)
-          }
+          if (reserveRestriction(account, boundary.fence, boundary.guard.generation)) advancedRestrictions.add(account)
         } catch { continue }
       }
     }
-    if (!sealed) refreshRestrictions()
+    let compacted = false
+    const compactFences = () => {
+      for (const account of accounts) {
+        if (writeBarrier(storageKey(account, 'migration'), clearFence())) {
+          compacted = true
+          erase(storageKey(account, 'continuity'))
+          erase(storageKey(account, 'restriction'))
+        }
+      }
+    }
+    if (!sealed) {
+      refreshRestrictions()
+      if (!coordinated) compactFences()
+    }
+    // No unlocked sweep or compaction may remove proof created after its account's consent deletion.
+    const consentKeys = new Set([...accounts].map(account => storageKey(account, 'consent')))
+    keys.sort((a, b) => Number(consentKeys.has(a)) - Number(consentKeys.has(b)))
     for (const key of keys) {
       if (!sealed && (fences.has(key) || restrictions.has(key))) continue
-      localStorage.removeItem(key)
+      erase(key)
     }
     if (!sealed) {
       refreshRestrictions()
       sealed = writeBarrier(CLEAR_GENERATION_KEY, generateUUID())
     }
     if (sealed) {
-      for (const key of [...fences, ...restrictions]) localStorage.removeItem(key)
+      if (coordinated) for (const key of [...fences, ...restrictions]) erase(key)
     } else {
-      let compacted = false
-      for (const account of accounts) {
-        if (writeBarrier(storageKey(account, 'migration'), clearFence())) {
-          compacted = true
-          localStorage.removeItem(storageKey(account, 'continuity'))
-          localStorage.removeItem(storageKey(account, 'restriction'))
-        }
-      }
+      if (coordinated) compactFences()
       refreshRestrictions()
       if (!compacted || !writeBarrier(CLEAR_GENERATION_KEY, generateUUID())) return false
-      for (const key of [...fences, ...restrictions]) localStorage.removeItem(key)
+      if (coordinated) for (const key of [...fences, ...restrictions]) erase(key)
     }
     return true
   }
   try { return await withConsentStorage(remove) } catch {
+    // An abort after the callback cannot give its old destructive work a second, unlocked turn.
+    if (mutated) return false
     // A denied coordination database must not stop the caller from erasing its
     // remaining account data. Report failure even when direct removal succeeds.
     try {
