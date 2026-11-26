@@ -1889,6 +1889,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Fittex mittenti…",
+            "noSenders": "Ebda mittent ma jaqbel",
             "title": "Filtri",
             "from": "Minn",
             "anyone": "Kulħadd",

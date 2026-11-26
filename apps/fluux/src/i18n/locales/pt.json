@@ -1885,6 +1885,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Pesquisar remetentes…",
+            "noSenders": "Nenhum remetente correspondente",
             "title": "Filtros",
             "from": "De",
             "anyone": "Qualquer pessoa",

@@ -1883,6 +1883,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Absender suchen…",
+            "noSenders": "Keine passenden Absender",
             "title": "Filter",
             "from": "Von",
             "anyone": "Alle",

@@ -1885,6 +1885,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Ieškoti siuntėjų…",
+            "noSenders": "Atitinkančių siuntėjų nėra",
             "title": "Filtrai",
             "from": "Nuo",
             "anyone": "Bet kas",

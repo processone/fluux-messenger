@@ -1881,6 +1881,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Afzenders zoeken…",
+            "noSenders": "Geen overeenkomende afzenders",
             "title": "Filters",
             "from": "Van",
             "anyone": "Iedereen",

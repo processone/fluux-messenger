@@ -1887,6 +1887,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Szukaj nadawców…",
+            "noSenders": "Brak pasujących nadawców",
             "title": "Filtry",
             "from": "Od",
             "anyone": "Każdy",

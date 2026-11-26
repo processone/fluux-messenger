@@ -1881,6 +1881,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Etsi lähettäjiä…",
+            "noSenders": "Ei vastaavia lähettäjiä",
             "title": "Suodattimet",
             "from": "Lähettäjä",
             "anyone": "Kuka tahansa",

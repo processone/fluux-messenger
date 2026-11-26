@@ -1883,6 +1883,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Otsi saatjaid…",
+            "noSenders": "Sobivaid saatjaid pole",
             "title": "Filtrid",
             "from": "Saatja",
             "anyone": "Kõik",
