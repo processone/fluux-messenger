@@ -254,9 +254,25 @@ describe('SearchView filters', () => {
       const dialog = openPicker()
       fireEvent.change(dialog.getByRole('combobox', { name: 'search.panel.from' }), { target: { value: 'alice' } })
       fireEvent.blur(dialog.getByRole('combobox', { name: 'search.panel.from' }), { relatedTarget: dialog.getByLabelText('search.panel.date') })
+      expect(dialog.getByRole('listbox')).toBeInTheDocument()
       fireEvent.click(dialog.getByRole('button', { name: 'search.panel.apply' }))
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
       expect(search.picked).toEqual(['from:alice', 'from:bob', 'is:mine', 'has:link'])
+    })
+
+    it.each([
+      ['is:mine', 'search.panel.me'],
+      ['from:ME', 'search.panel.me'],
+      ['from:alice', 'alice'],
+    ])('preserves the original token %s when the same sender is chosen again', async (filter, name) => {
+      search.query = `notes ${filter} has:link`
+      render(<SearchView />)
+      const dialog = openPicker()
+      fireEvent.click(dialog.getByRole('option', { name }))
+      fireEvent.click(dialog.getByRole('button', { name: 'search.panel.apply' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(search.picked).toEqual([filter, 'has:link'])
+      expect(input()).toHaveValue('notes')
     })
 
     it('selects a highlighted shortcut with Enter without submitting and resets only when asked', async () => {
