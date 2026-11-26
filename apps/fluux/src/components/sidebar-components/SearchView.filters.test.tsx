@@ -260,6 +260,25 @@ describe('SearchView filters', () => {
       expect(search.picked).toEqual(['from:alice', 'from:bob', 'is:mine', 'has:link'])
     })
 
+    it('recognizes a differently cased direct address and preserves its original token on keyboard reselection', async () => {
+      seedSenders()
+      const filter = 'from:"JO@EXAMPLE.TEST"'
+      search.query = `notes ${filter}`
+      render(<SearchView />)
+      const dialog = openPicker()
+      const rows = within(dialog.getByRole('listbox')).getAllByRole('option')
+      expect(rows.filter(row => row.textContent?.toLowerCase().includes('jo@example.test'))).toHaveLength(1)
+      const contact = dialog.getByRole('option', { name: 'Jo Lévy · jo@example.test' })
+      expect(contact).toHaveAttribute('aria-selected', 'true')
+      const picker = dialog.getByRole('combobox', { name: 'search.panel.from' })
+      fireEvent.keyDown(picker, { key: 'ArrowUp' })
+      fireEvent.keyDown(picker, { key: 'Enter' })
+      fireEvent.click(dialog.getByRole('button', { name: 'search.panel.apply' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(search.picked).toEqual([filter])
+      expect(input()).toHaveValue('notes')
+    })
+
     it.each([
       ['is:mine', 'search.panel.me'],
       ['from:ME', 'search.panel.me'],

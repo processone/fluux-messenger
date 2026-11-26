@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { SearchSenderPicker } from './SearchSenderPicker'
+import * as sdk from '@fluux/sdk'
 
+const { translate } = vi.hoisted(() => ({ translate: (key: string) => key }))
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({ t: translate, i18n: { language: 'en' } }),
 }))
 
 const open = () => {
@@ -52,7 +54,7 @@ describe('approved sender picker review regressions', () => {
 
   it('distinguishes equal room titles, reused nicknames and shortcut collisions in rows and the closed choice', () => {
     const onChange = vi.fn()
-    const saved = 'room:team%40conference.example.test:departed-id:Camille'
+    const saved = 'room:team%40conference.example.test:CURRENT-id:Camille'
     render(<SearchSenderPicker value={saved} senders={[
       { value: 'room:team%40conference.example.test:current-id:Camille', label: 'Camille' },
       { value: 'room:help%40conference.example.test:help-id:Camille', label: 'Camille' },
@@ -84,7 +86,7 @@ describe('approved sender picker review regressions', () => {
   it('updates the existing polite announcement instead of mounting populated text', () => {
     render(<SearchSenderPicker value="" senders={[{ value: 'jo@example.test', label: 'Jo' }]} onChange={vi.fn()} />)
     const status = screen.getByRole('status')
-    expect(status).toHaveTextContent('')
+    expect(status).toBeEmptyDOMElement()
     expect(status).toHaveAttribute('aria-live', 'polite')
     const picker = open()
     fireEvent.change(picker, { target: { value: 'nobody' } })
@@ -92,7 +94,20 @@ describe('approved sender picker review regressions', () => {
     expect(status).toHaveTextContent('search.panel.noSenders')
     fireEvent.change(picker, { target: { value: 'jo' } })
     expect(screen.getByRole('status')).toBe(status)
-    expect(status).toHaveTextContent('')
+    expect(status).toBeEmptyDOMElement()
+  })
+
+  it('reuses decoded choices when typing and moving the highlight', () => {
+    const decode = vi.spyOn(sdk, 'parseRoomSender')
+    const senders = [{ value: 'room:team%40conference.example.test:camille-team:Camille', label: 'Camille · Équipe' }]
+    render(<SearchSenderPicker value="" senders={senders} onChange={vi.fn()} />)
+    expect(decode).toHaveBeenCalledTimes(2)
+    const picker = open()
+    fireEvent.change(picker, { target: { value: 'cam' } })
+    fireEvent.pointerMove(screen.getByRole('option', { name: 'Camille · Équipe' }))
+    expect(picker).toHaveAttribute('aria-activedescendant', screen.getByRole('option', { name: 'Camille · Équipe' }).id)
+    expect(decode).toHaveBeenCalledTimes(2)
+    decode.mockRestore()
   })
 
   it('requests scrolling for arrows, not pointer hover', () => {

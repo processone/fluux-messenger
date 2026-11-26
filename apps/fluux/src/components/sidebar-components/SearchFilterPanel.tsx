@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { localDayBounds, localDayValue, parseSearchFilters, type HasValue } from '@fluux/sdk'
 import { ModalShell } from '../ModalShell'
 import { TextInput } from '../ui/TextInput'
-import { filterChipLabel, type SenderOption } from './searchOperators'
+import { filterChipLabel, searchSenderKey, type SenderOption } from './searchOperators'
 import { SearchSenderPicker } from './SearchSenderPicker'
 
 interface Props {
@@ -56,7 +56,7 @@ export function SearchFilterPanel({ filters, senders, onApply, onClose }: Props)
     <form className="p-4 space-y-4 overflow-y-auto min-h-0" onSubmit={event => { event.preventDefault(); apply() }}>
       <SearchSenderPicker value={from} senders={senders}
         summary={multipleSenders && from === '__multiple' ? senderFilters.map(filter => filterChipLabel(filter, t, i18n.language)).join(' · ') : undefined}
-        onChange={value => { if (value !== from) { setFrom(value); setEdited(previous => ({ ...previous, from: true })) } }} />
+        onChange={value => { if (searchSenderKey(value) !== searchSenderKey(from)) { setFrom(value); setEdited(previous => ({ ...previous, from: true })) } }} />
       <div className="space-y-1">
         <label htmlFor="search-filter-date" className="block text-sm font-medium text-fluux-text">{t('search.panel.date')}</label>
         <select id="search-filter-date" className={fieldClass} value={date} onChange={event => { setDate(event.target.value); setEdited(previous => ({ ...previous, date: true })) }}>

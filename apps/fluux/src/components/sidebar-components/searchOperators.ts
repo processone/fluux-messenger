@@ -19,6 +19,10 @@ export interface OperatorSuggestion {
 /** Someone `from:` can name: the value typed and the name shown. */
 export interface SenderOption { value: string; label: string }
 
+export function searchSenderKey(value: string, room = parseRoomSender(value)): string {
+  return room ? value : value.toLowerCase()
+}
+
 /** The word the caret is in, when it is the last one of the query. */
 export function lastWord(query: string): string {
   const token = searchInputTokens(query).at(-1)

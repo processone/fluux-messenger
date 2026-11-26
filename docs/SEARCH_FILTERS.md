@@ -34,6 +34,14 @@ Local history is not the complete server archive. Filter-only server searches re
 
 `e2e/search-filters.ts` owns the responsive keyboard/dialog journey in the normal browser gate. Run its Chromium and WebKit projects with `--project=search-filters-chromium --project=search-filters-webkit` using `e2e/playwright.e2e.config.ts`.
 
+The empty-result announcement also needs an actual screen reader; observing status text in a browser test is not spoken-output proof. With isolated demo data:
+
+1. Enable the screen reader, open Search, type `design`, then open Filters and From.
+2. Type `nobody-matches-this-name`. Observe the localized empty-result message being spoken while input focus stays in From; do not select a row or move focus to the message.
+3. Press Escape once. Confirm the closed sender choice is unchanged and the message search still contains `design`.
+
+Keep the tested version, OS, screen reader, locale, spoken output and focus/selection observations with the run. Restore the previous screen-reader state afterward.
+
 The on-demand measurement belongs to the SDK benchmark set: run `npm run bench:search:browser -w @fluux/sdk`. Its driver starts and stops its own loopback page, runs Chromium and WebKit in disposable contexts, and writes `packages/fluux-sdk/bench/results/searchIndex.browser.json`. Set `BENCH_SEARCH_OUTPUT` to keep a chosen output file elsewhere. `-- --check` checks both browser loaders and the corpus without seeding history or taking measurements.
 
 The benchmark uses the same 50,000-message repetition of the shipped conversation corpus for both variants. The historical variant loads the actual version-5 index source from an available Git reference over the same shipped cache and identity primitives; the candidate uses the current index. `BENCH_SEARCH_BASE` selects that historical reference, defaulting to the version-5 baseline recorded in the driver. The output identifies both versions, the historical source digest and the shared-primitives version. No copied helpers, second checkout or running app server is needed. See the [benchmark method](../packages/fluux-sdk/bench/README.md#search-index-cost).

@@ -1,10 +1,10 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { parseRoomSender } from '@fluux/sdk'
 import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import { TextInput } from '../ui/TextInput'
-import type { SenderOption } from './searchOperators'
+import { searchSenderKey, type SenderOption } from './searchOperators'
 
 interface Props {
   value: string
@@ -19,10 +19,12 @@ const countLabels = (options: readonly SenderOption[]) => {
   for (const { label } of options) counts.set(label, (counts.get(label) ?? 0) + 1)
   return counts
 }
+// Fixed-width UTF-16 units preserve even malformed saved text without URI encoding errors.
+const optionId = (prefix: string, value: string) => `${prefix}-option-${value.split('').map(unit => unit.charCodeAt(0).toString(16).padStart(4, '0')).join('')}`
 const fieldClass = 'w-full min-w-0 px-3 py-2 bg-fluux-bg text-fluux-text border border-fluux-border rounded text-sm'
 
 export function SearchSenderPicker({ value, summary, senders, onChange }: Props) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const id = useId()
   const trigger = useRef<HTMLButtonElement>(null)
   const input = useRef<HTMLInputElement>(null)
@@ -30,34 +32,44 @@ export function SearchSenderPicker({ value, summary, senders, onChange }: Props)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState<string | null>(null)
-  const shortcuts = [{ value: '', label: t('search.panel.anyone') }, { value: 'me', label: t('search.panel.me') }]
-  const baseLabel = (sender: SenderOption) => {
-    const room = parseRoomSender(sender.value)
-    return sender.value !== '' && sender.value !== 'me' && !room && sender.label !== sender.value ? `${sender.label} · ${sender.value}` : sender.label
-  }
-  const saved = value && value !== 'me' && !summary && !senders.some(sender => sender.value === value)
-    ? [{ value, label: parseRoomSender(value)?.nick ?? value }] : []
-  const candidates = [...shortcuts, ...saved, ...senders].map(sender => ({ ...sender, label: baseLabel(sender) }))
-  const counts = countLabels(candidates)
-  const contextual = candidates.map(sender => {
-    const room = parseRoomSender(sender.value)
-    if (!room || counts.get(sender.label) === 1) return sender
-    const status = saved.some(item => item.value === sender.value) ? ` · ${t('common.saved')}` : ''
-    return { ...sender, label: `${sender.label} · ${room.room}${status}` }
-  })
-  const contextualCounts = countLabels(contextual)
-  const labelled = contextual.map(sender => {
-    const room = parseRoomSender(sender.value)
-    return room && (contextualCounts.get(sender.label) ?? 0) > 1
-      ? { ...sender, label: `${sender.label} · ${room.occupant || sender.value}` } : sender
-  })
+  const { labelled, selectedKey } = useMemo(() => {
+    const selectedRoom = parseRoomSender(value)
+    const selectedKey = searchSenderKey(value, selectedRoom)
+    const candidates = senders.map(sender => {
+      const room = parseRoomSender(sender.value)
+      return { ...sender, room, key: searchSenderKey(sender.value, room), saved: false }
+    })
+    if (value && value !== 'me' && !summary && !candidates.some(sender => sender.key === selectedKey)) {
+      candidates.unshift({ value, label: selectedRoom?.nick ?? value, room: selectedRoom, key: selectedKey, saved: true })
+    }
+    candidates.unshift(
+      { value: '', label: t('search.panel.anyone'), room: null, key: '', saved: false },
+      { value: 'me', label: t('search.panel.me'), room: null, key: 'me', saved: false },
+    )
+    const base = candidates.map(sender => ({
+      ...sender,
+      label: sender.value !== '' && sender.value !== 'me' && !sender.room && sender.label !== sender.value
+        ? `${sender.label} · ${sender.value}` : sender.label,
+    }))
+    const counts = countLabels(base)
+    const contextual = base.map(sender => {
+      if (!sender.room || counts.get(sender.label) === 1) return sender
+      const status = sender.saved ? ` · ${t('common.saved')}` : ''
+      return { ...sender, label: `${sender.label} · ${sender.room.room}${status}` }
+    })
+    const contextualCounts = countLabels(contextual)
+    const labelled = contextual.map(sender => {
+      const label = sender.room && (contextualCounts.get(sender.label) ?? 0) > 1
+        ? `${sender.label} · ${sender.room.occupant || sender.value}` : sender.label
+      return { ...sender, label, id: optionId(id, sender.value), matchKey: normalize(`${label} ${sender.room?.nick ?? sender.value}`) }
+    })
+    return { labelled, selectedKey }
+  }, [senders, value, summary, t, i18n.language, id])
   const needle = normalize(query.trim())
-  const matches = labelled.slice(shortcuts.length).filter(sender => normalize(`${sender.label} ${parseRoomSender(sender.value)?.nick ?? sender.value}`).includes(needle))
-  const options = [...labelled.slice(0, shortcuts.length), ...matches]
+  const matches = useMemo(() => labelled.slice(2).filter(sender => sender.matchKey.includes(needle)), [labelled, needle])
+  const options = useMemo(() => [...labelled.slice(0, 2), ...matches], [labelled, matches])
   const highlighted = options.find(sender => sender.value === active)
-  const current = summary ?? labelled.find(sender => sender.value === value)?.label ?? value
-  // Fixed-width UTF-16 units preserve even malformed saved text without URI encoding errors.
-  const optionId = (value: string) => `${id}-option-${value.split('').map(unit => unit.charCodeAt(0).toString(16).padStart(4, '0')).join('')}`
+  const current = summary ?? labelled.find(sender => sender.key === selectedKey)?.label ?? value
   const close = () => { setOpen(false); setQuery(''); setActive(null) }
   const closeAndFocus = () => { restoreFocus.current = true; close() }
   useCloseOnEscape(closeAndFocus, open)
@@ -67,18 +79,18 @@ export function SearchSenderPicker({ value, summary, senders, onChange }: Props)
   }, [open])
   const choose = (next: string) => { onChange(next); closeAndFocus() }
   const openPicker = () => { setQuery(''); setActive(null); setOpen(true) }
-  const row = (sender: SenderOption) => <div
+  const row = (sender: (typeof labelled)[number]) => <div
     key={sender.value}
-    id={optionId(sender.value)}
+    id={sender.id}
     role="option"
-    aria-selected={sender.value === value}
+    aria-selected={sender.key === selectedKey}
     onPointerMove={() => setActive(sender.value)}
     onMouseDown={event => event.preventDefault()}
     onClick={() => choose(sender.value)}
     className={`flex items-start gap-2 px-3 py-2 text-sm cursor-pointer break-words ${active === sender.value ? 'bg-fluux-brand/15 text-fluux-text' : 'text-fluux-text hover:bg-fluux-hover'}`}
   >
     <span className="min-w-0 flex-1">{sender.label}</span>
-    {sender.value === value && <Check aria-hidden="true" className="size-4 flex-shrink-0 mt-0.5" />}
+    {sender.key === selectedKey && <Check aria-hidden="true" className="size-4 flex-shrink-0 mt-0.5" />}
   </div>
   // Pointer focus changes must not move another form control before its click is activated.
   return <div className="space-y-1">
@@ -95,7 +107,7 @@ export function SearchSenderPicker({ value, summary, senders, onChange }: Props)
       <div className="relative">
         <Search aria-hidden="true" className="absolute left-3 top-2.5 size-4 text-fluux-muted" />
         <TextInput ref={input} id={`${id}-input`} role="combobox" aria-autocomplete="list" aria-expanded="true"
-          aria-controls={`${id}-list`} aria-activedescendant={highlighted ? optionId(highlighted.value) : undefined}
+          aria-controls={`${id}-list`} aria-activedescendant={highlighted ? highlighted.id : undefined}
           autoComplete="off" placeholder={t('search.panel.senderPlaceholder')} value={query} className={`${fieldClass} pl-9`}
           onChange={event => { setQuery(event.target.value); setActive(null) }}
           onKeyDown={event => {
@@ -110,7 +122,7 @@ export function SearchSenderPicker({ value, summary, senders, onChange }: Props)
               const next = index < 0 ? (event.key === 'ArrowDown' ? 0 : options.length - 1)
                 : (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length
               setActive(options[next].value)
-              document.getElementById(optionId(options[next].value))?.scrollIntoView({ block: 'nearest' })
+              document.getElementById(options[next].id)?.scrollIntoView({ block: 'nearest' })
             } else if (event.key === 'Enter') {
               event.preventDefault()
               if (highlighted) choose(highlighted.value)
@@ -118,8 +130,8 @@ export function SearchSenderPicker({ value, summary, senders, onChange }: Props)
           }} />
       </div>
       <div id={`${id}-list`} role="listbox" aria-labelledby={`${id}-label`} className="rounded border border-fluux-border bg-fluux-bg overflow-hidden">
-        {labelled.slice(0, shortcuts.length).map(row)}
-        <div role="presentation" className="max-h-40 overflow-y-auto border-t border-fluux-border">
+        {labelled.slice(0, 2).map(row)}
+        <div role="presentation" tabIndex={-1} className="max-h-40 overflow-y-auto border-t border-fluux-border">
           {matches.map(row)}
         </div>
       </div>
