@@ -21,9 +21,9 @@ import { resetScrollShadowDiagnostics } from './scrollPositionShadow'
  * marker, store target, window slide, late read pointer, unmount) and writes down every call into
  * those four objects, in order, with the scroll writes of each step.
  *
- * The whole trace is compared with a file recorded before the effect order was replaced by the
- * commit planner, so a change that reorders, drops or adds a call fails here at the first
- * differing line.
+ * The maintained trace starts from the pre-planner baseline but omits reconciliation calls when
+ * no interaction hold exists: the guard avoids synchronous typing-band measurements on ordinary
+ * commits. All remaining collaborator calls and scroll writes stay pinned in order.
  */
 
 class MockResizeObserver {
