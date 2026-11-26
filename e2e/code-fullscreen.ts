@@ -101,6 +101,8 @@ for (const mode of ['phone', 'phone-mouse', 'desktop', 'narrow-desktop', 'touch-
         await testInfo.attach(name, { body: await page.screenshot(), contentType: 'image/png' })
         return geometry
       }
+      const fullscreenPanel = { top: 0, bottom: 956, left: 0, right: 440, width: 440, height: 956 }
+      if (narrow) await expect.poll(() => bounds(modal.locator('.fluux-glass'))).toEqual(fullscreenPanel)
       const opening = await capture('opening')
       expect(opening.code.text).toBe(CODE)
       if (phone) {
@@ -115,7 +117,7 @@ for (const mode of ['phone', 'phone-mouse', 'desktop', 'narrow-desktop', 'touch-
         await expect(wrap).toHaveAttribute('aria-pressed', 'false')
       }
       if (narrow) {
-        expect(opening.panel).toEqual({ top: 0, bottom: 956, left: 0, right: 440, width: 440, height: 956 })
+        expect(opening.panel).toEqual(fullscreenPanel)
       } else {
         expect(opening.panel.top).toBeGreaterThan(0)
         expect(opening.panel.bottom).toBeLessThan(portrait.height)
