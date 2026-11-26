@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, copyFileSync, chmodSync, existsSync, linkSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { test } from 'node:test'
-import { CAP, cargoArguments, compatibility, IDLE_MS, launch, managedCache, prune, publishIndependentExecutable, retainRegistryOnly, seedDependencies, freshSeedHits, qualifyEnvironment, cargoSettings, publishReport, finishBuild } from './rust-build-pilot.mjs'
+import { CAP, cargoArguments, compatibility, IDLE_MS, launch, managedCache, prune, publishIndependentExecutable, retainRegistryOnly, seedDependencies, freshSeedHits, qualifyEnvironment, cargoSettings, publishReport, finishBuild, workerQualification } from './rust-build-pilot.mjs'
 
 const recorded = JSON.parse(readFileSync(new URL('./fixtures/rust-build-pilot-tools.json', import.meta.url), 'utf8'))
 const nativeFs = { skip: process.platform === 'win32' }
@@ -292,5 +293,70 @@ test('receipt publication failure still prunes the cache and preserves Cargo fai
     const outcome = finishBuild(status, () => writeFileSync(receipt, JSON.stringify(layout.freshArtifact)), () => prune(cache, Date.now(), 0))
     assert.equal(outcome, status || 1)
     assert.equal(existsSync(cached), false)
+  }
+}))
+
+// Source: cold controls must not repeat cache hashing; shared qualification remains timed.
+test('private workers consume prepared identities but shared workers inspect again', () => {
+  let inspections = 0
+  const inspect = () => { inspections++; return structuredClone(recorded) }
+  const clean = { shared: false }
+  clean.preparedQualification = workerQualification(clean, inspect)
+  assert.equal(inspections, 1)
+  const privateIdentity = workerQualification(clean, inspect)
+  assert.equal(inspections, 1)
+  const sharedIdentity = workerQualification({ ...clean, shared: true }, inspect)
+  assert.equal(inspections, 2)
+  assert.deepEqual(sharedIdentity, privateIdentity)
+})
+
+// Source: the outer command must preserve a failed child's status despite broken receipts/reports.
+test('runner CLI preserves scheduler failures through receipt reads and report publication', { skip: process.platform !== 'linux' }, t => withCache((cache, parent) => {
+  const bin = join(parent, 'bin')
+  mkdirSync(bin)
+  symlinkSync(process.execPath, join(bin, 'node'))
+  for (const [name, output] of [['rustc', recorded.rustc], ['cargo', recorded.cargo.split('\n')[0]]]) {
+    const path = join(bin, name)
+    const version = name === 'rustc' ? 'true' : "process.argv[2] === '--version'"
+    writeFileSync(path, `#!/usr/bin/env node\nif (${version}) process.stdout.write(${JSON.stringify(output)})\nelse process.exit(Number(process.env.PILOT_CHILD_STATUS))\n`)
+    chmodSync(path, 0o700)
+  }
+  const scheduler = join(bin, 'infinitary-load-axi')
+  writeFileSync(scheduler, String.raw`#!/usr/bin/env node
+const fs = require('node:fs')
+const { spawnSync } = require('node:child_process')
+const options = JSON.parse(process.argv.at(-1))
+fs.appendFileSync(process.env.PILOT_CALLS, 'launch\n')
+let command = process.argv.slice(process.argv.indexOf('--') + 1)
+if (command[0] === 'flock') command = command.slice(3)
+const result = spawnSync(command[0], command.slice(1), { stdio: 'inherit' })
+if (process.env.PILOT_RECEIPT_CASE === 'partial-state') fs.writeFileSync(options.state, '{')
+else if (process.env.PILOT_RECEIPT_CASE === 'unreadable-state') {
+  fs.unlinkSync(options.state)
+  fs.mkdirSync(options.state)
+} else if (process.env.PILOT_RECEIPT_CASE === 'partial-tests') fs.writeFileSync(options.testReceipt, '{')
+process.exit(result.status ?? 1)
+`)
+  chmodSync(scheduler, 0o700)
+  for (const mode of ['partial-state', 'unreadable-state', 'partial-tests', 'report-write', 'complete', 'shared-complete']) {
+    for (const status of [0, 17, 101]) {
+      const target = join(parent, `${mode}-${status}`)
+      const calls = join(parent, `${mode}-${status}.calls`)
+      const args = ['scripts/rust-build-pilot.mjs', '--target', target, '--operation', 'test']
+      const report = join(parent, `${mode}-${status}.json`)
+      if (mode === 'report-write') args.push('--report', join(parent, 'r'.repeat(255)))
+      if (mode.endsWith('complete')) args.push('--report', report)
+      if (mode === 'shared-complete') args.push('--shared', '--cache', cache)
+      const result = spawnSync(process.execPath, args, { encoding: 'utf8', env: { ...process.env, PATH: bin, RUSTC: join(bin, 'rustc'), HOST_PKG_CONFIG_PATH: '/usr/lib/pkgconfig', PILOT_CALLS: calls, PILOT_RECEIPT_CASE: mode, PILOT_CHILD_STATUS: String(status) } })
+      assert.equal(result.status, status || 1, `${mode}, child ${status}: ${result.stderr}`)
+      if (mode.endsWith('complete')) {
+        const reading = JSON.parse(readFileSync(report, 'utf8'))
+        assert.equal(reading.status, status || 1)
+        assert.equal(reading.elapsedMs, reading.wallMs - reading.preparationMs)
+        assert.equal(reading.preparationMs > 0, mode === 'complete')
+      } else assert.match(result.stderr, /Pilot completion failed:/)
+      assert.equal(readFileSync(calls, 'utf8'), 'launch\n')
+      t.diagnostic(`Stand-in ${mode}: scheduler ${status}, CLI ${result.status}; ${result.stderr.trim().split('\n').at(-1)}`)
+    }
   }
 }))

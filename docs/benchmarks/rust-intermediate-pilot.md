@@ -53,7 +53,9 @@ packages, tracked Cargo manifests/lockfiles and build environment variables.
 Both reused and private comparison lanes qualify and pin identical Rust/C/C++
 tools and the host linker. Each report records tool identities, an SDK digest
 and `qualification.comparisonKey`; paired timing and freshness runs must have
-matching qualified identities. Unknown compiler, linker, wrapper, SDK/search-path
+matching qualified identities. Explicit private controls prepare these identities
+outside the measured build; reused lanes qualify under the timed cache lock.
+Unknown compiler, linker, wrapper, SDK/search-path
 overrides and nonempty checkout/ancestor/Cargo-home configuration use isolated,
 unqualified settings instead of a guessed key and cannot count as a comparison.
 This includes plain, host/target-prefixed and target-suffixed `PKG_CONFIG`
@@ -79,6 +81,8 @@ failure and records the actual lane: `shared`, `private-seeded`, `private` or
 cache miss. After Cargo completes, receipt-publication errors still trigger
 registry-only cleanup and pruning under the lock. Cleanup and publication errors
 fail an otherwise successful run without replacing an existing Cargo failure.
+The parent preserves the scheduler's known failure even if a final receipt is
+partial/unreadable or the optional report cannot be published.
 
 ## Bounds
 
@@ -114,9 +118,15 @@ node scripts/rust-build-pilot.mjs --shared --cache "$PILOT_CACHE" \
   --target "$PRIVATE_OUTPUT" --operation test --report "$RUN_REPORT"
 ```
 
-Save stdout/stderr as well as the JSON report. The report measures from before
-compatibility inspection until scheduler exit, including admission and lock wait.
-It records the lane actually used, copied-unit counts and matching `Fresh`
+Save stdout/stderr as well as the JSON report. `wallMs` measures runner setup
+through receipt/output checks, including admission and lock wait. For explicitly
+private controls, `preparationMs` records the separate identity-qualification
+phase; `elapsedMs` subtracts only that phase so unused cache hashing cannot inflate
+the cold baseline. The private worker uses the prepared identities and pinned
+tools without repeating qualification. Requested reuse has zero excluded
+preparation: all cache qualification, queueing, lock wait and fallback costs count.
+Compare `elapsedMs`, not the cold command's total time including qualification.
+The report records the lane actually used, copied-unit counts and matching `Fresh`
 registry artifacts, not a claim that Cargo reused every crate. Count Cargo's
 actual `Fresh`, `Compiling` and `Running` readings. Successful test
 reports must include the nonempty inventory and private executable receipt.
@@ -153,7 +163,7 @@ reports must include the nonempty inventory and private executable receipt.
    failure after a completed build and verify that cleanup still runs under the
    lock and the original Cargo failure status remains intact.
 5. Retain reuse only if coverage is equivalent and the three cross-copy runs'
-   median elapsed time, including queueing, is at most 70% of the three cold
+   median `elapsedMs`, including queueing, is at most 70% of the three cold
    runs' median. Otherwise remove the candidate lane and preserve the result,
    not an enabled optimization. Warm-repeat savings alone are insufficient.
 

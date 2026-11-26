@@ -307,6 +307,18 @@ export function finishBuild(status, persist, cleanup) {
   return status
 }
 
+export function workerQualification(options, inspect = inspectCompatibility) {
+  if (!options.shared && options.preparedQualification) return options.preparedQualification
+  try {
+    const details = inspect(options)
+    return { qualified: true, comparisonKey: compatibility(details), tools: details.tools, sdk: compatibility(details.sdk), cargo: details.cargo, rustc: details.rustc }
+  } catch (error) {
+    delete options.nativeTools
+    console.error(`Pilot tool qualification failed; using private settings: ${error.message}`)
+    return { qualified: false, reason: error.message }
+  }
+}
+
 function worker(options) {
   validateOutputTree(options.target)
   const state = { lane: 'private', cargoStarted: false }
@@ -316,16 +328,9 @@ function worker(options) {
   let build
   let packages = []
   let units = []
-  try {
-    const details = inspectCompatibility(options)
-    state.key = compatibility(details)
-    state.qualification = { qualified: true, comparisonKey: state.key, tools: details.tools, sdk: compatibility(details.sdk), cargo: details.cargo, rustc: details.rustc }
-  } catch (error) {
-    delete options.nativeTools
-    options.shared = false
-    state.qualification = { qualified: false, reason: error.message }
-    console.error(`Pilot tool qualification failed; using private settings: ${error.message}`)
-  }
+  state.qualification = workerQualification(options)
+  state.key = state.qualification.comparisonKey
+  if (!state.qualification.qualified) options.shared = false
   try {
     if (options.shared) {
       cache = managedCache(options.cacheParent)
@@ -452,6 +457,28 @@ export function launch(args, launchBuild) {
   return launchBuild(options)
 }
 
+export function completeInvocation(options, result, started, preparationMs = 0) {
+  let status = result.status ?? 1
+  try {
+    const state = existsSync(options.state) ? JSON.parse(readFileSync(options.state, 'utf8')) : { lane: 'not-started', cargoStarted: false }
+    const tests = existsSync(options.testReceipt) ? JSON.parse(readFileSync(options.testReceipt, 'utf8')) : undefined
+    const binary = options.operation === 'build' ? join(options.target, options.host, 'debug/fluux') : undefined
+    if (!status && (!state.cargoStarted || (options.operation === 'test' ? !tests : !existsSync(binary)))) status = 1
+    if (!status && binary && (!within(options.target, realpathSync(binary)) || statSync(binary).nlink !== 1 || !state.finalStorage)) throw new Error('Final binary lacks independent private storage')
+    const wallMs = performance.now() - started
+    const report = { operation: options.operation, features: options.features, target: options.host, ...state, key: ['shared', 'private-seeded'].includes(state.lane) ? state.key : null, elapsedMs: wallMs - preparationMs, wallMs, preparationMs, status, binary, tests }
+    if (options.report) {
+      validateReportDestination(options.report, options.target, options.cacheParent ?? options.cache)
+      publishReport(options.report, report)
+    }
+    console.error(JSON.stringify(report))
+  } catch (error) {
+    console.error(`Pilot completion failed: ${error.message}`)
+    status ||= 1
+  }
+  return status
+}
+
 function main() {
   if (process.argv[2] === '--worker') return worker(JSON.parse(process.argv[3]))
   if (process.argv[2] === '--test-executable') return runTestExecutable(process.argv[3], process.argv[4], process.argv[5], process.argv.slice(6))
@@ -466,6 +493,12 @@ function main() {
     validateOutputTree(options.target)
     options.state = join(options.target, `pilot-${randomUUID()}.json`)
     options.testReceipt = join(options.target, `test-${randomUUID()}.json`)
+    let preparationMs = 0
+    if (!options.shared) {
+      const preparing = performance.now()
+      options.preparedQualification = workerQualification(options)
+      preparationMs = performance.now() - preparing
+    }
     if (options.shared) {
       try {
         options.cacheParent = options.cache
@@ -485,19 +518,7 @@ function main() {
       console.error('Pilot lock/worker launch failed before Cargo; using isolated lane')
       result = schedule(false)
     }
-    const state = existsSync(options.state) ? JSON.parse(readFileSync(options.state, 'utf8')) : { lane: 'not-started', cargoStarted: false }
-    let status = result.status ?? 1
-    const tests = existsSync(options.testReceipt) ? JSON.parse(readFileSync(options.testReceipt, 'utf8')) : undefined
-    const binary = options.operation === 'build' ? join(options.target, options.host, 'debug/fluux') : undefined
-    if (!status && (!state.cargoStarted || (options.operation === 'test' ? !tests : !existsSync(binary)))) status = 1
-    if (!status && binary && (!within(options.target, realpathSync(binary)) || statSync(binary).nlink !== 1 || !state.finalStorage)) throw new Error('Final binary lacks independent private storage')
-    const report = { operation: options.operation, features: options.features, target: options.host, ...state, key: ['shared', 'private-seeded'].includes(state.lane) ? state.key : null, elapsedMs: performance.now() - started, status, binary, tests }
-    if (options.report) {
-      validateReportDestination(options.report, options.target, options.cacheParent ?? options.cache)
-      publishReport(options.report, report)
-    }
-    console.error(JSON.stringify(report))
-    return status
+    return completeInvocation(options, result, started, preparationMs)
   })
 }
 
