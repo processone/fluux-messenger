@@ -98,6 +98,12 @@ test('real accessibility change selects app imports, changed tests, languages an
 // Rust embeds these SDK constants through build.rs, so deletion and rename
 // endpoints need the native consumer as well as the existing SDK consumers.
 test('SDK timeout source selects the Rust build-script consumer', () => {
+  for (const path of [
+    'packages/fluux-sdk/src/core/modules/Connection.ts',
+    'apps/fluux/src/App.tsx',
+  ]) {
+    assert.deepEqual(planFor([path]).steps.filter(step => step.command === 'cargo'), [], path)
+  }
   const path = 'packages/fluux-sdk/src/core/modules/connectionTimeouts.ts'
   for (const status of ['M', 'D', 'R']) {
     const plan = createPlan([{ path, status }])

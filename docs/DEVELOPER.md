@@ -339,6 +339,42 @@ that builds for itself must retain that step unless it explicitly accepts a
 compatible prebuilt artifact. No global target directory or cross-task reuse is
 introduced here.
 
+For a concrete unsigned Linux handoff, use the existing
+[native GUI launcher](../scripts/native-tests/linux-gui/README.md). On a clean,
+committed working copy with its documented prerequisites, build once, then use
+the same executable for the normal smoke and the deliberate failure/cleanup
+check. Choose two new results directories outside the project. For example,
+after setting `results` to that external parent directory:
+
+```bash
+node scripts/native-tests/linux-gui/build.mjs
+app="$PWD/apps/fluux/src-tauri/target/debug/fluux"
+check_native_source() {
+  node --input-type=module - "$app" <<'NODE'
+import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim()
+assert.equal(git('status', '--porcelain'), '', 'Source changed; commit and rebuild before reusing')
+const build = JSON.parse(readFileSync(`${process.argv[2]}.linux-gui-build.json`, 'utf8'))
+assert.equal(build.commit, git('rev-parse', 'HEAD'), 'Source revision changed; rebuild before reusing')
+NODE
+}
+check_native_source && node scripts/native-tests/linux-gui/run.mjs --app "$app" --evidence "$results/smoke"
+check_native_source && node scripts/native-tests/linux-gui/run.mjs --app "$app" --evidence "$results/failure" --fail-after-session
+```
+
+The second check must exit nonzero after its native assertions. Inspect both
+`cleanup.json` files for removed profiles and no surviving owned processes.
+Both `identity.json` files must record the same build commit and executable
+SHA-256. Neither consumer invokes Cargo. The launcher checks the executable
+digest, Dev identity and production-TLS variant; the explicit source guard above
+adds the clean-tree and exact-revision checks, which the launcher itself does
+not enforce. A modified timeout source must fail that guard before launch;
+after any source change, commit and rerun the build rather than editing its
+provenance record. Changed toolchain/SDK/flags also require a new build even
+when the source guard passes. Keep this limitation explicit in evidence.
+
 GitHub remains the full-suite runner: the light `branch-check.yml` must pass for
 each branch, and every batch keeps the full gates. A change sent back from a
 batch must run both `ci.yml` and `platform-native.yml` by manual trigger at the
