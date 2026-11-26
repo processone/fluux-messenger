@@ -352,6 +352,7 @@ set -eu
 : "${results:?Set results to a new external output directory}"
 node scripts/native-tests/linux-gui/build.mjs
 git clean -f -- apps/fluux/src-tauri/gen/schemas/linux-schema.json
+git restore -- apps/fluux/src-tauri/gen/schemas/acl-manifests.json apps/fluux/src-tauri/gen/schemas/desktop-schema.json
 app="$PWD/apps/fluux/src-tauri/target/debug/fluux"
 check_native_source() {
   node --input-type=module - "$app" <<'NODE'
@@ -376,10 +377,12 @@ grep -Fq 'Requested failure-cleanup proof after native assertions' "$results/fai
 ```
 
 The producer requires a clean tree before building. Tauri generates an
-untracked Linux permission schema during that build; the narrowly scoped
-`git clean` removes only that generated file, never a tracked schema or other
-source changes. The subsequent source guards still reject every other dirty
-path.
+untracked Linux permission schema and can refresh the tracked ACL manifest and
+desktop schema from the plugin permissions. After a successful build, the
+narrowly scoped commands remove only the untracked Linux schema and restore
+only those two tracked generated outputs. They never discard pre-existing
+edits: the producer refuses a dirty tree before starting. All other dirty paths
+still fail the subsequent guards; no source or permission input is exempted.
 
 The subshell stops on producer, source-guard or normal-smoke failure, so a
 failed rebuild cannot fall through to an older executable. The second check
