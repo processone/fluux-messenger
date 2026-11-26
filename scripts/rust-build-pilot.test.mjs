@@ -195,6 +195,23 @@ for (const [kind, prepare] of [['output', privateDirectory], ['cache', managedCa
   }))
 }
 
+// Source: no-redirect preflight must cover the full sequence, including paths beyond missing components.
+for (const [kind, prepare] of [['output', privateDirectory], ['cache', managedCache]]) {
+  test(`${kind} missing-prefix parent segments reject later aliases before either directory changes`, nativeFs, () => withParentAlias(({ parent, outside, original }) => {
+    const before = { local: readdirSync(parent).sort(), redirected: readdirSync(join(outside, 'child')).sort() }
+    let failure
+    try { prepare(`${parent}/missing/../alias/new`) } catch (error) { failure = error }
+    const after = { local: readdirSync(parent).sort(), redirected: readdirSync(join(outside, 'child')).sort() }
+    assert.deepEqual(after, before)
+    assert.equal(createHash('sha256').update(readFileSync(join(outside, 'existing.json'))).digest('hex'), original)
+    assert.match(failure?.message ?? '', /must not redirect/)
+    const valid = `${parent}/ordinary-missing/../${kind}-valid/nested`
+    prepare(valid)
+    assert.equal(statSync(valid).mode & 0o777, 0o700)
+    if (kind === 'cache') assert.equal(existsSync(join(valid, NAMESPACE, 'owner')), true)
+  }))
+}
+
 // Source: report publication must leave outside files and directories untouched for rejected paths.
 for (const filename of ['new.json', 'existing.json']) {
   test(`report parent segments cannot hide an alias when publishing ${filename}`, nativeFs, () => withParentAlias(({ parent, outside, original, alias }) => {
@@ -409,7 +426,7 @@ else if (process.env.PILOT_RECEIPT_CASE === 'unreadable-state') {
 process.exit(result.status ?? 1)
 `)
   chmodSync(scheduler, 0o700)
-  for (const mode of ['partial-state', 'unreadable-state', 'partial-tests', 'report-write', 'complete', 'shared-complete', 'redirected-cache-complete']) {
+  for (const mode of ['partial-state', 'unreadable-state', 'partial-tests', 'report-write', 'complete', 'shared-complete', 'redirected-cache-complete', 'missing-prefix-cache-complete']) {
     for (const status of [0, 17, 101]) {
       const target = join(parent, `${mode}-${status}`)
       const calls = join(parent, `${mode}-${status}.calls`)
@@ -419,11 +436,13 @@ process.exit(result.status ?? 1)
       if (mode.endsWith('complete')) args.push('--report', report)
       if (mode === 'shared-complete') args.push('--shared', '--cache', cache)
       const outside = join(parent, `${mode}-${status}-outside`)
-      if (mode === 'redirected-cache-complete') {
+      const missing = join(parent, `${mode}-${status}-missing`)
+      if (['redirected-cache-complete', 'missing-prefix-cache-complete'].includes(mode)) {
         mkdirSync(join(outside, 'child'), { recursive: true, mode: 0o700 })
         const alias = join(parent, `${mode}-${status}-alias`)
         symlinkSync(join(outside, 'child'), alias, 'dir')
-        args.push('--shared', '--cache', `${alias}/../missing`)
+        const destination = mode === 'missing-prefix-cache-complete' ? `${missing}/../${mode}-${status}-alias/new` : `${alias}/../missing`
+        args.push('--shared', '--cache', destination)
       }
       const result = spawnSync(process.execPath, args, { encoding: 'utf8', env: { ...process.env, PATH: bin, RUSTC: join(bin, 'rustc'), HOST_PKG_CONFIG_PATH: '/usr/lib/pkgconfig', PILOT_CALLS: calls, PILOT_RECEIPT_CASE: mode, PILOT_CHILD_STATUS: String(status) } })
       assert.equal(result.status, status || 1, `${mode}, child ${status}: ${result.stderr}`)
@@ -432,8 +451,10 @@ process.exit(result.status ?? 1)
         assert.equal(reading.status, status || 1)
         assert.equal(reading.elapsedMs, reading.wallMs - reading.preparationMs)
         assert.equal(reading.preparationMs > 0, mode === 'complete')
-        if (mode === 'redirected-cache-complete') {
+        if (['redirected-cache-complete', 'missing-prefix-cache-complete'].includes(mode)) {
           assert.deepEqual(readdirSync(outside), ['child'])
+          assert.deepEqual(readdirSync(join(outside, 'child')), [])
+          assert.equal(existsSync(missing), false)
           assert.equal(reading.lane, 'private')
           assert.match(result.stderr, /Pilot disabled; using private intermediates: Pilot paths must not redirect/)
         }

@@ -20,23 +20,22 @@ function read(command, args, cwd = root) {
   return result.stdout.trim()
 }
 
-function unredirected(path) {
+function unredirected(path, allowMissing = false) {
   // Whole-path normalization can erase a symlink before '..'; inspect each prefix first.
   const origin = isAbsolute(path) ? parse(path).root : ''
   let prefix = origin || process.cwd()
   for (const component of path.slice(origin.length).split(sep)) {
     prefix = join(prefix, component)
-    if (lstatSync(prefix, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error('Pilot paths must not redirect')
+    const info = lstatSync(prefix, { throwIfNoEntry: false })
+    if (info && (info.isSymbolicLink() || realpathSync(prefix) !== resolve(prefix))) throw new Error('Pilot paths must not redirect')
   }
-  if (realpathSync(path) !== resolve(path) || lstatSync(path).isSymbolicLink()) throw new Error('Pilot paths must not redirect')
+  if (!allowMissing && (realpathSync(path) !== resolve(path) || lstatSync(path).isSymbolicLink())) throw new Error('Pilot paths must not redirect')
 }
 
 export function privateDirectory(path) {
   if (!path || !isAbsolute(path)) throw new Error('Use an absolute private directory')
-  // Validate the existing prefix before mkdir can follow an alias into missing descendants.
-  let prefix = path
-  while (!lstatSync(prefix, { throwIfNoEntry: false })) prefix = dirname(prefix)
-  unredirected(prefix)
+  // A missing component can precede '..' and a reachable alias; preflight the whole sequence.
+  unredirected(path, true)
   mkdirSync(path, { recursive: true, mode: 0o700 })
   unredirected(path)
   const info = lstatSync(path)
