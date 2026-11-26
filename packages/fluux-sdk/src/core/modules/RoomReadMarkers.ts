@@ -30,7 +30,7 @@ export const ROOM_MARKER_ORDER_PAGE_LIMIT = 20
 export const ROOM_READ_MARKERS_STORAGE_KEY = 'fluux-room-read-markers'
 const STORAGE_PREFIX = ROOM_READ_MARKERS_STORAGE_KEY + ':'
 const CLEAR_GENERATION_KEY = STORAGE_PREFIX + 'clear-generation'
-const storageKey = (account: string, kind: 'consent' | 'watermarks' | 'migration' | 'continuity') => STORAGE_PREFIX + JSON.stringify([account, kind])
+const storageKey = (account: string, kind: 'consent' | 'watermarks' | 'migration' | 'continuity' | 'restriction') => STORAGE_PREFIX + JSON.stringify([account, kind])
 // A compact 128-bit epoch fits in the space freed by even an empty legacy choice.
 function clearFence() {
   const hex = generateUUID().split('-').join('')
@@ -87,6 +87,7 @@ interface SavedConsent {
   witnessedInput: boolean
   localIdentity?: string
   conversion?: string
+  restricted?: boolean
 }
 function hasConfirmedLegacyInput(saved: SavedConsent | undefined) {
   return !!saved?.legacyChoice && (saved.witnessedInput || saved.linkedInput || !!saved.revoked.length || saved.sharedPermission?.choice === saved.legacyChoice)
@@ -109,8 +110,8 @@ function readConsentFence(raw: string | null): ConsentFence | undefined {
 function consentFenceValue(edits: Record<string, string>, epoch: string, generation: string, revoked: string[], input?: string) {
   return JSON.stringify({ version: 3, epoch, edits, generation, revoked, input })
 }
-function readConsentContinuity(account: string): { generation: string; input?: string; inputId?: string; id?: string; conversion?: string } | undefined {
-  const raw = localStorage.getItem(storageKey(account, 'continuity'))
+function readConsentContinuity(account: string, kind: 'continuity' | 'restriction' = 'continuity'): { generation: string; input?: string; inputId?: string; id?: string; conversion?: string } | undefined {
+  const raw = localStorage.getItem(storageKey(account, kind))
   try {
     const value = JSON.parse(raw ?? 'null') as { generation?: unknown; input?: unknown; inputId?: unknown; id?: unknown; conversion?: unknown } | null
     if (typeof value?.generation === 'string' && value.generation && (value.input === undefined || typeof value.input === 'string')
@@ -134,6 +135,23 @@ function writeConsentContinuity(account: string, generation: string, input?: str
   localStorage.setItem(storageKey(account, 'continuity'), raw)
   return { inputId, id, raw }
 }
+function restrictionInput(fence: string | null, clearToken: string | null) {
+  const history = readConsentFence(fence)
+  // Opaque ordering identity binds denial without copying the room names held by a fence.
+  return JSON.stringify([clearToken, fence === null, history?.generation, history?.epoch, Object.values(history?.edits ?? {}).sort(), history?.input])
+}
+function readClearRestriction(account: string, fence: string | null, guard: ClearGuard) {
+  const proof = readConsentContinuity(account, 'restriction')
+  try {
+    const token: unknown = JSON.parse(proof?.input ?? 'null')?.[0]
+    // An unrelated seal must not retire denial while it still carries the target's old permission.
+    return (token === null || typeof token === 'string') && (token === guard.generation || !!guard.legacy[account])
+      && proof?.input === restrictionInput(fence, token) ? proof : undefined
+  } catch { return undefined }
+}
+function hasEmptyConsentRestriction(account: string) {
+  try { return readConsentContinuity(account)?.input === '' } catch { return false }
+}
 function completeConsentConversion(account: string, generation: string, retireInput = false) {
   // A committed choice survives refused completion; pending observations stay blocked until a coordinated read retries it.
   try {
@@ -150,6 +168,7 @@ function readSavedRoomConsent(account: string): SavedConsent {
   const fenceEpoch = history?.epoch
   const guard = readClearGuard()
   const clearToken = guard.generation
+  const restriction = readClearRestriction(account, fence, guard)
   let value: unknown = null
   try { value = JSON.parse(raw ?? 'null') } catch { /* Malformed preferences convert to off, never to consent. */ }
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : null
@@ -158,7 +177,7 @@ function readSavedRoomConsent(account: string): SavedConsent {
   const validEdits = record?.edits && typeof record.edits === 'object' && !Array.isArray(record.edits)
     && Object.values(record.edits).every(edit => typeof edit === 'string')
   const overlay = history?.revoked !== undefined && !!history.generation
-  const current = record?.version === 3 && validRooms && typeof record.generation === 'string' && !!record.generation
+  const current = !restriction && record?.version === 3 && validRooms && typeof record.generation === 'string' && !!record.generation
     && (!history?.generation || (record.generation === history.generation && continuity?.generation === history.generation))
     && typeof record.epoch === 'string' && validEdits && (overlay || fenceEpoch === undefined || record.epoch === fenceEpoch)
     && (overlay || !history?.edits || (Object.keys(history.edits).length === Object.keys(record.edits as object).length
@@ -168,7 +187,7 @@ function readSavedRoomConsent(account: string): SavedConsent {
   const retained = history?.revoked !== undefined && raw !== null && !!history.input && history.input === continuity?.inputId
     && continuity?.generation === history.generation && continuity?.input === raw
   // An input witnessed before a refused fence must not become a different legacy choice before recovery.
-  const matchesInput = continuity?.input === undefined || continuity.input === raw
+  const matchesInput = !restriction && (continuity?.input === undefined || continuity.input === raw)
   const previous = matchesInput && (retained || !history?.edits) && !cleared && record?.version === 2 && validRooms
   const legacy = matchesInput && (retained || fence === null) && record?.version === undefined && typeof record?.enabled === 'boolean' && validRooms
   const choice = previous || legacy ? JSON.stringify([previous ? 2 : 0, previous || record?.enabled === true, previous || record?.enabled === true ? oldRooms : []]) : undefined
@@ -183,7 +202,7 @@ function readSavedRoomConsent(account: string): SavedConsent {
   }
   return {
     raw, fence, clearToken, sharedPermission: permission, rooms, cleared,
-    generation: continuity?.input === '' ? continuity.generation : current ? record.generation as string : history?.generation
+    generation: restriction ? restriction.generation : continuity?.input === '' ? continuity.generation : current ? record.generation as string : history?.generation
       ? raw !== null && continuity?.generation === history.generation ? history.generation : 'absent:' + history.generation
       : choice !== undefined && allowed ? continuity?.generation ?? inherited?.generation ?? JSON.stringify([account, clearToken, fenceEpoch ?? '']) : JSON.stringify([account, clearToken, fenceEpoch ?? '']),
     epoch: fenceEpoch ?? (current ? record.epoch as string : inherited?.epoch ?? ''),
@@ -195,6 +214,7 @@ function readSavedRoomConsent(account: string): SavedConsent {
     witnessedInput: raw !== null && continuity?.input === raw,
     localIdentity: continuity?.id,
     conversion: continuity?.conversion,
+    restricted: !!restriction || continuity?.input === '',
   }
 }
 function sameConsentBoundary(left: SavedConsent, right: SavedConsent) {
@@ -295,26 +315,38 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
   const writeBarrier = (key: string, value: string) => {
     try { localStorage.setItem(key, value); return true } catch { return false }
   }
+  const reserveRestriction = (account: string, fence: string | null, clearToken: string | null) => {
+    const raw = JSON.stringify({ generation: generateUUID(), input: restrictionInput(fence, clearToken) })
+    return writeBarrier(storageKey(account, 'restriction'), raw) ? raw : null
+  }
   let needsCoordinatedSeal = false
   let retryProof: string | null = null
   let retryFence: string | null = null
   const remove = (coordinated = true, retrying = false) => {
     if (!allAccounts) {
-      for (const kind of ['consent', 'watermarks', 'continuity'] as const) {
-        if (!retrying || kind === 'consent') localStorage.removeItem(storageKey(scoped!, kind))
+      localStorage.removeItem(storageKey(scoped!, 'consent'))
+      const retainedRestriction = hasEmptyConsentRestriction(scoped!)
+      if (!retrying) {
+        localStorage.removeItem(storageKey(scoped!, 'watermarks'))
+        if (!retainedRestriction) localStorage.removeItem(storageKey(scoped!, 'continuity'))
       }
       const targetSealed = writeBarrier(storageKey(scoped!, 'migration'), clearFence())
-      if (targetSealed && retrying) localStorage.removeItem(storageKey(scoped!, 'continuity'))
+      if (targetSealed) {
+        localStorage.removeItem(storageKey(scoped!, 'continuity'))
+        localStorage.removeItem(storageKey(scoped!, 'restriction'))
+      }
+      if (coordinated && !retrying && !targetSealed && retainedRestriction) {
+        reserveRestriction(scoped!, localStorage.getItem(storageKey(scoped!, 'migration')), readClearGuard().generation)
+      }
       // Without a storage turn, target protection must not rewrite another account's newer choice.
       if (!coordinated) {
         if (targetSealed) return false
         const guard = readClearGuard()
         needsCoordinatedSeal = guard.open || !!guard.legacy[scoped!]
         if (needsCoordinatedSeal) {
-          // Empty input cannot authorize legacy consent; a fresh explicit edit can replace this erasable restriction.
+          // A denial-only slot cannot overwrite a choice committed while this unlocked fallback waits.
           retryFence = localStorage.getItem(storageKey(scoped!, 'migration'))
-          try { retryProof = writeConsentContinuity(scoped!, generateUUID(), '', true).raw }
-          catch { retryProof = null }
+          retryProof = reserveRestriction(scoped!, retryFence, guard.generation)
         }
         return false
       }
@@ -330,7 +362,8 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         } catch { /* The shared clear guard is not an account record. */ }
       }
       const classified = new Map<string, SavedConsent>()
-      if (targetSealed) {
+      const targetProtected = targetSealed || readSavedRoomConsent(scoped!).restricted
+      if (targetProtected) {
         try {
           // Deferral must precede every preference-first conversion, not leave one without its import barrier.
           if (readClearGuard().open) for (const other of accounts) classified.set(other, readSavedRoomConsent(other))
@@ -375,7 +408,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           if (!saved) {
             if (permission) legacy[other] = permission
             // Sealing open import would erase an unclassified choice; the saved target barrier already protects erasure.
-            else if (guard.open && targetSealed) return false
+            else if (guard.open && targetProtected) return false
             continue
           }
           let proof: ReturnType<typeof readConsentContinuity>
@@ -401,7 +434,8 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       }
       if (!writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: generateUUID(), legacy }))) return false
       localStorage.removeItem(storageKey(scoped!, 'migration'))
-      if (retrying) localStorage.removeItem(storageKey(scoped!, 'continuity'))
+      localStorage.removeItem(storageKey(scoped!, 'continuity'))
+      localStorage.removeItem(storageKey(scoped!, 'restriction'))
       return preserved
     }
     const keys: string[] = []
@@ -422,18 +456,32 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
       catch { /* Unreadable permissions cannot be reconstructed; the clear reports failure. */ }
     }
     const fences = new Set([...accounts].map(account => storageKey(account, 'migration')))
+    const restrictions = new Set([...accounts].flatMap(account => [storageKey(account, 'restriction'), ...(hasEmptyConsentRestriction(account) ? [storageKey(account, 'continuity')] : [])]))
+    if (!sealed) for (const account of accounts) {
+      try {
+        if (hasEmptyConsentRestriction(account) || readClearRestriction(account, localStorage.getItem(storageKey(account, 'migration')), readClearGuard())) {
+          reserveRestriction(account, localStorage.getItem(storageKey(account, 'migration')), readClearGuard().generation)
+        }
+      } catch { continue }
+    }
     for (const key of keys) {
-      if (!sealed && fences.has(key)) continue
+      if (!sealed && (fences.has(key) || restrictions.has(key))) continue
       localStorage.removeItem(key)
     }
     if (!sealed) sealed = writeBarrier(CLEAR_GENERATION_KEY, generateUUID())
     if (sealed) {
-      for (const key of fences) localStorage.removeItem(key)
+      for (const key of [...fences, ...restrictions]) localStorage.removeItem(key)
     } else {
       let compacted = false
-      for (const account of accounts) compacted = writeBarrier(storageKey(account, 'migration'), clearFence()) || compacted
+      for (const account of accounts) {
+        if (writeBarrier(storageKey(account, 'migration'), clearFence())) {
+          compacted = true
+          localStorage.removeItem(storageKey(account, 'continuity'))
+          localStorage.removeItem(storageKey(account, 'restriction'))
+        }
+      }
       if (!compacted || !writeBarrier(CLEAR_GENERATION_KEY, generateUUID())) return false
-      for (const key of fences) localStorage.removeItem(key)
+      for (const key of [...fences, ...restrictions]) localStorage.removeItem(key)
     }
     return true
   }
@@ -447,7 +495,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           const guard = readClearGuard()
           if (!guard.open && !guard.legacy[scoped]) return false
           // A fresh target choice or later clear owns its boundary; recovery must not erase it again.
-          if (localStorage.getItem(storageKey(scoped, 'continuity')) !== retryProof
+          if (localStorage.getItem(storageKey(scoped, 'restriction')) !== retryProof
             || localStorage.getItem(storageKey(scoped, 'migration')) !== retryFence) return false
           return remove(true, true)
         })
@@ -504,7 +552,7 @@ export class RoomReadMarkers extends BaseModule {
 
   constructor(deps: ModuleDependencies, private focused = () => typeof document !== 'undefined' && document.visibilityState === 'visible' && document.hasFocus()) { super(deps) }
   private onStorage = (event: StorageEvent) => {
-    if (event.key === null || event.key === CLEAR_GENERATION_KEY || event.key === this.storageKey('continuity') || event.key === this.storageKey('consent') || event.key === this.storageKey('watermarks') || event.key === this.storageKey('migration')) this.reload()
+    if (event.key === null || event.key === CLEAR_GENERATION_KEY || event.key === this.storageKey('continuity') || event.key === this.storageKey('restriction') || event.key === this.storageKey('consent') || event.key === this.storageKey('watermarks') || event.key === this.storageKey('migration')) this.reload()
   }
 
   private capture() {
@@ -542,7 +590,7 @@ export class RoomReadMarkers extends BaseModule {
     return account
   }
   private roomKey(roomJid: string) { return JSON.stringify([this.account(), roomJid]) }
-  private storageKey(kind: 'consent' | 'watermarks' | 'migration' | 'continuity') { return storageKey(this.account(), kind) }
+  private storageKey(kind: 'consent' | 'watermarks' | 'migration' | 'continuity' | 'restriction') { return storageKey(this.account(), kind) }
   private state(): AccountState {
     const account = this.account()
     let state = this.accounts.get(account)

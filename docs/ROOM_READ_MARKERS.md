@@ -39,8 +39,10 @@ state and keeps keyboard focus until saving finishes; repeated input does not
 start another save. Saving and account clearing are asynchronous. Conversion
 never reuses a pending view; a fresh focused observation is required afterward.
 
-Scoped clearing removes the target account's records before attempting to convert
-unaffected preferences. Conversion without overlapping protection stores its
+Scoped clearing removes target consent and watermarks before attempting to convert
+unaffected preferences. It retains a verified denial-only restriction until an
+account fence or shared seal replaces it; another scoped or full clear follows
+the same rule. Conversion without overlapping protection stores its
 self-contained choice before its compatibility fence, retaining linked proof
 until that fence is saved. The erasable continuity record also binds the exact
 validated input before the preference changes. A refused fence restores the original
@@ -58,27 +60,34 @@ shared protection instead mirrors combined revocations and ordering into the fen
 retiring either protector, so refusal preserves the surviving choices.
 Refused unrelated conversion is reported without discarding its valid choices.
 If an unrelated record cannot be classified while legacy import remains open,
-a writable target-account fence protects erasure while shared sealing stays
-incomplete until that record can be read; no unverified exception is created.
+a writable target-account fence or verified denial restriction protects erasure.
+Sealing stays incomplete until that record can be read; no unverified exception
+is created. Either protector requires classifying all unrelated accounts before
+starting any conversion.
 Direct fallback only erases the target's records and attempts its account fence;
 it never replaces the shared guard. If that fence is refused and the shared guard
-still permits the target, a writable erasable exact-input restriction rejects
+still permits the target, a writable erasable denial-only reservation rejects
 stale legacy or version-2 import while recovery obtains a new storage turn.
-That restriction defines a new ownership boundary without granting permission:
+The reservation uses the existing proof format in a separate account slot, never
+replacing consent-bearing continuity. It binds opaque fence ordering and shared
+identity, not room names. A committed room choice changes that fence and remains
+valid even if the unlocked reservation is written afterward. An unrelated seal
+cannot retire denial while retaining the target's old permission exception.
+The restriction defines a new ownership boundary without granting permission:
 pre-clear opt-ins and self-marker work cannot restore erased records, while
-fresh post-clear work uses the new boundary. Automatic reload cannot turn the
-restriction into On; a fresh explicit room choice can replace it.
-Recovery retains its restriction until an account fence or shared seal commits.
-If the temporary restriction is refused, guarded coordinated sealing still runs
-when available; cleanup never claims that an unsaved reservation protected the wait.
-Recovery compares the exact proof it wrote and the fence captured before that
-write, never a later tab's proof or fence. It stops when a later seal already
-excludes the target and never deletes fresh watermarks during its retry.
+fresh post-clear work uses the new boundary. Automatic reload cannot turn it On.
+Recovery and repeated clears retain denial until an account fence or shared seal
+commits. Full-clear compaction retires each account's restriction only after its
+replacement fence is saved. If reservation is refused, guarded coordinated sealing
+still runs when available; cleanup never claims that an unsaved reservation
+protected the wait. Recovery compares its exact reservation and pre-write fence,
+never a later tab's proof or fence. It stops when a later seal already excludes
+the target and never deletes fresh watermarks during its retry.
 Other accounts' shared-only Off and completed clears also survive. If no safe
 barrier can be saved, cleanup reports failure without writing a stale shared
 snapshot or claiming durable protection.
-When that fence permits deferral, all unrelated accounts are classified before
-any conversion starts, so an earlier paused account cannot be left converted
+When either target protector permits deferral, all unrelated accounts are classified
+before any conversion starts, so an earlier paused account cannot be left converted
 without its compatibility barrier by a later unreadable account.
 Successful guard replacement permits only the exact effective choices of unaffected accounts whose conversion was
 refused; it never permits the erased account to import old consent. Those
@@ -99,7 +108,9 @@ independent opt-ins. Normal and compact recovery fences retain revocations and o
 they cannot authorize an unsaved On. Confirmed preferences remain the
 only source of permission, with revocations overlaid after partial writes.
 An independently erasable continuity proof binds the account identity to its
-preference; clearing removes both, even when the import fence cannot be replaced.
+preference; clearing removes that preference-bearing proof even when the import
+fence cannot be replaced. An empty-input proof that only denies import remains
+usable protection until a replacement commits.
 During a partial legacy Off, the proof also binds the exact previously validated
 input, so untouched selections survive conversion refusal without authorizing a
 different replacement. Fences link that input by an opaque identifier, never a
