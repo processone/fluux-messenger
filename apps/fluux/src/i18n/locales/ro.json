@@ -1885,6 +1885,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Caută expeditori…",
+            "noSenders": "Niciun expeditor corespunzător",
             "title": "Filtre",
             "from": "De la",
             "anyone": "Oricine",

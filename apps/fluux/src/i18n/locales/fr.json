@@ -1884,6 +1884,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Rechercher un expéditeur…",
+            "noSenders": "Aucun expéditeur correspondant",
             "title": "Filtres",
             "from": "De",
             "anyone": "Tout le monde",

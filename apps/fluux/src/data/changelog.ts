@@ -19,7 +19,7 @@ export const changelog: ChangelogEntry[] = [
     sections: [{
       type: 'added',
       items: [
-        'Search filters: open Filters to choose a sender, dates, images, links, files or polls, then apply removable chips without adding syntax to your text. Typed filters still work, and search explains when older content details are missing or preparation needs a retry',
+        'Search filters: open Filters to type and narrow the sender list, choose dates, images, links, files or polls, then apply removable chips without adding syntax to your text. Typed filters still work, and search explains when older content details are missing or preparation needs a retry',
         'Resume a draft from the quick switcher: Drafts lists chats and joined rooms with unfinished local text by name, and opens the existing composer. Drafts stay on this device. Opening the current draft asks before leaving an edit or private message. Older room text is kept but left out of the list until you edit it publicly',
         'Jump to date: open a chat or room at the first message of a day from the conversation menu or a date bubble',
         'Small private rooms can show who has read through each message, with a quiet Read through here line, up to three inline names and a link to the full list. Your own marker is hidden on every device, and other people’s positions are hidden while your sharing is off in that room. Sharing starts off: enable it in Privacy, then choose each room in its details. Only focused viewing in verified, unlisted, members-only, non-anonymous rooms below 20 occupants can share a position; encrypted messages are excluded. The room archive may retain this metadata. Your unread badges and private read sync stay unchanged',

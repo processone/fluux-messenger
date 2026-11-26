@@ -1,6 +1,6 @@
 # Message search filters
 
-Open Search and type words, or open **Filters** to narrow the messages without learning search syntax. The filter dialog offers From (including Me), Date (presets or an inclusive custom day range), and Contains (Images, Links, Files and Polls). A custom range may leave either end open. Choices stay in the dialog until Apply. Escape discards unapplied choices and returns to the search field. Clear filters clears the dialog's choices; Apply commits that change.
+Open Search and type words, or open **Filters** to narrow the messages without learning search syntax. The filter dialog offers From (including Me), Date (presets or an inclusive custom day range), and Contains (Images, Links, Files and Polls). A custom range may leave either end open. Open From and type to narrow the available senders by name, room label or direct-chat address, ignoring case and accents. Anyone and Me stay above the scrollable matches. Arrow keys highlight a sender; Enter or a click chooses that sender in the draft without applying it. Tab moves on without choosing. Choices stay in the dialog until Apply. When the sender picker is open, the first Escape closes only the picker and returns focus to its closed control. Escape from the closed picker discards unapplied choices and returns to the search field. Clear filters clears the dialog's choices; Apply commits that change.
 
 Applied choices appear as removable chips, not text inserted into the search field. All / Chats / Rooms independently selects the kind of conversation. A selected person in a room is tied to that room's stable occupant identity when available; an old row without an occupant identity may match the selected nickname, but a conflicting known occupant never does.
 
@@ -33,6 +33,14 @@ Local history is not the complete server archive. Filter-only server searches re
 ## Verification helpers
 
 `e2e/search-filters.ts` owns the responsive keyboard/dialog journey in the normal browser gate. Run its Chromium and WebKit projects with `--project=search-filters-chromium --project=search-filters-webkit` using `e2e/playwright.e2e.config.ts`.
+
+The empty-result announcement also needs an actual screen reader; observing status text in a browser test is not spoken-output proof. With isolated demo data:
+
+1. Enable the screen reader, open Search, type `design`, then open Filters and From.
+2. Type `nobody-matches-this-name`. Observe the localized empty-result message being spoken while input focus stays in From; do not select a row or move focus to the message.
+3. Press Escape once. Confirm the closed sender choice is unchanged and the message search still contains `design`.
+
+Keep the tested version, OS, screen reader, locale, spoken output and focus/selection observations with the run. Restore the previous screen-reader state afterward.
 
 The on-demand measurement belongs to the SDK benchmark set: run `npm run bench:search:browser -w @fluux/sdk`. Its driver starts and stops its own loopback page, runs Chromium and WebKit in disposable contexts, and writes `packages/fluux-sdk/bench/results/searchIndex.browser.json`. Set `BENCH_SEARCH_OUTPUT` to keep a chosen output file elsewhere. `-- --check` checks both browser loaders and the corpus without seeding history or taking measurements.
 

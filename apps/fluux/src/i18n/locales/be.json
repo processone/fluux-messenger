@@ -1885,6 +1885,8 @@
     },
     "search": {
         "panel": {
+            "senderPlaceholder": "Пошук адпраўніка…",
+            "noSenders": "Няма адпаведных адпраўнікоў",
             "title": "Фільтры",
             "from": "Ад",
             "anyone": "Любы",
