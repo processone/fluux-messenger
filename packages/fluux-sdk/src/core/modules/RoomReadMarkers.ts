@@ -285,10 +285,12 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
   const writeBarrier = (key: string, value: string) => {
     try { localStorage.setItem(key, value); return true } catch { return false }
   }
-  const remove = () => {
+  const remove = (coordinated = true) => {
     if (!allAccounts) {
       for (const kind of ['consent', 'watermarks', 'continuity'] as const) localStorage.removeItem(storageKey(scoped!, kind))
       const targetSealed = writeBarrier(storageKey(scoped!, 'migration'), clearFence())
+      // Without a storage turn, target protection must not rewrite another account's newer choice.
+      if (!coordinated && targetSealed) return false
       let preserved = true
       const legacy: Record<string, LegacyPermission> = Object.create(null)
       const accounts: string[] = []
@@ -324,10 +326,18 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
               // Reserve the conversion boundary while retaining linked input until preference commit.
               const continuity = readConsentContinuity(other)
               hasLocalProof = !!continuity
-              localIdentity = writeConsentContinuity(other, generation, continuity?.input, true).id; hasLocalProof = true
-              localStorage.setItem(storageKey(other, 'consent'), roomConsentValue({ ...saved, generation }, saved.rooms, edits))
+              const convertedProof = writeConsentContinuity(other, generation, continuity?.input, true)
+              localIdentity = convertedProof.id; hasLocalProof = true
+              const converted = roomConsentValue({ ...saved, generation }, saved.rooms, edits)
+              localStorage.setItem(storageKey(other, 'consent'), converted)
+              try {
+                localStorage.setItem(storageKey(other, 'migration'), consentFenceValue(edits, saved.epoch, generation, saved.revoked, saved.linkedInput ? convertedProof.inputId : undefined))
+              } catch (error) {
+                // A failed shared seal must still leave the old input eligible for a protected normal conversion.
+                if (saved.raw !== null && localStorage.getItem(storageKey(other, 'consent')) === converted) localStorage.setItem(storageKey(other, 'consent'), saved.raw)
+                throw error
+              }
               writeConsentContinuity(other, generation, undefined, 'complete')
-              localStorage.setItem(storageKey(other, 'migration'), consentFenceValue(edits, saved.epoch, generation, saved.revoked))
             }
           }
         } catch {
@@ -402,7 +412,7 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
   try { return await withConsentStorage(remove) } catch {
     // A denied coordination database must not stop the caller from erasing its
     // remaining account data. Report failure even when direct removal succeeds.
-    try { remove() } catch { return false }
+    try { remove(false) } catch { return false }
     return false
   }
 }

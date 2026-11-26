@@ -41,13 +41,18 @@ never reuses a pending view; a fresh focused observation is required afterward.
 
 Scoped clearing removes the target account's records before attempting to convert
 unaffected preferences. Conversion without overlapping protection stores its
-self-contained choice before its compatibility fence. Overlapping linked and
+self-contained choice before its compatibility fence, retaining linked proof
+until that fence is saved. A refused fence restores the exact original preference
+before shared sealing is attempted; completion refusal after a saved fence leaves
+the protected replacement intact. Overlapping linked and
 shared protection instead mirrors combined revocations and ordering into the fence first, before
 retiring either protector, so refusal preserves the surviving choices.
 Refused unrelated conversion is reported without discarding its valid choices.
 If an unrelated record cannot be classified while legacy import remains open,
 a writable target-account fence protects erasure while shared sealing stays
 incomplete until that record can be read; no unverified exception is created.
+Direct fallback stops after target erasure when its account fence is saved;
+unrelated preferences and shared protection wait for a coordinated storage turn.
 When that fence permits deferral, all unrelated accounts are classified before
 any conversion starts, so an earlier paused account cannot be left converted
 without its compatibility barrier by a later unreadable account.
