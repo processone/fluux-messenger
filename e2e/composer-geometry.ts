@@ -1302,24 +1302,58 @@ test.describe('native docked-keyboard composer spacing', () => {
 test.describe('iOS keyboard backdrop color', () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 700 } })
 
+  // The demo's host stand-in is switched to iOS after boot; only the outgoing appearance
+  // arguments are recorded.
+  async function bootAsIosHost(page: Page) {
+    await bootDemo(page, DEMO_URL)
+    await page.evaluate(() => {
+      const w = window as any
+      w.__installNotificationSettingsFixture('granted', 'disabled', { shell: 'mobile', os: 'ios' })
+      w.__appearanceCalls = []
+      const invoke = w.__TAURI_INTERNALS__.invoke
+      w.__TAURI_INTERNALS__.invoke = (command: string, args: unknown, ...rest: unknown[]) => {
+        if (command === 'plugin:ios-feedback|set_appearance') w.__appearanceCalls.push(args)
+        return invoke(command, args, ...rest)
+      }
+      w.__demoClient.stopAnimation()
+    })
+  }
+  // Colors sent since the last mark. Sends made before an action cannot satisfy its assertion.
+  const mark = (page: Page) => page.evaluate(() => { (window as any).__appearanceCalls.length = 0 })
+  const lastBackground = (page: Page) => page.evaluate(() => {
+    const calls = (window as any).__appearanceCalls as { background?: string }[]
+    return calls.map(call => call.background).filter(Boolean).at(-1) ?? null
+  })
+
+  // The user's ask: the area by the keyboard matches the theme. The theme cards at the bottom of
+  // the Appearance screen animate their background, so a color read at once is not the theme's.
+  test('sends the new theme color when the surface above the keyboard animates to it', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await bootAsIosHost(page)
+    await page.evaluate(() => {
+      (window as any).__settingsStore.getState().setThemeMode('dark')
+      location.hash = '#/settings/appearance'
+    })
+    const nord = page.getByRole('button', { name: 'Nord', exact: true })
+    await expect(nord).toBeVisible()
+    await mark(page)
+    await nord.click()
+
+    const settled = () => page.evaluate(async () => {
+      const card = document.elementsFromPoint(innerWidth / 2, innerHeight - 1).find(element => element.tagName === 'BUTTON')!
+      await Promise.all(card.getAnimations().map(animation => animation.finished))
+      const channels = getComputedStyle(card).backgroundColor.match(/\d+/g)!.slice(0, 3)
+      return `#${channels.map(channel => Number(channel).toString(16).padStart(2, '0')).join('')}`
+    })
+    const themed = await settled()
+    await expect.poll(() => lastBackground(page)).toBe(themed)
+  })
+
   for (const scheme of ['dark', 'light'] as const) {
     test(`sends the screen color above the keyboard in ${scheme} mode`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme })
-      await bootDemo(page, DEMO_URL)
-      // The demo's host stand-in is switched to iOS after boot; only the outgoing appearance
-      // arguments are recorded.
-      await page.evaluate(() => {
-        const w = window as any
-        w.__installNotificationSettingsFixture('granted', 'disabled', { shell: 'mobile', os: 'ios' })
-        w.__appearanceCalls = []
-        const invoke = w.__TAURI_INTERNALS__.invoke
-        w.__TAURI_INTERNALS__.invoke = (command: string, args: unknown, ...rest: unknown[]) => {
-          if (command === 'plugin:ios-feedback|set_appearance') w.__appearanceCalls.push(args)
-          return invoke(command, args, ...rest)
-        }
-        w.__demoClient.stopAnimation()
-        location.hash = '#/messages/ava%40fluux.chat'
-      })
+      await bootAsIosHost(page)
+      await page.evaluate(() => { location.hash = '#/messages/ava%40fluux.chat' })
       // A system theme change is what first reaches the backdrop once the host reads as iOS.
       await page.emulateMedia({ colorScheme: scheme === 'dark' ? 'light' : 'dark' })
       await page.emulateMedia({ colorScheme: scheme })
@@ -1333,12 +1367,6 @@ test.describe('iOS keyboard backdrop color', () => {
         band.style.cssText = `position:fixed;left:0;right:0;top:${bandTop}px;height:${bandHeight}px;background:${value};z-index:2147483647`
         document.body.appendChild(band)
       }, [top, height, color] as const)
-      // Colors sent since the last mark. Sends made before an action cannot satisfy its assertion.
-      const mark = () => page.evaluate(() => { (window as any).__appearanceCalls.length = 0 })
-      const freshBackground = () => page.evaluate(() => {
-        const calls = (window as any).__appearanceCalls as { background?: string }[]
-        return calls.map(call => call.background).filter(Boolean).at(-1) ?? null
-      })
       // The conversation surface just above the composer. The composer's own shadow darkens the
       // bottom edge of the page, which is not the screen color.
       const screenAboveComposer = async () => {
@@ -1356,22 +1384,22 @@ test.describe('iOS keyboard backdrop color', () => {
       }
 
       // With the theme's real styles, the color sent is the screen color above the composer.
-      await expect.poll(freshBackground).toBe(await screenAboveComposer())
+      await expect.poll(() => lastBackground(page)).toBe(await screenAboveComposer())
 
       // Different surfaces at the bottom row of the 700px page and of the 640px page.
       await paintBand(640, 60, 'rgb(12, 40, 60)')
       await paintBand(580, 60, 'rgb(10, 60, 40)')
 
       // Docking sends the color at the visible bottom row (700px page).
-      await mark()
+      await mark(page)
       await page.evaluate(() => { document.documentElement.dataset.keyboardDocked = 'true' })
-      await expect.poll(freshBackground).toBe('#0c283c')
+      await expect.poll(() => lastBackground(page)).toBe('#0c283c')
 
       // The page moves after the dock notification. With the flag unchanged, the new visible
       // bottom row (640px page) sits on the other surface, and that color must be sent.
-      await mark()
+      await mark(page)
       await page.setViewportSize({ width: 390, height: 640 })
-      await expect.poll(freshBackground).toBe('#0a3c28')
+      await expect.poll(() => lastBackground(page)).toBe('#0a3c28')
     })
   }
 })

@@ -64,6 +64,12 @@ function sample(): void {
   // panning, so this can be stale; the viewport resize and scroll events sample again.
   const bottom = Math.min(Math.floor((viewport ? viewport.offsetTop + viewport.height : window.innerHeight) - 1), window.innerHeight - 1)
   const stack = document.elementsFromPoint(Math.floor(window.innerWidth / 2), Math.max(bottom, 0))
+  // A theme change animates some backgrounds, and a read taken mid-way is neither theme's color.
+  // No viewport event follows, so sample again once those animations end or are replaced.
+  const fading = stack
+    .flatMap(element => element.getAnimations?.() ?? [])
+    .filter(animation => (animation as CSSTransition).transitionProperty === 'background-color')
+  if (fading.length) void Promise.allSettled(fading.map(animation => animation.finished)).then(syncKeyboardBackdrop)
   const backgrounds = function* () { for (const element of stack) yield getComputedStyle(element).backgroundColor }
   const color = visibleColor(backgrounds(), readThroughCanvas())
   if (!color) return
