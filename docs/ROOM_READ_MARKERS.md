@@ -132,8 +132,14 @@ whose conversion was refused; a target-only entry grants no permission. An open
 profile still admits unclassified accounts without exceptions, never a mismatched
 exception or erased target. Refused conversion retains an existing exception even
 when a different legacy room list is present; unconfirmed On is not
-witnessed over the surviving choice. Ordinary reload and new On likewise defer
-before any write or failed-save cleanup could retire that shared authority.
+witnessed over the surviving choice. Automatic reload likewise defers before retiring that authority. Explicit room
+edits merge the independently confirmed shared choices, never the rejected list.
+A matching shared choice survives a revocation fence only while its continuity
+still has that fence’s generation; erased continuity cannot restore permission.
+When no exact input is available, the writer reserves continuity before fencing
+and retains shared authority until an observed input can safely replace it.
+An explicit re-enable lifts the shared revocation only after its preference
+commits; refusing that shared write leaves the room Off and other choices intact.
 A recognizable Off still acquires its exact-input restriction so older On cannot replace it. Its denial and ordering still apply
 without granting that different input permission. Permission-bearing exceptions
 retire only after conversion or a choice safely replaces their protection.

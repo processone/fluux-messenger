@@ -1924,6 +1924,102 @@ describe('RoomReadMarkers', () => {
     return { storage, proofKey, opening, pending }
   }
 
+  it.each([false, true].flatMap(local => (['none', 'continuity', 'fence', 'preference'] as const).map(refusal => [local, refusal] as const)))('saves fresh explicit On while a resolvable stale-only room remains unconfirmed (%s, %s)', async (local, refusal) => {
+    // Approved sole-switch rule: stale input grants nothing, but a fresh saved On must work without restoring it.
+    const { storage, proofKey } = await prepareSharedLegacy(local, [replayFixture.room])
+    const unselected = 'another@conference.localhost'
+    const stale = JSON.stringify({ enabled: true, rooms: [roomJid, unselected] })
+    storage.setItem(consentKey, stale)
+    send.mockClear()
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      if (refusal !== 'none') {
+        vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+          ? (name: string, value: string) => { if (name === (refusal === 'continuity' ? proofKey : refusal === 'fence' ? migrationKey : consentKey)) throw new DOMException('Choice refused', 'SecurityError'); base.setItem(name, value) }
+          : Reflect.get(base, key, base) }))
+        try { expect(await observer.setRoomEnabled(roomJid, true)).toBe(false) }
+        finally { vi.stubGlobal('localStorage', storage) }
+      }
+      await observer.reload()
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+      expect(storage.getItem(consentKey)).toBe(stale)
+      expect(observer.isEnabledFor(roomJid)).toBe(false)
+      expect(await observer.setRoomEnabled(roomJid, true)).toBe(true)
+      expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
+      expect(observer.isEnabledFor(unselected)).toBe(false)
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(parse(String(send.mock.calls[0][0])).attrs.to).toBe(roomJid)
+      storage.setItem(consentKey, stale)
+      await observer.reload()
+      expect(observer.isEnabledFor(unselected)).toBe(false)
+    } finally { observer.cancelPending() }
+  })
+
+  it.each([false, true].flatMap(local => [false, true].map(refused => [local, refused] as const)))('reenables a shared Off through an explicit mismatch choice only after commit (%s, shared refusal: %s)', async (local, refused) => {
+    // Approved sole-switch rule: a confirmed explicit On supersedes Off without restoring or importing the stale list.
+    const { storage } = await prepareSharedRevocation(local)
+    storage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+    send.mockClear()
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    const guardKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:clear-generation`
+    try {
+      await observer.reload()
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+      if (refused) {
+        vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+          ? (name: string, value: string) => { if (name === guardKey) throw new DOMException('Shared write refused', 'SecurityError'); base.setItem(name, value) }
+          : Reflect.get(base, key, base) }))
+        try {
+          expect(await observer.setRoomEnabled(roomJid, true)).toBe(false)
+          await observer.viewed(roomJid, rows[1])
+          expect(send).not.toHaveBeenCalled()
+          expect(observer.isEnabledFor(roomJid)).toBe(false)
+        } finally { vi.stubGlobal('localStorage', storage) }
+      }
+      expect(await observer.setRoomEnabled(roomJid, true)).toBe(true)
+      expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+    } finally { observer.cancelPending() }
+  })
+
+  it.each([false, true].flatMap(local => (['normal', 'open', 'fence', 'preference'] as const).map(refusal => [local, refusal] as const)))('preserves independent shared choices through a mismatched room Off (%s, %s)', async (local, refusal) => {
+    // Approved independent-choice rule: a single-room Off never replaces the confirmed merge base with rejected input.
+    const { storage } = await prepareSharedLegacy(local)
+    const original = storage.getItem(consentKey)!
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    const opening = pauseNextConsentOpen(refusal === 'open')
+    const pending = observer.setRoomEnabled(roomJid, false)
+    await opening.ready
+    storage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (refusal === 'fence' && name === migrationKey || refusal === 'preference' && name === consentKey) throw new DOMException('Replacement refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    try {
+      opening.release()
+      expect(await pending).toBe(refusal === 'normal')
+      if (refusal === 'normal' || refusal === 'open') expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
+    } finally { vi.stubGlobal('localStorage', storage); opening.release() }
+    const checking = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      storage.setItem(consentKey, original)
+      expect(await checking.reload()).toBe(true)
+      expect(checking.isEnabledFor(replayFixture.room)).toBe(true)
+      checking.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await checking.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(checking.isEnabledFor(roomJid)).toBe(false)
+      expect(await checking.setRoomEnabled(roomJid, true)).toBe(true)
+      await checking.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(2)
+    } finally { checking.cancelPending(); observer.cancelPending() }
+  })
+
   it.each([false, true].flatMap(local => [false, true].flatMap(held => [false, true].flatMap(mismatched => (['both', 'preference'] as const).map(refusal => [local, held, mismatched, refusal] as const)))))('preserves shared revocation through another refused scoped conversion (local proof: %s, older On: %s, mismatched input: %s, refusal: %s)', async (local, held, mismatched, refusal) => {
     // Approved Off-wins rule: a different legacy list cannot retire denial or its ordering revision.
     const { storage, proofKey, opening, pending } = await prepareSharedRevocation(local, held ? 'on' : undefined)
