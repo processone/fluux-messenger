@@ -27,7 +27,7 @@ test('FLM-31 content-free local diagnostic lifecycle', { skip: process.platform 
       'apps/fluux/src-tauri/plugins/push/ios/Sources/NotificationPreviews/PreviewTrace.swift',
       'scripts/native-tests/NotificationDiagnosticTests.swift', '-lsqlite3', '-o', binary], { timeout: 120000 })
     const config = JSON.parse(readFileSync('apps/fluux/src-tauri/tauri.conf.json', 'utf8'))
-    assert.match(execFileSync(binary, [`${config.version} (test)`], { encoding: 'utf8' }), /passed/)
+    assert.match(execFileSync(binary, [`${config.version} (test)`], { encoding: 'utf8', timeout: 60000 }), /passed/)
   } finally { rmSync(scratch, { recursive: true, force: true }) }
 })
 
