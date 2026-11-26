@@ -76,9 +76,9 @@ while IFS= read -r path || [ -n "$path" ]; do
             rust=true
             ;;
 
-        # The OpenPGP golden key files are compiled into Rust tests (include_str!),
-        # so a change to them must run both families.
-        packages/openpgp-plugin/src/fixtures/*)
+        # Rust tests embed the OpenPGP fixtures; build.rs reads the SDK timeout
+        # constants. Both are native inputs even though neither is Rust source.
+        packages/openpgp-plugin/src/fixtures/* | packages/fluux-sdk/src/core/modules/connectionTimeouts.ts)
             js=true
             rust=true
             ;;
