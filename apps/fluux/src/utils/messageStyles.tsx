@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next'
 import { useWrappedCodeBlocksStore, type WrapIdentity } from '../stores/wrappedCodeBlocksStore'
 import { LiveEdgeGrowthContext } from '../components/conversation/liveEdgeGrowthContext'
 import { ModalShell } from '../components/ModalShell'
+import { isMobileDevice } from '../platform'
 import { useHighlighter } from './codeHighlight'
 import { getConsistentTextColor } from '../components/Avatar'
 import { MessageLink } from '../components/conversation/MessageLink'
@@ -432,7 +433,7 @@ function WrapButton({ wrapped, onToggle }: { wrapped: boolean; onToggle: () => v
   )
 }
 
-/** Expanded code modal — fullscreen on mobile, large centered panel on desktop */
+/** Panel shape follows viewport width, not the device identity used for safe areas and wrapping. */
 function CodeExpandModal({
   code,
   language,
@@ -448,6 +449,16 @@ function CodeExpandModal({
   onToggleWrap: () => void
   onClose: () => void
 }) {
+  const mobile = isMobileDevice()
+  // A phone's full-screen reading default must not change the inline block's
+  // session preference or the desktop view of that block.
+  const [mobileWrapped, setMobileWrapped] = useState(true)
+  const viewWrapped = mobile ? mobileWrapped : wrapped
+  const toggleViewWrap = () => {
+    if (mobile) setMobileWrapped(w => !w)
+    else onToggleWrap()
+  }
+  // This body portal is outside #root's safe-area padding.
   // React events bubble through portals to the React ancestors, so the modal
   // is isolated from row navigation the same way the inline controls are.
   return createPortal(
@@ -456,15 +467,15 @@ function CodeExpandModal({
       title={language || 'Code'}
       onClose={onClose}
       width="max-w-5xl"
-      panelClassName="max-h-dvh md:max-h-[90vh] h-dvh md:h-auto !mx-0 !rounded-none md:!mx-4 md:!rounded-lg flex flex-col"
+      panelClassName={`max-h-dvh md:max-h-[90vh] h-dvh md:h-auto !mx-0 !rounded-none md:!mx-4 md:!rounded-lg flex flex-col ${mobile ? 'pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]' : ''}`}
     >
       <div className="flex-1 overflow-auto min-h-0">
-        <pre className={`bg-fluux-bg/50 text-fluux-text px-4 py-3 overflow-x-auto font-mono text-sm min-h-full ${wrapped ? WRAP_CLASSES : ''}`}>
+        <pre className={`bg-fluux-bg/50 text-fluux-text px-4 py-3 overflow-x-auto font-mono text-sm min-h-full ${viewWrapped ? WRAP_CLASSES : ''}`}>
           <CodeContent code={code} highlightedHtml={highlightedHtml} />
         </pre>
       </div>
       <div className="flex justify-end items-center gap-0.5 px-3 py-2 border-t border-fluux-hover flex-shrink-0">
-        <WrapButton wrapped={wrapped} onToggle={onToggleWrap} />
+        <WrapButton wrapped={viewWrapped} onToggle={toggleViewWrap} />
         <CopyButton text={code} />
       </div>
     </ModalShell>
