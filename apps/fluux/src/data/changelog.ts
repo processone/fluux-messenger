@@ -61,6 +61,7 @@ export const changelog: ChangelogEntry[] = [
       type: 'fixed',
       items: [
         'iOS and Android: chat and room composers keep only their normal gap above a docked keyboard, with a slimmer expanded card and unchanged message fields and buttons',
+        'iOS: the highlighted edge of the focused message box now runs unbroken around its rounded bottom corners',
         'Messages keep following while you hover. Press a message or reach an action by keyboard to hold it steady; the typing indicator still makes room for the latest text',
         'Search on server now works with servers that advertise archive full-text search, such as ejabberd with a MySQL archive',
         'Reconnecting is more reliable: messages sent as the connection drops are resent once or marked not delivered with Retry, and long sessions no longer get cut off by strict servers',
