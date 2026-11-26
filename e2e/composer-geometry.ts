@@ -1325,28 +1325,24 @@ test.describe('iOS keyboard backdrop color', () => {
     return calls.map(call => call.background).filter(Boolean).at(-1) ?? null
   })
 
-  // The user's ask: the area by the keyboard matches the theme. The theme cards at the bottom of
-  // the Appearance screen animate their background, so a color read at once is not the theme's.
+  // The user's ask: the area by the keyboard matches the theme. A surface that animates to its new
+  // color on a theme switch reads as neither theme's color until the animation ends.
   test('sends the new theme color when the surface above the keyboard animates to it', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' })
     await bootAsIosHost(page)
+    // A band on the bottom rows that only this test styles, so no screen's layout is assumed.
+    await page.addStyleTag({ content: `
+      #backdrop-band { position: fixed; left: 0; right: 0; bottom: 0; height: 60px; z-index: 2147483647;
+        background: rgb(12, 40, 60); transition: background-color 150ms }
+      :root[data-theme='nord'] #backdrop-band { background: rgb(10, 60, 40) }` })
     await page.evaluate(() => {
-      (window as any).__settingsStore.getState().setThemeMode('dark')
-      location.hash = '#/settings/appearance'
+      const band = document.createElement('div')
+      band.id = 'backdrop-band'
+      document.body.appendChild(band)
     })
-    const nord = page.getByRole('button', { name: 'Nord', exact: true })
-    await expect(nord).toBeVisible()
     await mark(page)
-    await nord.click()
-
-    const settled = () => page.evaluate(async () => {
-      const card = document.elementsFromPoint(innerWidth / 2, innerHeight - 1).find(element => element.tagName === 'BUTTON')!
-      await Promise.all(card.getAnimations().map(animation => animation.finished))
-      const channels = getComputedStyle(card).backgroundColor.match(/\d+/g)!.slice(0, 3)
-      return `#${channels.map(channel => Number(channel).toString(16).padStart(2, '0')).join('')}`
-    })
-    const themed = await settled()
-    await expect.poll(() => lastBackground(page)).toBe(themed)
+    await page.evaluate(() => { (window as any).__themeStore.getState().setActiveTheme('nord') })
+    await expect.poll(() => lastBackground(page)).toBe('#0a3c28')
   })
 
   for (const scheme of ['dark', 'light'] as const) {
