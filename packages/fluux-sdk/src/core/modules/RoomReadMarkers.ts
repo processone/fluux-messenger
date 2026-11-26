@@ -244,8 +244,9 @@ function readSavedRoomConsent(account: string, raw = localStorage.getItem(storag
     restricted: !!restriction || continuity?.input === '',
   }
 }
-function readConfirmedSharedConsent(account: string, saved: SavedConsent) {
-  if (saved.raw === null || !hasUnconfirmedSharedInput(saved) || saved.cleared) return undefined
+function readConfirmedSharedConsent(account: string, saved: SavedConsent, includeOff = false) {
+  if (saved.raw === null || !saved.needsMigration || saved.cleared || saved.restricted || !saved.sharedPermission?.choice) return undefined
+  if (saved.sharedPermission.choice === saved.legacyChoice || !includeOff && !hasUnconfirmedSharedInput(saved)) return undefined
   let choice: unknown
   try { choice = JSON.parse(saved.sharedPermission.choice) } catch { return undefined }
   if (!Array.isArray(choice) || choice.length !== 3 || (choice[0] !== 0 && choice[0] !== 2) || typeof choice[1] !== 'boolean' || !Array.isArray(choice[2])) return undefined
@@ -805,7 +806,7 @@ export class RoomReadMarkers extends BaseModule {
       let shared: SavedConsent | undefined
       try {
         latest = mutating ?? this.readSavedConsent(account)
-        shared = readConfirmedSharedConsent(account, latest)
+        shared = readConfirmedSharedConsent(account, latest, 'allOff' in change)
       } catch { return }
       if (!sameConsentBoundary(initial, latest)) return
       if (shared) latest = { ...latest, rooms: shared.rooms }
@@ -856,8 +857,8 @@ export class RoomReadMarkers extends BaseModule {
     }
     try {
       let opening = captured ?? this.readSavedConsent(account)
-      if (change && 'allOff' in change) {
-        const shared = readConfirmedSharedConsent(account, opening)
+      if (!captured && change && 'allOff' in change) {
+        const shared = readConfirmedSharedConsent(account, opening, true)
         if (shared) opening = { ...opening, rooms: shared.rooms }
       }
       initial = opening
@@ -867,7 +868,7 @@ export class RoomReadMarkers extends BaseModule {
           let saved = this.readSavedConsent(account)
           // Import cannot replace retained authority; explicit edits merge only its confirmed rooms.
           if (!change && saved.needsMigration && hasUnconfirmedSharedInput(saved)) return false
-          const shared = change && saved.needsMigration ? readConfirmedSharedConsent(account, saved) : undefined
+          const shared = change && saved.needsMigration ? readConfirmedSharedConsent(account, saved, 'allOff' in change) : undefined
           if (shared) saved = { ...saved, rooms: shared.rooms }
           if (!change && !saved.needsMigration) return saved.cleared || saved.raw === null || !saved.generation ? true : completeConsentConversion(account, saved.generation)
           if (change && 'room' in change && change.enabled) {
@@ -995,7 +996,7 @@ export class RoomReadMarkers extends BaseModule {
     let boundary: SavedConsent | undefined
     try {
       boundary = this.readSavedConsent(account)
-      const shared = readConfirmedSharedConsent(account, boundary)
+      const shared = readConfirmedSharedConsent(account, boundary, true)
       if (shared) boundary = { ...boundary, rooms: shared.rooms }
     } catch { boundary = undefined }
     const unknownKey = this.roomKey('')
@@ -1012,7 +1013,7 @@ export class RoomReadMarkers extends BaseModule {
       if (this.account() !== account) { this.consentEdits.delete(unknownKey); return false }
       try {
         const latest = this.readSavedConsent(account)
-        let rooms = readConfirmedSharedConsent(account, latest)?.rooms ?? latest.rooms
+        let rooms = readConfirmedSharedConsent(account, latest, true)?.rooms ?? latest.rooms
         if (unreadable) {
           const history = unreadable.history
           const generation = history?.generation ?? unreadable.generation ?? JSON.stringify([account, unreadable.clearToken, history?.epoch ?? ''])

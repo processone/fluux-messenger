@@ -1924,6 +1924,177 @@ describe('RoomReadMarkers', () => {
     return { storage, proofKey, opening, pending }
   }
 
+  async function prepareCurrentWithSharedChoice(local: boolean) {
+    const { storage, proofKey } = await prepareSharedLegacy(local, [replayFixture.room])
+    storage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+    const guardKey = ROOM_READ_MARKERS_STORAGE_KEY + ':clear-generation'
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === guardKey) throw new DOMException('Prune refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    const writer = new RoomReadMarkers(dependencies, () => focused)
+    try { expect(await writer.setRoomEnabled(roomJid, true)).toBe(true) }
+    finally { writer.cancelPending(); vi.stubGlobal('localStorage', storage) }
+    send.mockClear()
+    return { storage, proofKey }
+  }
+
+  it.each([false, true].flatMap(local => [false, true].flatMap(unreadable => [false, true].map(failed => [local, unreadable, failed] as const))))('guards current saved rooms before older shared rooms during all-Off (%s, unreadable: %s, failed: %s)', async (local, unreadable, failed) => {
+    // Approved failed-save rule: the current saved selection, not its retained predecessor, owns suppression.
+    const { storage } = await prepareCurrentWithSharedChoice(local)
+    const actor = new RoomReadMarkers(dependencies, () => focused)
+    const opening = pauseNextConsentOpen(failed)
+    let reads = 0
+    if (unreadable) vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'getItem'
+      ? (name: string) => { if (name === consentKey && reads++ === 0) throw new DOMException('Read refused', 'SecurityError'); return base.getItem(name) }
+      : Reflect.get(base, key, base) }))
+    const pending = actor.setEnabled(false)
+    await opening.ready
+    vi.stubGlobal('localStorage', storage)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      actor.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await actor.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+      expect(actor.isEnabledFor(roomJid)).toBe(false)
+      opening.release()
+      expect(await pending).toBe(!failed)
+      await observer.reload()
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+      expect(observer.isEnabledFor(roomJid)).toBe(false)
+    } finally { opening.release(); await pending; actor.cancelPending(); observer.cancelPending() }
+  })
+
+  it.each([false, true])('guards current rooms when unknown all-Off capture recovers (%s)', async local => {
+    // Approved failed-save rule: a recovered current list cannot be replaced by an older shared list.
+    const { storage } = await prepareCurrentWithSharedChoice(local)
+    const actor = new RoomReadMarkers(dependencies, () => focused)
+    let reads = 0
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'getItem'
+      ? (name: string) => { if (name === consentKey && reads++ < 2) throw new DOMException('Capture refused', 'SecurityError'); return base.getItem(name) }
+      : Reflect.get(base, key, base) }))
+    try { expect(await actor.setEnabled(false)).toBe(false) }
+    finally { vi.stubGlobal('localStorage', storage) }
+    try {
+      actor.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await actor.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+      expect(actor.isEnabledFor(roomJid)).toBe(false)
+    } finally { actor.cancelPending() }
+  })
+
+  it.each([false, true])('preserves current independent rooms through shared-backed Off recovery (%s)', async local => {
+    // Approved independent-choice rule: recovery must not discard a newer current room absent from the shared predecessor.
+    await prepareCurrentWithSharedChoice(local)
+    const actor = new RoomReadMarkers(dependencies, () => focused)
+    const opening = pauseNextConsentOpen(true)
+    const pending = actor.setRoomEnabled(replayFixture.room, false)
+    await opening.ready
+    opening.release()
+    expect(await pending).toBe(false)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      await observer.reload()
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(observer.isEnabledFor(replayFixture.room)).toBe(false)
+    } finally { actor.cancelPending(); observer.cancelPending() }
+  })
+
+  it.each([false, true].flatMap(local => (['privacy', 'empty', 'v2'] as const).flatMap(kind => [false, true].flatMap(unreadable => [false, true].map(failed => [local, kind, unreadable, failed] as const)))))('captures confirmed rooms hidden by recognizable stale Off (%s, %s, unreadable: %s, failed: %s)', async (local, kind, unreadable, failed) => {
+    // Approved failed-save rule: a stale Off grants nothing but cannot erase the rooms all-Off must revoke.
+    const { storage } = await prepareSharedLegacy(local)
+    const original = storage.getItem(consentKey)!
+    storage.setItem(consentKey, JSON.stringify(kind === 'privacy' ? { enabled: false, rooms: [roomJid, replayFixture.room] } : kind === 'empty' ? { enabled: true, rooms: [] } : { version: 2, rooms: [] }))
+    send.mockClear()
+    const actor = new RoomReadMarkers(dependencies, () => focused)
+    const opening = pauseNextConsentOpen(failed)
+    let reads = 0
+    if (unreadable) vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'getItem'
+      ? (name: string) => { if (name === consentKey && reads++ === 0) throw new DOMException('Read refused', 'SecurityError'); return base.getItem(name) }
+      : Reflect.get(base, key, base) }))
+    const pending = actor.setEnabled(false)
+    await opening.ready
+    vi.stubGlobal('localStorage', storage)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    try {
+      storage.setItem(consentKey, original)
+      expect(actor.isEnabledFor(roomJid)).toBe(false)
+      actor.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await actor.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+      opening.release()
+      expect(await pending).toBe(!failed)
+      storage.setItem(consentKey, original)
+      await observer.reload()
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+      expect(observer.isEnabledFor(roomJid)).toBe(false)
+      expect(observer.isEnabledFor(replayFixture.room)).toBe(false)
+    } finally { opening.release(); await pending; actor.cancelPending(); observer.cancelPending() }
+  })
+
+  it.each([false, true].flatMap(local => (['privacy', 'empty', 'v2'] as const).map(kind => [local, kind] as const)))('guards restored shared rooms after unknown stale-Off capture (%s, %s)', async (local, kind) => {
+    // Approved failed-save rule: resolving unknown suppression while stale Off is present must retain the affected rooms.
+    const { storage } = await prepareSharedLegacy(local)
+    const original = storage.getItem(consentKey)!
+    storage.setItem(consentKey, JSON.stringify(kind === 'privacy' ? { enabled: false, rooms: [roomJid, replayFixture.room] } : kind === 'empty' ? { enabled: true, rooms: [] } : { version: 2, rooms: [] }))
+    const actor = new RoomReadMarkers(dependencies, () => focused)
+    const other = new RoomReadMarkers(dependencies, () => focused)
+    let reads = 0
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'getItem'
+      ? (name: string) => { if (name === consentKey && reads++ < 2) throw new DOMException('Capture refused', 'SecurityError'); return base.getItem(name) }
+      : Reflect.get(base, key, base) }))
+    try { expect(await actor.setEnabled(false)).toBe(false) }
+    finally { vi.stubGlobal('localStorage', storage) }
+    send.mockClear()
+    try {
+      expect(actor.getConsent().rooms).toEqual([])
+      storage.setItem(consentKey, original)
+      expect(actor.isEnabledFor(roomJid)).toBe(false)
+      actor.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await actor.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+      expect(await other.setRoomEnabled(roomJid, false)).toBe(true)
+      expect(await other.setRoomEnabled(roomJid, true)).toBe(true)
+      await actor.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+    } finally { actor.cancelPending(); other.cancelPending() }
+  })
+
+  it.each([false, true])('reuses complete all-Off capture before a duplicate proof read is refused (%s)', async local => {
+    // Approved failed-save rule: a complete capture must reach the writable storage turn without redundant proof reads.
+    const { storage, proofKey } = await prepareSharedLegacy(local)
+    const original = storage.getItem(consentKey)!
+    storage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+    const actor = new RoomReadMarkers(dependencies, () => focused)
+    let captured = false
+    let requested = false
+    const unsubscribe = actor.subscribe(() => { captured = true })
+    const open = idbConnection.openIndexedDB
+    vi.spyOn(idbConnection, 'openIndexedDB').mockImplementation(async (...args) => { requested = true; return open(...args) })
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'getItem'
+      ? (name: string) => { if (name === proofKey && captured && !requested) throw new DOMException('Duplicate read refused', 'SecurityError'); return base.getItem(name) }
+      : Reflect.get(base, key, base) }))
+    let saved: boolean
+    try { saved = await actor.setEnabled(false) }
+    finally { unsubscribe(); vi.stubGlobal('localStorage', storage) }
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    send.mockClear()
+    try {
+      storage.setItem(consentKey, original)
+      await observer.reload()
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+      expect(saved).toBe(true)
+      expect(observer.isEnabledFor(roomJid)).toBe(false)
+    } finally { actor.cancelPending(); observer.cancelPending() }
+  })
+
   it.each([false, true].flatMap(local => [false, true].flatMap(unreadable => [false, true].flatMap(newer => [false, true].map(failed => [local, unreadable, newer, failed] as const)))))('revokes captured shared rooms through mismatched all-Off (%s, unreadable: %s, newer: %s, failed open: %s)', async (local, unreadable, newer, failed) => {
     // Approved failed-save rule: capture hidden confirmed rooms for suppression, not the rejected empty list.
     const { storage } = await prepareSharedLegacy(local)

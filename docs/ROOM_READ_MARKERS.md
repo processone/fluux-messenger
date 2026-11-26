@@ -134,8 +134,12 @@ exception or erased target. Refused conversion retains an existing exception eve
 when a different legacy room list is present; unconfirmed On is not
 witnessed over the surviving choice. Automatic reload likewise defers before retiring that authority. Explicit room
 edits merge the independently confirmed shared choices, never the rejected list.
-Legacy all-Off captures those confirmed rooms for immediate suppression and
-recovery revocation, while preserving room edits committed after that capture.
+Confirmed current-format choices take precedence over older shared exceptions
+in capture and recovery. Legacy all-Off additionally captures previously confirmed
+rooms hidden by a recognizable stale Off for suppression and revocation, never
+as permission for that rejected input. It reuses its complete opening capture;
+normal commit and recovery still check the latest stored choices and preserve
+room edits committed after that capture.
 A matching shared choice survives a revocation fence only while its continuity
 still has that fence’s generation; erased continuity cannot restore permission.
 Once coordinated clearing removes consent, it retires that handoff proof when
