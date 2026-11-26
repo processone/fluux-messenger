@@ -13,6 +13,7 @@
 import { expect, test, type Browser, type Page } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'fs'
 import type { DemoClient } from '@fluux/sdk/demo'
+import type { subscribeDiagnostics } from '@fluux/sdk'
 import type { chatStore } from '@fluux/sdk/stores'
 import { waitForActions } from './harness/messageInteraction'
 import { LAUNCH_ROOM, OLIVIA } from '../apps/fluux/src/demo/showcase/constants'
@@ -926,7 +927,9 @@ async function openSavedVenue(page: Page) {
   await expect(page.getByTestId('saved-row')).toHaveCount(5)
   await page.getByTestId('saved-row').filter({ hasText: 'Venue confirmed' }).click()
   await expect(page.getByRole('button', { name: 'Go to message', exact: true })).toBeVisible()
-  await expect(page.getByText('Could we have the poster ready by tomorrow?')).toBeVisible()
+  const preview = page.getByTestId('saved-preview')
+  await expect(preview.locator('[data-message-id="showcase-emma-1"].message-highlight-persistent')).toBeInViewport()
+  await expect(preview.getByText('Could we have the poster ready by tomorrow?')).toBeInViewport()
 }
 
 /** Search "poster", narrowed to images with the Filters panel, with the matching message previewed. */
@@ -935,17 +938,23 @@ async function searchPosterImages(page: Page) {
   await navigateTo(page, 'search')
   const input = page.getByRole('combobox')
   await input.fill('poster')
-  await expect(page.locator('[data-search-result-id]')).toHaveCount(2)
+  // By message id: each row also quotes its neighbours, so row text names both messages.
+  const textOnlyHit = page.locator('[data-search-result-id$="showcase-emma-2"]')
+  const posterHit = page.locator('[data-search-result-id$="showcase-emma-4"]')
+  await expect(textOnlyHit).toBeVisible()
+  await expect(posterHit).toBeVisible()
   await page.getByRole('button', { name: 'Filters', exact: true }).click()
   const filters = page.getByRole('dialog', { name: 'Filters' })
   await filters.getByRole('checkbox', { name: 'Images', exact: true }).check()
   await filters.getByRole('button', { name: 'Apply', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Remove With an image' })).toBeVisible()
-  await expect(page.locator('[data-search-result-id]')).toHaveCount(1)
-  await page.locator('[data-search-result-id]').click()
+  await expect(textOnlyHit).toHaveCount(0)
+  await posterHit.click()
   await expect(page.getByText('You are viewing a search result preview')).toBeVisible()
   await expect(input).toHaveValue('poster')
-  await expect(page.locator('img[alt="launch-night-poster.jpg"]')).toBeInViewport({ ratio: 1 })
+  const poster = page.locator('[data-message-id="showcase-emma-4"].message-highlight-persistent img[alt="launch-night-poster.jpg"]')
+  await expect(poster).toBeInViewport({ ratio: 1 })
+  await expect(poster).not.toHaveJSProperty('naturalWidth', 0)
 }
 
 /**
@@ -953,18 +962,19 @@ async function searchPosterImages(page: Page) {
  * message from Olivia: the demo transport drops what it is given to send, so nobody else can send it.
  */
 async function receiveForward(page: Page) {
-  type Scope = Window & { __demoClient: DemoClient; __chatStore: typeof chatStore; __forward?: { attrs: Record<string, string> } }
+  type Scope = Window & {
+    __demoClient: DemoClient
+    __chatStore: typeof chatStore
+    __fluuxDiagnostics: typeof subscribeDiagnostics
+    __forward?: { attrs: Record<string, string> }
+  }
   await openShowcase(page)
   await page.evaluate(() => {
     const scope = window as unknown as Scope
-    const transport = scope.__demoClient as unknown as {
-      beginStanzaSend: (stanza: { name: string; attrs: Record<string, string>; getChild: (name: string, xmlns: string) => unknown }) => Promise<void>
-    }
-    const send = transport.beginStanzaSend.bind(transport)
-    transport.beginStanzaSend = async stanza => {
-      if (stanza.name === 'message' && stanza.getChild('forwarded', 'urn:xmpp:forward:0')) scope.__forward = stanza
-      await send(stanza)
-    }
+    scope.__fluuxDiagnostics(event => {
+      if (event.kind !== 'application-stanza-out') return
+      if (event.stanza.name === 'message' && event.stanza.getChild('forwarded', 'urn:xmpp:forward:0')) scope.__forward = event.stanza
+    })
   })
   await navigateTo(page, 'rooms')
   await selectItem(page, 'Launch Crew')
@@ -979,6 +989,7 @@ async function receiveForward(page: Page) {
   await picker.getByRole('textbox', { name: /comment/i }).fill('Good news for Thursday: Liam has the stream covered 🎥')
   await picker.getByRole('button', { name: 'Send', exact: true }).click()
   await expect(picker).toBeHidden()
+  await expect.poll(() => page.evaluate(() => (window as unknown as Scope).__forward?.attrs.to)).toBe(OLIVIA)
 
   await navigateTo(page, 'messages')
   await selectItem(page, 'Olivia Park')
@@ -992,13 +1003,14 @@ async function receiveForward(page: Page) {
     ;(scope.__demoClient.messages as unknown as { handle(stanza: unknown): void }).handle(stanza)
   }, OLIVIA)
 
-  const card = page.locator('[data-forwarded-copy]')
-  await expect(card).toHaveCount(1)
+  const row = page.locator('[data-message-id="showcase-forward"][data-message-body]')
+  await expect(row).toContainText('Good news for Thursday: Liam has the stream covered')
+  await expect(page.locator('[data-forwarded-copy]')).toHaveCount(1)
+  const card = row.locator('[data-forwarded-copy]')
   await expect(card).toContainText('Liam')
   await expect(card).toContainText('Launch Crew')
   await expect(card).toContainText('Livestream is ready, and the backup stream too')
   await expect(card.locator('[data-forward-differs]')).toHaveCount(0)
-  await expect(page.getByText('Liam has the stream covered').last()).toBeVisible()
   return card
 }
 

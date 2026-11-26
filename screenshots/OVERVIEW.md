@@ -81,10 +81,9 @@ and the [blog thumbnail](./blog-hero-0.18.0.png).
 
 ## Forwarding
 
-| Received forward |
-| --- |
-| <a href="./showcase/08-forward-dark.png"><img src="./showcase/08-forward-dark.png" width="600" alt="A direct chat with Olivia Park holding a comment and a forwarded card naming Liam, the Launch Crew room, the time and the original text"/></a> |
-| *A forwarded message names its source, and the card opens the original* |
+<a href="./showcase/08-forward-dark.png"><img src="./showcase/08-forward-dark.png" width="100%" alt="A direct chat with Olivia Park holding a comment and a forwarded card naming Liam, the Launch Crew room, the time and the original text"/></a>
+
+*Forwarded from Liam in Launch Crew: the message names its source, and the card opens the original when it is available*
 
 ## Search & Navigation
 
