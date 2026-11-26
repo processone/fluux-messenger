@@ -1330,18 +1330,31 @@ test.describe('iOS keyboard backdrop color', () => {
   test('sends the new theme color when the surface above the keyboard animates to it', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' })
     await bootAsIosHost(page)
-    // A band on the bottom rows that only this test styles, so no screen's layout is assumed.
+    // A band on the bottom rows that only this test styles, so no screen's layout is assumed. Its
+    // transition is far longer than the test, so only the test's own finish() ends it.
     await page.addStyleTag({ content: `
       #backdrop-band { position: fixed; left: 0; right: 0; bottom: 0; height: 60px; z-index: 2147483647;
-        background: rgb(12, 40, 60); transition: background-color 150ms }
+        background: rgb(12, 40, 60); transition: background-color 600s }
       :root[data-theme='nord'] #backdrop-band { background: rgb(10, 60, 40) }` })
-    await page.evaluate(() => {
+    // Reading the computed color resolves the starting style; without it the engine may fold the
+    // insertion and the theme switch into one style change, which starts no transition.
+    const starting = await page.evaluate(() => {
       const band = document.createElement('div')
       band.id = 'backdrop-band'
       document.body.appendChild(band)
+      return getComputedStyle(band).backgroundColor
     })
+    expect(starting).toBe('rgb(12, 40, 60)')
     await mark(page)
     await page.evaluate(() => { (window as any).__themeStore.getState().setActiveTheme('nord') })
+    // The sample taken while the band still shows its starting color.
+    await expect.poll(() => lastBackground(page)).toBe('#0c283c')
+    const finished = await page.evaluate(() => {
+      const animations = document.getElementById('backdrop-band')!.getAnimations()
+      animations.forEach(animation => animation.finish())
+      return animations.length
+    })
+    expect(finished).toBe(1)
     await expect.poll(() => lastBackground(page)).toBe('#0a3c28')
   })
 
