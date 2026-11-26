@@ -6627,10 +6627,10 @@
           "markdownDescription": "Denies the fetch_send command without any pre-configured scope."
         },
         {
-          "description": "Confirm accepted gestures with native haptic feedback, and draw the app-switcher cover in the app's theme.\n#### This default permission set includes:\n\n- `allow-haptic`\n- `allow-set-appearance`",
+          "description": "Confirm accepted gestures with native haptic feedback, and draw the app-switcher cover in the app's theme, and paint the web view behind the keyboard's rounded corners in the screen color.\n#### This default permission set includes:\n\n- `allow-haptic`\n- `allow-set-appearance`",
           "type": "string",
           "const": "ios-feedback:default",
-          "markdownDescription": "Confirm accepted gestures with native haptic feedback, and draw the app-switcher cover in the app's theme.\n#### This default permission set includes:\n\n- `allow-haptic`\n- `allow-set-appearance`"
+          "markdownDescription": "Confirm accepted gestures with native haptic feedback, and draw the app-switcher cover in the app's theme, and paint the web view behind the keyboard's rounded corners in the screen color.\n#### This default permission set includes:\n\n- `allow-haptic`\n- `allow-set-appearance`"
         },
         {
           "description": "Enables the haptic command without any pre-configured scope.",
