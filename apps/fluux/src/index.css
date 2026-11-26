@@ -1526,6 +1526,13 @@ html, body {
   opacity: 1;
   visibility: visible;
   transition: max-height 160ms ease, opacity 160ms ease;
+  /* iOS WebKit repaints a drawer control's box with the card's background but not its rounded
+   * border, and the + and emoji boxes reach into the curve of the bottom corners: revealing the
+   * drawer or pressing a control left a notch in the focused edge. A layer of their own keeps
+   * those repaints off the card. The layer is also a stacking context, which would trap the
+   * attach and emoji popovers below the send button (z-index 10), so the controls sit above it. */
+  will-change: opacity;
+  z-index: 11;
 }
 .composer-card:not(:focus-within) .composer-drawer-item {
   max-height: 0;
