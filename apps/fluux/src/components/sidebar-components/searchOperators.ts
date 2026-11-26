@@ -20,7 +20,7 @@ export interface OperatorSuggestion {
 export interface SenderOption { value: string; label: string }
 
 export function searchSenderKey(value: string, room = parseRoomSender(value)): string {
-  return room ? value : value.toLowerCase()
+  return room ? `room:${value}` : `plain:${value.toLowerCase()}`
 }
 
 /** The word the caret is in, when it is the last one of the query. */

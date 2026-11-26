@@ -110,6 +110,28 @@ describe('approved sender picker review regressions', () => {
     decode.mockRestore()
   })
 
+  it('ignores repeated Enter on the input and restored trigger while allowing a fresh activation', () => {
+    const onChange = vi.fn()
+    render(<SearchSenderPicker value="" senders={[]} onChange={onChange} />)
+    const picker = open()
+    fireEvent.keyDown(picker, { key: 'ArrowDown' })
+    fireEvent.keyDown(picker, { key: 'ArrowDown' })
+    fireEvent.keyDown(picker, { key: 'Enter', repeat: true })
+    expect(onChange).not.toHaveBeenCalled()
+    expect(picker).toHaveFocus()
+    fireEvent.keyDown(picker, { key: 'Enter' })
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('me')
+    const trigger = screen.getByRole('button')
+    expect(trigger).toHaveFocus()
+    const repeated = new KeyboardEvent('keydown', { key: 'Enter', repeat: true, bubbles: true, cancelable: true })
+    fireEvent(trigger, repeated)
+    expect(repeated.defaultPrevented).toBe(true)
+    expect(screen.queryByRole('listbox')).toBeNull()
+    const fresh = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    fireEvent(trigger, fresh)
+    expect(fresh.defaultPrevented).toBe(false)
+  })
+
   it('requests scrolling for arrows, not pointer hover', () => {
     const scroll = vi.spyOn(HTMLElement.prototype, 'scrollIntoView')
     render(<SearchSenderPicker value="" senders={[{ value: 'jo@example.test', label: 'Jo' }]} onChange={vi.fn()} />)

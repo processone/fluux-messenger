@@ -43,8 +43,8 @@ export function SearchSenderPicker({ value, summary, senders, onChange }: Props)
       candidates.unshift({ value, label: selectedRoom?.nick ?? value, room: selectedRoom, key: selectedKey, saved: true })
     }
     candidates.unshift(
-      { value: '', label: t('search.panel.anyone'), room: null, key: '', saved: false },
-      { value: 'me', label: t('search.panel.me'), room: null, key: 'me', saved: false },
+      { value: '', label: t('search.panel.anyone'), room: null, key: searchSenderKey('', null), saved: false },
+      { value: 'me', label: t('search.panel.me'), room: null, key: searchSenderKey('me', null), saved: false },
     )
     const base = candidates.map(sender => ({
       ...sender,
@@ -99,6 +99,8 @@ export function SearchSenderPicker({ value, summary, senders, onChange }: Props)
       aria-labelledby={`${id}-label ${id}-value`} aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-list`}
       className={`${fieldClass} ${open ? 'hidden' : 'flex'} items-center gap-2 text-left`}
       onClick={openPicker} onKeyDown={event => {
+        // Selection restores this button while Enter may still be held.
+        if (event.key === 'Enter' && event.repeat) { event.preventDefault(); return }
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); openPicker() }
       }}>
       <span id={`${id}-value`} className="min-w-0 flex-1 break-words">{current}</span><ChevronDown aria-hidden="true" className="size-4 flex-shrink-0" />
@@ -125,7 +127,7 @@ export function SearchSenderPicker({ value, summary, senders, onChange }: Props)
               document.getElementById(options[next].id)?.scrollIntoView({ block: 'nearest' })
             } else if (event.key === 'Enter') {
               event.preventDefault()
-              if (highlighted) choose(highlighted.value)
+              if (!event.repeat && highlighted) choose(highlighted.value)
             } else if (event.key === 'Tab') close()
           }} />
       </div>
