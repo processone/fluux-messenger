@@ -128,8 +128,13 @@ without its compatibility barrier by a later unreadable account.
 Shared exceptions permit only the exact effective choices of unaffected accounts
 whose conversion was refused; a target-only entry grants no permission. An open
 profile still admits unclassified accounts without exceptions, never a mismatched
-exception or erased target. Exceptions disappear when their account saves its
-choice; scoped clearing replaces the target's exception with denial. Unknown
+exception or erased target. Refused conversion retains an existing exception even
+when a different legacy room list is present; its denial and ordering still apply
+without granting that different input permission. Permission-bearing exceptions
+retire only after conversion or a choice safely replaces their protection.
+Scoped clearing replaces the target's exception with denial even if preference
+removal failed, while still reporting incomplete erasure. Denial-only entries need
+not be pruned before a confirmed fence-backed local On can save. Unknown
 older guards remain sealed. A refused replacement retains the existing seal or
 a writable account fence and reports incomplete cleanup. When no safe barrier can
 be saved and no usable prior barrier exists, durable revocation cannot be

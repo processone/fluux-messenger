@@ -66,7 +66,8 @@ function readClearGuard(): ClearGuard {
 }
 function pruneLegacyPermission(account: string) {
   const guard = readClearGuard()
-  if (!guard.legacy[account]) return
+  // Denial needs no retirement: confirmed local writes supersede it without reopening import.
+  if (!guard.legacy[account] || guard.legacy[account].choice === '') return
   delete guard.legacy[account]
   localStorage.setItem(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy: guard.legacy }))
 }
@@ -195,12 +196,14 @@ function readSavedRoomConsent(account: string): SavedConsent {
   const legacy = matchesInput && (retained || fence === null) && record?.version === undefined && typeof record?.enabled === 'boolean' && validRooms
   const choice = previous || legacy ? JSON.stringify([previous ? 2 : 0, previous || record?.enabled === true, previous || record?.enabled === true ? oldRooms : []]) : undefined
   const permission = guard.legacy[account]
-  const inherited = choice !== undefined && permission?.choice === choice && (!permission.local || permission.local === continuity?.id) ? permission : undefined
+  // A changed input cannot grant permission or discard earlier revocations and ordering.
+  const protection = permission && (!permission.local || permission.local === continuity?.id) ? permission : undefined
+  const inherited = choice !== undefined && protection?.choice === choice ? protection : undefined
   const allowed = retained || (guard.open && !permission) || !!inherited
-  const rooms = current || (allowed && (previous || (legacy && record?.enabled === true))) ? oldRooms.filter(room => !history?.revoked?.includes(room) && !inherited?.revoked?.includes(room)) : []
+  const rooms = current || (allowed && (previous || (legacy && record?.enabled === true))) ? oldRooms.filter(room => !history?.revoked?.includes(room) && !protection?.revoked?.includes(room)) : []
   const edits = { ...(history?.edits ?? (current ? record.edits as Record<string, string> : {})) }
   // Either protector can hold a newer Off; an idempotent union changes on either edit and survives mirroring before pruning.
-  for (const [room, edit] of Object.entries(inherited?.edits ?? {})) {
+  for (const [room, edit] of Object.entries(protection?.edits ?? {})) {
     edits[room] = [...new Set([...(edits[room]?.split('+') ?? []), ...edit.split('+')])].sort().join('+')
   }
   return {
@@ -208,9 +211,9 @@ function readSavedRoomConsent(account: string): SavedConsent {
     generation: denied ? JSON.stringify([permission.generation, restriction?.generation, fenceEpoch]) : restriction ? restriction.generation : continuity?.input === '' ? continuity.generation : current ? record.generation as string : history?.generation
       ? raw !== null && continuity?.generation === history.generation ? history.generation : 'absent:' + history.generation
       : choice !== undefined && allowed ? continuity?.generation ?? inherited?.generation ?? JSON.stringify([account, clearToken, fenceEpoch ?? '']) : JSON.stringify([account, clearToken, fenceEpoch ?? '']),
-    epoch: fenceEpoch ?? (current ? record.epoch as string : inherited?.epoch ?? ''),
+    epoch: fenceEpoch ?? (current ? record.epoch as string : protection?.epoch ?? ''),
     edits,
-    revoked: [...new Set([...(history?.revoked ?? []), ...(inherited?.revoked ?? [])])],
+    revoked: [...new Set([...(history?.revoked ?? []), ...(protection?.revoked ?? [])])],
     needsMigration: !cleared && raw !== null && !current,
     legacyChoice: allowed ? choice : undefined,
     linkedInput: retained,
@@ -402,7 +405,6 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         return false
       }
       retireProtectedProof(scoped!)
-      if (!removedConsents.has(scoped!) && !targetSealed) return false
       let preserved = true
       const guard = readClearGuard()
       // Target-only denial preserves unrelated slots, including ones installed after enumeration.
@@ -493,8 +495,10 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
             && saved.revoked.every(room => replacement.revoked?.includes(room))
             && Object.entries(saved.edits).every(([room, edit]) => replacement.edits?.[room] === edit)
           // A linked input alone cannot replace shared-only Off or its ordering revision.
-          if (permission && permission.choice === saved.legacyChoice && (!permission.local || permission.local === saved.localIdentity) && !mirrored) {
-            legacy[other] = { ...permission, generation: localIdentity ? undefined : permission.generation, local: localIdentity ?? permission.local }
+          if (permission && !mirrored) {
+            legacy[other] = permission.choice === saved.legacyChoice && (!permission.local || permission.local === saved.localIdentity)
+              ? { ...permission, generation: localIdentity ? undefined : permission.generation, local: localIdentity ?? permission.local }
+              : permission
           } else if (!mirrored && saved.legacyChoice && !saved.linkedInput && saved.rooms.length && localStorage.getItem(storageKey(other, 'consent')) === saved.raw) {
             legacy[other] = { ...(saved.sharedPermission?.choice === saved.legacyChoice ? saved.sharedPermission : {}), choice: saved.legacyChoice, generation: localIdentity ? undefined : saved.generation, local: localIdentity }
           }

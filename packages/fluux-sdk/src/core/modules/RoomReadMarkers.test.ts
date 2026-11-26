@@ -1747,7 +1747,7 @@ describe('RoomReadMarkers', () => {
       expect(send).toHaveBeenCalledTimes(erased ? 2 : 1)
       expect(other.isEnabledFor(roomJid)).toBe(erased)
       expect(other.isEnabledFor(replayFixture.room)).toBe(!erased && mode === 'room')
-      expect(JSON.parse(storage.getItem(ROOM_READ_MARKERS_STORAGE_KEY + ':clear-generation')!).legacy[jid]).toBeUndefined()
+      expect(JSON.parse(storage.getItem(ROOM_READ_MARKERS_STORAGE_KEY + ':clear-generation')!).legacy[jid]?.choice ?? '').toBe('')
       expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
       await markers.viewed(roomJid, rows[1])
       expect(send).toHaveBeenCalledTimes(2)
@@ -1924,8 +1924,11 @@ describe('RoomReadMarkers', () => {
     return { storage, proofKey, opening, pending }
   }
 
-  it.each([false, true].flatMap(local => [false, true].map(held => [local, held] as const)))('preserves shared revocation through another refused scoped conversion (local proof: %s, older On: %s)', async (local, held) => {
+  it.each([false, true].flatMap(local => [false, true].flatMap(held => [false, true].map(mismatched => [local, held, mismatched] as const))))('preserves shared revocation through another refused scoped conversion (local proof: %s, older On: %s, mismatched input: %s)', async (local, held, mismatched) => {
+    // Approved Off-wins rule: a different legacy list cannot retire denial or its ordering revision.
     const { storage, proofKey, opening, pending } = await prepareSharedRevocation(local, held ? 'on' : undefined)
+    const original = storage.getItem(consentKey)!
+    if (mismatched) storage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
     vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
       ? (name: string, value: string) => { if (name === proofKey || name === consentKey) throw new DOMException('Conversion refused', 'SecurityError'); base.setItem(name, value) }
       : Reflect.get(base, key, base) }))
@@ -1934,11 +1937,17 @@ describe('RoomReadMarkers', () => {
     if (held) expect(await pending).toBe(false)
     const observer = new RoomReadMarkers(dependencies, () => focused)
     try {
-      await observer.reload()
+      expect(await observer.reload()).toBe(true)
       observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
       await observer.viewed(roomJid, rows[1])
       expect(send).toHaveBeenCalledTimes(1)
-      expect(observer.isEnabledFor(replayFixture.room)).toBe(true)
+      if (mismatched) {
+        storage.setItem(consentKey, original)
+        expect(await observer.reload()).toBe(true)
+        await observer.viewed(roomJid, rows[1])
+        expect(send).toHaveBeenCalledTimes(1)
+      }
+      expect(observer.isEnabledFor(replayFixture.room)).toBe(!mismatched)
       expect(await observer.setRoomEnabled(roomJid, true)).toBe(true)
       await observer.viewed(roomJid, rows[1])
       expect(send).toHaveBeenCalledTimes(2)
@@ -2203,7 +2212,7 @@ describe('RoomReadMarkers', () => {
   }
 
 
-  it.each(['open', 'exception'] as const)('protects target import while preserving another account denial (%s profile)', async profile => {
+  it.each((['open', 'exception'] as const).flatMap(profile => [false, true].map(retained => [profile, retained] as const)))('protects target import while preserving another account denial (%s profile, retained preference: %s)', async (profile, retained) => {
     // Approved erasure and independent-choice rules: a shared fallback must protect B without changing A's waiting On.
     const storage = localStorage
     const target = jid
@@ -2228,6 +2237,7 @@ describe('RoomReadMarkers', () => {
     const observer = new RoomReadMarkers({ ...dependencies, getCurrentJid: () => target + '/browser' }, () => focused)
     vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
       ? (name: string, value: string) => { if (name === keyFor(target, 'migration') || name === keyFor(target, 'restriction')) throw new DOMException('Local barrier refused', 'SecurityError'); base.setItem(name, value) }
+      : key === 'removeItem' ? (name: string) => { if (retained && name === consentKey) throw new DOMException('Preference removal refused', 'SecurityError'); base.removeItem(name) }
       : Reflect.get(base, key, base) }))
     try {
       const cleared = await clearRoomReadMarkersLocalData(target)
@@ -2238,7 +2248,7 @@ describe('RoomReadMarkers', () => {
       await observer.viewed(roomJid, rows[1])
       expect(send).not.toHaveBeenCalled()
       expect(observer.isEnabledFor(roomJid)).toBe(false)
-      expect(cleared).toBe(true)
+      expect(cleared).toBe(!retained)
       opening.release()
       const saved = await pending
       independent.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
@@ -2261,6 +2271,33 @@ describe('RoomReadMarkers', () => {
       await observer.viewed(roomJid, rows[1])
       expect(send).toHaveBeenCalledTimes(1)
     } finally { vi.stubGlobal('localStorage', storage); opening.release(); await pending; observer.cancelPending(); independent.cancelPending() }
+  })
+
+  it.each([false, true])('saves fresh On without pruning shared denial (previous On: %s)', async previous => {
+    // Approved usable-switch rule: denial retirement is not a prerequisite for a confirmed local choice.
+    if (previous) expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
+    expect(await clearRoomReadMarkersLocalData(jid)).toBe(true)
+    const storage = localStorage
+    const guardKey = `${ROOM_READ_MARKERS_STORAGE_KEY}:clear-generation`
+    const guard = storage.getItem(guardKey)
+    const observer = new RoomReadMarkers(dependencies, () => focused)
+    vi.stubGlobal('localStorage', new Proxy(storage, { get: (base, key) => key === 'setItem'
+      ? (name: string, value: string) => { if (name === guardKey) throw new DOMException('Prune refused', 'SecurityError'); base.setItem(name, value) }
+      : Reflect.get(base, key, base) }))
+    try {
+      const saved = await observer.setRoomEnabled(roomJid, true)
+      observer.recordArchiveOrder(roomJid, rows.map(row => row.stanzaId!))
+      await observer.viewed(roomJid, rows[1])
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(saved).toBe(true)
+      expect(storage.getItem(guardKey)).toBe(guard)
+      send.mockClear()
+      storage.setItem(consentKey, JSON.stringify({ enabled: true, rooms: [roomJid] }))
+      expect(await observer.reload()).toBe(true)
+      await observer.viewed(roomJid, rows[1])
+      expect(send).not.toHaveBeenCalled()
+      expect(observer.isEnabledFor(roomJid)).toBe(false)
+    } finally { vi.stubGlobal('localStorage', storage); observer.cancelPending() }
   })
 
   it.each(['restriction', 'fence'] as const)('advances target-only denial through a later clear (%s writable)', async writable => {
