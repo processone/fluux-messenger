@@ -1294,3 +1294,121 @@ test.describe('native docked-keyboard composer spacing', () => {
     })
   }
 })
+
+// The web view behind the iOS keyboard's rounded corners is native, so only the color Fluux
+// sends can be read here. The demo boots as a web page; the iOS host is stubbed afterwards, and
+// a viewport resize stands in for WebKit panning the page. This proves which row Fluux samples
+// and what it sends, not that the native view shows it.
+test.describe('iOS keyboard backdrop color', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 700 } })
+
+  // The demo's host stand-in is switched to iOS after boot; only the outgoing appearance
+  // arguments are recorded.
+  async function bootAsIosHost(page: Page) {
+    await bootDemo(page, DEMO_URL)
+    await page.evaluate(() => {
+      const w = window as any
+      w.__installNotificationSettingsFixture('granted', 'disabled', { shell: 'mobile', os: 'ios' })
+      w.__appearanceCalls = []
+      const invoke = w.__TAURI_INTERNALS__.invoke
+      w.__TAURI_INTERNALS__.invoke = (command: string, args: unknown, ...rest: unknown[]) => {
+        if (command === 'plugin:ios-feedback|set_appearance') w.__appearanceCalls.push(args)
+        return invoke(command, args, ...rest)
+      }
+      w.__demoClient.stopAnimation()
+    })
+  }
+  // Colors sent since the last mark. Sends made before an action cannot satisfy its assertion.
+  const mark = (page: Page) => page.evaluate(() => { (window as any).__appearanceCalls.length = 0 })
+  const lastBackground = (page: Page) => page.evaluate(() => {
+    const calls = (window as any).__appearanceCalls as { background?: string }[]
+    return calls.map(call => call.background).filter(Boolean).at(-1) ?? null
+  })
+
+  // The user's ask: the area by the keyboard matches the theme. A surface that animates to its new
+  // color on a theme switch reads as neither theme's color until the animation ends.
+  test('sends the new theme color when the surface above the keyboard animates to it', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await bootAsIosHost(page)
+    // A band on the bottom rows that only this test styles, so no screen's layout is assumed. Its
+    // transition is far longer than the test, so only the test's own finish() ends it.
+    await page.addStyleTag({ content: `
+      #backdrop-band { position: fixed; left: 0; right: 0; bottom: 0; height: 60px; z-index: 2147483647;
+        background: rgb(12, 40, 60); transition: background-color 600s }
+      :root[data-theme='nord'] #backdrop-band { background: rgb(10, 60, 40) }` })
+    // Reading the computed color resolves the starting style; without it the engine may fold the
+    // insertion and the theme switch into one style change, which starts no transition.
+    const starting = await page.evaluate(() => {
+      const band = document.createElement('div')
+      band.id = 'backdrop-band'
+      document.body.appendChild(band)
+      return getComputedStyle(band).backgroundColor
+    })
+    expect(starting).toBe('rgb(12, 40, 60)')
+    await mark(page)
+    await page.evaluate(() => { (window as any).__themeStore.getState().setActiveTheme('nord') })
+    // The sample taken while the band still shows its starting color.
+    await expect.poll(() => lastBackground(page)).toBe('#0c283c')
+    const finished = await page.evaluate(() => {
+      const animations = document.getElementById('backdrop-band')!.getAnimations()
+      animations.forEach(animation => animation.finish())
+      return animations.length
+    })
+    expect(finished).toBe(1)
+    await expect.poll(() => lastBackground(page)).toBe('#0a3c28')
+  })
+
+  for (const scheme of ['dark', 'light'] as const) {
+    test(`sends the screen color above the keyboard in ${scheme} mode`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme })
+      await bootAsIosHost(page)
+      await page.evaluate(() => { location.hash = '#/messages/ava%40fluux.chat' })
+      // A system theme change is what first reaches the backdrop once the host reads as iOS.
+      await page.emulateMedia({ colorScheme: scheme === 'dark' ? 'light' : 'dark' })
+      await page.emulateMedia({ colorScheme: scheme })
+      await expect(page.locator('textarea').first()).toBeVisible()
+      const card = page.locator('.composer-card')
+      await expect(card).toBeVisible()
+
+      // A fixed band of one color across the page between two heights, topmost in the hit test.
+      const paintBand = (top: number, height: number, color: string) => page.evaluate(([bandTop, bandHeight, value]) => {
+        const band = document.createElement('div')
+        band.style.cssText = `position:fixed;left:0;right:0;top:${bandTop}px;height:${bandHeight}px;background:${value};z-index:2147483647`
+        document.body.appendChild(band)
+      }, [top, height, color] as const)
+      // The conversation surface just above the composer. The composer's own shadow darkens the
+      // bottom edge of the page, which is not the screen color.
+      const screenAboveComposer = async () => {
+        const box = (await card.boundingBox())!
+        const png = await page.screenshot({ clip: { x: box.x + box.width + 6, y: box.y - 9, width: 1, height: 1 } })
+        return page.evaluate(async base64 => {
+          const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob())
+          const canvas = document.createElement('canvas')
+          canvas.width = canvas.height = 1
+          const context = canvas.getContext('2d')!
+          context.drawImage(bitmap, 0, 0)
+          const [r, g, b] = context.getImageData(0, 0, 1, 1).data
+          return `#${[r, g, b].map(channel => channel.toString(16).padStart(2, '0')).join('')}`
+        }, png.toString('base64'))
+      }
+
+      // With the theme's real styles, the color sent is the screen color above the composer.
+      await expect.poll(() => lastBackground(page)).toBe(await screenAboveComposer())
+
+      // Different surfaces at the bottom row of the 700px page and of the 640px page.
+      await paintBand(640, 60, 'rgb(12, 40, 60)')
+      await paintBand(580, 60, 'rgb(10, 60, 40)')
+
+      // Docking sends the color at the visible bottom row (700px page).
+      await mark(page)
+      await page.evaluate(() => { document.documentElement.dataset.keyboardDocked = 'true' })
+      await expect.poll(() => lastBackground(page)).toBe('#0c283c')
+
+      // The page moves after the dock notification. With the flag unchanged, the new visible
+      // bottom row (640px page) sits on the other surface, and that color must be sent.
+      await mark(page)
+      await page.setViewportSize({ width: 390, height: 640 })
+      await expect.poll(() => lastBackground(page)).toBe('#0a3c28')
+    })
+  }
+})

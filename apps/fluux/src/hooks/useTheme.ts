@@ -6,6 +6,7 @@ import { resolveTransparency } from '@/themes/transparency'
 import { guardedFocusRing, paintedFocusSurfaces, type FocusRgba } from '@/themes/focusRing'
 import { platform } from '@/platform'
 import { setIosAppearance } from '@/platform/ios/appearance'
+import { syncKeyboardBackdrop } from '@/platform/ios/keyboardBackdrop'
 import { measureSystemBodySize, rootFontSize } from '@/utils/systemTextSize'
 
 
@@ -317,6 +318,8 @@ export function useTheme() {
 
     // 6. Sync native iOS views drawn over the app
     setIosAppearance(mode === 'system' ? null : resolved)
+
+    syncKeyboardBackdrop()
   }, [mode, activeThemeId, getActiveTheme, accentPreset])
 
   // Listen for system preference changes when in 'system' mode
@@ -348,6 +351,7 @@ export function useTheme() {
       applyEmojiPickerColors()
 
       updateThemeColorMeta(resolved)
+      syncKeyboardBackdrop()
     }
 
     mediaQuery.addEventListener('change', handler)

@@ -1,6 +1,6 @@
 ## Default Permission
 
-Confirm accepted gestures with native haptic feedback, and draw the app-switcher cover in the app's theme.
+Confirm accepted gestures with native haptic feedback, and draw the app-switcher cover in the app's theme, and paint the web view behind the keyboard's rounded corners in the screen color.
 
 #### This default permission set includes the following:
 
