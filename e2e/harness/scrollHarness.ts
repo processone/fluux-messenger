@@ -354,20 +354,31 @@ export async function getMessageOffsetFromTop(page: Page, messageId: string): Pr
   }, messageId)
 }
 
-/** Sample scrollTop every rAF for `durationMs`, return the array. */
-export async function sampleScrollTop(page: Page, durationMs: number): Promise<number[]> {
-  return page.evaluate((ms) => new Promise<number[]>((resolve) => {
+/** First-frame scheduling delay must not consume the drift-observation window. */
+export async function sampleScrollTop(page: Page, durationMs: number, minimumSamples = 3): Promise<number[]> {
+  return page.evaluate(({ ms, minimumSamples }) => new Promise<number[]>((resolve, reject) => {
     const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
     if (!scroller) { resolve([]); return }
     const samples: number[] = []
-    const t0 = performance.now()
-    const tick = () => {
-      samples.push(scroller.scrollTop)
-      if (performance.now() - t0 < ms) requestAnimationFrame(tick)
-      else resolve(samples)
+    let firstFrame: number | undefined
+    let frame = 0
+    const frameGapMs = 5000
+    const onStall = () => {
+      cancelAnimationFrame(frame)
+      reject(new Error(`Insufficient scroll sampling: no frame for ${frameGapMs} ms after ${samples.length} real samples`))
     }
-    requestAnimationFrame(tick)
-  }), durationMs)
+    let deadline = window.setTimeout(onStall, frameGapMs)
+    const tick = (atMs: number) => {
+      clearTimeout(deadline)
+      firstFrame ??= atMs
+      samples.push(scroller.scrollTop)
+      if (atMs - firstFrame < ms || samples.length < minimumSamples) {
+        frame = requestAnimationFrame(tick)
+        deadline = window.setTimeout(onStall, frameGapMs)
+      } else resolve(samples)
+    }
+    frame = requestAnimationFrame(tick)
+  }), { ms: durationMs, minimumSamples })
 }
 
 /**
