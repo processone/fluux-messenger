@@ -650,13 +650,15 @@ test.describe('Virtualization scroll invariants', () => {
 
     // Wait for: mock network delay (80ms) + React re-render + useLayoutEffect restore.
     await page.waitForTimeout(200)
-    const samples = await sampleScrollTop(page, FRAME_SAMPLE_MS)
+    const stableSampleIndex = 5
+    const minimumSamples = stableSampleIndex + 1
+    const samples = await sampleScrollTop(page, FRAME_SAMPLE_MS, minimumSamples)
+    expect(samples.length, 'prepend drift requires a real comparison after the restoration frames').toBeGreaterThanOrEqual(minimumSamples)
     await page.waitForTimeout(500) // let the 20-frame measure-assert loop finish (333ms)
 
-    // Assertion A: no large frame-to-frame jump during the stable period.
-    // Skip the first 5 samples (cover the initial restore jump which is expected).
+    // Initial restoration frames may jump, but at least one subsequent comparison must run.
     let maxJump = 0
-    for (let i = 5; i < samples.length; i++) {
+    for (let i = stableSampleIndex; i < samples.length; i++) {
       const jump = Math.abs(samples[i] - samples[i - 1])
       if (jump > maxJump) maxJump = jump
     }
