@@ -29,6 +29,9 @@ suite.
 Final desktop executables live in an explicit private output directory outside
 the cache. Before releasing the cache lock, the runner replaces Cargo's published
 hard link with independent executable storage and records both file identities.
+On macOS the `dev` profile leaves line tables in the intermediate object files,
+and a shared build removes its own, so that executable's backtrace frames and
+debugger show no file or line for Fluux code. A private build keeps them.
 Both lanes reject redirected descendants of the output root before Cargo starts.
 Builds retain only compatible registry dependency units; the runner removes all
 checkout-sensitive units and incremental state before and after every shared
