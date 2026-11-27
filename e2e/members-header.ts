@@ -175,6 +175,7 @@ for (const lang of ['en', 'fr']) {
       await expect.poll(() => name.evaluate(el =>
         el.clientWidth > 0 && el.scrollWidth > el.clientWidth,
       ), 'long member name truncates rather than widening the dock').toBe(true)
+      await heading.hover()
       await row.hover()
       await expect(page.getByRole('tooltip')).toContainText(nick)
       await name.click()
