@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
+import { useState, useRef, useEffect, useCallback, useId, type ReactNode } from 'react'
 import { getFloatingViewport, limitFloatingHeight } from '@/hooks/floatingViewport'
 import { createPortal } from 'react-dom'
 import { useIsMobileWeb } from '../hooks/useIsMobileWeb'
@@ -25,6 +25,7 @@ interface TooltipProps {
   showOnMobile?: boolean
   /** Trigger mode: 'hover' shows on hover/focus (default), 'click' shows on click/tap (works on mobile) */
   triggerMode?: 'hover' | 'click'
+  triggerLabel?: string
 }
 
 /**
@@ -57,7 +58,9 @@ export function Tooltip({
   maxWidth = 250,
   showOnMobile = false,
   triggerMode = 'hover',
+  triggerLabel,
 }: TooltipProps) {
+  const contentId = useId()
   const isMobile = useIsMobileWeb()
   // click mode always works on mobile
   const effectiveDisabled = disabled || (isMobile && !showOnMobile && triggerMode !== 'click')
@@ -251,11 +254,19 @@ export function Tooltip({
           ? {
               role: 'button' as const,
               tabIndex: 0,
+              'aria-label': triggerLabel,
+              'aria-expanded': isVisible,
+              'aria-controls': isVisible ? contentId : undefined,
+              'aria-describedby': isVisible ? contentId : undefined,
               onClick: toggleTooltip,
               onKeyDown: (e: import('react').KeyboardEvent) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
                   toggleTooltip()
+                } else if (e.key === 'Escape' && isVisible) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  hideTooltip()
                 }
               },
               onPointerDown: (e: import('react').PointerEvent) => e.stopPropagation(),
@@ -279,6 +290,7 @@ export function Tooltip({
         >
           <div
             ref={tooltipRef}
+            id={contentId}
             role="tooltip"
             style={{ maxWidth }}
             className="relative px-3 py-2 rounded-lg bg-fluux-float text-fluux-text text-sm

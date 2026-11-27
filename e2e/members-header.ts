@@ -9,7 +9,7 @@ const locales = Object.fromEntries(['en', 'fr'].map(lang => [lang,
   JSON.parse(readFileSync(new URL(`../apps/fluux/src/i18n/locales/${lang}.json`, import.meta.url), 'utf8')),
 ]))
 
-test.use({ reducedMotion: 'reduce' })
+test.use({ reducedMotion: 'reduce', hasTouch: true })
 
 // The accepted docked-header fix requires visible room identity, contained controls
 // and an unobscured Members heading, not merely a non-overflowing outer header.
@@ -154,9 +154,12 @@ for (const lang of ['en', 'fr']) {
       await expect(row.getByText('×2', { exact: true })).toBeVisible()
       await expect(row.locator(`[title="${words.rooms.affiliationAdmin}"]`)).toBeVisible()
       await expect(row.getByText('+1', { exact: true })).toBeVisible()
-      await row.getByText('+1', { exact: true }).hover()
+      const singleLabel = row.getByRole('button', { name: `${words.rooms.settings.fields.enableHats} (1)`, exact: true })
+      await singleLabel.click()
+      await expect(singleLabel).toHaveAttribute('aria-expanded', 'true')
       await expect(page.getByRole('tooltip').getByText('Community coordinator', { exact: true })).toBeVisible()
-      await heading.hover()
+      await singleLabel.press('Escape')
+      await expect(singleLabel).toHaveAttribute('aria-expanded', 'false')
       await expect(page.getByRole('tooltip')).toHaveCount(0)
       await expect.poll(() => row.getByText(jid, { exact: true }).evaluate(el =>
         el.clientWidth > 0 && el.scrollWidth > el.clientWidth,
@@ -233,17 +236,28 @@ for (const lang of ['en', 'fr']) {
           while (getComputedStyle(list).overflowY !== 'auto') list = list.parentElement!
           return el.scrollWidth <= el.clientWidth && list.scrollWidth <= list.clientWidth
         }), 'padding cannot widen the row or make the Members list scroll sideways').toBe(true)
-        expect(await page.evaluate(jid => {
-          const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
-          return [...store.getRoom(store.activeRoomJid!)!.occupants.values()].find(occupant => occupant.jid === jid)!.nick
-        }, jid)).toBe(markedNick)
-        await warningRow.getByText('+4', { exact: true }).hover()
+        const disclosure = warningRow.getByRole('button', { name: `${words.rooms.settings.fields.enableHats} (4)`, exact: true })
         const extraLabels = page.getByRole('tooltip').filter({ has: page.getByText('Release coordination', { exact: true }) })
-        for (const label of ['Community coordinator', 'Release coordination', 'Support', 'Moderation']) {
-          await expect(extraLabels.getByText(label, { exact: true })).toBeVisible()
+        // Focus explicitly: this owns control activation, not the separate Tab-navigation route.
+        for (const activation of ['pointer', 'Enter', 'Space', 'touch']) {
+          await expect(disclosure).toHaveAttribute('aria-expanded', 'false')
+          if (activation === 'pointer') await disclosure.click()
+          else if (activation === 'touch') await disclosure.tap()
+          else {
+            await disclosure.focus()
+            await disclosure.press(activation)
+          }
+          await expect(disclosure).toHaveAttribute('aria-expanded', 'true')
+          const controlled = await disclosure.getAttribute('aria-controls')
+          if (!controlled) throw new Error('Open role labels require a controlled tooltip')
+          await expect(extraLabels).toHaveAttribute('id', controlled)
+          for (const label of ['Community coordinator', 'Release coordination', 'Support', 'Moderation']) {
+            await expect(extraLabels.getByText(label, { exact: true })).toBeVisible()
+          }
+          await disclosure.press('Escape')
+          await expect(disclosure).toBeFocused()
+          await expect(extraLabels).toHaveCount(0)
         }
-        await heading.hover()
-        await expect(extraLabels).toHaveCount(0)
         if (process.env.FLUUX_MEMBERS_HEADER_PROOF) {
           await page.screenshot({ path: test.info().outputPath(`members-compact-markers-${padding}.png`) })
         }

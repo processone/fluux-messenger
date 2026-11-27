@@ -247,8 +247,8 @@ const OccupantRow = memo(function OccupantRow({
               const visible = hats.slice(0, MAX_INLINE)
               const overflow = hats.slice(MAX_INLINE, MAX_INLINE + 9)
               const overflowGroups = [
-                { hats: overflow, className: 'inline-flex shrink-0 lg:hidden lg:@[16rem]/members:inline-flex' },
-                { hats: hats.slice(0, MAX_INLINE + 9), className: 'hidden shrink-0 lg:inline-flex lg:@[16rem]/members:hidden' },
+                { hats: overflow, className: 'inline-flex shrink-0 lg:hidden lg:@[16rem]/members:inline-flex', triggerMode: 'hover' as const },
+                { hats: hats.slice(0, MAX_INLINE + 9), className: 'hidden shrink-0 lg:inline-flex lg:@[16rem]/members:hidden', triggerMode: 'click' as const },
               ]
               return (
                 <>
@@ -261,9 +261,11 @@ const OccupantRow = memo(function OccupantRow({
                       {hat.title}
                     </span>
                   ))}
-                  {overflowGroups.map(({ hats: extraHats, className }) => extraHats.length > 0 && (
+                  {overflowGroups.map(({ hats: extraHats, className, triggerMode }) => extraHats.length > 0 && (
                     <Tooltip
                       key={className}
+                      triggerMode={triggerMode}
+                      triggerLabel={triggerMode === 'click' ? `${t('rooms.settings.fields.enableHats')} (${extraHats.length})` : undefined}
                       content={
                         <div className="flex flex-col gap-1">
                           {extraHats.map((hat) => (
