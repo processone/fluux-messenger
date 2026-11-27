@@ -81,7 +81,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.13",
+    "@babel/core": "^8.0.0",
     "@eslint/js": "^10.0.0",
     "@rolldown/plugin-babel": "^0.3.0",
     "@tailwindcss/container-queries": "^0.1.1",
