@@ -418,7 +418,7 @@ edits. This did not justify adding sccache installation and configuration to the
 development workflow. Keep the toolchain's default linker and the existing
 `Swatinem/rust-cache` setup in CI; the experiment did not evaluate CI performance.
 
-The [unsigned Linux intermediate-cache pilot](benchmarks/rust-intermediate-pilot.md)
+The [unsigned Linux and macOS intermediate-cache pilot](benchmarks/rust-intermediate-pilot.md)
 is an explicit opt-in evaluation, separate from this default workflow. It shares
 only qualified registry dependencies, never reuses checkout-sensitive units,
 executes tests privately, and must demonstrate equivalent native checks and at

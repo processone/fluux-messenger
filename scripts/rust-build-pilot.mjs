@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { constants, closeSync, chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { delimiter, dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
+import { constants, closeSync, chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { userInfo } from 'node:os'
+import { basename, delimiter, dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const CAP = 10 * 1024 ** 3
@@ -13,6 +14,20 @@ const root = resolve(dirname(script), '..')
 const native = 'apps/fluux/src-tauri'
 const hash = value => createHash('sha256').update(value).digest('hex')
 const within = (parent, child) => { const path = relative(parent, child); return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path)) }
+
+// macOS ships no flock(1). Perl takes the same kernel lock and execs the worker with the descriptor left open, so the lock lasts as long as the worker.
+const PERL_LOCK = 'my $l = shift; sysopen(my $f, $l, O_RDWR|O_NOFOLLOW) or die "lock open: $!\\n"; flock($f, LOCK_EX) or die "lock: $!\\n"; fcntl($f, F_SETFD, 0) or die "cloexec: $!\\n"; exec { $ARGV[0] } @ARGV; die "exec: $!\\n"'
+
+export function lockedCommand(lock, command) {
+  return process.platform === 'darwin'
+    ? ['/usr/bin/perl', '-MFcntl=:flock,O_RDWR,O_NOFOLLOW,F_SETFD', '-e', PERL_LOCK, lock, ...command]
+    : ['flock', '--exclusive', lock, ...command]
+}
+
+// com.apple.SecurityServer stays reachable because trust-root reads go through it: denying it fails the TLS root tests.
+export function keychainSandbox(home) {
+  return `(version 1)(allow default)(deny mach-lookup (global-name "com.apple.securityd") (global-name "com.apple.securityd.xpc") (global-name "com.apple.secd") (global-name-regex #"^com\\.apple\\.security\\.") (global-name-regex #"^com\\.apple\\.securityd"))(deny file-read* file-write* (subpath ${JSON.stringify(join(home, 'Library/Keychains'))}))`
+}
 
 function read(command, args, cwd = root) {
   const result = spawnSync(command, args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 ** 2 })
@@ -125,8 +140,7 @@ export function qualifyEnvironment(env) {
   if (overrides.length || /linker|sysroot|link-arg|(^|[\s\x1f])-L/.test(flags)) throw new Error('Unqualified native compiler or SDK override')
 }
 
-function inspectCompatibility(options) {
-  qualifyEnvironment(process.env)
+function checkoutInputs() {
   const files = read('git', ['ls-files', '-z']).split('\0').filter(Boolean)
   const inputs = files.filter(path => /(^|\/)Cargo\.(toml|lock)$|^rust-toolchain/.test(path)).map(path => [path, hash(readFileSync(join(root, path)))])
   const configRoots = new Set([process.env.CARGO_HOME ?? join(process.env.HOME, '.cargo')])
@@ -138,9 +152,74 @@ function inspectCompatibility(options) {
   for (const path of configRoots) for (const name of ['config', 'config.toml']) {
     if (existsSync(join(path, name)) && readFileSync(join(path, name), 'utf8').trim()) throw new Error('Unqualified Cargo configuration; using isolated build')
   }
+  return inputs
+}
+
+function pinTools(options) {
   const sysroot = read('rustc', ['--print', 'sysroot'])
   options.nativeTools = { rustc: join(sysroot, 'bin/rustc'), cc: executable('cc'), cxx: executable('c++'), ar: executable('ar') }
-  const tools = [...Object.values(options.nativeTools), executable('cargo'), join(sysroot, 'bin/cargo'), executable('as'), executable('pkg-config')]
+  return { sysroot, pinned: [...Object.values(options.nativeTools), executable('cargo'), join(sysroot, 'bin/cargo')] }
+}
+
+function buildEnvironment(names) {
+  return Object.fromEntries(Object.entries(process.env).filter(([key]) => names.test(key) && !['CARGO_TARGET_DIR', 'CARGO_BUILD_BUILD_DIR'].includes(key)).sort())
+}
+
+// SDK frameworks are full of symlinks, so record each link's target instead of walking through it.
+function digestLinks(path) {
+  const info = lstatSync(path)
+  if (info.isSymbolicLink()) return hash(`link:${readlinkSync(path)}`)
+  if (!info.isDirectory()) return hash(readFileSync(path))
+  return hash(JSON.stringify(readdirSync(path).sort().map(name => [name, digestLinks(join(path, name))])))
+}
+
+// System libraries exist only in the dyld shared cache, which the OS build pins; the rest are hashed from disk.
+function darwinLibraries(paths) {
+  const files = new Set()
+  const linkage = []
+  for (const path of paths) {
+    const output = spawnSync('/usr/bin/otool', ['-L', path], { encoding: 'utf8' })
+    if (output.status !== 0) throw new Error('Cannot identify native shared libraries')
+    for (const [, name] of output.stdout.matchAll(/^\s+(\S+)\s+\(/gm)) {
+      linkage.push(`${path}:${name}`)
+      const candidates = name.startsWith('@') ? [join(dirname(path), '../lib', basename(name)), join(dirname(path), basename(name))] : [name]
+      const found = candidates.find(candidate => existsSync(candidate) && statSync(candidate).isFile())
+      if (found) files.add(realpathSync(found))
+    }
+  }
+  return { linkage: linkage.sort(), files: [...files].sort() }
+}
+
+function inspectDarwin(options) {
+  qualifyEnvironment(process.env)
+  const inputs = checkoutInputs()
+  const { sysroot, pinned } = pinTools(options)
+  // The pinned /usr/bin compilers are stubs; xcrun names the binaries that actually run.
+  const toolchain = ['clang', 'clang++', 'ld', 'ar', 'as', 'libtool', 'lipo'].map(name => realpathSync(read('xcrun', ['--find', name])))
+  const tools = [...pinned, executable('xcrun'), executable('node'), executable('plutil'), executable('git'), ...toolchain]
+  const sdk = realpathSync(read('xcrun', ['--show-sdk-path']))
+  const resource = realpathSync(join(read(toolchain[0], ['-print-resource-dir']), 'include'))
+  const libraries = darwinLibraries(tools)
+  return {
+    format: 3, platform: 'darwin', features: options.features, target: options.host, profile: 'dev',
+    cargo: read('cargo', ['-vV']), rustc: read('rustc', ['-vV']),
+    tools: tools.map(path => [path, digestTree(path)]),
+    sdk: {
+      path: sdk, version: read('xcrun', ['--show-sdk-version']), build: read('xcrun', ['--show-sdk-build-version']), developerDir: read('xcode-select', ['-p']),
+      tree: digestLinks(sdk), resource: [resource, digestLinks(resource)],
+      libraries: libraries.files.map(path => [path, digestTree(path)]), linkage: libraries.linkage,
+      rust: digestTree(join(sysroot, 'lib/rustlib', options.host, 'lib')),
+    },
+    systemPackages: [read('sw_vers', ['--productVersion']), read('sw_vers', ['--buildVersion']), read('xcrun', ['xcodebuild', '-version'])].join('\n'),
+    inputs, buildEnv: buildEnvironment(/^(CARGO|RUST|TAURI|PATH|MACOSX_DEPLOYMENT_TARGET|DEVELOPER_DIR)/),
+  }
+}
+
+function inspectLinux(options) {
+  qualifyEnvironment(process.env)
+  const inputs = checkoutInputs()
+  const { sysroot, pinned } = pinTools(options)
+  const tools = [...pinned, executable('as'), executable('pkg-config')]
   for (const name of ['ld', 'cc1', 'collect2', 'as']) tools.push(executable(read('cc', [`-print-prog-name=${name}`])))
   tools.push(executable(read('c++', ['-print-prog-name=cc1plus'])))
   const sdkFlags = read('pkg-config', ['--cflags', '--libs', 'gtk+-3.0', 'webkit2gtk-4.1', 'javascriptcoregtk-4.1', 'libsoup-3.0'])
@@ -150,14 +229,17 @@ function inspectCompatibility(options) {
   if (linkInputs.some(path => !isAbsolute(path))) throw new Error('Cannot identify compiler runtime inputs')
   const headers = sdkHeaderRoots(options.nativeTools, sdkFlags)
   if (sdkFlags.split(/\s+/).some(flag => flag.startsWith('-L')) || libraries.some(path => !isAbsolute(path))) throw new Error('Unqualified native library search path')
-  const buildEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(CARGO|RUST|TAURI|PATH)/.test(key) && !['CARGO_TARGET_DIR', 'CARGO_BUILD_BUILD_DIR'].includes(key)).sort())
   return {
     format: 3, features: options.features, target: options.host, profile: 'dev',
     cargo: read('cargo', ['-vV']), rustc: read('rustc', ['-vV']),
     tools: tools.map(path => [path, digestTree(path)]),
     sdk: { flags: sdkFlags, headers: headers.map(path => [path, digestTree(path)]), libraries: linkedLibraries([...tools, ...libraries]).map(path => [path, digestTree(path)]), linkInputs: linkInputs.map(path => [path, digestTree(path)]), rust: digestTree(join(sysroot, 'lib/rustlib', options.host, 'lib')) },
-    systemPackages: read('dpkg-query', ['-W', '-f=${Package}=${Version}\n']), inputs, buildEnv,
+    systemPackages: read('dpkg-query', ['-W', '-f=${Package}=${Version}\n']), inputs, buildEnv: buildEnvironment(/^(CARGO|RUST|TAURI|PATH)/),
   }
+}
+
+function inspectCompatibility(options) {
+  return process.platform === 'darwin' ? inspectDarwin(options) : inspectLinux(options)
 }
 
 function sdkHeaderRoots(tools, flags) {
@@ -274,11 +356,14 @@ export function publishIndependentExecutable(binary, target) {
 function runTestExecutable(target, receipt, path, args) {
   const resolved = realpathSync(path)
   if (!within(target, resolved)) throw new Error('Cargo tried to execute a shared test binary')
-  const inventory = read(resolved, ['--list'])
+  // The password database's home, not $HOME: a scratch HOME still leaves the account's keychains reachable.
+  const sandbox = process.platform === 'darwin' ? keychainSandbox(userInfo().homedir) : null
+  const guarded = args => sandbox ? ['/usr/bin/sandbox-exec', ['-p', sandbox, resolved, ...args]] : [resolved, args]
+  const inventory = read(...guarded(['--list']))
   if (!inventory.split('\n').some(line => line.endsWith(': test'))) throw new Error('Native test inventory is empty')
-  writeFileSync(receipt, JSON.stringify({ executable: resolved, inventory }))
+  writeFileSync(receipt, JSON.stringify({ executable: resolved, inventory, sandbox }))
   console.error(`Pilot private test executable: ${resolved}`)
-  return spawnSync(resolved, args, { stdio: 'inherit' }).status ?? 1
+  return spawnSync(...guarded(args), { stdio: 'inherit' }).status ?? 1
 }
 
 export function cargoArguments(options) {
@@ -494,7 +579,7 @@ function main() {
   if (process.argv[2] === '--test-executable') return runTestExecutable(process.argv[3], process.argv[4], process.argv[5], process.argv.slice(6))
   const started = performance.now()
   return launch(process.argv.slice(2), options => {
-    if (process.platform !== 'linux') throw new Error('Only unsigned Linux host builds are supported')
+    if (!['linux', 'darwin'].includes(process.platform)) throw new Error('Only unsigned Linux or macOS host builds are supported')
     options.host = read(process.env.RUSTC ?? 'rustc', ['-vV']).match(/^host: (.+)$/m)?.[1]
     if (!options.host) throw new Error('Cannot resolve the compiler host target')
     const version = read('cargo', ['--version']).match(/^cargo (\d+)\.(\d+)\./)
@@ -520,7 +605,7 @@ function main() {
     }
     const schedule = shared => {
       const command = [process.execPath, script, '--worker', JSON.stringify({ ...options, shared })]
-      const payload = shared ? ['flock', '--exclusive', join(options.cache, '.lock'), ...command] : command
+      const payload = shared ? lockedCommand(join(options.cache, '.lock'), command) : command
       return spawnSync('infinitary-load-axi', ['run', '--processors', '2', '--memory-mib', '6144', '--', ...payload], { stdio: 'inherit' })
     }
     let result = schedule(options.shared)

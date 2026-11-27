@@ -1,19 +1,21 @@
-# Unsigned Linux Rust intermediate-cache pilot
+# Unsigned Linux and macOS Rust intermediate-cache pilot
 
 This is an evaluation lane, not a new default. It changes only how the unsigned
-Linux desktop binary is built and checked. It does not change check selection,
-skip native tests, configure a global Cargo target, install a compiler wrapper,
+Linux or macOS desktop binary is built and checked. It does not change check
+selection, skip native tests, configure a global Cargo target, install a compiler wrapper,
 or build a signed application. Do not roll it out until the criteria below pass.
 
 ## Scope and isolation
 
-Use only mutually trusted local Fluux checkouts on the pilot Linux host, with
-Cargo 1.100 or later and the existing native build prerequisites. The opt-in
-runner requires Node.js, `flock`, `dpkg-query`, the host compiler/linker,
-`pkg-config` and the load-line launcher supplied by the local work scheduler.
-There is no default cache path or machine-wide environment change. Ordinary
-JavaScript policy tests use recorded real tool identities and require none of
-these native tools.
+Use only mutually trusted local Fluux checkouts on the pilot Linux or macOS host,
+with Cargo 1.100 or later and the existing native build prerequisites. If the
+default toolchain is older, select a newer installed one with `RUSTUP_TOOLCHAIN`.
+The opt-in runner requires Node.js, the host compiler/linker and the load-line
+launcher supplied by the local work scheduler. Linux also needs `flock`,
+`dpkg-query` and `pkg-config`. macOS needs Xcode (`xcrun`, `xcodebuild`), `otool`,
+`/usr/bin/perl` and `/usr/bin/sandbox-exec`. There is no default cache path or
+machine-wide environment change. Ordinary JavaScript policy tests use recorded
+real tool identities and require none of these native tools.
 
 The runner accepts only `cargo build --bin fluux` and `cargo test --bin fluux`,
 using the locked offline dependency graph, two workers and the explicit `dev`
@@ -21,11 +23,15 @@ profile. Both commands explicitly pass the compiler's resolved host target;
 Cargo configuration cannot silently select another platform. `--features`
 supports an explicitly qualified variant. No arbitrary arguments are forwarded.
 Do not substitute `--lib`: the mobile library excludes its implementation on
-Linux and is not evidence of a desktop build or nonempty desktop test suite.
+desktop hosts and is not evidence of a desktop build or nonempty desktop test
+suite.
 
 Final desktop executables live in an explicit private output directory outside
 the cache. Before releasing the cache lock, the runner replaces Cargo's published
 hard link with independent executable storage and records both file identities.
+On macOS the `dev` profile leaves line tables in the intermediate object files,
+and a shared build removes its own, so that executable's backtrace frames and
+debugger show no file or line for Fluux code. A private build keeps them.
 Both lanes reject redirected descendants of the output root before Cargo starts.
 Builds retain only compatible registry dependency units; the runner removes all
 checkout-sensitive units and incremental state before and after every shared
@@ -50,6 +56,16 @@ A compatibility key separates features, explicit development profile, host
 target, Cargo/rustc identities, actual compiler/linker binaries, native SDK
 headers and resolved shared libraries, Rust standard libraries, installed system
 packages, tracked Cargo manifests/lockfiles and build environment variables.
+
+On Linux the SDK is the compiler's include directories and the libraries
+`pkg-config` and `ldd` resolve, and system packages come from `dpkg-query`.
+On macOS the key covers the Xcode tools `xcrun` resolves, the whole SDK (its
+symlinks by target), the compiler's own headers, the libraries `otool` names for
+those tools, and the macOS and Xcode versions. `MACOSX_DEPLOYMENT_TARGET` and
+`DEVELOPER_DIR` are part of the key. Libraries that exist only in the system's
+shared cache are pinned by the macOS build number. Homebrew packages are not
+inventoried: only the libraries those tools load directly are hashed.
+
 Both reused and private comparison lanes qualify and pin identical Rust/C/C++
 tools and the host linker. Each report records tool identities, an SDK digest
 and `qualification.comparisonKey`; paired timing and freshness runs must have
@@ -64,7 +80,9 @@ Native source freshness remains Cargo's responsibility. Neither timestamps nor
 fingerprints are rewritten. Conservative qualification may miss reuse on purpose.
 
 The whole build/test first enters the load line, then holds one exclusive lock,
-including seeding and eviction. This serializes different keys too. Admission,
+including seeding and eviction. It is a kernel lock on the namespace's `.lock`
+file, taken with `flock` on Linux and through Perl on macOS, which ships no
+`flock` command. This serializes different keys too. Admission,
 lock wait and compatibility inspection are included in elapsed time. Use one
 cache parent for the lane; different roots do not coordinate reuse.
 
@@ -84,6 +102,17 @@ fail an otherwise successful run without replacing an existing Cargo failure.
 The parent preserves the scheduler's known failure even if a final receipt is
 partial/unreadable or the optional report cannot be published.
 
+## macOS native tests
+
+On macOS the test runner lists and runs each private test executable under
+`sandbox-exec`. The profile denies the keychain services and every read or write
+under the account's `~/Library/Keychains`, taken from the password database so a
+scratch `HOME` does not move it. It deliberately leaves the legacy security
+server reachable, because trust-root reads need it, and does not cover the system
+keychain under `/Library/Keychains`. It is a guard for this lane's tests, not a
+general security boundary. The report records the profile used. Build scripts and
+procedural macros run outside it, as in any Cargo build.
+
 ## Bounds
 
 Before and after shared access, remove entries individually larger than 10 GiB
@@ -94,7 +123,8 @@ directory bytes; redirected entries are rejected before deletion. The active
 build can temporarily exceed the retained limit and is removed afterward if
 oversized. This is a retention cap, not a filesystem quota. Idle eviction happens
 on the next invocation; no background cleanup job is installed. The namespace's
-lock and ownership marker are never evicted.
+lock and ownership marker are never evicted. One macOS desktop entry measured
+about 1.9 GB, so the cap holds about five.
 
 ## Invocation
 
@@ -169,10 +199,12 @@ reports must include the nonempty inventory and private executable receipt.
 
 Run `npm run test:rust-build-pilot` for deterministic key, retention, namespace
 and output-separation safeguards. Linux branch and batch checks run them without
-requiring native tools. They do not replace real Cargo comparisons. Existing
+requiring native tools. The macOS lock and keychain sandbox tests run only on a
+Mac and those checks skip them, so run the command on a Mac after changing the
+runner. They do not replace real Cargo comparisons. Existing
 branch, batch, platform and release gates remain unchanged in scope.
 
-## Reviewed result
+## Reviewed Linux result
 
 The qualified unsigned Linux host experiment met the retention criteria. Keep
 this lane opt-in; this result does not enable a default or qualify another host.
@@ -211,3 +243,29 @@ were removed after preserving the evidence.
 
 This result does not qualify packaging, installed-app behavior, production TLS
 runtime, macOS or mobile. Existing platform and batch gates remain required.
+
+## Reviewed macOS result
+
+The unsigned macOS host experiment on Apple silicon, with Cargo 1.100, met the
+same retention criteria. It stays opt-in and enables no default.
+
+| Paired run | Cold elapsed time | Fresh-copy elapsed time |
+| --- | ---: | ---: |
+| 1 | 105.51 s | 23.74 s |
+| 2 | 104.88 s | 23.61 s |
+| 3 | 110.51 s | 23.78 s |
+| Median | 105.51 s | 23.74 s |
+
+The median reduction was **77.49%**, including admission and lock wait. Each
+fresh-copy build recorded 720 artifacts Cargo treated as fresh and rebuilt 33.
+Clean and private-seeded original suites each passed 506 tests with 6 ignored,
+and changed-input suites each passed 507. Older-after-newer inputs, deliberate
+failures, feature/flag keys and redirected-cache fallback matched the protocol
+above. An added probe that expands Tauri's context macro a second time must use
+`tauri::generate_context!(test = true)` on macOS, or the executable embeds its
+property list twice and does not compile in either lane.
+That experiment did not repeat the eviction, lock-exclusion or report-error
+readings.
+
+This result does not qualify app bundles, installed-app behavior, signing,
+production TLS runtime or iOS. Existing platform and batch gates remain required.

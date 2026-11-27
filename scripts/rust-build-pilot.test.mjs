@@ -2,13 +2,14 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, copyFileSync, chmodSync, existsSync, linkSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync, statSync, readdirSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { tmpdir, userInfo } from 'node:os'
 import { join, resolve } from 'node:path'
 import { test } from 'node:test'
-import { CAP, NAMESPACE, cargoArguments, compatibility, IDLE_MS, launch, managedCache, prune, publishIndependentExecutable, retainRegistryOnly, seedDependencies, freshSeedHits, qualifyEnvironment, cargoSettings, publishReport, finishBuild, workerQualification, privateDirectory } from './rust-build-pilot.mjs'
+import { CAP, NAMESPACE, cargoArguments, compatibility, IDLE_MS, launch, managedCache, prune, publishIndependentExecutable, retainRegistryOnly, seedDependencies, freshSeedHits, qualifyEnvironment, cargoSettings, publishReport, finishBuild, workerQualification, privateDirectory, lockedCommand, keychainSandbox } from './rust-build-pilot.mjs'
 
 const recorded = JSON.parse(readFileSync(new URL('./fixtures/rust-build-pilot-tools.json', import.meta.url), 'utf8'))
 const nativeFs = { skip: process.platform === 'win32' }
+const macOnly = { skip: process.platform !== 'darwin' }
 function withCache(action, temporaryParent = tmpdir()) {
   const parent = realpathSync(mkdtempSync(join(temporaryParent, 'fluux-rust-policy-')))
   try { action(managedCache(parent), parent) } finally { rmSync(parent, { recursive: true, force: true }) }
@@ -399,7 +400,7 @@ test('private workers consume prepared identities but shared workers inspect aga
 })
 
 // Source: the outer command must preserve a failed child's status despite broken receipts/reports.
-test('runner CLI preserves scheduler failures through receipt reads and report publication', { skip: process.platform !== 'linux' }, t => withCache((cache, parent) => {
+test('runner CLI preserves scheduler failures through receipt reads and report publication', { skip: !['linux', 'darwin'].includes(process.platform) }, t => withCache((cache, parent) => {
   const bin = join(parent, 'bin')
   mkdirSync(bin)
   symlinkSync(process.execPath, join(bin, 'node'))
@@ -463,4 +464,53 @@ process.exit(result.status ?? 1)
       t.diagnostic(`Stand-in ${mode}: scheduler ${status}, CLI ${result.status}; ${result.stderr.trim().split('\n').at(-1)}`)
     }
   }
+}))
+
+// Source: macOS has no flock(1); shared builds must still hold one kernel lock for the whole worker.
+test('the Mac lock stays held by the worker it starts and refuses a redirected lock', macOnly, () => withCache((cache, parent) => {
+  const lock = join(cache, '.lock')
+  const probe = ['/usr/bin/perl', '-MFcntl=:flock', '-e', 'open(my $f, "<", shift) or die; print flock($f, LOCK_EX | LOCK_NB) ? "free" : "held"; exit 3', lock]
+  const run = ([command, ...args]) => spawnSync(command, args, { encoding: 'utf8' })
+  const locked = run(lockedCommand(lock, probe))
+  assert.equal(locked.stdout, 'held', locked.stderr)
+  assert.equal(locked.status, 3)
+  assert.equal(run(probe).stdout, 'free')
+  const alias = join(parent, 'lock-alias')
+  symlinkSync(lock, alias)
+  const redirected = run(lockedCommand(alias, probe))
+  assert.notEqual(redirected.status, 0)
+  assert.equal(redirected.stdout, '')
+}))
+
+// Source: Mac native test executables must not reach the account's keychain folder, whatever HOME says.
+test('the Mac test runner lists and runs the executable with the keychain folder denied', macOnly, () => withCache((cache, parent) => {
+  const target = join(parent, 'output')
+  mkdirSync(target, { mode: 0o700 })
+  const program = join(target, 'probe')
+  // Only the folder's metadata is asked for, so a broken sandbox would still read no keychain.
+  writeFileSync(program, `#!/usr/bin/env node
+let answer = 'allowed'
+try { require('node:fs').statSync(${JSON.stringify(join(userInfo().homedir, 'Library/Keychains'))}) } catch (error) { answer = error.code }
+console.log('keychain_folder_' + answer + ': test')
+process.exit(process.argv[2] === '--list' ? 0 : 7)
+`, { mode: 0o700 })
+  const receipt = join(target, 'executed.json')
+  const result = spawnSync(process.execPath, ['scripts/rust-build-pilot.mjs', '--test-executable', target, receipt, program], { encoding: 'utf8', env: { ...process.env, HOME: parent } })
+  assert.equal(result.stdout, 'keychain_folder_EPERM: test\n', result.stderr)
+  assert.equal(result.status, 7)
+  assert.equal(JSON.parse(readFileSync(receipt, 'utf8')).inventory, 'keychain_folder_EPERM: test')
+}))
+
+// Source: the sandbox denies reading and writing keychain files and nothing beside them.
+test('the keychain sandbox denies keychain files while leaving their neighbours usable', macOnly, () => withCache((cache, parent) => {
+  const keychains = join(parent, 'Library/Keychains')
+  mkdirSync(keychains, { recursive: true })
+  const inside = join(keychains, 'stand-in.keychain-db')
+  const beside = join(parent, 'Library/neighbour')
+  for (const path of [inside, beside]) copyFileSync('apps/fluux/src-tauri/Cargo.lock', path)
+  const sandboxed = (...command) => spawnSync('/usr/bin/sandbox-exec', ['-p', keychainSandbox(parent), ...command]).status
+  assert.equal(sandboxed('/bin/cat', beside), 0)
+  assert.equal(sandboxed('/bin/cat', inside), 1)
+  assert.equal(sandboxed('/usr/bin/touch', beside), 0)
+  assert.equal(sandboxed('/usr/bin/touch', inside), 1)
 }))
