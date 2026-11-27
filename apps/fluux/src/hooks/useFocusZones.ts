@@ -1,3 +1,4 @@
+import { isDatePillVisible } from '@/components/conversation/datePillFocus'
 import { useEffect, useRef, useCallback, type RefObject } from 'react'
 
 export type FocusZone = 'sidebarList' | 'mainContent' | 'composer' | 'account'
@@ -19,6 +20,7 @@ export interface FocusZoneRefs {
  * Shift+Tab reverses the direction.
  *
  * Each zone container should have tabIndex={0} to be focusable.
+ * Conversation actions precede Main Content; visible date pills follow it.
  * Within zones, arrow keys can be used for navigation (handled separately).
  */
 export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
@@ -126,10 +128,41 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
       }
 
       // Only handle Tab key for zone cycling
-      if (e.key !== 'Tab') return
+      if (e.key !== 'Tab' || e.defaultPrevented) return
 
       // Check if we're in a zone
       const currentZone = getCurrentZone()
+
+      if (currentZone !== 'composer' && (activeElement?.matches('input, textarea') || activeElement?.isContentEditable)) return
+
+      // Conversation actions and visible day pills belong to the message zone's
+      // Tab route; unrelated per-message controls still use the existing zone hop.
+      const main = refsRef.current.mainContent.current
+      const conversation = main?.closest('[data-conversation-thread]')
+      const dateStops = conversation
+        ? [...conversation.querySelectorAll<HTMLElement>('[data-header-overflow-trigger], [data-date-pill]')].filter(isDatePillVisible)
+        : []
+      if (dateStops.length) {
+        const stops = ZONE_ORDER.flatMap(zone => {
+          const element = refsRef.current[zone]?.current
+          if (!element) return []
+          if (zone !== 'mainContent') return [element]
+          return [
+            ...dateStops.filter(stop => stop.hasAttribute('data-header-overflow-trigger')),
+            element,
+            ...dateStops.filter(stop => stop.hasAttribute('data-date-pill')),
+          ]
+        })
+        const current = stops.includes(activeElement) ? activeElement : currentZone ? refsRef.current[currentZone]?.current : null
+        const index = current ? stops.findIndex(stop => stop === current) : e.shiftKey ? 0 : -1
+        e.preventDefault()
+        for (let step = 1; step <= stops.length; step++) {
+          const next = stops[(index + (e.shiftKey ? -step : step) + stops.length) % stops.length]
+          next.focus({ preventScroll: true })
+          if (document.activeElement === next) break
+        }
+        return
+      }
 
       // Handle Tab from input/textarea elements
       const target = e.target as HTMLElement

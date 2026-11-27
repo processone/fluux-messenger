@@ -130,8 +130,67 @@ describe('JumpToDateDialog', () => {
     expect(useToastStore.getState().toasts).toEqual([expect.objectContaining({ type: 'info', message: 'chat.jumpToDate.showingLatest' })])
   })
 
+  // Approved day-pill plan: opening and Tab traversal stay inside the named picker.
+  it('names the dialog, focuses the date and keeps forward/backward Tab inside', () => {
+    open()
+    const dialog = screen.getByRole('dialog', { name: 'chat.jumpToDate.title' })
+    const input = screen.getByLabelText('chat.jumpToDate.date')
+    expect(input).toHaveFocus()
+    const last = screen.getByRole('button', { name: 'chat.jumpToDate.yearAgo' })
+    fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })
+    expect(last).toHaveFocus()
+    fireEvent.keyDown(last, { key: 'Tab' })
+    expect(input).toHaveFocus()
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(h.find).not.toHaveBeenCalled()
+  })
+
   it('opens on the day of the date bubble it came from', () => {
     open([], '2024-03-10')
     expect((screen.getByLabelText('chat.jumpToDate.date') as HTMLInputElement).value).toBe('2024-03-10')
+  })
+
+  // Approved picker contract: pending lookups retain keyboard focus and submit only once.
+  it('keeps the pending input and Go stop usable until an archive error', async () => {
+    let resolve!: (result: unknown) => void
+    h.find.mockReturnValueOnce(new Promise(done => { resolve = done }))
+    open([], '2024-03-10')
+    const input = screen.getByLabelText('chat.jumpToDate.date')
+    fireEvent.submit(input.closest('form')!)
+    expect(input).toHaveFocus()
+    expect(input).not.toBeDisabled()
+    expect(input).toHaveAttribute('readonly')
+    const go = screen.getByRole('button', { name: 'chat.jumpToDate.searching' })
+    fireEvent.keyDown(input, { key: 'Tab' })
+    expect(go).toHaveFocus()
+    fireEvent.click(go)
+    fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.weekAgo' }))
+    expect(h.find).toHaveBeenCalledTimes(1)
+    await act(async () => resolve({ kind: 'unknown' }))
+    expect(go).toHaveFocus()
+    expect(screen.getByRole('alert')).toHaveTextContent('chat.jumpToDate.failed')
+  })
+
+  // Approved Escape cancellation must take effect before the exit animation finishes.
+  it.each(['Escape', 'Close', 'backdrop'])('cancels a pending lookup immediately on %s', async route => {
+    let resolve!: (result: unknown) => void
+    h.find.mockReturnValueOnce(new Promise(done => { resolve = done }))
+    document.documentElement.setAttribute('data-motion', 'full')
+    vi.useFakeTimers()
+    try {
+      const { onLand, onClose } = open([], '2024-03-10')
+      fireEvent.submit(screen.getByLabelText('chat.jumpToDate.date').closest('form')!)
+      if (route === 'Escape') fireEvent.keyDown(document, { key: 'Escape' })
+      else if (route === 'Close') fireEvent.click(screen.getByRole('button', { name: 'common.close' }))
+      else fireEvent.click(document.querySelector('[data-modal] > button')!)
+      expect(onClose).not.toHaveBeenCalled()
+      await act(async () => resolve({ kind: 'found', message: message(new Date(2024, 2, 10, 8)), source: 'archive' }))
+      expect(onLand).not.toHaveBeenCalled()
+      act(() => vi.runOnlyPendingTimers())
+      expect(onClose).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+      document.documentElement.removeAttribute('data-motion')
+    }
   })
 })

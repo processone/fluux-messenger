@@ -1,4 +1,4 @@
-import { useLayoutEffect, type RefObject } from 'react'
+import { useLayoutEffect, useRef, type RefObject } from 'react'
 import { getFocusableElements } from './focusable'
 import {
   focusNextTabStop,
@@ -7,10 +7,15 @@ import {
   getTabStops,
 } from './composedFocus'
 
+// A foreground trap retains its parent's restoration if its own opener disappears.
+const trapRestorers = new WeakMap<HTMLElement, () => void>()
+
 interface FocusTrapOptions {
   /** Preferred element to focus on open; falls back to the first focusable
    *  element, then the container itself. */
   initialFocusRef?: RefObject<HTMLElement | null>
+  /** Replaces default restoration; a foreground trap can retain this callback when its opener disappears. */
+  restoreFocus?: (opener: HTMLElement | null) => void
   /** Gate the trap (e.g. an overlay's `open`/`isOpen` flag). Default true. */
   active?: boolean
   /** For menus hosting web components: pick the opening focus through open shadow
@@ -24,7 +29,8 @@ interface FocusTrapOptions {
  * - moves focus into the container when it opens,
  * - cycles Tab / Shift+Tab within the container so focus never reaches the UI
  *   beneath it,
- * - returns focus to the element that was focused before it opened, on close.
+ * - restores the opener on cleanup by default, or calls the custom restorer;
+ *   the caller decides whether that cleanup should move focus.
  *
  * The keydown listener is attached to the container (not `document`), so a
  * stacked overlay wins automatically: the lower overlay's container never
@@ -35,8 +41,9 @@ interface FocusTrapOptions {
  */
 export function useFocusTrap<T extends HTMLElement>(
   containerRef: RefObject<T | null>,
-  { initialFocusRef, active = true, includeShadowRoots = false }: FocusTrapOptions = {},
+  { initialFocusRef, restoreFocus, active = true, includeShadowRoots = false }: FocusTrapOptions = {},
 ) {
+  const openerRef = useRef<HTMLElement | null>(null)
   useLayoutEffect(() => {
     if (!active) return
     const container = containerRef.current
@@ -50,6 +57,22 @@ export function useFocusTrap<T extends HTMLElement>(
       !container.contains(document.activeElement)
         ? document.activeElement
         : null
+    let inheritedRestore: (() => void) | undefined
+    for (let owner = previouslyFocused; owner; owner = owner.parentElement) {
+      inheritedRestore = trapRestorers.get(owner)
+      if (inheritedRestore) break
+    }
+
+    // A custom restorer can defer focus until explicit close. StrictMode's probe
+    // then leaves focus inside the panel, so retain the first captured opener.
+    if (previouslyFocused) openerRef.current = previouslyFocused
+
+    const restoreOpener = () => {
+      if (restoreFocus) restoreFocus(openerRef.current)
+      else if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true })
+      else inheritedRestore?.()
+    }
+    trapRestorers.set(container, restoreOpener)
 
     // Let the container hold focus itself when it has no focusable children, so
     // focus can never fall through to the page beneath.
@@ -82,7 +105,17 @@ export function useFocusTrap<T extends HTMLElement>(
 
     return () => {
       container.removeEventListener('keydown', handleKeyDown, capture)
-      if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true })
+      trapRestorers.delete(container)
+      if (restoreFocus || previouslyFocused?.isConnected) restoreOpener()
+      else if (inheritedRestore) {
+        // Layout cleanup precedes DOM removal; the closing panel must no longer
+        // look like a foreground focus owner when its parent decides where to return.
+        queueMicrotask(() => {
+          const focusedModal = document.activeElement?.closest('[data-modal="true"]')
+          if (focusedModal && !focusedModal.contains(container)) return
+          restoreOpener()
+        })
+      }
     }
-  }, [containerRef, initialFocusRef, active, includeShadowRoots])
+  }, [containerRef, initialFocusRef, restoreFocus, active, includeShadowRoots])
 }

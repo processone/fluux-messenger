@@ -1309,12 +1309,22 @@ html, body {
   }
 }
 
+[data-date-pill][data-find-covered] {
+  visibility: hidden;
+}
+
 /* Utility: guarantee a comfortable >=44px touch hit area for icon-only or */
 /* compact buttons WITHOUT enlarging the glyph or changing desktop density. */
 /* The rule is inert on hovering/fine-pointer devices (mouse): only on touch */
 /* (coarse pointer / no hover) does the minimum box grow and the icon centre. */
 /* Apply to small icon buttons (modal close, header actions, menu rows, etc.). */
 @media (hover: none), (pointer: coarse) {
+  /* The 44px date hit target still fits the existing 48px estimated date row. */
+  .date-separator:has([data-date-pill]) {
+    padding-top: 0.125rem;
+    padding-bottom: 0.125rem;
+  }
+
   .tap-target {
     display: inline-flex;
     align-items: center;

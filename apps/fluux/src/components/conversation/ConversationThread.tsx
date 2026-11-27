@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode, RefObject } from 'react'
+import { useCallback, useLayoutEffect, useRef, type ComponentProps, type ReactNode, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Upload } from 'lucide-react'
 import { MediaAutoloadProvider } from '@/contexts'
@@ -9,6 +9,7 @@ import { ReactionMentions } from './ReactionMentions'
 import { EasterEggMentions } from './EasterEggMentions'
 import { EasterEggAnimation } from '../easter-eggs/EasterEggAnimation'
 import { JumpToDateDialog } from './JumpToDateDialog'
+import { focusConversationActions, isDatePillVisible, observeDatePillsCoveredByFind } from './datePillFocus'
 
 interface ConversationThreadProps {
   /** `layout` from useConversationThread. */
@@ -42,6 +43,21 @@ export function ConversationThread({
 }: ConversationThreadProps) {
   const { t } = useTranslation()
   const { id, find } = thread
+  const rootRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (find.isOpen && rootRef.current) return observeDatePillsCoveredByFind(rootRef.current)
+  }, [find.isOpen, id])
+  const restoreDateFocus = useCallback((opener: HTMLElement | null, jumped: boolean) => {
+    const root = rootRef.current
+    // An old dialog's cleanup must not focus a conversation opened in the meantime.
+    if (!root?.isConnected || root.dataset.conversationThread !== id || root.closest('[inert], [aria-hidden="true"]')) return
+    // A foreground modal owns focus even if this lookup finishes behind it.
+    const focusedModal = document.activeElement?.closest('[data-modal="true"]')
+    if (focusedModal && !focusedModal.querySelector('#jump-to-date')) return
+    if (jumped) root.querySelector<HTMLElement>('[data-date-focus-target]')?.focus({ preventScroll: true })
+    else if (opener?.matches('[data-date-pill]') && root.contains(opener) && isDatePillVisible(opener)) opener.focus({ preventScroll: true })
+    else focusConversationActions(root)
+  }, [id])
 
   const column = (
     <ConversationColumn>
@@ -52,6 +68,7 @@ export function ConversationThread({
       <div
         ref={mainContentRef as RefObject<HTMLDivElement>}
         tabIndex={0}
+        data-date-focus-target
         // `composer-active` hides the per-message hover toolbars while typing via CSS (index.css),
         // instead of threading `isComposing` into every row's `hideToolbar` prop, which re-rendered
         // (and relayouted) the whole non-virtualized list on each typing burst.
@@ -87,6 +104,8 @@ export function ConversationThread({
 
   return (
     <div
+      ref={rootRef}
+      data-conversation-thread={id}
       className={rootClassName}
       inert={covered || undefined}
       aria-hidden={covered || undefined}
@@ -109,7 +128,7 @@ export function ConversationThread({
       {thread.activeAnimation && (
         <EasterEggAnimation animation={thread.activeAnimation.animation} onComplete={thread.clearAnimation} senderName={thread.activeAnimation.senderName} />
       )}
-      {thread.jumpToDate && <JumpToDateDialog key={thread.jumpToDate.conversationId} {...thread.jumpToDate} />}
+      {thread.jumpToDate && <JumpToDateDialog key={thread.jumpToDate.conversationId} {...thread.jumpToDate} onRestoreFocus={restoreDateFocus} />}
       {overlays}
     </div>
   )

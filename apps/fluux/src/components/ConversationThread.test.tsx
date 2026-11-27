@@ -23,6 +23,8 @@ import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
 import { ChatView } from './ChatView'
 import { RoomView } from './RoomView'
+import { ModalOverlay } from './ModalOverlay'
+import { MODAL_EXIT_MS } from '@/hooks/useModalTransition'
 
 const h = vi.hoisted(() => ({
   chat: null as Record<string, unknown> | null,
@@ -129,6 +131,8 @@ vi.mock('./OccupantPanel', () => ({ OccupantPanel: () => <div data-testid="occup
 // The list boundary: records its props and draws every row through the view's own renderMessage.
 vi.mock('./conversation/MessageList', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./conversation/MessageList')>()
+  const { DateSeparator } = await import('./conversation/DateSeparator')
+  const { localDayValue } = await import('@fluux/sdk')
   return {
     ...actual,
     MessageList: (props: MessageListProps<Message>) => {
@@ -136,6 +140,7 @@ vi.mock('./conversation/MessageList', async (importOriginal) => {
       const rows = props.timeline.messages
       return (
         <div data-testid="list">
+          {rows[0] && <DateSeparator date={localDayValue(rows[0].timestamp)} onSelect={props.timeline.window?.onJumpToDate} />}
           {rows.map((m, i) => (
             <div key={messageRowId(m)} data-message-row-id={messageRowId(m)} data-message-id={messageRowId(m)}>
               {props.renderMessage(m, i, rows, false, () => {})}
@@ -167,10 +172,10 @@ vi.mock('./MessageComposer', async (importOriginal) => {
 
 // The header boundary: the thread hands it the search and saved handlers.
 vi.mock('./ChatHeader', () => ({
-  ChatHeader: (props: Record<string, unknown>) => { h.headerProps = props; return <div data-testid="header" /> },
+  ChatHeader: (props: Record<string, unknown>) => { h.headerProps = props; return <div data-testid="header"><button type="button" data-header-overflow-trigger>Conversation actions</button></div> },
 }))
 vi.mock('./RoomHeader', () => ({
-  RoomHeader: (props: Record<string, unknown>) => { h.headerProps = props; return <div data-testid="header" /> },
+  RoomHeader: (props: Record<string, unknown>) => { h.headerProps = props; return <div data-testid="header"><button type="button" data-header-overflow-trigger>Conversation actions</button></div> },
 }))
 
 const ME = 'me@example.com'
@@ -706,6 +711,147 @@ describe.each(KINDS)('conversation thread: $name view', (kind) => {
       expect(screen.queryByLabelText('chat.jumpToDate.date')).toBeNull()
       await act(async () => resolve({ kind: 'found', message: kind.messages()[0], source: 'archive' }))
       expect(kind.storeSpies.setTargetMessageId).not.toHaveBeenCalled()
+    })
+
+    // Approved day-pill plan: cancel restores a visible opener, not a stale or hidden row.
+    it.each(['visible', 'outside viewport', 'removed'] as const)('restores usable focus when the date opener is %s', (state) => {
+      document.documentElement.setAttribute('data-motion', 'reduced')
+      try {
+        kind.mount()
+        const pill = document.querySelector<HTMLElement>('[data-date-pill]')!
+        const rect = { x: 100, y: 100, top: 100, left: 100, right: 200, bottom: 126, width: 100, height: 26, toJSON() {} }
+        vi.spyOn(pill, 'getBoundingClientRect').mockImplementation(() => rect)
+        fireEvent.click(pill)
+        expect(screen.getByRole('dialog', { name: 'chat.jumpToDate.title' })).toBeInTheDocument()
+        expect(screen.getByLabelText('chat.jumpToDate.date')).toHaveFocus()
+        expect(h.findFirstMessageOfDay).not.toHaveBeenCalled()
+        if (state === 'outside viewport') { rect.top = -100; rect.bottom = -74 }
+        if (state === 'removed') pill.remove()
+        fireEvent.keyDown(document, { key: 'Escape' })
+        expect(state === 'visible' ? pill : screen.getByRole('button', { name: 'Conversation actions' })).toHaveFocus()
+        expect(kind.storeSpies.setTargetMessageId).not.toHaveBeenCalled()
+      } finally { document.documentElement.removeAttribute('data-motion') }
+    })
+
+    it('returns menu cancellation to actions and a completed jump to the message area', async () => {
+      document.documentElement.setAttribute('data-motion', 'reduced')
+      try {
+        h.findFirstMessageOfDay.mockResolvedValue({ kind: 'found', message: kind.messages()[0], source: 'cache' })
+        kind.mount()
+        const actions = screen.getByRole('button', { name: 'Conversation actions' })
+        actions.focus()
+        act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+        fireEvent.keyDown(document, { key: 'Escape' })
+        expect(actions).toHaveFocus()
+        act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'chat.jumpToDate.go' })) })
+        expect(document.querySelector('[data-date-focus-target]')).toHaveFocus()
+      } finally { document.documentElement.removeAttribute('data-motion') }
+    })
+
+    // Approved stacked-dialog contract: a completed lookup cannot steal foreground focus.
+    it('leaves focus in a modal opened above a pending date lookup', async () => {
+      document.documentElement.setAttribute('data-motion', 'reduced')
+      let resolve!: (result: unknown) => void
+      h.findFirstMessageOfDay.mockReturnValueOnce(new Promise(done => { resolve = done }))
+      kind.mount()
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      fireEvent.submit(screen.getByLabelText('chat.jumpToDate.date').closest('form')!)
+      const foreground = document.createElement('div')
+      foreground.dataset.modal = 'true'
+      const input = document.createElement('input')
+      foreground.append(input)
+      document.body.append(foreground)
+      const focusMessages = vi.spyOn(document.querySelector<HTMLElement>('[data-date-focus-target]')!, 'focus')
+      try {
+        input.focus()
+        await act(async () => resolve({ kind: 'found', message: kind.messages()[0], source: 'archive' }))
+        expect(screen.queryByRole('dialog')).toBeNull()
+        expect(input).toHaveFocus()
+        expect(focusMessages).not.toHaveBeenCalled()
+        expect(kind.storeSpies.setTargetMessageId).toHaveBeenCalled()
+      } finally {
+        foreground.remove()
+        document.documentElement.removeAttribute('data-motion')
+      }
+    })
+
+    // The approved picker outcome must survive a foreground modal opened during dismissal.
+    it.each([
+      ['Escape', 'visible', 'pill'],
+      ['Close', 'visible', 'pill'],
+      ['backdrop', 'visible', 'pill'],
+      ['Escape', 'clipped', 'actions'],
+      ['Escape', 'removed', 'actions'],
+      ['jump', 'visible', 'messages'],
+      ['jump', 'switched', 'none'],
+      ['jump', 'covered', 'none'],
+      ['jump', 'foreground', 'none'],
+    ] as const)('restores %s with a %s opener after the foreground closes', async (outcome, state, expected) => {
+      document.documentElement.setAttribute('data-motion', 'full')
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      let resolve!: (result: unknown) => void
+      if (outcome === 'jump') h.findFirstMessageOfDay.mockReturnValueOnce(new Promise(done => { resolve = done }))
+      const view = kind.mount()
+      const pill = document.querySelector<HTMLElement>('[data-date-pill]')!
+      const rect = { x: 100, y: 100, top: 100, left: 100, right: 200, bottom: 126, width: 100, height: 26, toJSON() {} }
+      vi.spyOn(pill, 'getBoundingClientRect').mockImplementation(() => rect)
+      fireEvent.click(pill)
+      if (outcome === 'jump') fireEvent.submit(screen.getByLabelText('chat.jumpToDate.date').closest('form')!)
+      else if (outcome === 'Escape') fireEvent.keyDown(document, { key: 'Escape' })
+      else if (outcome === 'Close') fireEvent.click(screen.getByRole('button', { name: 'common.close' }))
+      else fireEvent.click(document.querySelector('[data-modal] > button')!)
+      expect(screen.getByRole('dialog', { name: 'chat.jumpToDate.title' })).toBeInTheDocument()
+      const foreground = render(<ModalOverlay onClose={() => {}}><input aria-label="Search conversations" /></ModalOverlay>)
+      const input = foreground.container.querySelector('input')!
+      const other = document.createElement('div')
+      try {
+        expect(input).toHaveFocus()
+        if (outcome === 'jump') await act(async () => resolve({ kind: 'found', message: kind.messages()[0], source: 'archive' }))
+        else act(() => vi.advanceTimersByTime(MODAL_EXIT_MS))
+        expect(screen.queryByRole('dialog', { name: 'chat.jumpToDate.title' })).toBeNull()
+        expect(input).toHaveFocus()
+        if (state === 'clipped') { rect.top = -100; rect.bottom = -74 }
+        if (state === 'removed') pill.remove()
+        if (state === 'switched') {
+          kind.activate(secondId, kind.messages())
+          view.rerender(kind.name === 'chat' ? <ChatView /> : <RoomView />)
+        }
+        if (state === 'covered') document.querySelector('[data-conversation-thread]')!.setAttribute('inert', '')
+        if (state === 'foreground') {
+          other.dataset.modal = 'true'
+          other.innerHTML = '<input aria-label="Another search">'
+          document.body.append(other)
+          other.querySelector('input')!.focus()
+        }
+        const messages = document.querySelector<HTMLElement>('[data-date-focus-target]')!
+        const focusMessages = vi.spyOn(messages, 'focus')
+        await act(async () => { foreground.unmount() })
+        if (expected === 'pill') expect(pill).toHaveFocus()
+        else if (expected === 'actions') expect(screen.getByRole('button', { name: 'Conversation actions' })).toHaveFocus()
+        else if (expected === 'messages') expect(messages).toHaveFocus()
+        else expect(focusMessages).not.toHaveBeenCalled()
+        if (state === 'foreground') expect(other.querySelector('input')).toHaveFocus()
+        if (outcome !== 'jump') expect(kind.storeSpies.setTargetMessageId).not.toHaveBeenCalled()
+      } finally {
+        foreground.unmount()
+        other.remove()
+        vi.useRealTimers()
+        document.documentElement.removeAttribute('data-motion')
+      }
+    })
+
+    it('does not restore old-dialog focus after a conversation switch', () => {
+      const { rerender } = kind.mount()
+      const actions = screen.getByRole('button', { name: 'Conversation actions' })
+      actions.focus()
+      const focus = vi.spyOn(actions, 'focus')
+      act(() => { (h.headerProps!.onJumpToDate as () => void)() })
+      focus.mockClear()
+      kind.activate(secondId, kind.messages())
+      rerender(kind.name === 'chat' ? <ChatView /> : <RoomView />)
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(focus).not.toHaveBeenCalled()
     })
 
     it('opens jump to date on the day of a date bubble', () => {

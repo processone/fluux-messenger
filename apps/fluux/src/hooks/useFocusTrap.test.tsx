@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from 'vitest'
-import { render, cleanup, fireEvent } from '@testing-library/react'
-import { useRef } from 'react'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { render, cleanup, fireEvent, act } from '@testing-library/react'
+import { StrictMode, useRef } from 'react'
 import { useFocusTrap } from './useFocusTrap'
 import { getTabStops } from './composedFocus'
 
 afterEach(cleanup)
 
-function Trap({ active = true }: { active?: boolean }) {
+function Trap({ active = true, restoreFocus }: { active?: boolean; restoreFocus?: (opener: HTMLElement | null) => void }) {
   const ref = useRef<HTMLDivElement>(null)
-  useFocusTrap(ref, { active })
+  useFocusTrap(ref, { active, restoreFocus })
   return (
     <div ref={ref}>
       <button type="button">first</button>
@@ -59,6 +59,47 @@ describe('useFocusTrap', () => {
     expect(document.activeElement).not.toBe(opener)
     unmount()
     expect(document.activeElement).toBe(opener)
+    opener.remove()
+  })
+
+  // The date picker defers restoration until explicit close, including under StrictMode.
+  it('keeps the original opener across a StrictMode probe with custom restoration', () => {
+    const opener = document.createElement('button')
+    opener.textContent = 'Yesterday. Jump to date'
+    document.body.appendChild(opener)
+    opener.focus()
+    const restoreFocus = vi.fn()
+    const { unmount } = render(<StrictMode><Trap restoreFocus={restoreFocus} /></StrictMode>)
+    restoreFocus.mockClear()
+    unmount()
+    expect(restoreFocus).toHaveBeenCalledWith(opener)
+    opener.remove()
+  })
+
+  // The picker owns the outcome; a foreground trap must preserve its custom restoration.
+  it.each([false, true])('delegates a detached opener without overriding another foreground owner: %s', async covered => {
+    const opener = document.createElement('button')
+    document.body.append(opener)
+    opener.focus()
+    const restoreFocus = vi.fn()
+    const parent = render(<Trap restoreFocus={restoreFocus} />)
+    const foreground = render(<Trap />)
+    expect(foreground.container.querySelector('button')).toHaveFocus()
+    parent.unmount()
+    restoreFocus.mockClear()
+    const other = document.createElement('div')
+    if (covered) {
+      other.dataset.modal = 'true'
+      other.innerHTML = '<input aria-label="Search">'
+      document.body.append(other)
+      other.querySelector('input')!.focus()
+    }
+    await act(async () => { foreground.unmount() })
+    if (covered) {
+      expect(other.querySelector('input')).toHaveFocus()
+      expect(restoreFocus).not.toHaveBeenCalled()
+    } else expect(restoreFocus).toHaveBeenCalledWith(opener)
+    other.remove()
     opener.remove()
   })
 

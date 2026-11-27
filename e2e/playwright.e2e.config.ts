@@ -65,6 +65,7 @@ const SUITES = [
   { name: 'room-private-group-layout', testMatch: 'room-private-group-layout.ts' },
   { name: 'message-context-menu', testMatch: 'message-context-menu.ts' },
   { name: 'header-context-menu', testMatch: 'header-context-menu.ts' },
+  { name: 'jump-to-date', testMatch: 'jump-to-date.ts' },
   { name: 'forward-direct', testMatch: 'forward-direct.ts' },
   { name: 'forward-card', testMatch: 'forward-card.ts' },
   { name: 'mobile-members', testMatch: 'mobile-members.ts' },

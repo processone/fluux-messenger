@@ -31,6 +31,7 @@ import {
 } from './slowCorrectionMonitor'
 import { signalAnomaly } from '@/utils/anomalySignal'
 import { isIosDevice } from '@/platform'
+import { refreshDatePillsCoveredByFind } from './datePillFocus'
 
 export interface ScrollContainerBindingPorts {
   /** Publish the attached scroller: the caller's own ref plus any external one it mirrors. */
@@ -141,6 +142,7 @@ export function useScrollContainerBinding(
           runCorrectionBody(currentScroller)
         } finally {
           const correctionEnd = performance.now()
+          refreshDatePillsCoveredByFind(currentScroller)
           if (!slowCorrectionMonitorRef.current) {
             slowCorrectionMonitorRef.current = createSlowCorrectionMonitor()
           }

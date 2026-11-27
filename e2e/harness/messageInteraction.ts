@@ -252,8 +252,24 @@ export async function restoreMessageActionFocus(page: Page, row: Locator) {
 }
 
 export async function tabOutOfMessageActions(page: Page) {
+  const composer = page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()
+  const dateControls = page.locator('[data-date-pill]')
+  const maximumDateStops = await dateControls.count()
+  const stops: string[] = []
   await page.keyboard.press('Tab')
-  await expect(page.locator('textarea.message-input, .message-input[contenteditable="true"]').last()).toBeFocused()
+  // Native Tab must traverse the calendar controls; directly focusing the composer would conceal a broken route.
+  for (let index = 0; index < maximumDateStops; index++) {
+    const focusedDate = page.locator('[data-date-pill]:focus')
+    if (await focusedDate.count() === 0) break
+    await expect(focusedDate).toBeVisible()
+    stops.push((await focusedDate.getAttribute('aria-label')) ?? '')
+    await page.keyboard.press('Tab')
+  }
+  await expect(composer).toBeFocused()
+  await test.info().attach('message-actions-tab-route', {
+    body: JSON.stringify({ dateStops: stops, destination: await composer.getAttribute('aria-label') }),
+    contentType: 'application/json',
+  })
 }
 
 type LayoutRect = { top: number; bottom: number; left: number; right: number; width: number; height: number }
