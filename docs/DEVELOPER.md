@@ -214,13 +214,13 @@ The reading and live-edge suites share their setup, geometry helpers, and after-
 scroll diagnostics in `e2e/harness/scrollHarness.ts`. Tests within each file run in
 declaration order.
 
-CI runs the browser projects configured in `e2e/playwright.e2e.config.ts` in
-separate Chromium and WebKit jobs with two workers per runner.
-Each job builds and serves its own demo and uploads a separate report on failure.
-To reproduce one engine's job or one scroll suite:
+CI divides the browser projects configured in `e2e/playwright.e2e.config.ts`
+into four shards per engine. Each job has two workers and
+30 minutes, builds and serves its own demo, and uploads a report on test failure.
+To reproduce one Chromium shard or one scroll suite locally:
 
 ```bash
-npm run test:e2e -- --project="*-chromium" --workers=2
+npm run test:e2e -- --project="*-chromium" --shard=1/4 --workers=2
 npm run test:e2e -- --project=scroll-reading-webkit
 ```
 

@@ -379,11 +379,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Three Chromium shards put both long scroll suites on one runner; four split that load.
         # Four WebKit shards keep its slower journeys within the 30-minute job budget.
         # Every shard is a blocking check.
         include:
-          - { browser: chromium, shard: 1, shards: 2 }
-          - { browser: chromium, shard: 2, shards: 2 }
+          - { browser: chromium, shard: 1, shards: 4 }
+          - { browser: chromium, shard: 2, shards: 4 }
+          - { browser: chromium, shard: 3, shards: 4 }
+          - { browser: chromium, shard: 4, shards: 4 }
           - { browser: webkit, shard: 1, shards: 4 }
           - { browser: webkit, shard: 2, shards: 4 }
           - { browser: webkit, shard: 3, shards: 4 }
