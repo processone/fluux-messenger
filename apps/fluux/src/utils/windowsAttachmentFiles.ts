@@ -2,24 +2,26 @@ import type { FileAttachment } from '@fluux/sdk'
 import { useToastStore } from '@/stores/toastStore'
 
 /**
- * Windows document attachments live directly in the user's Downloads folder.
- * A filename is not a unique attachment ID: remember which XMPP URL last
- * wrote each filename so that similarly named attachments are never silently
- * mistaken for each other. The association persists across app restarts.
- *
- * Button "save": ask before replacing any existing file.
- * Card "open": open a previously saved matching file, otherwise download
- * (asking before replacing a conflicting file) and launch the OS default app.
+ * Windows document attachments live in Downloads. Explicit saves always create
+ * a new copy; opening reuses a local copy only if its attachment identity matches.
+ * Keep the original owner records for compatibility with previous releases.
  */
 const pendingByFilename = new Map<string, Promise<void>>()
 const knownOwners = new Map<string, string>()
 const storagePrefix = 'fluux:attachment-download-owner:v1:'
+const savedCopyPrefix = 'fluux:attachment-download-copy:v1:'
 
 function safeFilename(name: string | undefined): string {
   const leaf = (name || 'attachment').replace(/\\/g, '/').split('/').pop() || 'attachment'
-  let cleaned = leaf.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/, '').slice(0, 160)
+  let cleaned = leaf.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 160).replace(/[. ]+$/, '')
   if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(cleaned)) cleaned = `_${cleaned}`
   return cleaned || 'attachment'
+}
+
+function isSafeSavedCopy(name: string): boolean {
+  // Numbered copies may be longer than the sanitized original filename.
+  return !!name && !/[<>:"/\\|?*\u0000-\u001f]/.test(name) && !/[. ]$/.test(name)
+    && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)
 }
 
 function ownerStorageKey(filename: string): string {
@@ -45,6 +47,38 @@ function rememberSavedOwner(filename: string, owner: string): void {
   }
 }
 
+function savedCopyKey(filename: string, owner: string): string {
+  return `${savedCopyPrefix}${filename.toLowerCase()}:${owner}`
+}
+
+function getSavedCopy(filename: string, owner: string): string | null {
+  const key = savedCopyKey(filename, owner)
+  try {
+    return localStorage.getItem(key) ?? knownOwners.get(key) ?? null
+  } catch {
+    return knownOwners.get(key) ?? null
+  }
+}
+
+function rememberSavedCopy(filename: string, owner: string, copy: string): void {
+  rememberSavedOwner(copy, owner)
+  const key = savedCopyKey(filename, owner)
+  knownOwners.set(key, copy)
+  try {
+    localStorage.setItem(key, copy)
+  } catch {
+    // The current session still remembers the association if storage is blocked.
+  }
+}
+
+function numberedFilename(filename: string, number: number): string {
+  if (number === 0) return filename
+  const dot = filename.lastIndexOf('.')
+  const stem = dot > 0 ? filename.slice(0, dot) : filename
+  const extension = dot > 0 ? filename.slice(dot) : ''
+  return `${stem} (${number})${extension}`
+}
+
 async function sourceIdentity(attachment: FileAttachment): Promise<string> {
   // Do not store media URLs or encryption metadata as plain text in localStorage.
   const data = new TextEncoder().encode(`${attachment.url}\u0000${JSON.stringify(attachment.encryption ?? null)}`)
@@ -60,73 +94,61 @@ async function resolveAttachmentUrl(attachment: FileAttachment): Promise<string>
   return resolveMediaUrl(attachment.url)
 }
 
-async function confirmOverwrite(filename: string): Promise<boolean> {
-  const { ask } = await import('@tauri-apps/plugin-dialog')
-  return ask(`Файл «${filename}» уже существует в папке «Загрузки». Заменить его?`, {
-    title: 'Fluux Messenger Custom',
-    kind: 'warning',
-    okLabel: 'Заменить',
-    cancelLabel: 'Отмена',
-  })
-}
-
 async function saveOrOpen(attachment: FileAttachment, mode: 'save' | 'open', filename: string): Promise<void> {
   const { downloadDir, join } = await import('@tauri-apps/api/path')
-  const { exists, writeFile, rename, remove } = await import('@tauri-apps/plugin-fs')
-  const path = await join(await downloadDir(), filename)
+  const { exists, writeFile, remove } = await import('@tauri-apps/plugin-fs')
+  const dir = await downloadDir()
   const owner = await sourceIdentity(attachment)
-  const alreadyExists = await exists(path)
 
-  // Opening a file known to belong to this exact attachment needs no download.
-  if (mode === 'open' && alreadyExists && getSavedOwner(filename) === owner) {
-    const { openPath } = await import('@tauri-apps/plugin-opener')
-    await openPath(path)
-    return
+  if (mode === 'open') {
+    // Prefer the last successfully saved copy, falling back to the original
+    // filename used by older versions. Never open an unrelated same-named file.
+    const savedCopy = getSavedCopy(filename, owner)
+    for (const candidate of new Set([savedCopy, filename])) {
+      if (!candidate || !isSafeSavedCopy(candidate) || getSavedOwner(candidate) !== owner) continue
+      const path = await join(dir, candidate)
+      if (await exists(path)) {
+        const { openPath } = await import('@tauri-apps/plugin-opener')
+        await openPath(path)
+        return
+      }
+    }
   }
 
-  // An explicit save asks every time; opening an existing but unrecognized
-  // filename asks too, rather than opening somebody else's same-named file.
-  if (alreadyExists && !(await confirmOverwrite(filename))) return
-
-  // Download and decrypt everything before touching an existing local file.
+  // Finish downloading/decrypting before creating any local file.
   const mediaUrl = await resolveAttachmentUrl(attachment)
   const response = await fetch(mediaUrl)
   if (!response.ok) throw new Error(`Unable to download attachment: HTTP ${response.status}`)
   const bytes = new Uint8Array(await response.arrayBuffer())
 
-  // Stage the complete download in Downloads, then replace the old file.
-  // If the replacement fails, restore the original from its temporary backup.
-  const dir = await downloadDir()
-  const tempPath = await join(dir, `.fluux-download-${crypto.randomUUID()}.tmp`)
-  const backupPath = await join(dir, `.fluux-backup-${crypto.randomUUID()}.tmp`)
-  await writeFile(tempPath, bytes)
-  let backedUp = false
-  try {
-    if (await exists(path)) {
-      await rename(path, backupPath)
-      backedUp = true
-    }
+  for (let number = 0; ; number++) {
+    const copy = numberedFilename(filename, number)
+    const path = await join(dir, copy)
+    if (await exists(path)) continue
+
+    // Reserve the name exclusively: even a simultaneous download (including
+    // an attachment whose original name already ends in " (1)") cannot
+    // overwrite an existing file between exists() and creation.
     try {
-      await rename(tempPath, path)
+      await writeFile(path, new Uint8Array(0), { createNew: true })
     } catch (error) {
-      if (backedUp) {
-        await rename(backupPath, path).catch(restoreError => {
-          console.error('[attachment] Could not restore replaced file:', backupPath, restoreError)
-        })
-      }
+      if (await exists(path)) continue
       throw error
     }
-  } finally {
-    await remove(tempPath).catch(() => {})
-    if (backedUp && await exists(path)) {
-      await remove(backupPath).catch(() => {})
-    }
-  }
 
-  rememberSavedOwner(filename, owner)
-  if (mode === 'open') {
-    const { openPath } = await import('@tauri-apps/plugin-opener')
-    await openPath(path)
+    try {
+      await writeFile(path, bytes, { create: false })
+    } catch (error) {
+      await remove(path).catch(() => {})
+      throw error
+    }
+
+    rememberSavedCopy(filename, owner, copy)
+    if (mode === 'open') {
+      const { openPath } = await import('@tauri-apps/plugin-opener')
+      await openPath(path)
+    }
+    return
   }
 }
 
