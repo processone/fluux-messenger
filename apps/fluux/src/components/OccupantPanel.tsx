@@ -205,14 +205,14 @@ const OccupantRow = memo(function OccupantRow({
           forceOffline={forceOffline}
         />
 
-        {/* Nick and badges — single nowrap line: the name shrinks and truncates so
-            badges/hats never wrap to a second line (which made row heights inconsistent) */}
+        {/* Clip the docked nickname separately from its bounded edge markers so
+            padding cannot hide the invisible-character warning. */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 lg:gap-0.5">
             {isMe ? (
-              <span className="min-w-0 truncate text-sm font-semibold" style={{ color: nameColor }}>
-                <NickText nick={group.primaryNick} />
-                <span className="text-fluux-muted font-normal"> {t('rooms.you')}</span>
+              <span className="min-w-0 lg:min-w-[3rem] truncate lg:flex lg:items-baseline lg:overflow-visible text-sm font-semibold" style={{ color: nameColor }}>
+                <NickText nick={group.primaryNick} truncateAtDesktop />
+                <span className="text-fluux-muted font-normal lg:ms-1 lg:truncate"> {t('rooms.you')}</span>
               </span>
             ) : (
               <UserInfoPopover
@@ -221,10 +221,10 @@ const OccupantRow = memo(function OccupantRow({
                 occupantJid={`${roomJid}/${group.primaryNick}`}
                 role={primaryOccupant.role}
                 affiliation={bestAffiliation as RoomAffiliation}
-                className="min-w-0"
+                className="min-w-0 lg:min-w-[3rem]"
               >
-                <span className="block truncate text-sm" style={{ color: nameColor }}>
-                  <NickText nick={group.primaryNick} />
+                <span className="block truncate lg:flex lg:items-baseline lg:overflow-visible text-sm" style={{ color: nameColor }}>
+                  <NickText nick={group.primaryNick} truncateAtDesktop />
                 </span>
               </UserInfoPopover>
             )}
@@ -239,28 +239,36 @@ const OccupantRow = memo(function OccupantRow({
             {ignored && (
               <EyeOff className="size-3 shrink-0 text-fluux-muted" />
             )}
-            {/* XEP-0317 Hats from all connections (max 3 inline, overflow in tooltip) */}
+            {/* Compact docks reserve the name budget for identity markers; hats move
+                into the existing overflow tooltip instead of competing with them. */}
             {(() => {
               const hats = Array.from(allHats.values())
               const MAX_INLINE = 3
               const visible = hats.slice(0, MAX_INLINE)
               const overflow = hats.slice(MAX_INLINE, MAX_INLINE + 9)
+              const overflowGroups = [
+                { hats: overflow, className: 'inline-flex shrink-0 lg:hidden lg:@[16rem]/members:inline-flex', triggerMode: 'hover' as const },
+                { hats: hats.slice(0, MAX_INLINE + 9), className: 'hidden shrink-0 lg:inline-flex lg:@[16rem]/members:hidden', triggerMode: 'click' as const },
+              ]
               return (
                 <>
                   {visible.map((hat) => (
                     <span
                       key={hat.uri}
-                      className="min-w-0 truncate px-1.5 py-0.5 text-[10px] font-medium rounded"
+                      className="min-w-0 truncate px-1.5 py-0.5 text-[10px] font-medium rounded lg:hidden lg:@[16rem]/members:block"
                       style={getHatColors(hat)}
                     >
                       {hat.title}
                     </span>
                   ))}
-                  {overflow.length > 0 && (
+                  {overflowGroups.map(({ hats: extraHats, className, triggerMode }) => extraHats.length > 0 && (
                     <Tooltip
+                      key={className}
+                      triggerMode={triggerMode}
+                      triggerLabel={triggerMode === 'click' ? `${t('rooms.settings.fields.enableHats')} (${extraHats.length})` : undefined}
                       content={
                         <div className="flex flex-col gap-1">
-                          {overflow.map((hat) => (
+                          {extraHats.map((hat) => (
                             <span
                               key={hat.uri}
                               className="px-1.5 py-0.5 text-[10px] font-medium rounded inline-block"
@@ -273,13 +281,13 @@ const OccupantRow = memo(function OccupantRow({
                       }
                       position="top"
                       delay={300}
-                      className="inline-flex shrink-0"
+                      className={className}
                     >
                       <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-fluux-muted/20 text-fluux-muted cursor-default">
-                        +{overflow.length}
+                        +{extraHats.length}
                       </span>
                     </Tooltip>
-                  )}
+                  ))}
                 </>
               )
             })()}
@@ -699,7 +707,7 @@ export function OccupantPanel({
   }
 
   return (
-    <div className={`${fullScreen ? 'w-full h-full' : 'w-64 border-s border-fluux-bg'} flex flex-col bg-fluux-chat`}>
+    <div className={`${fullScreen ? 'w-full h-full' : 'w-64 lg:w-full border-s border-fluux-bg'} flex flex-col bg-fluux-chat`}>
       {/* Panel header */}
       <div className="h-14 px-4 flex items-center justify-between border-b border-fluux-bg">
         {fullScreen ? (
