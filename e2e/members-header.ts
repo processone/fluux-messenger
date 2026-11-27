@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { expect, test, type Locator } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
 import { navigateToStressRoom } from './harness/scrollHarness'
 import { ROOM_JID } from '../apps/fluux/src/demo/constants'
@@ -39,6 +39,15 @@ async function containedHeader(toggle: Locator, heading: Locator) {
   }), 'Members heading is inside its panel and no control covers it').toBe(true)
 }
 
+async function tabTo(page: Page, control: Locator) {
+  const candidates = await page.locator('button, a[href], input, select, textarea, [tabindex], [contenteditable="true"]').count()
+  for (let step = 0; step < candidates + 2; step++) {
+    await page.keyboard.press('Tab')
+    if (await control.evaluate(el => el === document.activeElement)) return
+  }
+  await expect(control, 'control is reachable through sequential keyboard navigation').toBeFocused()
+}
+
 for (const lang of ['en', 'fr']) {
   for (const mode of ['light', 'dark']) {
     test(`${lang} ${mode}: docked Members leaves room identity and both close controls usable`, async ({ page }) => {
@@ -52,6 +61,7 @@ for (const lang of ['en', 'fr']) {
         w.__settingsStore.getState().setThemeMode(mode)
       }, mode)
       await navigateToStressRoom(page, false, ROOM_JID)
+      const baseFont = await page.locator('html').evaluate(el => parseFloat(getComputedStyle(el).fontSize))
       const show = page.getByRole('button', { name: words.rooms.showMembers, exact: true })
       const hide = page.getByRole('button', { name: words.rooms.hideMembers, exact: true })
       const heading = page.getByRole('heading', { name: words.rooms.members, exact: true })
@@ -71,6 +81,12 @@ for (const lang of ['en', 'fr']) {
       for (const [width, text] of [[1024, 150], [1024, 100], [1280, 150]]) {
         await page.setViewportSize({ width, height: 812 })
         await page.evaluate(text => (window as any).__settingsStore.getState().setFontSize(text), text)
+        const renderedFont = baseFont * text / 100
+        await expect(page.locator('html')).toHaveCSS('font-size', `${renderedFont}px`)
+        // WebKit can publish the root font before the rem-sized dock has caught up.
+        await expect.poll(() => heading.evaluate(el =>
+          el.parentElement!.parentElement!.getBoundingClientRect().width,
+        )).toBe(16 * renderedFont)
         for (const findOpen of [true, false]) {
           if (findOpen) await page.keyboard.press('Control+f')
           else await page.locator('[data-find-on-page-bar] input').press('Escape')
@@ -85,10 +101,16 @@ for (const lang of ['en', 'fr']) {
           await expect(heading).toBeVisible()
           await hide.click()
           await expect(heading).toHaveCount(0)
-          await show.focus()
+          await tabTo(page, show)
           await page.keyboard.press('Enter')
           await expect(heading).toBeVisible()
-          await hide.focus()
+          await tabTo(page, page.getByRole('button', { name: words.rooms.closePanel, exact: true }))
+          await page.keyboard.press('Enter')
+          await expect(heading).toHaveCount(0)
+          await tabTo(page, show)
+          await page.keyboard.press('Space')
+          await expect(heading).toBeVisible()
+          await tabTo(page, hide)
           await page.keyboard.press('Space')
           await expect(heading).toHaveCount(0)
           await show.click()
