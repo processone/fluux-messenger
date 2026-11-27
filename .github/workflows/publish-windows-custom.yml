@@ -4,7 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish, e.g. 0.17.5 (must match tauri.conf.json)'
+        description: 'Version to publish'
+        required: true
+        type: string
+      changelog:
+        description: 'Список изменений в новой версии'
         required: true
         type: string
 
@@ -55,7 +59,7 @@ jobs:
           projectPath: apps/fluux
           tagName: v${{ inputs.version }}
           releaseName: Fluux Messenger Custom v${{ inputs.version }}
-          releaseBody: 'Unofficial customized Windows build. Not affiliated with ProcessOne.'
+          releaseBody: ${{ inputs.changelog }}          
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true
