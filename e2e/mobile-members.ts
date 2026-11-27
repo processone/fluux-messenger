@@ -62,6 +62,14 @@ test.describe('mobile members', () => {
 
   test('long press offers Whisper and returns to the focused private composer', async ({ page, browserName }) => {
     const nick = await openRoom(page)
+    // The approved compact dock must not change the mobile pane's full available surface.
+    const pane = page.getByRole('heading', { name: 'Members', exact: true }).locator('..').locator('..').locator('..')
+    await expect.poll(() => pane.evaluate(el => {
+      const bounds = el.getBoundingClientRect()
+      const main = el.closest('main')!.getBoundingClientRect()
+      return { left: bounds.left, right: bounds.right, top: bounds.top - main.top, bottom: bounds.bottom - main.bottom }
+    })).toEqual({ left: 0, right: 390, top: 0, bottom: 0 })
+    await page.screenshot({ path: test.info().outputPath('mobile-members-open.png') })
     const row = page.locator('.touch-menu-row').filter({ has: page.getByText(nick, { exact: true }) }).last()
     await expect(row).toBeVisible()
     expect(await row.evaluate((el) => !!el.closest('[inert], [aria-hidden="true"]'))).toBe(false)
