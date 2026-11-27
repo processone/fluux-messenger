@@ -749,6 +749,14 @@ function pickFields<T extends object>(source: object, fields: readonly (keyof T 
   return picked as Partial<T>
 }
 
+function clearEmptyRoomArchiveProof(states: Map<string, HistoryQueryState>, roomJid: string): Map<string, HistoryQueryState> {
+  const current = states.get(roomJid)
+  if (!current?.emptyArchiveProof && !current?.emptyArchiveMembership) return states
+  const next = new Map(states)
+  next.set(roomJid, { ...current, emptyArchiveProof: undefined, emptyArchiveMembership: undefined })
+  return next
+}
+
 /**
  * Fan a Partial<Room> update out to the four room maps: the combined `rooms`
  * map always, and each split map only when the patch carries one of its
@@ -769,6 +777,7 @@ function commitRoomUpdate(
   const newRooms = new Map(state.rooms)
   newRooms.set(roomJid, { ...existing, ...update })
   const result: Partial<RoomState> = { rooms: newRooms }
+  if (update.joined === false) result.mamQueryStates = clearEmptyRoomArchiveProof(state.mamQueryStates, roomJid)
 
   const entityPatch = pickFields<RoomEntity>(update, ROOM_ENTITY_FIELDS as readonly (keyof RoomEntity & string)[])
   if (Object.keys(entityPatch).length > 0) {
@@ -1102,7 +1111,8 @@ export interface RoomState {
   // Persisted history-gap intervals per room (survives reload; drives the gap marker)
   roomGaps: GapMap
   // Persisted contiguous-with-live coverage per room (positive twin of roomGaps;
-  // survives fresh sessions and gap closure). See shared/mamCoverage.ts.
+  // survives fresh sessions and gap closure). A durable live row after a proven
+  // empty room archive can establish the first anchor too. See shared/mamCoverage.ts.
   roomCoverage: Map<string, CoverageRecord>
   // Rooms the user has acknowledged as non-anonymous (issue #37) — warn once, not
   // on every reconnect. Persisted to localStorage separately and scoped per account.
@@ -1590,6 +1600,7 @@ export const roomStore = createStore<RoomState>()(
         roomMeta: newMeta,
         roomRuntime: newRuntime,
         messages: newMessages,
+        ...(!room.joined && { mamQueryStates: clearEmptyRoomArchiveProof(state.mamQueryStates, room.jid) }),
       }
     })
   },
@@ -1641,6 +1652,7 @@ export const roomStore = createStore<RoomState>()(
         messages: newMessages,
         lastArrivedMessage: newLastArrivedMessage,
         windowAtLiveEdge: newLiveEdge,
+        mamQueryStates: clearEmptyRoomArchiveProof(state.mamQueryStates, roomJid),
       }
       if (state.roomGaps.has(roomJid)) {
         const newGaps = new Map(state.roomGaps)
@@ -1708,7 +1720,8 @@ export const roomStore = createStore<RoomState>()(
         })
       }
 
-      return { rooms: newRooms, roomEntities: newEntities, roomMeta: newMeta }
+      return { rooms: newRooms, roomEntities: newEntities, roomMeta: newMeta,
+        ...(!joined ? { mamQueryStates: clearEmptyRoomArchiveProof(state.mamQueryStates, roomJid) } : {}) }
     })
   },
 
@@ -1728,7 +1741,9 @@ export const roomStore = createStore<RoomState>()(
         }
       }
 
-      return { rooms: newRooms, roomEntities: newEntities }
+      let mamQueryStates = state.mamQueryStates
+      for (const jid of mamQueryStates.keys()) mamQueryStates = clearEmptyRoomArchiveProof(mamQueryStates, jid)
+      return { rooms: newRooms, roomEntities: newEntities, mamQueryStates }
     })
   },
 
@@ -2448,8 +2463,39 @@ export const roomStore = createStore<RoomState>()(
       }
     })
 
+    const emptyProof = get().mamQueryStates.get(roomJid)?.emptyArchiveProof
+    const archiveId = messageToAdd.stanzaId
+    const stillCurrent = captureRoomCacheRead(roomJid)
     const durableWrite = acceptedMessage && !isNoLocalStore(messageToAdd)
-      ? messageCache.saveMessageWithResult('room', messageToAdd)
+      ? messageCache.saveMessageWithResult('room', messageToAdd).then((committed) => {
+        // An empty archive has no RSM cursor. Materialize its coverage only from
+        // a durable live row, before endArrival retires that row's overlay.
+        // Loading defers counting, not this evidence: a failed overlapping
+        // query will not replay the committed row to create its anchor.
+        if (committed && stillCurrent() && emptyProof && !messageToAdd.isDelayed && archiveId) {
+          let anchored = false
+          set((state) => {
+            const mam = state.mamQueryStates.get(roomJid)
+            if (!mam || mam.emptyArchiveProof !== emptyProof || !mam.isCaughtUpToLive ||
+              state.roomCoverage.has(roomJid) || getGapList(state.roomGaps, roomJid).length > 0) return state
+            const roomCoverage = new Map(state.roomCoverage)
+            roomCoverage.set(roomJid, {
+              bottomId: archiveId, countBottomId: archiveId, topId: archiveId,
+            })
+            saveCoverageToStorage(roomCoverage, undefined, { roomJid, kind: 'created' })
+            anchored = true
+            return { roomCoverage }
+          })
+          if (anchored) roomReadTracker.scheduleRecount(roomJid)
+        }
+        // Deactivation can evict the row before its write, leaving a remote
+        // marker stashed after a cache miss. Recount alone cannot resolve it.
+        if (committed && stillCurrent() && archiveId &&
+          roomReadView(get(), roomJid)?.pendingRemoteMarker === archiveId) {
+          void roomReadTracker.resolvePendingFromCache(roomJid, { afterWrite: true })
+        }
+        return committed
+      })
       : undefined
     roomReadTracker.endArrival(arrivalNote, { accepted: acceptedMessage, durableWrite })
     if (durableWrite) {
@@ -3620,9 +3666,16 @@ export const roomStore = createStore<RoomState>()(
 
   // MAM state management (XEP-0313 for MUC rooms)
   setRoomMAMLoading: (roomJid, isLoading, requestId) => {
-    set((state) => ({
-      mamQueryStates: mamState.setMAMLoading(state.mamQueryStates, roomJid, isLoading, requestId),
-    }))
+    set((state) => {
+      const mamQueryStates = mamState.setMAMLoading(state.mamQueryStates, roomJid, isLoading, requestId)
+      if (isLoading) {
+        mamQueryStates.set(roomJid, { ...mamState.getMAMQueryState(mamQueryStates, roomJid),
+          emptyArchiveMembership: state.roomEntities.get(roomJid)?.joined
+            ? mamState.getMAMQueryState(mamQueryStates, roomJid).emptyArchiveMembership ?? {}
+            : undefined })
+      }
+      return { mamQueryStates }
+    })
     if (!isLoading) roomReadTracker.resumeDeferredRecounts(roomJid)
   },
 

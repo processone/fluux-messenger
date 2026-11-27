@@ -563,6 +563,8 @@ export interface RoomEvents {
 
   /** Room MAM messages loaded */
   'room:history-messages': {
+    /** The whole positive-sized, unbounded fetch-latest was empty before filtering. */
+    emptyRoomArchive?: boolean
     roomJid: string
     messages: RoomMessage[]
     page: PageInfo
