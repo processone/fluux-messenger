@@ -6,8 +6,8 @@ license = "AGPL-3.0-or-later"
 [lib]
 crate-type = ["staticlib", "rlib"]
 [dependencies]
-sequoia-openpgp = { version = "=2.4.2", default-features = false, features = ["crypto-rust", "compression-deflate", "allow-experimental-crypto", "allow-variable-time-crypto"] }
-anyhow = "=1.0.104"
+sequoia-openpgp = { version = "=2.5.0", default-features = false, features = ["crypto-rust", "compression-deflate", "allow-experimental-crypto", "allow-variable-time-crypto"] }
+anyhow = "=1.0.105"
 ring = "=0.17.14"
 base64 = "=0.23.1"
 quick-xml = "=0.42.0"
