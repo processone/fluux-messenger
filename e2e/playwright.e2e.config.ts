@@ -129,6 +129,8 @@ const ENGINES = [
   { name: 'webkit', use: { ...devices['Desktop Safari'], ...WEBKIT_TRACE } },
 ] as const
 
+const excludeChromiumScrollReading = process.env.FLUUX_E2E_EXCLUDE_CHROMIUM_SCROLL_READING === '1'
+
 export default defineConfig({
   testDir: '.',
 
@@ -219,7 +221,7 @@ export default defineConfig({
       testMatch: 'webkit-gpu-termination.ts',
       use: { ...devices['Desktop Safari'], ...WEBKIT_TRACE },
     },
-  ],
+  ].filter(project => !excludeChromiumScrollReading || project.name !== 'scroll-reading-chromium'),
 
   webServer: {
     // Playwright spawns the server from the config's directory; the npm scripts live at the root.
