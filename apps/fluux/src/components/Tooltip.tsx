@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useId, type ReactNode } from 
 import { getFloatingViewport, limitFloatingHeight } from '@/hooks/floatingViewport'
 import { createPortal } from 'react-dom'
 import { useIsMobileWeb } from '../hooks/useIsMobileWeb'
-import { onDismissAllTooltips } from '../utils/tooltipBus'
+import { dismissAllTooltips, onDismissAllTooltips } from '../utils/tooltipBus'
 
 export type TooltipPosition = 'top' | 'bottom' | 'left' | 'right'
 
@@ -92,7 +92,9 @@ export function Tooltip({
 
   const toggleTooltip = () => {
     if (effectiveDisabled) return
-    setIsVisible(v => !v)
+    const opening = !isVisible
+    dismissAllTooltips()
+    setIsVisible(opening)
   }
 
   // Dismiss on the global tooltip-bus signal (fired when a modal such as the
@@ -102,8 +104,8 @@ export function Tooltip({
   // tooltips are caught too.
   useEffect(() => onDismissAllTooltips(hideTooltip), [hideTooltip])
 
-  // Hide tooltip on scroll, window blur, or any pointer down — these events
-  // can cause the trigger to move or disappear without firing mouseLeave.
+  // A click disclosure can disappear through container-query CSS without unmounting.
+  // Row resizing can move its anchor without a window resize.
   useEffect(() => {
     if (!isVisible) return
 
@@ -121,16 +123,26 @@ export function Tooltip({
     const handleBlur = () => hideTooltip()
     const handlePointerDown = () => hideTooltip()
 
-    // Use capture phase so we catch scroll on any ancestor before it bubbles
+    const row = triggerMode === 'click' ? triggerRef.current?.parentElement : null
+    const initial = row?.getBoundingClientRect()
+    const observer = row && initial ? new ResizeObserver(() => {
+      const current = row.getBoundingClientRect()
+      if (current.width !== initial.width || current.height !== initial.height) hideTooltip()
+    }) : null
+    if (row) observer?.observe(row)
+    window.addEventListener('resize', hideTooltip)
+    // Capture catches scrolling ancestors before their own handlers can stop it.
     window.addEventListener('scroll', handleScroll, true)
     window.addEventListener('blur', handleBlur)
     window.addEventListener('pointerdown', handlePointerDown)
     return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', hideTooltip)
       window.removeEventListener('scroll', handleScroll, true)
       window.removeEventListener('blur', handleBlur)
       window.removeEventListener('pointerdown', handlePointerDown)
     }
-  }, [isVisible, hideTooltip])
+  }, [isVisible, hideTooltip, triggerMode])
 
   // Calculate position when tooltip becomes visible
   useEffect(() => {

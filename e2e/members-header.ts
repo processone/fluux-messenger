@@ -262,8 +262,51 @@ for (const lang of ['en', 'fr']) {
           await page.screenshot({ path: test.info().outputPath(`members-compact-markers-${padding}.png`) })
         }
       }
+      // Switching members must replace the role disclosure without an outside click.
+      await page.evaluate(() => {
+        const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
+        const room = store.getRoom(store.activeRoomJid!)!
+        const liam = room.occupants.get('Liam')!
+        store.addOccupant(room.jid, { ...liam, hats: [
+          { uri: 'urn:fluux:infrastructure', title: 'Infrastructure support' },
+          { uri: 'urn:fluux:incident', title: 'Incident response' },
+        ] })
+      })
+      const firstDisclosure = page.getByRole('button', { name: `${words.rooms.settings.fields.enableHats} (4)`, exact: true })
+      const secondDisclosure = page.getByRole('button', { name: `${words.rooms.settings.fields.enableHats} (2)`, exact: true })
+      const firstRoles = page.getByRole('tooltip').filter({ has: page.getByText('Release coordination', { exact: true }) })
+      const secondRoles = page.getByRole('tooltip').filter({ has: page.getByText('Infrastructure support', { exact: true }) })
+      await firstDisclosure.click()
+      await expect(firstRoles).toBeVisible()
+      await secondDisclosure.click()
+      await expect(firstDisclosure).toHaveAttribute('aria-expanded', 'false')
+      await expect(firstRoles).toHaveCount(0)
+      await expect(secondRoles).toBeVisible()
+      await secondDisclosure.press('Escape')
+      await expect(secondRoles).toHaveCount(0)
+
+      // Sidebar dragging changes the dock query without resizing the window.
+      await page.setViewportSize({ width: 1120, height: 812 })
+      await firstDisclosure.click()
+      await expect(firstRoles).toBeVisible()
+      await resizeSidebar(page, 288)
+      await expect(firstDisclosure).toBeHidden()
+      await expect(firstRoles).toHaveCount(0)
+      await resizeSidebar(page, 400)
+      await page.setViewportSize({ width: 1024, height: 812 })
+      await firstDisclosure.click()
+      await expect(firstRoles).toBeVisible()
+      await page.setViewportSize({ width: 1280, height: 812 })
+      await expect(firstDisclosure).toBeHidden()
+      await expect(firstRoles).toHaveCount(0)
+
       // Crossing lg must switch back to the unchanged fixed-width overlaid drawer.
+      await page.setViewportSize({ width: 1024, height: 812 })
+      await firstDisclosure.click()
+      await expect(firstRoles).toBeVisible()
       await page.setViewportSize({ width: 1023, height: 812 })
+      await expect(firstDisclosure).toBeHidden()
+      await expect(firstRoles).toHaveCount(0)
       await expect.poll(() => heading.evaluate(el =>
         el.parentElement!.parentElement!.getBoundingClientRect().width,
       )).toBe(384)
