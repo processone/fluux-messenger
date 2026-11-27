@@ -175,10 +175,18 @@ describe('empty initial room archive followed by an inactive remote read', () =>
     await vi.waitFor(() => expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(0))
   })
 
-  it.each(['first', 'later'] as const)('resolves a stashed marker when the %s live cache write commits after closing', async which => {
+  it.each(['first', 'later', 'migrated-floor'] as const)('resolves a stashed marker when the %s live cache write commits after closing', async which => {
     roomStore.getState().setActiveRoom(ROOM)
     emptyFetch()
-    if (which === 'later') await receive(message('earlier-row', 0))
+    const floor = message('earlier-row', 0)
+    if (which !== 'first') await receive(floor)
+    if (which === 'migrated-floor') {
+      roomStore.getState().updateRoom(ROOM, {
+        readPointer: { order: { role: 'floor', timestamp: floor.timestamp.getTime() },
+          identity: { state: 'local', messageId: floor.id } },
+        unreadCount: 0,
+      })
+    }
     const finish = holdNextWrite()
     const row = message('evicted-before-commit', 1)
     await roomStore.getState().addMessage(ROOM, row)
@@ -190,6 +198,38 @@ describe('empty initial room archive followed by an inactive remote read', () =>
     expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe(row.stanzaId)
     expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBeGreaterThan(0)
     finish()
+    await vi.waitFor(() => expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(0))
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe(row.id)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    expect(roomStore.getState().activeRoomJid).toBe(OTHER_ROOM)
+  })
+
+  it('starts a fresh cache resolution when the pre-write miss is still in flight', async () => {
+    roomStore.getState().setActiveRoom(ROOM)
+    emptyFetch()
+    const finishWrite = holdNextWrite()
+    const row = message('in-flight-miss', 1)
+    await roomStore.getState().addMessage(ROOM, row)
+    roomStore.getState().setActiveRoom(OTHER_ROOM)
+    const load = messageCache.getMessageByStanzaId
+    let finishLookup!: () => void
+    let sawMiss!: () => void
+    const lookupHeld = new Promise<void>(resolve => { finishLookup = resolve })
+    const missed = new Promise<void>(resolve => { sawMiss = resolve })
+    const holdResult = async <T>(pending: Promise<T>): Promise<T> => {
+      const result = await pending
+      expect(result).toBeNull()
+      sawMiss()
+      await lookupHeld
+      return result
+    }
+    vi.spyOn(messageCache, 'getMessageByStanzaId').mockImplementationOnce((kind, id, stanzaId) =>
+      kind === 'room' ? holdResult(load('room', id, stanzaId)) : holdResult(load('chat', id, stanzaId)))
+    roomStore.getState().applyRemoteDisplayed(ROOM, row.stanzaId!)
+    await missed
+    finishWrite()
+    await vi.waitFor(async () => expect(await load('room', ROOM, row.stanzaId!)).not.toBeNull())
+    finishLookup()
     await vi.waitFor(() => expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(0))
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe(row.id)
     expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
@@ -233,7 +273,7 @@ describe('empty initial room archive followed by an inactive remote read', () =>
     expect(roomStore.getState().activeRoomJid).toBe(OTHER_ROOM)
   })
 
-  it.each(['remove', 'leave', 'membership-loss', 'session-membership-reset'] as const)(
+  it.each(['remove', 'leave', 'membership-loss', 'session-membership-reset', 'room-replacement'] as const)(
     'revokes the empty baseline on %s before a pending or new membership write', async boundary => {
       emptyFetch()
       const finish = holdNextWrite()
@@ -241,6 +281,7 @@ describe('empty initial room archive followed by an inactive remote read', () =>
       if (boundary === 'remove') roomStore.getState().removeRoom(ROOM)
       else if (boundary === 'leave') roomStore.getState().setRoomJoined(ROOM, false)
       else if (boundary === 'membership-loss') roomStore.getState().updateRoom(ROOM, { joined: false })
+      else if (boundary === 'room-replacement') roomStore.getState().addRoom({ ...room(ROOM), joined: false })
       else roomStore.getState().markAllRoomsNotJoined()
       if (boundary === 'remove') roomStore.getState().addRoom(room(ROOM))
       else roomStore.getState().setRoomJoined(ROOM, true)

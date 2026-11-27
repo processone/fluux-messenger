@@ -273,9 +273,9 @@ export interface HistoryQueryState {
    *  survives resident-window changes, but not another merge or membership.
    *  A durable live row can materialize the first coverage anchor from it. */
   emptyArchiveProof?: object
-  /** Room query allowed to establish empty-archive proof in this membership.
-   *  Revoked on membership loss independently of ordinary loading state. */
-  emptyArchiveQueryId?: string
+  /** Room membership identity for authorizing empty-archive evidence.
+   *  Independent queries share it; membership loss revokes it. */
+  emptyArchiveMembership?: object
   loadingRequestId?: string
   /** True while query is in progress */
   isLoading: boolean

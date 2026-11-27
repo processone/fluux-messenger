@@ -751,9 +751,9 @@ function pickFields<T extends object>(source: object, fields: readonly (keyof T 
 
 function clearEmptyRoomArchiveProof(states: Map<string, HistoryQueryState>, roomJid: string): Map<string, HistoryQueryState> {
   const current = states.get(roomJid)
-  if (!current?.emptyArchiveProof && !current?.emptyArchiveQueryId) return states
+  if (!current?.emptyArchiveProof && !current?.emptyArchiveMembership) return states
   const next = new Map(states)
-  next.set(roomJid, { ...current, emptyArchiveProof: undefined, emptyArchiveQueryId: undefined })
+  next.set(roomJid, { ...current, emptyArchiveProof: undefined, emptyArchiveMembership: undefined })
   return next
 }
 
@@ -1600,6 +1600,7 @@ export const roomStore = createStore<RoomState>()(
         roomMeta: newMeta,
         roomRuntime: newRuntime,
         messages: newMessages,
+        ...(!room.joined && { mamQueryStates: clearEmptyRoomArchiveProof(state.mamQueryStates, room.jid) }),
       }
     })
   },
@@ -2489,7 +2490,7 @@ export const roomStore = createStore<RoomState>()(
         // marker stashed after a cache miss. Recount alone cannot resolve it.
         if (committed && stillCurrent() && archiveId &&
           roomReadView(get(), roomJid)?.pendingRemoteMarker === archiveId) {
-          roomReadTracker.applyRemoteDisplayed(roomJid, archiveId, [messageToAdd])
+          void roomReadTracker.resolvePendingFromCache(roomJid, { afterWrite: true })
         }
         return committed
       })
@@ -3665,9 +3666,11 @@ export const roomStore = createStore<RoomState>()(
   setRoomMAMLoading: (roomJid, isLoading, requestId) => {
     set((state) => {
       const mamQueryStates = mamState.setMAMLoading(state.mamQueryStates, roomJid, isLoading, requestId)
-      if (isLoading && requestId) {
+      if (isLoading) {
         mamQueryStates.set(roomJid, { ...mamState.getMAMQueryState(mamQueryStates, roomJid),
-          emptyArchiveQueryId: state.roomEntities.get(roomJid)?.joined ? requestId : undefined })
+          emptyArchiveMembership: state.roomEntities.get(roomJid)?.joined
+            ? mamState.getMAMQueryState(mamQueryStates, roomJid).emptyArchiveMembership ?? {}
+            : undefined })
       }
       return { mamQueryStates }
     })

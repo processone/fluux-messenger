@@ -95,7 +95,7 @@ describe('room archive emptiness evidence', () => {
     expect(roomStore.getState().getRoomMAMQueryState(ROOM).emptyArchiveProof).toBeDefined()
   })
 
-  it.each(['remove', 'leave', 'membership-loss', 'session-membership-reset'] as const)(
+  it.each(['remove', 'leave', 'membership-loss', 'session-membership-reset', 'room-replacement'] as const)(
     'does not reinstall empty proof from a reply held across %s and rejoin', async boundary => {
       let start!: () => void
       let finish!: () => void
@@ -109,6 +109,7 @@ describe('room archive emptiness evidence', () => {
       if (boundary === 'remove') roomStore.getState().removeRoom(ROOM)
       else if (boundary === 'leave') roomStore.getState().setRoomJoined(ROOM, false)
       else if (boundary === 'membership-loss') roomStore.getState().updateRoom(ROOM, { joined: false })
+      else if (boundary === 'room-replacement') roomStore.getState().addRoom({ ...joinedRoom(), joined: false })
       else roomStore.getState().markAllRoomsNotJoined()
       if (boundary === 'remove') roomStore.getState().addRoom(joinedRoom())
       else roomStore.getState().setRoomJoined(ROOM, true)
@@ -124,6 +125,29 @@ describe('room archive emptiness evidence', () => {
       expect(roomStore.getState().getRoomMAMQueryState(ROOM).emptyArchiveProof).toBeDefined()
     },
   )
+
+  it.each([
+    { name: 'failed bounded', options: { end: '2026-11-26T12:00:00Z' }, fails: true },
+    { name: 'failed forward', options: { after: 'previous-archive-id' }, fails: true },
+    { name: 'completed bounded', options: { end: '2026-11-26T12:00:00Z' }, fails: false },
+    { name: 'completed forward', options: { after: 'previous-archive-id' }, fails: false },
+  ])('keeps membership authorization during an overlapping $name query', async ({ options, fails }) => {
+    const { events } = await query([{ entries: [], complete: true }], {}, async () => {
+      const overlapping = query([{ entries: [], complete: true }], options, async () => {
+        if (fails) throw new Error('Room archive temporarily unavailable')
+      })
+      if (fails) {
+        await expect(overlapping).rejects.toThrow('Room archive temporarily unavailable')
+        expect(roomStore.getState().getRoomMAMQueryState(ROOM).error).toBe('Room archive temporarily unavailable')
+      } else {
+        await overlapping
+        expect(roomStore.getState().getRoomMAMQueryState(ROOM).hasQueried).toBe(true)
+      }
+    })
+    expect(events).toHaveLength(1)
+    expect(events[0].emptyRoomArchive).toBe(true)
+    expect(roomStore.getState().getRoomMAMQueryState(ROOM).emptyArchiveProof).toBeDefined()
+  })
 
   it('does not certify a query issued before membership even if the room joins before its reply', async () => {
     roomStore.getState().setRoomJoined(ROOM, false)

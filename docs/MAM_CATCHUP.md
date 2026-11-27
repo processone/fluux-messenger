@@ -397,15 +397,18 @@ markers or other signals does not make a nonempty walk empty. A successfully
 cached live room row with a room archive ID can materialize the first coverage
 record from that proof and schedule the normal guarded unread recount. After a
 live write commits, a matching stashed private-sync marker is retried through
-the existing forward-only resolver, even if deactivation evicted its resident
-row before the cache write. The durable row's archive ID supplies `bottomId`,
-`countBottomId` and `topId`; a bare remote marker never
+the existing cache-backed forward-only resolver, even if deactivation evicted
+its resident row before the cache write. A pre-write cache miss finishes before
+this fresh lookup, which can also recover a migrated floor from the cache. The
+durable row's archive ID supplies `bottomId`, `countBottomId` and `topId`; a bare
+remote marker never
 establishes coverage or clears the badge itself. Resident-window changes preserve
 the proof, while another archive merge, a session reset, room removal or lost
-membership revokes it. The issuing query's request ID is authorized only for
-that membership, so a late empty reply cannot reinstall revoked proof after a
-leave or rejoin; ordinary archive pages still merge. Recorded gaps, delayed
-rows and failed writes prevent this bootstrap.
+membership revokes it, including replacement by a not-joined room. Queries
+share authorization within one membership, independently of loading request IDs,
+so overlapping queries do not cancel valid empty evidence. A late empty reply
+cannot reinstall proof after a leave or rejoin; ordinary archive pages still
+merge. Recorded gaps, delayed rows and failed writes prevent this bootstrap.
 
 On an SM resume the delayed pass never runs, so room coverage comes from the
 resume seed instead: rooms joined, MAM-enabled, inactive, and **not** already
