@@ -29,7 +29,7 @@
   "dependencies": {
     "@noble/ciphers": "^1.2.1",
     "@noble/curves": "^1.8.1",
-    "@noble/hashes": "^1.7.1"
+    "@noble/hashes": "^2.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
