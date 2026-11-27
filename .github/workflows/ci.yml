@@ -473,9 +473,8 @@ jobs:
           sudo --preserve-env=CI_RETRY_CLEANUP env "PATH=$PATH" scripts/ci-retry.sh 3 300 \
             npx playwright install-deps ${{ matrix.browser }}
 
-      # Each engine runs against its own bundled demo. Separate reading and
-      # live-edge files let both workers share the scroll workload while tests
-      # within each suite retain their declaration order.
+      # Each job runs against its own bundled demo. The dedicated Chromium reading
+      # jobs split one test file across runners, with two parallel workers per job.
       #
       # The composer half cannot be unit tested: jsdom has no layout, so the autosize
       # unit tests mock scrollHeight — and a mocked measurement can never contradict

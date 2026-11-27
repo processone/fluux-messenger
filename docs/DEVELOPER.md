@@ -211,8 +211,8 @@ npm run test:run -w @fluux/sdk -- --maxWorkers=1
   previews across viewport sizes, themes, and text sizes.
 
 The reading and live-edge suites share their setup, geometry helpers, and after-test
-scroll diagnostics in `e2e/harness/scrollHarness.ts`. Tests within each file run in
-declaration order.
+scroll diagnostics in `e2e/harness/scrollHarness.ts`. Discovery lists tests within
+each file in declaration order; parallel workers do not guarantee that execution order.
 
 CI gives the `scroll-reading-chromium` project two dedicated shards and divides
 all other Chromium projects into four shards. Keeping the slower reading cases
