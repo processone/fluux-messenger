@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import type { roomStore } from '@fluux/sdk/stores'
 import type { DemoClient } from '@fluux/sdk/demo'
+import fr from '../apps/fluux/src/i18n/locales/fr.json' with { type: 'json' }
 import type { useSettingsStore } from '../apps/fluux/src/stores/settingsStore'
 import { bootDemo } from './harness/demoBoot'
 import { stableFrames } from './harness/messageInteraction'
@@ -50,7 +51,7 @@ for (const virtualized of [true, false]) for (const latest of [true, false]) {
     const toolbar = row.locator('[data-message-toolbar]')
     await toolbar.evaluate(async el => { for (const animation of el.getAnimations()) await animation.finished })
     await expect(toolbar).toHaveCSS('opacity', '1')
-    const trigger = toolbar.getByRole('button', { name: "Plus d'options", exact: true })
+    const trigger = toolbar.getByRole('button', { name: fr.chat.moreOptions, exact: true })
     const box = (await trigger.boundingBox())!
     // Coordinate clicks cannot scroll a clipped target into view and hide the defect.
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
@@ -84,7 +85,7 @@ for (const virtualized of [true, false]) for (const latest of [true, false]) {
     expect(reading.bottom).toBeLessThanOrEqual(Math.min(reading.listBottom, reading.composeTop) + 1)
     if (latest) expect(reading.bottom).toBeLessThanOrEqual(reading.triggerTop)
     else expect(reading.top).toBeGreaterThanOrEqual(reading.triggerBottom)
-    expect(reading.actions.map(action => action.label)).toEqual(['Enregistrer le message', 'Copier le lien du message'])
+    expect(reading.actions.map(action => action.label)).toEqual([fr.chat.saveMessage, fr.chat.copyMessageLink])
     for (const action of reading.actions) {
       expect(action.enabled).toBe(true)
       expect(action.centerHit, action.label!).toBe(true)
