@@ -1,6 +1,6 @@
 {
   "name": "@fluux/sdk",
-  "version": "0.17.7",
+  "version": "0.17.9",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
