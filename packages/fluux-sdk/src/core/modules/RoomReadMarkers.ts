@@ -507,7 +507,6 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
         if (restricted.has(other)) continue
         let saved: SavedConsent | undefined
         let localIdentity: string | undefined
-        let hasLocalProof = true
         try {
           saved = classified.get(other) ?? readSavedRoomConsent(other)
           localIdentity = saved.localIdentity
@@ -525,9 +524,8 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
               const edits = migrationEdits(saved)
               // Preserve the exact validated input until an import barrier protects the committed preference.
               const continuity = readConsentContinuity(other)
-              hasLocalProof = !!continuity
               const convertedProof = writeConsentContinuity(other, generation, continuity?.input ?? saved.raw ?? undefined, true)
-              localIdentity = convertedProof.id; hasLocalProof = true
+              localIdentity = convertedProof.id
               const converted = roomConsentValue({ ...saved, generation }, saved.rooms, edits)
               localStorage.setItem(storageKey(other, 'consent'), converted)
               try {
@@ -555,11 +553,10 @@ export async function clearRoomReadMarkersLocalData(account: string | null, allA
           let proof: ReturnType<typeof readConsentContinuity>
           try {
             proof = readConsentContinuity(other)
-            hasLocalProof = !!proof
             localIdentity = proof?.id
           } catch { return false }
           // An unreferenceable local proof must not become shared, non-erasable identity.
-          if (hasLocalProof && !localIdentity) return false
+          if (proof && !localIdentity) return false
           const replacement = readConsentFence(localStorage.getItem(storageKey(other, 'migration')))
           const mirrored = replacement?.generation === saved.generation && replacement?.epoch === saved.epoch && proof?.generation === saved.generation && !!replacement?.input
             && replacement.input === proof?.inputId && proof?.input === saved.raw
@@ -1368,7 +1365,7 @@ export class RoomReadMarkers extends BaseModule {
 
   private async rememberSent(roomJid: string, position: Position, isCurrent: () => boolean, dispatch?: (commit: () => void) => Promise<void>): Promise<boolean> {
     let delivery: Promise<{ ok: true } | { ok: false; error: unknown }> | undefined
-    let saved = false
+    let saved: boolean
     try {
       saved = await withConsentStorage(() => {
         const account = this.account()

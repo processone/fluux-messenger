@@ -1102,7 +1102,7 @@ describe('RoomReadMarkers', () => {
         base.setItem(name, value)
       } : Reflect.get(base, key, base) }))
     if (direct) vi.spyOn(idbConnection, 'openIndexedDB').mockRejectedValueOnce(new DOMException('First turn refused', 'SecurityError'))
-    let cleared = false
+    let cleared: boolean
     try { cleared = await clearRoomReadMarkersLocalData(null, true) }
     finally { vi.stubGlobal('localStorage', storage); opening.release() }
     const saved = await delayed
@@ -1162,7 +1162,7 @@ describe('RoomReadMarkers', () => {
     const pending = mode === 'all Off' ? markers.setEnabled(false) : markers.setRoomEnabled(roomJid, mode === 'On')
     await opening.ready
     const next = new RoomReadMarkers(dependencies, () => focused)
-    let expected: Array<string | null> = []
+    let expected: Array<string | null>
     const keys = ['consent', 'migration', 'watermarks'].map(kind => `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, kind])}`)
     try {
       expect(await clearRoomReadMarkersLocalData(jid, allAccounts)).toBe(true)
@@ -1182,7 +1182,7 @@ describe('RoomReadMarkers', () => {
     const pending = mode === 'all Off' ? markers.setEnabled(false) : markers.setRoomEnabled(roomJid, mode === 'On')
     await opening.ready
     const next = new RoomReadMarkers(dependencies, () => focused)
-    let expected: string | null = null
+    let expected: string | null
     try {
       expect(await next.setRoomEnabled(replayFixture.room, true)).toBe(true)
       expected = localStorage.getItem(consentKey)
@@ -1222,7 +1222,7 @@ describe('RoomReadMarkers', () => {
     await opening.ready
     const next = new RoomReadMarkers(dependencies, () => focused)
     const storage = localStorage
-    let expected: string | null = null
+    let expected: string | null
     try {
       expect(await next.setRoomEnabled(replayFixture.room, true)).toBe(true)
       expected = storage.getItem(consentKey)
@@ -1331,7 +1331,7 @@ describe('RoomReadMarkers', () => {
     const pending = mode === 'all' ? markers.setEnabled(false) : markers.setRoomEnabled(roomJid, false)
     await opening.ready
     const next = new RoomReadMarkers(dependencies, () => focused)
-    let expected: Array<string | null> = []
+    let expected: Array<string | null>
     const keys = ['consent', 'migration', 'watermarks'].map(kind => `${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, kind])}`)
     try {
       expect(await clearRoomReadMarkersLocalData(jid, allAccounts)).toBe(true)
@@ -4356,7 +4356,7 @@ describe('RoomReadMarkers', () => {
         base.setItem(name, value)
       } : Reflect.get(base, key, base) }))
     const observer = new RoomReadMarkers(dependencies, () => focused)
-    let restriction: string | null = null
+    let restriction: string | null
     try {
       expect(await clearRoomReadMarkersLocalData('other@localhost')).toBe(false)
       if (recovery === 'refused recovery') {
@@ -5414,9 +5414,6 @@ describe('RoomReadMarkers', () => {
 
   it.each(['scoped', 'full'] as const)('retains an existing seal when all barrier writes fail during %s clear', async kind => {
     expect(await clearRoomReadMarkersLocalData(null, true)).toBe(true)
-    const prefix = ROOM_READ_MARKERS_STORAGE_KEY + ':'
-    const guard = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!)
-      .find(key => key.startsWith(prefix) && !key.slice(prefix.length).startsWith('['))!
     expect(await markers.setRoomEnabled(roomJid, true)).toBe(true)
     localStorage.removeItem(`${ROOM_READ_MARKERS_STORAGE_KEY}:${JSON.stringify([jid, 'migration'])}`)
     const storage = localStorage
@@ -5470,7 +5467,7 @@ describe('RoomReadMarkers', () => {
         if (name === guard && target.getItem(otherConsent) !== null) throw new DOMException('Quota exhausted', 'QuotaExceededError')
         target.setItem(name, value)
       } : Reflect.get(target, key, target) }))
-    let cleared = false
+    let cleared: boolean
     try {
       expect(storage.getItem(consentKey)).toBeNull()
       cleared = await clearRoomReadMarkersLocalData(null, true)
@@ -5492,7 +5489,7 @@ describe('RoomReadMarkers', () => {
     vi.stubGlobal('localStorage', new Proxy(storage, { get: (target, key) => key === 'setItem'
       ? (name: string, value: string) => { if (name === guard) throw new DOMException('Quota exhausted', 'QuotaExceededError'); target.setItem(name, value) }
       : Reflect.get(target, key, target) }))
-    let watermark: string | null = null
+    let watermark: string | null
     try {
       expect(await clearRoomReadMarkersLocalData(jid, kind === 'full')).toBe(false)
       expect(await markers.setRoomEnabled(replayFixture.room, true)).toBe(true)
