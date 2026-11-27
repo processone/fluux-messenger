@@ -65,6 +65,7 @@ export const changelog: ChangelogEntry[] = [
         'Messages keep following while you hover. Press a message or reach an action by keyboard to hold it steady; the typing indicator still makes room for the latest text',
         'Search on server now works with servers that advertise archive full-text search, such as ejabberd with a MySQL archive',
         'Reconnecting is more reliable: messages sent as the connection drops are resent once or marked not delivered with Retry, and long sessions no longer get cut off by strict servers',
+        'Reloading Fluux on an HTTP page no longer signs you out when the browser does not provide Web Crypto hashing',
         'Fluux no longer silently falls back to plain text for a contact whose key you refused or have not decided on',
         'Fluux now rejects message copies and archive results that do not come from your own account or the archive it asked',
         'OpenPGP: a verification you removed can no longer come back when two of your devices update your verified contacts at once',

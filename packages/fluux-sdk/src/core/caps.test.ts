@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   CLIENT_FEATURES,
   calculateVerificationString,
@@ -186,6 +186,34 @@ describe('caps (XEP-0115)', () => {
   })
 
   describe('calculateCapsHash', () => {
+    // Initial presence must retain its XEP-0115 fingerprint on HTTP origins
+    // where the browser provides getRandomValues but not SubtleCrypto.
+    it.each([
+      { name: 'base features', extras: [] },
+      { name: 'the registered OpenPGP feature', extras: [NS_OPENPGP_IM] },
+    ])('hashes $name without SubtleCrypto', async ({ extras }) => {
+      const features = [...new Set([...CLIENT_FEATURES, ...extras])].sort()
+      const expected = createHash('sha1')
+        .update(`client/web//Fluux Web<${features.join('<')}<`, 'utf8')
+        .digest('base64')
+      vi.stubGlobal('crypto', { getRandomValues: globalThis.crypto.getRandomValues.bind(globalThis.crypto) })
+      try {
+        await expect(calculateCapsHash(extras)).resolves.toBe(expected)
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('keeps the native SHA-1 digest when SubtleCrypto is available', async () => {
+      const digest = vi.spyOn(globalThis.crypto.subtle, 'digest')
+      try {
+        await calculateCapsHash()
+        expect(digest).toHaveBeenCalledExactlyOnceWith('SHA-1', expect.any(Uint8Array))
+      } finally {
+        digest.mockRestore()
+      }
+    })
+
     it('should return a base64-encoded SHA-1 hash', async () => {
       const hash = await calculateCapsHash()
 
