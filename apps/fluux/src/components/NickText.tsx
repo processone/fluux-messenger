@@ -6,29 +6,29 @@ import { splitNickForDisplay } from '@fluux/sdk'
 /**
  * Renders a MUC occupant nick, revealing impersonation vectors that HTML would
  * otherwise hide: leading/trailing whitespace is shown as a marked gap, and
- * invisible / bidi-control characters are flagged with a warning badge. A clean
- * nick renders verbatim (no wrapper, no cost).
+ * invisible / bidi-control characters are flagged with a warning badge. Without
+ * desktop truncation, a clean nick renders verbatim (no wrapper, no cost).
  *
- * Emits inline content only — drop it in wherever a raw `{nick}` is rendered and
- * let the surrounding element keep owning color/truncation/layout.
+ * Desktop truncation requires a flex parent: only the core may clip, never the
+ * identity markers. Other callers keep inline content and own their layout.
  *
  * Never mutates the nick: trimming a remote nick for display would *complete* an
  * impersonation (`"admin "` and `"admin"` both collapse to `"admin"`). See
  * docs/superpowers/specs/2026-07-07-muc-nick-whitespace-impersonation-design.md.
  */
-export function NickText({ nick }: { nick: string }) {
+export function NickText({ nick, truncateAtDesktop = false }: { nick: string; truncateAtDesktop?: boolean }) {
   const { t } = useTranslation()
   const { leading, core, trailing, hasHiddenChars } = splitNickForDisplay(nick)
 
-  if (!leading && !trailing && !hasHiddenChars) {
+  if (!leading && !trailing && !hasHiddenChars && !truncateAtDesktop) {
     return <>{nick}</>
   }
 
   return (
     <>
-      {leading && <WhitespaceMarker run={leading} label={t('rooms.nickEdgeWhitespace')} />}
-      {core}
-      {trailing && <WhitespaceMarker run={trailing} label={t('rooms.nickEdgeWhitespace')} />}
+      {leading && <WhitespaceMarker run={leading} label={t('rooms.nickEdgeWhitespace')} keepAtDesktop={truncateAtDesktop} />}
+      {truncateAtDesktop ? <span className="lg:min-w-0 lg:truncate">{core}</span> : core}
+      {trailing && <WhitespaceMarker run={trailing} label={t('rooms.nickEdgeWhitespace')} keepAtDesktop={truncateAtDesktop} />}
       {hasHiddenChars && (
         <span
           data-testid="nick-hidden-chars"
@@ -79,13 +79,13 @@ export function NickSentence({ i18nKey, nick }: { i18nKey: string; nick: string 
  * keeps the browser from collapsing it; one cell per source character signals
  * presence (exact width is not important).
  */
-function WhitespaceMarker({ run, label }: { run: string; label: string }) {
+function WhitespaceMarker({ run, label, keepAtDesktop = false }: { run: string; label: string; keepAtDesktop?: boolean }) {
   return (
     <span
       data-testid="nick-ws-marker"
       title={label}
       aria-label={label}
-      className="rounded-[2px] bg-amber-400/40 ring-1 ring-inset ring-amber-500/40 whitespace-pre"
+      className={`rounded-[2px] bg-amber-400/40 ring-1 ring-inset ring-amber-500/40 whitespace-pre${keepAtDesktop ? ' lg:shrink-0' : ''}`}
     >
       {' '.repeat(run.length)}
     </span>

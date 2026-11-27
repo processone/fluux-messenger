@@ -205,14 +205,14 @@ const OccupantRow = memo(function OccupantRow({
           forceOffline={forceOffline}
         />
 
-        {/* Nick and badges — single nowrap line: the name shrinks and truncates so
-            badges/hats never wrap to a second line (which made row heights inconsistent) */}
+        {/* Only the nickname core clips in the dock: whitespace and invisible-character
+            markers must stay visible even when the narrower label runs out of space. */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             {isMe ? (
-              <span className="min-w-0 truncate text-sm font-semibold" style={{ color: nameColor }}>
-                <NickText nick={group.primaryNick} />
-                <span className="text-fluux-muted font-normal"> {t('rooms.you')}</span>
+              <span className="min-w-0 truncate lg:flex lg:items-baseline lg:overflow-visible text-sm font-semibold" style={{ color: nameColor }}>
+                <NickText nick={group.primaryNick} truncateAtDesktop />
+                <span className="text-fluux-muted font-normal lg:ms-1 lg:truncate"> {t('rooms.you')}</span>
               </span>
             ) : (
               <UserInfoPopover
@@ -223,8 +223,8 @@ const OccupantRow = memo(function OccupantRow({
                 affiliation={bestAffiliation as RoomAffiliation}
                 className="min-w-0"
               >
-                <span className="block truncate text-sm" style={{ color: nameColor }}>
-                  <NickText nick={group.primaryNick} />
+                <span className="block truncate lg:flex lg:items-baseline lg:overflow-visible text-sm" style={{ color: nameColor }}>
+                  <NickText nick={group.primaryNick} truncateAtDesktop />
                 </span>
               </UserInfoPopover>
             )}

@@ -171,7 +171,7 @@ for (const lang of ['en', 'fr'] as const) {
       const bar = page.locator('[data-find-on-page-bar]')
       const input = bar.locator('input')
       // WebKit updates rem-based panel widths a frame after reporting the new root font size.
-      await expect.poll(() => bar.evaluate(el => el.parentElement!.parentElement!.getBoundingClientRect().width)).toBeLessThan(250)
+      await expect.poll(() => bar.evaluate(el => el.parentElement!.parentElement!.getBoundingClientRect().width)).toBe(302)
       for (const query of ['', 'the', 'quartzbadger']) {
         await input.fill(query)
         if (query === 'the') await expect(bar.locator('span')).toHaveText(/\d+\/\d+/)

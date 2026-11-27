@@ -82,7 +82,8 @@ export function splitNickForDisplay(nick: string): NickDisplay
 
 App component `apps/fluux/src/components/NickText.tsx`:
 
-- Clean nick → renders the nick verbatim (no wrapper, no cost).
+- Clean nick → renders the nick verbatim (no wrapper, no cost), except when a desktop occupant row opts into core-only truncation.
+- Docked occupant rows truncate only the nickname core; edge-whitespace markers and hidden-character warnings remain outside that clipping. Drawer and mobile rows retain their existing inline layout.
 - `leading` / `trailing` present → render as an NBSP gap wrapped in a faintly
   marked span (subtle background/underline) so the padding is *noticeable*, not
   just an easy-to-miss gap. (Pawel's NBSP idea, strengthened with a marker.)

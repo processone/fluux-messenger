@@ -171,11 +171,39 @@ for (const lang of ['en', 'fr']) {
       await row.hover()
       await expect(page.getByRole('tooltip')).toContainText(nick)
       await name.click()
-      await expect(page.getByText(jid, { exact: true }).last()).toBeVisible()
+      const popover = page.locator('.fluux-popover').filter({ has: page.getByText(jid, { exact: true }) })
+      await expect(popover).toBeVisible()
+      await expect(popover.getByText(jid, { exact: true })).toBeVisible()
       if (process.env.FLUUX_MEMBERS_HEADER_PROOF) {
         await page.screenshot({ path: test.info().outputPath('members-compact-identity.png') })
       }
       await heading.click()
+      await expect(popover).toHaveCount(0)
+
+      // The existing identity design requires warnings to stay painted beside a clipped core.
+      await page.evaluate(({ jid }) => {
+        const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
+        const room = store.getRoom(store.activeRoomJid!)!
+        const emma = [...room.occupants.values()].find(occupant => occupant.jid === jid)!
+        for (const occupant of room.occupants.values()) {
+          if (occupant.jid === jid) store.removeOccupant(room.jid, occupant.nick)
+        }
+        store.addOccupant(room.jid, {
+          ...emma, nick: 'Emma Wilson — community\u200b ', affiliation: 'none', role: 'participant', hats: [],
+        })
+      }, { jid })
+      const warningRow = page.locator('.touch-menu-row').filter({ has: page.getByTestId('nick-hidden-chars') })
+      for (const marker of [warningRow.getByTestId('nick-ws-marker'), warningRow.getByTestId('nick-hidden-chars')]) {
+        await expect.poll(() => marker.evaluate(el => {
+          const bounds = el.getBoundingClientRect()
+          return bounds.width > 0 && bounds.height > 0 && [0.1, 0.5, 0.9].every(fraction =>
+            el.contains(document.elementFromPoint(bounds.left + bounds.width * fraction, bounds.top + bounds.height / 2)),
+          )
+        }), 'identity marker is visibly painted, not clipped with the long nickname').toBe(true)
+      }
+      if (process.env.FLUUX_MEMBERS_HEADER_PROOF) {
+        await page.screenshot({ path: test.info().outputPath('members-compact-markers.png') })
+      }
       // Crossing lg must switch back to the unchanged fixed-width overlaid drawer.
       await page.setViewportSize({ width: 1023, height: 812 })
       await expect.poll(() => heading.evaluate(el =>
