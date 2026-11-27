@@ -523,7 +523,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onClick={handleCloseOccupants}
             className="fixed-below-titlebar z-[32] bg-black/50 lg:hidden"
           />
-          <div className="fixed bottom-0 top-[var(--fluux-window-titlebar-height)] end-0 z-40 flex shadow-xl animate-drawer-in lg:static lg:z-auto lg:shadow-none">
+          <div className="fixed bottom-0 top-[var(--fluux-window-titlebar-height)] end-0 z-40 flex shadow-xl animate-drawer-in lg:static lg:z-auto lg:shadow-none lg:shrink-0 lg:w-[clamp(13rem,calc(100%_-_16rem),16rem)]">
             <RegionErrorBoundary region="occupants" variant="panel" resetKey={activeRoom.jid}>
               <OccupantPanel
                 room={activeRoom}

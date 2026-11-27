@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
-import { expect, test, type Locator } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
+import type { roomStore } from '@fluux/sdk/stores'
 import { bootDemo } from './harness/demoBoot'
 import { navigateToStressRoom } from './harness/scrollHarness'
 import { ROOM_JID } from '../apps/fluux/src/demo/constants'
@@ -31,12 +32,26 @@ async function containedHeader(toggle: Locator, heading: Locator) {
   await expect.poll(() => heading.evaluate(el => {
     const rect = el.getBoundingClientRect()
     const panelHeader = el.parentElement!.getBoundingClientRect()
-    return rect.left >= panelHeader.left && rect.right <= panelHeader.right &&
+    const close = el.parentElement!.querySelector('button')!.getBoundingClientRect()
+    return rect.left >= panelHeader.left && rect.right <= close.left &&
+      close.right <= panelHeader.right && close.top >= panelHeader.top && close.bottom <= panelHeader.bottom &&
       rect.top >= panelHeader.top && rect.bottom <= panelHeader.bottom &&
       [0.1, 0.5, 0.9].every(fraction => el.contains(document.elementFromPoint(
         rect.left + rect.width * fraction, rect.top + rect.height / 2,
       )))
   }), 'Members heading is inside its panel and no control covers it').toBe(true)
+}
+
+async function resizeSidebar(page: Page, width: number) {
+  const sidebar = page.locator('.chrome-sidebar')
+  const handle = sidebar.locator('[role="separator"][aria-orientation="vertical"]')
+  const box = await handle.boundingBox()
+  expect(box).not.toBeNull()
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(width, box!.y + box!.height / 2)
+  await page.mouse.up()
+  await expect(sidebar).toHaveCSS('width', `${width}px`)
 }
 
 for (const lang of ['en', 'fr']) {
@@ -58,33 +73,37 @@ for (const lang of ['en', 'fr']) {
       const heading = page.getByRole('heading', { name: words.rooms.members, exact: true })
       await show.click()
       await expect(heading).toBeVisible()
-      const sidebar = page.locator('.chrome-sidebar')
-      const handle = sidebar.locator('[role="separator"][aria-orientation="vertical"]')
-      const box = await handle.boundingBox()
-      expect(box).not.toBeNull()
-      await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
-      await page.mouse.down()
-      await page.mouse.move(400, box!.y + box!.height / 2)
-      await page.mouse.up()
-      await expect(sidebar).toHaveCSS('width', '400px')
-
-      // The first case is the reported failure; the other two were unaffected controls.
-      for (const [width, text] of [[1024, 150], [1024, 100], [1280, 150]]) {
+      // The approved compact Members sizing trial owns these pixel expectations at 16px root text.
+      // Roomy docks retain the header fix's 16rem baseline; compact docks return room to chat.
+      for (const [width, text, sidebarWidth, panelWidth] of [
+        [1024, 150, 400, 312],
+        [1080, 150, 400, 312],
+        [1120, 150, 400, 326],
+        [1024, 100, 400, 256],
+        [1280, 150, 400, 384],
+        [1024, 150, 288, 342],
+        [1280, 150, 288, 384],
+      ]) {
         await page.setViewportSize({ width, height: 812 })
+        await resizeSidebar(page, sidebarWidth)
         await page.evaluate(text => (window as any).__settingsStore.getState().setFontSize(text), text)
         const renderedFont = baseFont * text / 100
         await expect(page.locator('html')).toHaveCSS('font-size', `${renderedFont}px`)
         // WebKit can publish the root font before the rem-sized dock has caught up.
         await expect.poll(() => heading.evaluate(el =>
           el.parentElement!.parentElement!.getBoundingClientRect().width,
-        )).toBe(16 * renderedFont)
+        )).toBe(panelWidth)
+        if (width === 1024 && text === 150 && sidebarWidth === 400) {
+          await expect.poll(async () => (await hide.locator('xpath=ancestor::header').boundingBox())!.width,
+            'the compact dock returns 72px to the formerly 230px conversation').toBe(302)
+        }
         for (const findOpen of [true, false]) {
           if (findOpen) await page.keyboard.press('Control+f')
           else await page.locator('[data-find-on-page-bar] input').press('Escape')
           await expect(page.locator('[data-find-on-page-bar]')).toHaveCount(findOpen ? 1 : 0)
           await containedHeader(hide, heading)
           if (process.env.FLUUX_MEMBERS_HEADER_PROOF) {
-            await page.screenshot({ path: test.info().outputPath(`members-${width}-${text}-find-${findOpen}.png`) })
+            await page.screenshot({ path: test.info().outputPath(`members-${width}-${text}-sidebar-${sidebarWidth}-find-${findOpen}.png`) })
           }
           await page.getByRole('button', { name: words.rooms.closePanel, exact: true }).click()
           await expect(heading).toHaveCount(0)
@@ -108,6 +127,73 @@ for (const lang of ['en', 'fr']) {
           await containedHeader(hide, heading)
         }
       }
+      // The approved compact Members plan retains full identity access when long labels truncate.
+      await page.setViewportSize({ width: 1024, height: 812 })
+      await resizeSidebar(page, 400)
+      await page.evaluate(() => (window as any).__settingsStore.getState().setFontSize(150))
+      const nick = 'Emma Wilson — community coordination'
+      const jid = 'emma.wilson@community.fluux.chat'
+      await page.evaluate(({ nick, jid }) => {
+        const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
+        const room = store.getRoom(store.activeRoomJid!)!
+        const emma = room.occupants.get('Emma')!
+        store.removeOccupant(room.jid, emma.nick)
+        store.addOccupant(room.jid, {
+          ...emma, nick, jid, occupantId: undefined,
+          hats: [{ uri: 'urn:fluux:community-coordinator', title: 'Community coordinator' }],
+        })
+        store.addOccupant(room.jid, {
+          ...emma, nick: 'Emma Wilson — mobile', jid, occupantId: undefined,
+        })
+      }, { nick, jid })
+      await expect.poll(() => heading.evaluate(el =>
+        el.parentElement!.parentElement!.getBoundingClientRect().width,
+      )).toBe(312)
+      await containedHeader(hide, heading)
+      const row = page.locator('.touch-menu-row').filter({ has: page.getByText(nick, { exact: true }) })
+      await expect(row.getByText('×2', { exact: true })).toBeVisible()
+      await expect(row.locator(`[title="${words.rooms.affiliationAdmin}"]`)).toBeVisible()
+      await expect(row.getByText('Community coordinator', { exact: true })).toBeVisible()
+      await expect.poll(() => row.getByText(jid, { exact: true }).evaluate(el =>
+        el.clientWidth > 0 && el.scrollWidth > el.clientWidth,
+      ), 'long address truncates inside the compact member row').toBe(true)
+      await expect.poll(() => row.evaluate(el => {
+        const bounds = el.getBoundingClientRect()
+        return Array.from(el.querySelectorAll('svg, p, span')).every(child => {
+          const rect = child.getBoundingClientRect()
+          return rect.left >= bounds.left && rect.right <= bounds.right
+        }) && el.scrollWidth <= el.clientWidth
+      }), 'long names, addresses and badges stay inside the compact member row').toBe(true)
+      const name = row.getByText(nick, { exact: true })
+      await expect.poll(() => name.evaluate(el =>
+        el.clientWidth > 0 && el.scrollWidth > el.clientWidth,
+      ), 'long member name truncates rather than widening the dock').toBe(true)
+      await row.hover()
+      await expect(page.getByRole('tooltip')).toContainText(nick)
+      await name.click()
+      await expect(page.getByText(jid, { exact: true }).last()).toBeVisible()
+      if (process.env.FLUUX_MEMBERS_HEADER_PROOF) {
+        await page.screenshot({ path: test.info().outputPath('members-compact-identity.png') })
+      }
+      await heading.click()
+      // Crossing lg must switch back to the unchanged fixed-width overlaid drawer.
+      await page.setViewportSize({ width: 1023, height: 812 })
+      await expect.poll(() => heading.evaluate(el =>
+        el.parentElement!.parentElement!.getBoundingClientRect().width,
+      )).toBe(384)
+      const drawer = heading.locator('..').locator('..').locator('..')
+      await expect(drawer).toHaveCSS('position', 'fixed')
+      const roomHeader = hide.locator('xpath=ancestor::header')
+      await expect.poll(async () => (await roomHeader.boundingBox())!.width).toBeGreaterThan(384)
+      if (process.env.FLUUX_MEMBERS_HEADER_PROOF) {
+        await page.screenshot({ path: test.info().outputPath('members-drawer.png') })
+      }
+      await page.getByRole('button', { name: words.rooms.closePanel, exact: true }).click()
+      await expect(heading).toHaveCount(0)
+      await show.click()
+      await expect(heading).toBeVisible()
+      await page.setViewportSize({ width: 1280, height: 812 })
+      await containedHeader(hide, heading)
     })
   }
 }

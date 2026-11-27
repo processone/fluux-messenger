@@ -699,7 +699,7 @@ export function OccupantPanel({
   }
 
   return (
-    <div className={`${fullScreen ? 'w-full h-full' : 'w-64 border-s border-fluux-bg'} flex flex-col bg-fluux-chat`}>
+    <div className={`${fullScreen ? 'w-full h-full' : 'w-64 lg:w-full border-s border-fluux-bg'} flex flex-col bg-fluux-chat`}>
       {/* Panel header */}
       <div className="h-14 px-4 flex items-center justify-between border-b border-fluux-bg">
         {fullScreen ? (
