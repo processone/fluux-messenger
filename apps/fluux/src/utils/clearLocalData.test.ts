@@ -69,3 +69,18 @@ describe('clearLocalData ignore list', () => {
     expect(ignoreStore.getState().ignoredUsers).toEqual({})
   })
 })
+
+// Source: account erasure must keep working if room-consent coordination is unavailable.
+describe('clearLocalData room coordination failure', () => {
+  it('continues deleting reconnect tokens when room storage cannot coordinate', async () => {
+    const database = globalThis.indexedDB
+    vi.stubGlobal('indexedDB', undefined)
+    const jid = 'fixture@example.com'
+    seedFastToken(jid)
+    expect(hasFastToken(jid)).toBe(true)
+    try {
+      await expect(clearLocalData({ allAccounts: true })).resolves.toBeUndefined()
+      expect(hasFastToken(jid)).toBe(false)
+    } finally { vi.stubGlobal('indexedDB', database) }
+  })
+})

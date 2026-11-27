@@ -2028,11 +2028,9 @@
         "reload": "Znova naloži"
     },
     "readMarkers": {
-        "master": "Deli položaje branja v sobah",
-        "description": "Privzeto izklopljeno. Po vklopu izberite vsako sobo posebej v njenih podrobnostih.",
         "shareInRoom": "Deli moj položaj branja v tej sobi",
         "roomDescription": "Pošiljaj le v preverjenih, neobjavljenih, neanonimnih sobah samo za člane, z manj kot 20 prisotnimi s stalnimi identitetami v sobi. Šifrirana sporočila so izključena.",
-        "masterOff": "Glavno stikalo v Zasebnosti je izklopljeno. Soba ne bo delila vašega položaja branja, dokler ga ne vklopite.",
+        "offHidesReaders": "Izklop deljenja skrije tudi položaje branja drugih v tej sobi.",
         "metadata": "Soba in prisotni vidijo vašo dejavnost branja. Arhiv lahko te metapodatke ohrani. Izklop ustavi prihodnje posodobitve, ne odstrani pa shranjenih oznak.",
         "readThroughHere": "Prebrano do tu:",
         "others_one": "+{{count}} druga oseba",

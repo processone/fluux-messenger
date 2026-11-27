@@ -2026,11 +2026,9 @@
         "reload": "Torna a carregar"
     },
     "readMarkers": {
-        "master": "Comparteix les posicions de lectura a les sales",
-        "description": "Desactivat per defecte. Després d'activar-ho, tria cada sala per separat als seus detalls.",
         "shareInRoom": "Comparteix la meva posició de lectura en aquesta sala",
         "roomDescription": "Envia només en sales verificades, no llistades, no anònimes i només per a membres, amb menys de 20 ocupants amb identitats estables dins la sala. S'exclouen els missatges xifrats.",
-        "masterOff": "L'interruptor general de Privadesa està desactivat. Aquesta sala no compartirà la teva posició de lectura fins que l'activis.",
+        "offHidesReaders": "Desactivar la compartició també amaga les posicions de lectura dels altres en aquesta sala.",
         "metadata": "La sala i els seus ocupants poden veure la teva activitat de lectura. L'arxiu pot conservar aquestes metadades. Desactivar-ho atura les actualitzacions futures, però no elimina els marcadors desats.",
         "readThroughHere": "Llegit fins aquí:",
         "others_one": "+{{count}} altra persona",

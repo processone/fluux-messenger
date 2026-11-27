@@ -9,8 +9,13 @@ import type { MessageRowRef } from '../types/messageRow'
 import { exactPosition, isAfterBoundary } from '../../stores/shared/readState'
 import { getRoomModerationId, messageRowRef } from '../../utils/roomStanzaId'
 import { roomSelf, isOwnRoomMessage } from '../../utils/roomSelf'
+import { openIndexedDB } from '../../utils/idbConnection'
 
-export interface RoomReadConsent { enabled: boolean; rooms: string[] }
+export interface RoomReadConsent {
+  /** @deprecated Compatibility summary only: true when at least one room is selected, not a master consent. */
+  enabled: boolean
+  rooms: string[]
+}
 export interface RoomReader { occupantId: string; nick: string; avatar?: string }
 interface Position { row: MessageRowRef; archiveId: string }
 interface DiscoveryProof { features: string[]; count: number; epoch: number; connection: ReturnType<ModuleDependencies['getXmpp']> }
@@ -24,23 +29,665 @@ const REQUEST_RETRY_MS = ROOM_MARKER_DISCOVERY_RETRY_DELAYS[0]
 export const ROOM_MARKER_ORDER_PAGE_LIMIT = 20
 export const ROOM_READ_MARKERS_STORAGE_KEY = 'fluux-room-read-markers'
 const STORAGE_PREFIX = ROOM_READ_MARKERS_STORAGE_KEY + ':'
-const storageKey = (account: string, kind: 'consent' | 'watermarks') => STORAGE_PREFIX + JSON.stringify([account, kind])
+const CLEAR_GENERATION_KEY = STORAGE_PREFIX + 'clear-generation'
+const storageKey = (account: string, kind: 'consent' | 'watermarks' | 'migration' | 'continuity' | 'restriction') => STORAGE_PREFIX + JSON.stringify([account, kind])
+// A compact 128-bit epoch fits in the space freed by even an empty legacy choice.
+function clearFence() {
+  const hex = generateUUID().split('-').join('')
+  const bytes = Array.from({ length: 16 }, (_, i) => String.fromCharCode(Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16))).join('')
+  return '!' + btoa(bytes).slice(0, -2)
+}
 let storageRevision = 0
-/** Remove consent and published-position references with the account's local data. */
-export function clearRoomReadMarkersLocalData(account: string | null, allAccounts = false) {
-  storageRevision++
+interface LegacyPermission { choice: string; generation?: string; local?: string; revoked?: string[]; edits?: Record<string, string>; epoch?: string }
+interface ClearGuard { generation: string | null; legacy: Record<string, LegacyPermission>; open: boolean }
+function readClearGuard(): ClearGuard {
+  const raw = localStorage.getItem(CLEAR_GENERATION_KEY)
+  if (raw === null) return { generation: null, legacy: {}, open: true }
   try {
+    const value = JSON.parse(raw) as { generation?: unknown; legacy?: unknown }
+    if ((value.generation === null || typeof value.generation === 'string' && !!value.generation) && value.legacy && typeof value.legacy === 'object' && !Array.isArray(value.legacy)) {
+      const legacy: Record<string, LegacyPermission> = Object.create(null)
+      for (const [account, entry] of Object.entries(value.legacy)) {
+        if (typeof entry === 'string') legacy[account] = { choice: entry }
+        else {
+          const permission = entry as { choice?: unknown; generation?: unknown; local?: unknown; revoked?: unknown; edits?: unknown; epoch?: unknown } | null
+          if (!permission || typeof permission.choice !== 'string' || (permission.generation !== undefined && (typeof permission.generation !== 'string' || !permission.generation))
+            || (permission.local !== undefined && (typeof permission.local !== 'string' || !permission.local))
+            || (permission.revoked !== undefined && (!Array.isArray(permission.revoked) || !permission.revoked.every(room => typeof room === 'string' && !!room && getBareJid(room) === room)))
+            || (permission.edits !== undefined && (!permission.edits || typeof permission.edits !== 'object' || Array.isArray(permission.edits) || !Object.values(permission.edits).every(edit => typeof edit === 'string')))
+            || (permission.epoch !== undefined && typeof permission.epoch !== 'string')) return { generation: raw, legacy: {}, open: false }
+          legacy[account] = { choice: permission.choice, generation: permission.generation as string | undefined, local: permission.local as string | undefined, revoked: permission.revoked as string[] | undefined, edits: permission.edits as Record<string, string> | undefined, epoch: permission.epoch as string | undefined }
+        }
+      }
+      return { generation: value.generation, legacy, open: value.generation === null }
+    }
+  } catch { /* Earlier guards stored only the generation. */ }
+  return { generation: raw, legacy: {}, open: false }
+}
+function pruneLegacyPermission(account: string) {
+  const guard = readClearGuard()
+  // Denial needs no retirement: confirmed local writes supersede it without reopening import.
+  if (!guard.legacy[account] || guard.legacy[account].choice === '') return
+  delete guard.legacy[account]
+  localStorage.setItem(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy: guard.legacy }))
+}
+interface SavedConsent {
+  raw: string | null
+  fence: string | null
+  clearToken: string | null
+  sharedPermission?: LegacyPermission
+  cleared: boolean
+  rooms: string[]
+  generation?: string
+  epoch: string
+  edits: Record<string, string>
+  revoked: string[]
+  needsMigration: boolean
+  legacyChoice?: string
+  linkedInput: boolean
+  witnessedInput: boolean
+  localIdentity?: string
+  conversion?: string
+  restricted?: boolean
+}
+function hasUnconfirmedSharedInput(saved: SavedConsent): saved is SavedConsent & { sharedPermission: LegacyPermission } {
+  // Known erasure already supersedes shared authority; unrecognized input cannot.
+  if (saved.restricted || !saved.sharedPermission?.choice || saved.sharedPermission.choice === saved.legacyChoice) return false
+  try {
+    const candidate = JSON.parse(saved.raw ?? 'null') as { version?: unknown; enabled?: unknown; rooms?: unknown } | null
+    const off = candidate?.version === undefined && candidate?.enabled === false
+      || (candidate?.version === 2 || candidate?.version === undefined && candidate?.enabled === true) && Array.isArray(candidate?.rooms) && candidate.rooms.length === 0
+    return !off
+  } catch { return true }
+}
+function hasConfirmedLegacyInput(saved: SavedConsent | undefined) {
+  return !!saved?.legacyChoice && (saved.witnessedInput || saved.linkedInput || !!saved.revoked.length || saved.sharedPermission?.choice === saved.legacyChoice)
+}
+interface ConsentFence { epoch: string; edits?: Record<string, string>; generation?: string; revoked?: string[]; input?: string }
+function readConsentFence(raw: string | null): ConsentFence | undefined {
+  if (raw?.startsWith('!')) return { epoch: raw }
+  try {
+    const parsed: unknown = JSON.parse(raw?.startsWith('~') ? raw.slice(1) : raw ?? 'null')
+    const value = (raw?.startsWith('~') && Array.isArray(parsed)
+      ? { version: 3, generation: parsed[0], epoch: parsed[1], revoked: parsed[4] === 1 ? parsed[2] : undefined, edits: parsed[3], input: parsed[5] ?? undefined } : parsed) as { version?: unknown; epoch?: unknown; edits?: unknown; generation?: unknown; revoked?: unknown; input?: unknown } | null
+    if (value?.version === 3 && typeof value.epoch === 'string' && value.edits && typeof value.edits === 'object' && !Array.isArray(value.edits)
+      && Object.values(value.edits).every(edit => typeof edit === 'string')
+      && (value.generation === undefined || (typeof value.generation === 'string' && !!value.generation))
+      && (value.input === undefined || typeof value.input === 'string')
+      && (value.revoked === undefined || (typeof value.generation === 'string' && Array.isArray(value.revoked) && value.revoked.every(room => typeof room === 'string' && !!room && getBareJid(room) === room)))) return { epoch: value.epoch, edits: value.edits as Record<string, string>, generation: value.generation as string | undefined, revoked: value.revoked as string[] | undefined, input: value.input as string | undefined }
+  } catch { /* Unknown fences cannot supply trusted ordering history. */ }
+  return undefined
+}
+function consentFenceValue(edits: Record<string, string>, epoch: string, generation: string, revoked: string[], input?: string) {
+  return JSON.stringify({ version: 3, epoch, edits, generation, revoked, input })
+}
+function readConsentContinuity(account: string, kind: 'continuity' | 'restriction' = 'continuity'): { generation: string; input?: string; inputId?: string; id?: string; conversion?: string; raw: string } | undefined {
+  const raw = localStorage.getItem(storageKey(account, kind))
+  if (raw === null) return undefined
+  try {
+    const value = JSON.parse(raw) as { generation?: unknown; input?: unknown; inputId?: unknown; id?: unknown; conversion?: unknown } | null
+    if (typeof value?.generation === 'string' && value.generation && (value.input === undefined || typeof value.input === 'string')
+      && (value.inputId === undefined || (typeof value.inputId === 'string' && !!value.inputId))
+      && (value.id === undefined || (typeof value.id === 'string' && !!value.id))
+      && (value.conversion === undefined || (typeof value.conversion === 'string' && !!value.conversion))) return { ...(value as { generation: string; input?: string; inputId?: string; id?: string; conversion?: string }), raw }
+  } catch { /* Invalid proof cannot establish preference continuity. */ }
+  return undefined
+}
+function writeConsentContinuity(account: string, generation: string, input?: string, converting: boolean | 'complete' = false) {
+  const previous = readConsentContinuity(account)
+  // Ordinary input changes keep identity; erasure removes the opaque proof reference.
+  const id = previous?.generation === generation && previous.id ? previous.id : generateUUID()
+  const inputId = input === undefined ? undefined
+    : previous?.generation === generation && previous.input === input && previous.inputId ? previous.inputId : generateUUID()
+  // The pending prefix rejects views captured before preference commit while linked input still authorizes untouched rooms.
+  const retainedConversion = previous?.generation === generation ? previous.conversion : undefined
+  const conversion = converting === true ? '!' + generateUUID()
+    : converting === 'complete' && retainedConversion?.startsWith('!') ? retainedConversion.slice(1) : retainedConversion
+  const raw = JSON.stringify({ generation, input, inputId, id, conversion })
+  localStorage.setItem(storageKey(account, 'continuity'), raw)
+  return { inputId, id, raw }
+}
+function restrictionInput(fence: string | null, clearToken: string | null) {
+  const history = readConsentFence(fence)
+  // Opaque ordering identity binds denial without copying the room names held by a fence.
+  return JSON.stringify([clearToken, fence === null, history?.generation, history?.epoch, Object.values(history?.edits ?? {}).sort(), history?.input])
+}
+function readClearRestriction(account: string, fence: string | null, guard: ClearGuard) {
+  const proof = readConsentContinuity(account, 'restriction')
+  try {
+    const token: unknown = JSON.parse(proof?.input ?? 'null')?.[0]
+    // An unrelated seal must not retire denial while it still carries the target's old permission.
+    return (token === null || typeof token === 'string') && (token === guard.generation || !!guard.legacy[account])
+      && proof?.input === restrictionInput(fence, token) ? proof : undefined
+  } catch { return undefined }
+}
+function readEmptyConsentRestriction(account: string) {
+  try { return readConsentContinuity(account)?.input === '' } catch { return undefined }
+}
+function completeConsentConversion(account: string, generation: string, retireInput = false) {
+  // A committed choice survives refused completion; pending observations stay blocked until a coordinated read retries it.
+  try {
+    const proof = readConsentContinuity(account)
+    if (proof?.generation === generation && proof.conversion?.startsWith('!')) writeConsentContinuity(account, generation, retireInput ? undefined : proof.input, 'complete')
+    return true
+  } catch { return false }
+}
+function readSavedRoomConsent(account: string, raw = localStorage.getItem(storageKey(account, 'consent'))): SavedConsent {
+  const fence = localStorage.getItem(storageKey(account, 'migration'))
+  const history = readConsentFence(fence)
+  const continuity = readConsentContinuity(account)
+  const fenceEpoch = history?.epoch
+  const guard = readClearGuard()
+  const clearToken = guard.generation
+  const restriction = readClearRestriction(account, fence, guard)
+  let value: unknown = null
+  try { value = JSON.parse(raw ?? 'null') } catch { /* Malformed preferences convert to off, never to consent. */ }
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : null
+  const validRooms = Array.isArray(record?.rooms) && record.rooms.every(room =>
+    typeof room === 'string' && !!room && getBareJid(room) === room)
+  const validEdits = record?.edits && typeof record.edits === 'object' && !Array.isArray(record.edits)
+    && Object.values(record.edits).every(edit => typeof edit === 'string')
+  const overlay = history?.revoked !== undefined && !!history.generation
+  const denial = guard.legacy[account]?.choice === '' ? guard.legacy[account] : undefined
+  let followsDenial = !denial
+  if (denial && typeof record?.generation === 'string') {
+    try {
+      const identity: unknown = JSON.parse(record.generation)
+      followsDenial = Array.isArray(identity) && identity[0] === (denial.generation ?? null)
+    } catch { /* Opaque pre-clear identity cannot establish a save after this denial. */ }
+  }
+  const current = !restriction && (!denial || (followsDenial && !!history?.generation)) && record?.version === 3 && validRooms && typeof record.generation === 'string' && !!record.generation
+    && (!history?.generation || (record.generation === history.generation && continuity?.generation === history.generation))
+    && typeof record.epoch === 'string' && validEdits && (overlay || fenceEpoch === undefined || record.epoch === fenceEpoch)
+    && (overlay || !history?.edits || (Object.keys(history.edits).length === Object.keys(record.edits as object).length
+      && Object.entries(history.edits).every(([room, edit]) => (record.edits as Record<string, string>)[room] === edit)))
+  // Only a confirmed fence-backed save against this denial supersedes it; earlier saves and legacy input cannot.
+  const denied = guard.legacy[account]?.choice === '' && !current
+  const cleared = !overlay && !!fenceEpoch && !current
+  const oldRooms = validRooms ? [...new Set(record!.rooms as string[])] : []
+  const retained = history?.revoked !== undefined && raw !== null && !!history.input && history.input === continuity?.inputId
+    && continuity?.generation === history.generation && continuity?.input === raw
+  // An input witnessed before a refused fence must not become a different legacy choice before recovery.
+  const matchesInput = !restriction && !denied && (continuity?.input === undefined || continuity.input === raw)
+  const permission = guard.legacy[account]
+  // A changed input cannot grant permission or discard earlier revocations and ordering.
+  const protection = permission && (!permission.local || permission.local === continuity?.id) ? permission : undefined
+  const candidate = validRooms && (record?.version === 2 || record?.version === undefined && typeof record?.enabled === 'boolean')
+    ? JSON.stringify([record?.version === 2 ? 2 : 0, record?.version === 2 || record?.enabled === true, record?.version === 2 || record?.enabled === true ? oldRooms : []]) : undefined
+  // Shared authority can carry its original choice across a revocation fence, never across erased continuity.
+  const inherited = matchesInput && !cleared && candidate !== undefined && protection?.choice === candidate
+    && (fence === null || overlay && continuity?.generation === history?.generation) ? protection : undefined
+  const previous = matchesInput && (retained || !history?.edits || !!inherited) && !cleared && record?.version === 2 && validRooms
+  const legacy = matchesInput && (retained || fence === null || !!inherited) && record?.version === undefined && typeof record?.enabled === 'boolean' && validRooms
+  const choice = previous || legacy ? candidate : undefined
+  const allowed = retained || (guard.open && !permission) || !!inherited
+  const rooms = current || (allowed && (previous || (legacy && record?.enabled === true))) ? oldRooms.filter(room => !history?.revoked?.includes(room) && !protection?.revoked?.includes(room)) : []
+  const edits = { ...(history?.edits ?? (current ? record.edits as Record<string, string> : {})) }
+  // Either protector can hold a newer Off; an idempotent union changes on either edit and survives mirroring before pruning.
+  for (const [room, edit] of Object.entries(protection?.edits ?? {})) {
+    edits[room] = [...new Set([...(edits[room]?.split('+') ?? []), ...edit.split('+')])].sort().join('+')
+  }
+  return {
+    raw, fence, clearToken, sharedPermission: permission, rooms, cleared,
+    generation: denied ? JSON.stringify([permission.generation, restriction?.generation, fenceEpoch]) : restriction ? restriction.generation : continuity?.input === '' ? continuity.generation : current ? record.generation as string : history?.generation
+      ? raw !== null && continuity?.generation === history.generation ? history.generation : 'absent:' + history.generation
+      : choice !== undefined && allowed ? continuity?.generation ?? inherited?.generation ?? JSON.stringify([account, clearToken, fenceEpoch ?? '']) : (raw !== null && protection ? continuity?.generation ?? protection.generation : undefined) ?? JSON.stringify([account, clearToken, fenceEpoch ?? '']),
+    epoch: fenceEpoch ?? (current ? record.epoch as string : protection?.epoch ?? ''),
+    edits,
+    revoked: [...new Set([...(history?.revoked ?? []), ...(protection?.revoked ?? [])])],
+    needsMigration: !cleared && raw !== null && !current,
+    legacyChoice: allowed ? choice : undefined,
+    linkedInput: retained,
+    witnessedInput: raw !== null && continuity?.input === raw,
+    localIdentity: continuity?.id,
+    conversion: continuity?.conversion,
+    restricted: !!restriction || continuity?.input === '',
+  }
+}
+function readConfirmedSharedConsent(account: string, saved: SavedConsent, includeOff = false) {
+  if (saved.raw === null || !saved.needsMigration || saved.cleared || saved.restricted || !saved.sharedPermission?.choice) return undefined
+  if (saved.sharedPermission.choice === saved.legacyChoice || !includeOff && !hasUnconfirmedSharedInput(saved)) return undefined
+  let choice: unknown
+  try { choice = JSON.parse(saved.sharedPermission.choice) } catch { return undefined }
+  if (!Array.isArray(choice) || choice.length !== 3 || (choice[0] !== 0 && choice[0] !== 2) || typeof choice[1] !== 'boolean' || !Array.isArray(choice[2])) return undefined
+  const input = readConsentContinuity(account)?.input
+  // Reconstruction is a read-only merge base, never an exact-input witness written to storage.
+  const raw = input ?? JSON.stringify(choice[0] === 2 ? { version: 2, rooms: choice[2] } : { enabled: choice[1], rooms: choice[2] })
+  const confirmed = readSavedRoomConsent(account, raw)
+  return confirmed.legacyChoice === saved.sharedPermission.choice && sameConsentBoundary(saved, confirmed) ? confirmed : undefined
+}
+function sameConsentBoundary(left: SavedConsent, right: SavedConsent) {
+  return left.generation === right.generation
+}
+function tryRevokeLegacy(account: string, saved: SavedConsent, revoked: string[], edits: Record<string, string>, epoch: string, confirmed?: SavedConsent) {
+  try {
+    const guard = readClearGuard()
+    const permission = guard.legacy[account]
+    const current = readSavedRoomConsent(account)
+    const choice = saved.legacyChoice ?? (confirmed && sameConsentBoundary(saved, confirmed) ? confirmed.legacyChoice : undefined)
+      ?? (hasUnconfirmedSharedInput(saved) ? saved.sharedPermission.choice : undefined)
+    if (!choice || permission?.choice !== choice || current.raw !== saved.raw || !sameConsentBoundary(saved, current)) return false
+    guard.legacy[account] = { ...permission, generation: current.localIdentity ? undefined : permission.generation, local: current.localIdentity ?? permission.local, revoked: [...new Set([...(permission.revoked ?? []), ...revoked])], edits, epoch }
+    localStorage.setItem(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy: guard.legacy }))
+    return true
+  } catch { return false }
+}
+function roomConsentValue(saved: SavedConsent, rooms: string[], edits = saved.edits, epoch = saved.epoch) {
+  return JSON.stringify({ version: 3, generation: saved.generation ?? generateUUID(), epoch, edits, rooms })
+}
+function persistRoomConsent(account: string, saved: SavedConsent, rooms: string[], edits = saved.edits, epoch = saved.epoch, retireInput = false) {
+  const generation = saved.generation ?? generateUUID()
+  const revoked = [...new Set([...saved.revoked, ...saved.rooms.filter(room => !rooms.includes(room)),
+    ...Object.keys(edits).filter(room => !rooms.includes(room) && edits[room] !== saved.edits[room])])]
+  const shared = readConfirmedSharedConsent(account, saved)
+  const input = saved.legacyChoice && (revoked.length || hasConfirmedLegacyInput(saved)) ? saved.raw ?? undefined
+    : shared?.witnessedInput ? shared.raw ?? undefined : undefined
+  const preserveShared = !!shared
+  const liftsSharedOff = (saved.sharedPermission?.revoked ?? []).some(room => rooms.includes(room))
+  let inputId: string | undefined
+  let sharedIdentity: string | undefined
+  // Reserve valid input before fencing it out; clearing can erase this proof without reopening import.
+  if (input !== undefined) inputId = writeConsentContinuity(account, generation, input, saved.needsMigration).inputId
+  else if (preserveShared) sharedIdentity = writeConsentContinuity(account, generation, undefined, saved.needsMigration).id
+  // The linked fence must preserve untouched input before its shared authority is retired.
+  localStorage.setItem(storageKey(account, 'migration'), consentFenceValue(edits, epoch, generation, revoked, inputId))
+  if (!preserveShared) pruneLegacyPermission(account)
+  if (input === undefined && !preserveShared) writeConsentContinuity(account, generation, undefined, saved.needsMigration)
+  localStorage.setItem(storageKey(account, 'consent'), roomConsentValue({ ...saved, generation }, rooms, edits, epoch))
+  if (preserveShared) {
+    try {
+      if (input !== undefined) pruneLegacyPermission(account)
+      else if (liftsSharedOff) {
+        const guard = readClearGuard()
+        const permission = guard.legacy[account]
+        if (!sharedIdentity || !permission || JSON.stringify(permission) !== JSON.stringify(saved.sharedPermission)) return false
+        // Only the committed preference may lift shared Off; retain the other confirmed choices and their erasable identity.
+        guard.legacy[account] = { ...permission, generation: undefined, local: sharedIdentity, revoked: (permission.revoked ?? []).filter(room => !rooms.includes(room)), edits, epoch }
+        localStorage.setItem(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy: guard.legacy }))
+      }
+    } catch {
+      // A surviving shared Off must still prevent re-enabling; other committed choices need no rollback.
+      if (liftsSharedOff) return false
+    }
+  }
+  const completed = completeConsentConversion(account, generation, retireInput)
+  const remaining = revoked.filter(room => !rooms.includes(room))
+  // A revocation is lifted only after its new On exists in the permission record.
+  if (remaining.length !== revoked.length) {
+    try { localStorage.setItem(storageKey(account, 'migration'), consentFenceValue(edits, epoch, generation, remaining)) } catch { return false }
+  }
+  return !retireInput || completed
+}
+function removeConsentWithBarrier(account: string, epoch = clearFence()) {
+  let removeProof = false
+  try { removeProof = readConsentContinuity(account)?.input === undefined || readConsentFence(localStorage.getItem(storageKey(account, 'migration'))) !== undefined } catch { /* An unverified barrier cannot replace a possible input restriction. */ }
+  try { localStorage.removeItem(storageKey(account, 'consent')); if (removeProof) localStorage.removeItem(storageKey(account, 'continuity')) } catch { /* Local guards cover denied removal. */ }
+  try {
+    localStorage.setItem(storageKey(account, 'migration'), epoch)
+    if (!removeProof) localStorage.removeItem(storageKey(account, 'continuity'))
+  } catch { /* A sole input restriction survives a refused replacement. */ }
+}
+// Conversion orders earlier On without pretending to be a newer user choice.
+function migrationEdits(saved: SavedConsent) {
+  const edits = { ...saved.edits }
+  for (const room of saved.rooms) if (!edits[room]) edits[room] = 'm:' + generateUUID()
+  return edits
+}
+function sameRoomChoice(opening: SavedConsent, latest: SavedConsent, room: string) {
+  return (opening.edits[room] ?? '') === (latest.edits[room] ?? '') || (!opening.edits[room] && latest.edits[room]?.startsWith('m:'))
+}
+function readRoomWatermarks(account: string): Record<string, Position> {
+  const value = JSON.parse(localStorage.getItem(storageKey(account, 'watermarks')) ?? 'null') as Pick<AccountState, 'sent'> | null
+  const sent: Record<string, Position> = {}
+  if (value === null) return sent
+  if (!value.sent || typeof value.sent !== 'object' || Array.isArray(value.sent)) throw new Error('Invalid room watermark storage')
+  for (const [room, position] of Object.entries(value.sent)) {
+    if (typeof position?.archiveId !== 'string' || typeof position.row?.id !== 'string' || position.row.stanzaId !== position.archiveId) throw new Error('Invalid room watermark')
+    sent[room] = { row: position.row, archiveId: position.archiveId }
+  }
+  return sent
+}
+
+async function withConsentStorage<T>(action: () => T, onTransactionStart?: () => void): Promise<T> {
+  const db = await openIndexedDB('fluux-room-read-coordination', 1, {
+    upgrade: db => { db.createObjectStore('consent') },
+    onClosed: () => {},
+  })
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      // Transactions order commits, not the user's earlier choice. Room edit
+      // revisions reject superseded opt-ins before this synchronous commit.
+      const transaction = db.transaction('consent', 'readwrite')
+      onTransactionStart?.()
+      let result: T
+      let failure: unknown
+      transaction.objectStore('consent').get('turn').onsuccess = () => {
+        try { result = action() } catch (error) { failure = error; transaction.abort() }
+      }
+      transaction.oncomplete = () => resolve(result)
+      transaction.onabort = () => reject(failure ?? transaction.error ?? new Error('Room consent transaction aborted'))
+    })
+  } finally { db.close() }
+}
+
+/** Remove consent and published-position references after earlier queued writes. */
+export async function clearRoomReadMarkersLocalData(account: string | null, allAccounts = false): Promise<boolean> {
+  const scoped = account ? getBareJid(account) : null
+  if (!allAccounts && !scoped) return true
+  storageRevision++
+  let mutated = false
+  let erased = true
+  const removedConsents = new Set<string>()
+  const erase = (key: string) => {
+    try { localStorage.removeItem(key); mutated = true; return true } catch { erased = false; return false }
+  }
+  const eraseConsent = (account: string) => {
+    if (erase(storageKey(account, 'consent'))) removedConsents.add(account)
+  }
+  const writeBarrier = (key: string, value: string) => {
+    try { localStorage.setItem(key, value); mutated = true; return true } catch { return false }
+  }
+  const advancedRestrictions = new Set<string>()
+  const reserveRestriction = (account: string, fence: string | null, clearToken: string | null) => {
+    if (!ownsBoundary(account)) return null
+    const raw = JSON.stringify({ generation: generateUUID(), input: restrictionInput(fence, clearToken) })
+    if (!writeBarrier(storageKey(account, 'restriction'), raw)) return null
+    const boundary = boundaries.get(account)
+    if (boundary) boundary.restriction = raw
+    advancedRestrictions.add(account)
+    return raw
+  }
+  const boundaries = new Map<string, { fence: string | null; guard: ClearGuard; restriction?: string | null } | null>()
+  const captureBoundary = (account: string) => {
+    if (!boundaries.has(account)) {
+      try {
+        const boundary: NonNullable<ReturnType<typeof boundaries.get>> = { fence: localStorage.getItem(storageKey(account, 'migration')), guard: readClearGuard() }
+        try { boundary.restriction = localStorage.getItem(storageKey(account, 'restriction')) } catch { /* Unknown slot ownership cannot authorize a later cleanup turn. */ }
+        boundaries.set(account, boundary)
+      }
+      catch { boundaries.set(account, null) }
+    }
+    return boundaries.get(account)
+  }
+  const ownsBoundary = (account: string) => {
+    const boundary = boundaries.get(account)
+    if (!boundary || boundary.restriction === undefined) return false
+    try {
+      const guard = readClearGuard()
+      return localStorage.getItem(storageKey(account, 'restriction')) === boundary.restriction
+        && localStorage.getItem(storageKey(account, 'migration')) === boundary.fence
+        && (guard.generation === boundary.guard.generation || guard.open || !!guard.legacy[account])
+        && JSON.stringify(guard.legacy[account]) === JSON.stringify(boundary.guard.legacy[account])
+    } catch { return false }
+  }
+  const retireProtectedProof = (account: string) => {
+    try {
+      const history = readConsentFence(localStorage.getItem(storageKey(account, 'migration')))
+      // After consent removal, an unlinked revocation fence denies both legacy formats without the removable handoff proof.
+      if (removedConsents.has(account) && history?.generation && history.edits && history.revoked) {
+        erase(storageKey(account, 'continuity'))
+        return
+      }
+      const guard = readClearGuard()
+      if ((!guard.open && !guard.legacy[account]) || readClearRestriction(account, localStorage.getItem(storageKey(account, 'migration')), guard)) erase(storageKey(account, 'continuity'))
+    } catch { /* Unverified protection cannot replace an exact-input restriction. */ }
+  }
+  let needsRecovery = false
+  let fullGuard: ClearGuard | undefined
+  const remove = (coordinated = true, retrying = false) => {
     if (!allAccounts) {
-      if (account) for (const kind of ['consent', 'watermarks'] as const) localStorage.removeItem(storageKey(getBareJid(account), kind))
-      return
+      const boundary = captureBoundary(scoped!)
+      const retainedRestriction = readEmptyConsentRestriction(scoped!)
+      let reservedProof: ReturnType<typeof readClearRestriction>
+      try { reservedProof = boundary ? readClearRestriction(scoped!, boundary.fence, boundary.guard) : undefined } catch { reservedProof = undefined }
+      let reservedRestriction = !!reservedProof
+      let targetSealed = writeBarrier(storageKey(scoped!, 'migration'), clearFence())
+      if (!retrying) erase(storageKey(scoped!, 'watermarks'))
+      if (targetSealed) {
+        erase(storageKey(scoped!, 'continuity'))
+        erase(storageKey(scoped!, 'restriction'))
+      }
+      // Unlocked retirement cannot expose still-present legacy input or delete a proof saved after erasure.
+      if (!retrying) eraseConsent(scoped!)
+      if (coordinated && !targetSealed) {
+        targetSealed = writeBarrier(storageKey(scoped!, 'migration'), clearFence())
+        if (targetSealed) {
+          erase(storageKey(scoped!, 'continuity'))
+          erase(storageKey(scoped!, 'restriction'))
+        }
+      }
+      if (coordinated && !retrying && !targetSealed && boundary) {
+        reservedRestriction = !!reserveRestriction(scoped!, boundary.fence, boundary.guard.generation) || reservedRestriction
+      }
+      // Without a storage turn, target protection must not rewrite another account's newer choice.
+      if (!coordinated) {
+        if (targetSealed) return false
+        needsRecovery = true
+        // A denial-only slot cannot overwrite a choice committed while this unlocked fallback waits.
+        if (boundary) reserveRestriction(scoped!, boundary.fence, boundary.guard.generation)
+        return false
+      }
+      retireProtectedProof(scoped!)
+      let preserved = true
+      const guard = readClearGuard()
+      // Target-only denial preserves unrelated slots, including ones installed after enumeration.
+      const legacy: Record<string, LegacyPermission> = { ...guard.legacy }
+      legacy[scoped!] = { choice: '', generation: generateUUID() }
+      // Advance the target before unrelated reads can defer conversion, preserving every peer entry.
+      writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy: { ...guard.legacy, [scoped!]: legacy[scoped!] } }))
+      const restricted = new Set<string>()
+      const accounts: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (!key?.startsWith(STORAGE_PREFIX)) continue
+        let restrictedAccount: string | undefined
+        try {
+          const parts: unknown = JSON.parse(key.slice(STORAGE_PREFIX.length))
+          if (Array.isArray(parts) && parts.length === 2 && typeof parts[0] === 'string' && parts[0] !== scoped) {
+            if (parts[1] === 'consent') accounts.push(parts[0])
+            if (parts[1] === 'restriction') restrictedAccount = parts[0]
+          }
+        } catch { /* The shared clear guard is not an account record. */ }
+        if (restrictedAccount) {
+          try {
+            // Unrelated denial must not be converted into a different choice.
+            if (readClearRestriction(restrictedAccount, localStorage.getItem(storageKey(restrictedAccount, 'migration')), guard)) restricted.add(restrictedAccount)
+          } catch { restricted.add(restrictedAccount) }
+        }
+      }
+      const classified = new Map<string, SavedConsent>()
+      const targetProtected = targetSealed || retainedRestriction === true || reservedRestriction
+      if (targetProtected) {
+        try {
+          // Deferral must precede every preference-first conversion, not leave one without its import barrier.
+          if (guard.open) for (const other of accounts) if (!restricted.has(other)) classified.set(other, readSavedRoomConsent(other))
+        } catch { return false }
+      }
+      for (const other of accounts) {
+        if (restricted.has(other)) continue
+        let saved: SavedConsent | undefined
+        let localIdentity: string | undefined
+        try {
+          saved = classified.get(other) ?? readSavedRoomConsent(other)
+          localIdentity = saved.localIdentity
+          if (saved.needsMigration) {
+            if (hasUnconfirmedSharedInput(saved)) {
+              legacy[other] = saved.sharedPermission
+              preserved = false
+              continue
+            }
+            if (saved.linkedInput && saved.sharedPermission) {
+              // Shared-only protection must reach the linked fence before either protector can retire.
+              if (!persistRoomConsent(other, saved, saved.rooms, migrationEdits(saved), saved.epoch, true)) preserved = false
+            } else {
+              const generation = saved.generation ?? generateUUID()
+              const edits = migrationEdits(saved)
+              // Preserve the exact validated input until an import barrier protects the committed preference.
+              const continuity = readConsentContinuity(other)
+              const convertedProof = writeConsentContinuity(other, generation, continuity?.input ?? saved.raw ?? undefined, true)
+              localIdentity = convertedProof.id
+              const converted = roomConsentValue({ ...saved, generation }, saved.rooms, edits)
+              localStorage.setItem(storageKey(other, 'consent'), converted)
+              try {
+                localStorage.setItem(storageKey(other, 'migration'), consentFenceValue(edits, saved.epoch, generation, saved.revoked, saved.linkedInput ? convertedProof.inputId : undefined))
+              } catch (error) {
+                // A failed shared seal must still leave the old input eligible for a protected normal conversion.
+                if (saved.raw !== null && localStorage.getItem(storageKey(other, 'consent')) === converted) localStorage.setItem(storageKey(other, 'consent'), saved.raw)
+                throw error
+              }
+              writeConsentContinuity(other, generation, undefined, 'complete')
+            }
+            if (guard.legacy[other]?.choice) delete legacy[other]
+          }
+        } catch {
+          preserved = false
+          const guard = readClearGuard()
+          const permission = guard.legacy[other]
+          // Unreadable preferences are uncertainty, not evidence that an unrelated exception can retire.
+          if (!saved) {
+            if (permission) legacy[other] = permission
+            // Sealing open import would erase an unclassified choice; the saved target barrier already protects erasure.
+            else if (guard.open && targetProtected) return false
+            continue
+          }
+          let proof: ReturnType<typeof readConsentContinuity>
+          try {
+            proof = readConsentContinuity(other)
+            localIdentity = proof?.id
+          } catch { return false }
+          // An unreferenceable local proof must not become shared, non-erasable identity.
+          if (proof && !localIdentity) return false
+          const replacement = readConsentFence(localStorage.getItem(storageKey(other, 'migration')))
+          const mirrored = replacement?.generation === saved.generation && replacement?.epoch === saved.epoch && proof?.generation === saved.generation && !!replacement?.input
+            && replacement.input === proof?.inputId && proof?.input === saved.raw
+            && saved.revoked.every(room => replacement.revoked?.includes(room))
+            && Object.entries(saved.edits).every(([room, edit]) => replacement.edits?.[room] === edit)
+          // A linked input alone cannot replace shared-only Off or its ordering revision.
+          if (mirrored && permission?.choice) delete legacy[other]
+          else if (permission && !mirrored) {
+            legacy[other] = permission.choice === saved.legacyChoice && (!permission.local || permission.local === saved.localIdentity)
+              ? { ...permission, generation: localIdentity ? undefined : permission.generation, local: localIdentity ?? permission.local }
+              : permission
+          } else if (!mirrored && saved.legacyChoice && !saved.linkedInput && saved.rooms.length && localStorage.getItem(storageKey(other, 'consent')) === saved.raw) {
+            legacy[other] = { ...(saved.sharedPermission?.choice === saved.legacyChoice ? saved.sharedPermission : {}), choice: saved.legacyChoice, generation: localIdentity ? undefined : saved.generation, local: localIdentity }
+          }
+        }
+      }
+      if (!writeBarrier(CLEAR_GENERATION_KEY, JSON.stringify({ generation: guard.generation, legacy }))) return false
+      if (removedConsents.has(scoped!)) {
+        erase(storageKey(scoped!, 'migration'))
+        erase(storageKey(scoped!, 'continuity'))
+        erase(storageKey(scoped!, 'restriction'))
+      }
+      return preserved
     }
     const keys: string[] = []
-    for (let i = 0; i < localStorage.length; i++) {
+    const accounts = new Set<string>(retrying ? boundaries.keys() : scoped ? [scoped] : [])
+    if (!retrying) for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
-      if (key?.startsWith(STORAGE_PREFIX)) keys.push(key)
+      if (!key?.startsWith(STORAGE_PREFIX) || key === CLEAR_GENERATION_KEY) continue
+      keys.push(key)
+      try {
+        const parts: unknown = JSON.parse(key.slice(STORAGE_PREFIX.length))
+        if (Array.isArray(parts) && parts.length === 2 && typeof parts[0] === 'string') accounts.add(parts[0])
+      } catch { /* Non-account feature keys are still erased. */ }
     }
-    for (const key of keys) localStorage.removeItem(key)
-  } catch { /* An unavailable storage cannot enable sharing. */ }
+    if (retrying) for (const account of accounts) if (!ownsBoundary(account)) accounts.delete(account)
+    if (!retrying) for (const account of accounts) captureBoundary(account)
+    try { fullGuard ??= readClearGuard() } catch { /* Unknown shared protection cannot be replaced. */ }
+    const fenced = new Set<string>()
+    const seal = () => {
+      if (!coordinated) return false
+      try {
+        if (!fullGuard || [...accounts].some(account => !removedConsents.has(account) && !fenced.has(account))) return false
+        if (retrying && (accounts.size !== boundaries.size || JSON.stringify(readClearGuard()) !== JSON.stringify(fullGuard))) return false
+        return writeBarrier(CLEAR_GENERATION_KEY, generateUUID())
+      } catch { return false }
+    }
+    if (!coordinated) needsRecovery = true
+    if (!retrying) {
+      try { for (const account of Object.keys(readClearGuard().legacy)) accounts.add(account) }
+      catch { /* Unreadable permissions cannot be reconstructed; the clear reports failure. */ }
+      for (const account of accounts) captureBoundary(account)
+    }
+    const fences = new Set([...accounts].map(account => storageKey(account, 'migration')))
+    const restrictions = new Set([...accounts].flatMap(account => [storageKey(account, 'restriction'), storageKey(account, 'continuity')]))
+    const refreshRestrictions = () => {
+      for (const account of accounts) {
+        const boundary = captureBoundary(account)
+        if (!boundary || advancedRestrictions.has(account)) continue
+        try {
+          const guard = readClearGuard()
+          if (localStorage.getItem(storageKey(account, 'migration')) !== boundary.fence
+            || (guard.generation !== boundary.guard.generation && !guard.open && !guard.legacy[account])) continue
+          if (reserveRestriction(account, boundary.fence, boundary.guard.generation)) advancedRestrictions.add(account)
+        } catch { continue }
+      }
+    }
+    let compacted = false
+    const compactFences = () => {
+      for (const account of accounts) {
+        if ((!coordinated || retrying) && !fenced.has(account) && !ownsBoundary(account)) continue
+        const fence = clearFence()
+        if (writeBarrier(storageKey(account, 'migration'), fence)) {
+          const boundary = boundaries.get(account)
+          if (boundary) boundary.fence = fence
+          fenced.add(account)
+          compacted = true
+          erase(storageKey(account, 'continuity'))
+          if (erase(storageKey(account, 'restriction')) && boundary) boundary.restriction = null
+        }
+      }
+    }
+    // A shared import seal alone cannot deny a current-format preference whose deletion is refused.
+    compactFences()
+    let sealed = seal()
+    if (!sealed) refreshRestrictions()
+    // Retire protection only after consent deletion; unlocked recovery never replays this sweep.
+    const consentKeys = new Set([...accounts].map(account => storageKey(account, 'consent')))
+    for (const key of keys) {
+      if (fences.has(key) || restrictions.has(key) || consentKeys.has(key)) continue
+      erase(key)
+    }
+    if (!retrying) for (const account of accounts) eraseConsent(account)
+    const retire = () => {
+      for (const account of accounts) if (removedConsents.has(account)) {
+        for (const kind of ['migration', 'continuity', 'restriction'] as const) erase(storageKey(account, kind))
+      }
+    }
+    if (coordinated) for (const account of accounts) retireProtectedProof(account)
+    if (!sealed) {
+      refreshRestrictions()
+      if (coordinated) sealed = seal()
+    }
+    if (sealed) {
+      if (coordinated) retire()
+    } else {
+      if (coordinated) compactFences()
+      refreshRestrictions()
+      if (!coordinated || !compacted || !seal()) return false
+      if (coordinated) retire()
+    }
+    if (!coordinated) needsRecovery = false
+    return true
+  }
+  try { const result = await withConsentStorage(remove); return result && erased } catch {
+    // An abort after the callback cannot give its old destructive work a second, unlocked turn.
+    if (mutated) return false
+    // A denied coordination database must not stop the caller from erasing its
+    // remaining account data. Report failure even when direct removal succeeds.
+    try {
+      remove(false)
+      if (needsRecovery) {
+        await withConsentStorage(() => {
+          // Only unchanged accounts can receive post-deletion barriers; ordinary erasure never repeats.
+          if (!allAccounts && (!scoped || !ownsBoundary(scoped))) return false
+          return remove(true, true)
+        })
+      }
+    } catch { return false }
+    return false
+  }
 }
 export const ROOM_MARKER_OCCUPANT_LIMIT = 20
 const NONE: readonly RoomReader[] = Object.freeze([])
@@ -70,6 +717,8 @@ export class RoomReadMarkers extends BaseModule {
   private seenStorageRevision = storageRevision
   private accounts = new Map<string, AccountState>()
   private refusedConsent = new Set<string>()
+  private migrations = new Map<string, Promise<boolean>>()
+  private consentEdits = new Map<string, { isCurrent: () => boolean }>()
   private stateConnection: ReturnType<ModuleDependencies['getXmpp']> | undefined
   private orders = new Map<string, RoomMarkerOrder>()
   private proofs = new Map<string, DiscoveryProof>()
@@ -82,13 +731,13 @@ export class RoomReadMarkers extends BaseModule {
   private badges = new Map<string, Map<string, readonly RoomReader[]>>()
   private listeners = new Set<() => void>()
   private pending = new Map<string, { task: Promise<void>; isCurrent: () => boolean }>()
-  private queued = new Map<string, { row: RoomMessage; epoch: number; consent: number; isCurrent: () => boolean }>()
+  private queued = new Map<string, { row: RoomMessage; epoch: number; consent: number; isCurrent: () => boolean; sessionCurrent: () => boolean; watermarkCurrent: () => boolean }>()
   private consentRevision = 0
   private lifecycle = 0
 
   constructor(deps: ModuleDependencies, private focused = () => typeof document !== 'undefined' && document.visibilityState === 'visible' && document.hasFocus()) { super(deps) }
   private onStorage = (event: StorageEvent) => {
-    if (event.key === null || event.key === this.storageKey('consent') || event.key === this.storageKey('watermarks')) this.reload()
+    if (event.key === null || event.key === CLEAR_GENERATION_KEY || event.key === this.storageKey('continuity') || event.key === this.storageKey('restriction') || event.key === this.storageKey('consent') || event.key === this.storageKey('watermarks') || event.key === this.storageKey('migration')) this.reload()
   }
 
   private capture() {
@@ -126,37 +775,172 @@ export class RoomReadMarkers extends BaseModule {
     return account
   }
   private roomKey(roomJid: string) { return JSON.stringify([this.account(), roomJid]) }
-  private storageKey(kind: 'consent' | 'watermarks') { return storageKey(this.account(), kind) }
+  private storageKey(kind: 'consent' | 'watermarks' | 'migration' | 'continuity' | 'restriction') { return storageKey(this.account(), kind) }
   private state(): AccountState {
     const account = this.account()
     let state = this.accounts.get(account)
     if (!state) {
       state = { consent: { enabled: false, rooms: [] }, sent: {} }
       try {
-        const consent = JSON.parse(localStorage.getItem(this.storageKey('consent')) ?? 'null') as RoomReadConsent | null
-        const watermarks = JSON.parse(localStorage.getItem(this.storageKey('watermarks')) ?? 'null') as Pick<AccountState, 'sent'> | null
-        if (consent && typeof consent.enabled === 'boolean' && Array.isArray(consent.rooms)) {
-          state.consent = { enabled: consent.enabled, rooms: consent.rooms.filter(room => typeof room === 'string' && getBareJid(room) === room) }
-        }
-        if (watermarks !== null) {
-          if (!watermarks.sent || typeof watermarks.sent !== 'object' || Array.isArray(watermarks.sent)) throw new Error('Invalid room watermark storage')
-          for (const [room, position] of Object.entries(watermarks.sent)) {
-            if (typeof position?.archiveId !== 'string' || typeof position.row?.id !== 'string' || position.row.stanzaId !== position.archiveId) throw new Error('Invalid room watermark')
-            state.sent[room] = { row: position.row, archiveId: position.archiveId }
-          }
-        }
+        state.sent = readRoomWatermarks(account)
       } catch { state = { consent: { enabled: false, rooms: [] }, sent: {} } }
       this.accounts.set(account, state)
     }
     return state
   }
-  private persist(kind: 'consent' | 'watermarks' = 'watermarks'): boolean {
-    if (!this.account()) return false
-    const state = this.state()
-    try { localStorage.setItem(this.storageKey(kind), JSON.stringify(kind === 'consent' ? state.consent : { sent: state.sent })); return true } catch { return false }
+  private readSavedConsent(account = this.account()) { return readSavedRoomConsent(account) }
+  private async writeConsent(change?: { room: string; enabled: boolean } | { allOff: true }, captured?: SavedConsent, onCaptured?: (saved: SavedConsent) => void): Promise<boolean> {
+    const account = this.account()
+    if (!account) return false
+    let changed = false
+    let transactionStarted = false
+    let initial: SavedConsent | undefined
+    let attempted: SavedConsent | undefined
+    let attemptedShared = false
+    const optingOut = !!change && (!('room' in change) || !change.enabled)
+    const recoverRevocation = (mutating?: SavedConsent) => {
+      if (!optingOut || !initial || !change || this.account() !== account) return
+      let latest: SavedConsent
+      let shared: SavedConsent | undefined
+      try {
+        latest = mutating ?? this.readSavedConsent(account)
+        shared = readConfirmedSharedConsent(account, latest, 'allOff' in change)
+      } catch { return }
+      if (!sameConsentBoundary(initial, latest)) return
+      if (shared) latest = { ...latest, rooms: shared.rooms }
+      const opening = initial
+      const revoked = ('room' in change ? [change.room] : opening.rooms).filter(room =>
+        sameRoomChoice(opening, latest, room))
+      if ('room' in change && !revoked.length) return
+      const rooms = latest.rooms.filter(room => !revoked.includes(room))
+      const edits = { ...latest.edits }
+      for (const room of revoked) edits[room] = generateUUID()
+      const epoch = 'room' in change ? latest.epoch : latest.epoch.startsWith('!') ? clearFence() : generateUUID()
+      changed = true
+      const compact = () => {
+        if (shared && tryRevokeLegacy(account, latest, revoked, edits, epoch, shared)) return
+        // Recovery preserves account identity so unrelated Off survives; the epoch rejects older On.
+        const compactEpoch = clearFence()
+        try {
+          const retainedEdits = Object.fromEntries(rooms.flatMap(room => latest.edits[room] ? [[room, latest.edits[room]]] : []))
+          const input = latest.legacyChoice && (revoked.length || hasConfirmedLegacyInput(latest)) ? latest.raw ?? undefined
+            : readConsentFence(latest.fence) ? undefined : readConsentContinuity(account)?.input
+          const generation = latest.generation ?? generateUUID()
+          const proof = writeConsentContinuity(account, generation, input, latest.needsMigration)
+          const inputId = latest.legacyChoice ? proof.inputId : undefined
+          localStorage.setItem(storageKey(account, 'migration'), '~' + JSON.stringify([generation, compactEpoch, [...new Set([...latest.revoked, ...revoked])], retainedEdits, 1, inputId]))
+          localStorage.setItem(storageKey(account, 'consent'), roomConsentValue({ ...latest, generation }, rooms, retainedEdits, compactEpoch))
+          completeConsentConversion(account, generation)
+        } catch {
+          if (!tryRevokeLegacy(account, latest, revoked, edits, epoch, shared) && !rooms.length) removeConsentWithBarrier(account, compactEpoch)
+        }
+      }
+      if (mutating) compact()
+      else {
+        try { persistRoomConsent(account, latest, rooms, edits, epoch) } catch { compact() }
+      }
+      this.consentRevision++
+    }
+    const recoverUnchanged = (durable: boolean) => {
+      if ((!changed && !change) || !initial || this.account() !== account) return
+      // A new On that never wrote cannot invalidate another room’s confirmed permission.
+      if (!changed && change && 'room' in change && change.enabled && !initial.rooms.includes(change.room)) return
+      try {
+        const latest = this.readSavedConsent(account)
+        if (initial.raw !== latest.raw || initial.fence !== latest.fence || initial.clearToken !== latest.clearToken
+          || JSON.stringify(initial.sharedPermission) !== JSON.stringify(latest.sharedPermission)) return
+      } catch { return }
+      changed = true
+      this.failConsentSave(account, !!change, durable)
+    }
+    try {
+      let opening = captured ?? this.readSavedConsent(account)
+      if (!captured && change && 'allOff' in change) {
+        const shared = readConfirmedSharedConsent(account, opening, true)
+        if (shared) opening = { ...opening, rooms: shared.rooms }
+      }
+      initial = opening
+      onCaptured?.(opening)
+      return await withConsentStorage(() => {
+        try {
+          let saved = this.readSavedConsent(account)
+          // Import cannot replace retained authority; explicit edits merge only its confirmed rooms.
+          if (!change && saved.needsMigration && hasUnconfirmedSharedInput(saved)) return false
+          const shared = change && saved.needsMigration ? readConfirmedSharedConsent(account, saved, 'allOff' in change) : undefined
+          if (shared) saved = { ...saved, rooms: shared.rooms }
+          if (!change && !saved.needsMigration) return saved.cleared || saved.raw === null || !saved.generation ? true : completeConsentConversion(account, saved.generation)
+          if (change && 'room' in change && change.enabled) {
+            if (!saved.needsMigration && saved.rooms.includes(change.room)) return true
+            const changedAccount = opening.generation ? opening.generation !== saved.generation
+              : opening.clearToken !== saved.clearToken || opening.cleared !== saved.cleared
+            if (changedAccount || opening.epoch !== saved.epoch || (opening.edits[change.room] ?? '') !== (saved.edits[change.room] ?? '')) return false
+          }
+          // Target erasure supersedes Off even if older code rewrites preferences afterward.
+          if (optingOut && !sameConsentBoundary(opening, saved)) return true
+          let rooms = saved.rooms
+          const edits = saved.needsMigration ? migrationEdits(saved) : { ...saved.edits }
+          let epoch = saved.epoch
+          if (change && 'room' in change) {
+            rooms = rooms.filter(room => room !== change.room)
+            if (change.enabled) rooms.push(change.room)
+            edits[change.room] = generateUUID()
+          } else if (change) {
+            rooms = rooms.filter(room => !sameRoomChoice(opening, saved, room))
+            epoch = saved.epoch.startsWith('!') ? clearFence() : generateUUID()
+          }
+          attempted = saved
+          attemptedShared = !!shared
+          changed = true
+          const committed = persistRoomConsent(account, saved, rooms, edits, epoch)
+          const effective = committed ? rooms : rooms.filter(room => !saved.revoked.includes(room))
+          this.refusedConsent.delete(account)
+          this.consentRevision++
+          const state = this.accounts.get(account)
+          if (state) state.consent = { enabled: effective.length > 0, rooms: effective }
+          return committed
+        } catch {
+          if (optingOut) recoverRevocation(attempted)
+          else if (changed) {
+            // Confirmed input protects untouched choices without authorizing a failed new On.
+            const confirmed = attempted && (hasConfirmedLegacyInput(attempted) || (!attempted.needsMigration && !attempted.cleared && attempted.raw !== null))
+            if (!attempted || !attemptedShared && (!confirmed || (change && 'room' in change && attempted.rooms.includes(change.room)))) this.failConsentSave(account, !!change)
+            else {
+              // Refused replacement must not leave newly reserved identity in a non-erasable shared fallback.
+              tryRevokeLegacy(account, attempted, [], attempted.edits, attempted.epoch)
+            }
+          } else recoverUnchanged(true)
+          return false
+        }
+      }, () => { transactionStarted = true })
+    } catch {
+      // Revocation before mutation is distinct from replaying destructive cleanup after abort.
+      if (optingOut && !changed) {
+        try { await withConsentStorage(() => recoverRevocation()) } catch { /* Local suppression survives unavailable coordination. */ }
+      } else recoverUnchanged(!transactionStarted)
+      return false
+    } finally {
+      if (changed && account === this.account()) this.notify()
+    }
   }
-  /** Re-read this account's durable choices/watermarks, without creating a viewed event. */
-  reload() { this.consentRevision++; this.queued.clear(); this.accounts.delete(this.account()); this.notify() }
+  private migrateConsent() {
+    const account = this.account()
+    const pending = this.migrations.get(account)
+    if (pending) return pending
+    const task = this.writeConsent().finally(() => {
+      if (this.migrations.get(account) === task) this.migrations.delete(account)
+    })
+    this.migrations.set(account, task)
+    return task
+  }
+  /** Re-read durable choices without creating a viewed event or missing account keys. */
+  reload() {
+    this.consentRevision++; this.queued.clear(); this.accounts.delete(this.account()); this.notify()
+    try {
+      const saved = this.readSavedConsent()
+      if (saved.needsMigration || saved.conversion?.startsWith('!')) return this.migrateConsent()
+    } catch { return Promise.resolve(false) }
+    return Promise.resolve(true)
+  }
   subscribe = (listener: () => void) => {
     if (!this.listeners.size && typeof window !== 'undefined') window.addEventListener('storage', this.onStorage)
     this.listeners.add(listener)
@@ -175,47 +959,121 @@ export class RoomReadMarkers extends BaseModule {
     // Recheck the durable choice at the send boundary too: a storage event can
     // still be queued when this tab takes the connection back.
     let consent: RoomReadConsent = { enabled: false, rooms: [] }
-    try {
-      const value = JSON.parse(localStorage.getItem(this.storageKey('consent')) ?? 'null') as RoomReadConsent | null
-      if (typeof value?.enabled === 'boolean' && Array.isArray(value.rooms)) {
-        consent = { enabled: value.enabled, rooms: value.rooms.filter(room => typeof room === 'string' && getBareJid(room) === room) }
-      }
-    } catch { /* Storage uncertainty cannot enable sharing. */ }
+    if (this.account()) {
+      try {
+        const saved = this.readSavedConsent()
+        if (saved.needsMigration || saved.conversion?.startsWith('!')) void this.migrateConsent()
+        if (!saved.needsMigration || hasConfirmedLegacyInput(saved)) consent = { enabled: saved.rooms.length > 0, rooms: saved.rooms }
+      } catch { /* A read failure hides sharing without discarding durable choices. */ }
+    }
+    const unknown = this.consentEdits.get(this.roomKey(''))
+    if (unknown?.isCurrent()) return { enabled: false, rooms: [] }
+    const rooms = consent.rooms.filter(room => {
+      const key = this.roomKey(room)
+      const edit = this.consentEdits.get(key)
+      if (edit && !edit.isCurrent()) this.consentEdits.delete(key)
+      return !this.consentEdits.has(key)
+    })
+    consent = { enabled: rooms.length > 0, rooms }
     if (JSON.stringify(consent) !== JSON.stringify(state.consent)) {
       this.consentRevision++
       state.consent = consent
     }
     return state.consent
   }
-  isEnabledFor(roomJid: string) { const consent = this.getConsent(); return consent.enabled && consent.rooms.includes(roomJid) }
-  setEnabled(enabled: boolean) {
-    this.consentRevision++
-    const state = this.state()
-    state.consent = { ...state.consent, enabled }
-    const saved = this.persist('consent')
-    if (!saved) this.failConsentSave(state)
-    else this.refusedConsent.delete(this.account())
-    this.notify()
-    return saved
+  isEnabledFor(roomJid: string) {
+    const key = this.roomKey(roomJid)
+    const edit = this.consentEdits.get(key)
+    if (edit && !edit.isCurrent()) this.consentEdits.delete(key)
+    return !this.consentEdits.has(key) && this.getConsent().rooms.includes(roomJid)
   }
-  setRoomEnabled(roomJid: string, enabled: boolean) {
-    this.consentRevision++
-    if (!roomJid || getBareJid(roomJid) !== roomJid) return
-    const state = this.state()
-    const rooms = state.consent.rooms.filter(room => room !== roomJid)
-    state.consent = { ...state.consent, rooms: enabled ? [...rooms, roomJid] : rooms }
-    const saved = this.persist('consent')
-    if (!saved) this.failConsentSave(state)
-    else this.refusedConsent.delete(this.account())
-    this.notify()
-    return saved
+  /** @deprecated Only legacy opt-out is supported; opting in requires an explicit room choice. */
+  setEnabled(enabled: boolean): Promise<boolean> {
+    if (enabled) return Promise.resolve(false)
+    const account = this.account()
+    let boundary: SavedConsent | undefined
+    try {
+      boundary = this.readSavedConsent(account)
+      const shared = readConfirmedSharedConsent(account, boundary, true)
+      if (shared) boundary = { ...boundary, rooms: shared.rooms }
+    } catch { boundary = undefined }
+    const unknownKey = this.roomKey('')
+    let unreadable: { history?: ConsentFence; generation?: string; clearToken: string | null } | undefined
+    if (!boundary) {
+      try {
+        const guard = readClearGuard()
+        unreadable = { history: readConsentFence(localStorage.getItem(storageKey(account, 'migration'))), generation: readConsentContinuity(account)?.generation ?? guard.legacy[account]?.generation, clearToken: guard.generation }
+      }
+      catch { /* No readable ownership means suppression cannot yet be retired as superseded. */ }
+    }
+    let edits = (boundary?.rooms ?? []).map(room => this.beginConsentEdit(room, account, boundary))
+    const unknown = { isCurrent: () => {
+      if (this.account() !== account) { this.consentEdits.delete(unknownKey); return false }
+      try {
+        const latest = this.readSavedConsent(account)
+        let rooms = readConfirmedSharedConsent(account, latest, true)?.rooms ?? latest.rooms
+        if (unreadable) {
+          const history = unreadable.history
+          const generation = history?.generation ?? unreadable.generation ?? JSON.stringify([account, unreadable.clearToken, history?.epoch ?? ''])
+          const retainedLegacy = !history?.generation && latest.fence === null && !!latest.legacyChoice
+          if (latest.generation !== generation && !retainedLegacy) rooms = []
+          else rooms = rooms.filter(room => (history?.edits?.[room] ?? '') === (latest.edits[room] ?? '')
+            || (!history?.edits?.[room] && latest.edits[room]?.startsWith('m:')))
+        }
+        edits = rooms.map(room => this.beginConsentEdit(room, account, latest))
+        boundary = latest
+        this.consentEdits.delete(unknownKey)
+        return false
+      } catch { return true }
+    } }
+    if (!boundary) this.consentEdits.set(unknownKey, unknown)
+    this.consentRevision++; this.queued.clear(); this.notify()
+    let saved = false
+    return this.writeConsent({ allOff: true }, boundary, captured => {
+      if (!boundary) { edits = captured.rooms.map(room => this.beginConsentEdit(room, account, captured)); boundary = captured }
+      if (this.consentEdits.get(unknownKey) === unknown) this.consentEdits.delete(unknownKey)
+    }).then(result => { saved = result; return result }).finally(() => {
+      if (boundary && this.consentEdits.get(unknownKey) === unknown) this.consentEdits.delete(unknownKey)
+      for (const { key, edit } of edits) if (saved && this.consentEdits.get(key) === edit) this.consentEdits.delete(key)
+      this.notify()
+    })
   }
-  private failConsentSave(state: AccountState) {
-    this.refusedConsent.add(this.account())
-    state.consent = { enabled: false, rooms: [] }
-    // In particular, quota exhaustion must not leave an older opt-in ready to
-    // reactivate on restart. Removing a key does not need more storage space.
-    try { localStorage.removeItem(this.storageKey('consent')) } catch { /* The UI reports the unsaved choice. */ }
+  private beginConsentEdit(roomJid: string, account: string, boundary?: SavedConsent) {
+    const key = this.roomKey(roomJid)
+    const edit = { isCurrent: () => {
+      if (this.account() !== account) return false
+      try {
+        if (!boundary) return true
+        const latest = this.readSavedConsent(account)
+        return sameConsentBoundary(boundary, latest) && sameRoomChoice(boundary, latest, roomJid)
+      } catch { return true }
+    } }
+    this.consentEdits.set(key, edit)
+    return { key, edit }
+  }
+  setRoomEnabled(roomJid: string, enabled: boolean): Promise<boolean> {
+    if (!roomJid || getBareJid(roomJid) !== roomJid) return Promise.resolve(false)
+    this.consentEdits.get(this.roomKey(''))?.isCurrent()
+    const account = this.account()
+    let boundary: SavedConsent | undefined
+    try { boundary = this.readSavedConsent(account) } catch { /* Unreadable state stays locally suppressed. */ }
+    const { key, edit } = this.beginConsentEdit(roomJid, account, boundary)
+    // A save can wait behind another tab's transaction. Suppress this tab immediately,
+    // rather than allowing an already-queued viewed event to publish meanwhile.
+    this.consentRevision++; this.queued.clear(); this.notify()
+    let saved = false
+    return this.writeConsent({ room: roomJid, enabled }, boundary).then(result => { saved = result; return result }).finally(() => {
+      if (this.consentEdits.get(key) === edit && (saved || enabled)) this.consentEdits.delete(key)
+      this.notify()
+    })
+  }
+  private failConsentSave(account: string, explicitChoice = true, durable = true) {
+    if (explicitChoice) this.refusedConsent.add(account)
+    const state = this.accounts.get(account)
+    if (state) state.consent = { enabled: false, rooms: [] }
+    if (!durable) return
+    // Deletion frees space for a compact barrier without retaining a failed On snapshot.
+    removeConsentWithBarrier(account)
   }
 
   private discover(roomJid: string): Promise<boolean> {
@@ -274,10 +1132,11 @@ export class RoomReadMarkers extends BaseModule {
           if (this.discovery.get(key) !== request || !query.isCurrent()) return
           // The elapsed timer is the due signal, even if wall time moved back.
           request.retryAt = -Infinity
+          const enabled = this.isEnabledFor(roomJid)
           const held = this.queued.get(key)
           if (held?.isCurrent() && held.epoch === (this.epochs.get(key) ?? 0)
-            && held.consent === this.consentRevision && this.focused() && this.isEnabledFor(roomJid)) {
-            void this.viewed(roomJid, held.row).catch(() => {})
+            && held.consent === this.consentRevision && this.focused() && enabled) {
+            void this.publishQueued(roomJid).catch(() => {})
           } else {
             if (held && this.queued.get(key) === held) this.queued.delete(key)
             if (this.positions.has(key)) void this.discover(roomJid).catch(() => {})
@@ -453,12 +1312,13 @@ export class RoomReadMarkers extends BaseModule {
     return canMark(row, roomJid) ? row : null
   }
 
-  async receive(roomJid: string, stanza: Element, additional: readonly RoomMessage[] = [], archived = false): Promise<void> {
+  async receive(roomJid: string, stanza: Element, additional: readonly RoomMessage[] = [], archived = false, replayCurrent?: () => boolean): Promise<void> {
     const displays = stanza.getChildren('displayed', NS_CHAT_MARKERS)
     const actors = stanza.getChildren('occupant-id', NS_OCCUPANT_ID)
     if (stanza.attrs.type !== 'groupchat' || getBareJid(stanza.attrs.from ?? '') !== roomJid || !getResource(stanza.attrs.from ?? '')
       || stanza.getChild('body') || displays.length !== 1 || !displays[0].attrs.id || actors.length !== 1 || !actors[0].attrs.id) return
     const query = this.capture()
+    const watermarkCurrent = replayCurrent ?? this.captureReplayBoundary()
     const key = this.roomKey(roomJid)
     if ((!this.eligible(roomJid) && !await this.discover(roomJid)) || !query.isCurrent()) return
     const epoch = this.epochs.get(key) ?? 0
@@ -482,34 +1342,102 @@ export class RoomReadMarkers extends BaseModule {
       const sent = this.state().sent[roomJid]
       const advances = !sent || await this.forward(roomJid, sent.archiveId, position.archiveId, true, !archived)
       if (advances && query.isCurrent() && epoch === (this.epochs.get(key) ?? 0) && this.eligible(roomJid)) {
-        this.rememberSent(roomJid, position)
+        await this.rememberSent(roomJid, position, () => watermarkCurrent() && query.isCurrent()
+          && epoch === (this.epochs.get(key) ?? 0) && this.eligible(roomJid))
       }
     }
     this.roomChanged(roomJid)
   }
 
-  private rememberSent(roomJid: string, position: Position): boolean {
-    const state = this.state()
-    const previous = state.sent[roomJid]
-    if (previous && !this.order(roomJid).after(position.archiveId, previous.archiveId)) return false
-    state.sent[roomJid] = position
-    // Write before the stream: an uncertain send must not be replayed as a new
-    // read after restart. A failed durable write prevents publication entirely.
-    if (!this.persist()) { if (previous) state.sent[roomJid] = previous; else delete state.sent[roomJid]; return false }
-    return true
+  /** Capture before archive work starts; late replay must not restore erased local positions. */
+  captureReplayBoundary() {
+    const account = this.account()
+    try {
+      const saved = this.readSavedConsent(account)
+      return () => {
+        try {
+          const latest = this.readSavedConsent(account)
+          return this.account() === account && (saved.generation ? saved.generation === latest.generation : saved.clearToken === latest.clearToken && saved.cleared === latest.cleared && saved.epoch === latest.epoch)
+        } catch { return false }
+      }
+    } catch { return () => false }
+  }
+
+  private async rememberSent(roomJid: string, position: Position, isCurrent: () => boolean, dispatch?: (commit: () => void) => Promise<void>): Promise<boolean> {
+    let delivery: Promise<{ ok: true } | { ok: false; error: unknown }> | undefined
+    let saved: boolean
+    try {
+      saved = await withConsentStorage(() => {
+        const account = this.account()
+        if (!account) return false
+        const sent = readRoomWatermarks(account)
+        const previous = sent[roomJid]
+        if (previous && !this.order(roomJid).after(position.archiveId, previous.archiveId)) return false
+        if (!isCurrent()) return false
+        sent[roomJid] = position
+        let active = true
+        let wrote = false
+        const commit = () => {
+          if (!active || wrote || !isCurrent()) throw new Error('Room viewing is no longer current')
+          localStorage.setItem(storageKey(account, 'watermarks'), JSON.stringify({ sent }))
+          this.state().sent = sent
+          wrote = true
+        }
+        try {
+          if (dispatch) {
+            try { delivery = dispatch(commit).then(() => ({ ok: true as const }), error => ({ ok: false as const, error })) }
+            catch (error) { delivery = Promise.resolve({ ok: false, error }) }
+          } else commit()
+        } finally { active = false }
+        return wrote
+      })
+    } catch { saved = false }
+    const result = await delivery
+    if (result && !result.ok) throw result.error
+    return saved
+  }
+
+  private captureConversionBoundary() {
+    const account = this.account()
+    const snapshot = () => {
+      // Preference and continuity are separate reads; a conversion between them cannot become focused-view evidence.
+      const conversion = readConsentContinuity(account)?.conversion
+      const saved = this.readSavedConsent(account)
+      return conversion === saved.conversion && !conversion?.startsWith('!') ? saved : undefined
+    }
+    try {
+      const saved = snapshot()
+      if (!saved) return () => false
+      return () => {
+        try {
+          const latest = snapshot()
+          return !!latest && this.account() === account && latest.needsMigration === saved.needsMigration && latest.conversion === saved.conversion
+        } catch { return false }
+      }
+    } catch { return () => false }
   }
 
   /** Explicit focused viewport evidence, after the existing read writer ran. */
-  viewed(roomJid: string, row: RoomMessage): Promise<void> {
+  viewed(roomJid: string, row: RoomMessage, viewCurrent: () => boolean = () => true): Promise<void> {
     if (!this.focused() || !this.isEnabledFor(roomJid) || !canMark(row, roomJid) || row.isOutgoing) return Promise.resolve()
     if (this.state().sent[roomJid]?.archiveId === row.stanzaId) return Promise.resolve()
     const key = this.roomKey(roomJid)
     const query = this.capture()
+    const watermarkCurrent = this.captureReplayBoundary()
+    const conversionCurrent = this.captureConversionBoundary()
     const held = this.queued.get(key)
-    if (!held || !held.isCurrent() || held.epoch !== (this.epochs.get(key) ?? 0) || held.consent !== this.consentRevision
+    if (!held || !held.isCurrent() || !held.watermarkCurrent() || held.epoch !== (this.epochs.get(key) ?? 0) || held.consent !== this.consentRevision
       || this.order(roomJid).after(row.stanzaId!, held.row.stanzaId!)) {
-      this.queued.set(key, { row, epoch: this.epochs.get(key) ?? 0, consent: this.consentRevision, isCurrent: query.isCurrent })
+      this.queued.set(key, { row, epoch: this.epochs.get(key) ?? 0, consent: this.consentRevision, isCurrent: () => query.isCurrent() && viewCurrent() && conversionCurrent(), sessionCurrent: query.isCurrent, watermarkCurrent })
     }
+    return this.publishQueued(roomJid)
+  }
+
+  private publishQueued(roomJid: string): Promise<void> {
+    const key = this.roomKey(roomJid)
+    const observation = this.queued.get(key)
+    if (!observation) return Promise.resolve()
+    const query = { isCurrent: observation.sessionCurrent }
     const running = this.pending.get(key)
     if (running?.isCurrent()) return running.task
     // Advances that arrive before discovery finishes collapse to the furthest
@@ -524,8 +1452,11 @@ export class RoomReadMarkers extends BaseModule {
         }
         const candidate = this.queued.get(key)
         if (!candidate) continue
-        const authorized = () => candidate.isCurrent() && candidate.epoch === (this.epochs.get(key) ?? 0)
-          && candidate.consent === this.consentRevision && this.focused() && this.isEnabledFor(roomJid)
+        const authorized = () => {
+          const enabled = this.isEnabledFor(roomJid)
+          return candidate.isCurrent() && candidate.epoch === (this.epochs.get(key) ?? 0)
+            && candidate.consent === this.consentRevision && this.focused() && enabled
+        }
         if (!discovered && authorized()) {
           if (candidate.epoch !== initial.epoch) continue
           if (this.discovery.get(key)?.retryAt !== undefined) break
@@ -543,9 +1474,14 @@ export class RoomReadMarkers extends BaseModule {
         const reflected = this.positions.get(key)?.get(roomSelf(room).occupantId ?? '')
         if (reflected && !await this.forward(roomJid, reflected.archiveId, position.archiveId, true)) continue
         if (previous && !await this.forward(roomJid, previous.archiveId, position.archiveId, true)) continue
-        if (!current() || !this.rememberSent(roomJid, position)) continue
-        await this.deps.sendStanza(xml('message', { type: 'groupchat', to: roomJid },
-          xml('displayed', { xmlns: NS_CHAT_MARKERS, id: position.archiveId }), xml('store', { xmlns: NS_HINTS })))
+        if (!current()) continue
+        const withinReadBoundary = () => {
+          const latest = this.getRoomWithOccupants(roomJid)?.readPointer
+          return !!latest && !isAfterBoundary(exactPosition(confirmed, 'room'), latest.order)
+        }
+        await this.rememberSent(roomJid, position, () => candidate.watermarkCurrent() && current() && withinReadBoundary(),
+          commit => this.deps.sendStanza(xml('message', { type: 'groupchat', to: roomJid },
+            xml('displayed', { xmlns: NS_CHAT_MARKERS, id: position.archiveId }), xml('store', { xmlns: NS_HINTS })), commit))
       }
     })
     const entry = { task, isCurrent: query.isCurrent }

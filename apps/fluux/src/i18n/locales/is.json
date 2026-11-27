@@ -2022,11 +2022,9 @@
         "reload": "Endurhlaða"
     },
     "readMarkers": {
-        "master": "Deila lestrarstöðum í herbergjum",
-        "description": "Slökkt sjálfgefið. Eftir að þú kveikir á þessu skaltu velja hvert herbergi sérstaklega í upplýsingum þess.",
         "shareInRoom": "Deila lestrarstöðu minni í þessu herbergi",
         "roomDescription": "Senda aðeins í staðfestum, óskráðum, ónafnlausum herbergjum sem eru eingöngu fyrir meðlimi, með færri en 20 viðstöddum með stöðug auðkenni í herberginu. Dulkóðuð skilaboð eru undanskilin.",
-        "masterOff": "Aðalrofinn í Persónuvernd er slökktur. Herbergið deilir ekki lestrarstöðu þinni fyrr en þú kveikir á honum.",
+        "offHidesReaders": "Þegar slökkt er á deilingu eru lestrarstöður annarra í þessu herbergi einnig faldar.",
         "metadata": "Herbergið og viðstaddir geta séð lestrarvirkni þína. Safnið kann að geyma þessi lýsigögn. Slökkt er á framtíðaruppfærslum, en vistuð merki eru ekki fjarlægð.",
         "readThroughHere": "Lesið hingað:",
         "others_one": "+{{count}} annar",

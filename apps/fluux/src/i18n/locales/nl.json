@@ -2022,11 +2022,9 @@
         "reload": "Opnieuw laden"
     },
     "readMarkers": {
-        "master": "Leesposities in kamers delen",
-        "description": "Standaard uitgeschakeld. Kies na het inschakelen elke kamer afzonderlijk in de kamerdetails.",
         "shareInRoom": "Mijn leespositie in deze kamer delen",
         "roomDescription": "Alleen verzenden in geverifieerde, niet-vermelde, niet-anonieme kamers uitsluitend voor leden, met minder dan 20 aanwezigen met vaste kameridentiteiten. Versleutelde berichten zijn uitgesloten.",
-        "masterOff": "De hoofdschakelaar onder Privacy is uitgeschakeld. Deze kamer deelt je leespositie pas nadat je die hebt ingeschakeld.",
+        "offHidesReaders": "Als je delen uitschakelt, worden ook de leesposities van anderen in deze kamer verborgen.",
         "metadata": "De kamer en de aanwezigen kunnen je leesactiviteit zien. Het archief kan deze metadata bewaren. Uitschakelen stopt toekomstige updates, maar verwijdert opgeslagen markeringen niet.",
         "readThroughHere": "Gelezen tot hier:",
         "others_one": "+{{count}} andere",

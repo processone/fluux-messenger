@@ -1095,6 +1095,8 @@ export interface RoomState {
   activationPending: boolean
   /** Requested room during hydration; never part of persisted room data. */
   activationTarget: string | null
+  /** Identity lets observers capture operation guards before either hydration read. */
+  pendingActivation: { roomJid: string } | null
   // Easter egg animation state (ephemeral)
   activeAnimation: { roomJid: string; animation: string; senderName?: string } | null
   // Message drafts per room (persisted to localStorage separately)
@@ -1465,7 +1467,7 @@ function createEmptyRoomState(
   acknowledgedNonAnonymousRooms: Set<string> = new Set(),
   roomCoverage: Map<string, CoverageRecord> = new Map(),
   pendingRetractions: Map<string, PendingRetraction[]> = new Map(),
-): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'messages' | 'lastArrivedMessage' | 'windowAtLiveEdge' | 'activeRoomJid' | 'activationPending' | 'activationTarget' | 'activeAnimation' | 'drafts' | 'ordinaryDrafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'firstNewMessageCounts' | 'interiorPlacementVersions' | 'bookmarksLoaded'> {
+): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'messages' | 'lastArrivedMessage' | 'windowAtLiveEdge' | 'activeRoomJid' | 'activationPending' | 'activationTarget' | 'pendingActivation' | 'activeAnimation' | 'drafts' | 'ordinaryDrafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'firstNewMessageCounts' | 'interiorPlacementVersions' | 'bookmarksLoaded'> {
   return {
     rooms: new Map(),
     roomEntities: new Map(),
@@ -1477,6 +1479,7 @@ function createEmptyRoomState(
     activeRoomJid: null,
     activationPending: false,
     activationTarget: null,
+    pendingActivation: null,
     activeAnimation: null,
     ...draftStorage,
     votedPollIds,
@@ -3047,7 +3050,7 @@ export const roomStore = createStore<RoomState>()(
     if (roomJid) {
       // Signal the hydration window so the UI can hold a neutral surface
       // instead of flashing the empty state while the cache read is in flight.
-      set({ activationPending: true })
+      set({ activationPending: true, pendingActivation: { roomJid } })
       await get().loadMessagesFromCache(roomJid, { limit: 100 })
       // A newer activation started while the cache read was in flight: it owns
       // the pending flag now, so bail without clearing it.
@@ -3114,7 +3117,7 @@ export const roomStore = createStore<RoomState>()(
     // Set active and clear pending atomically (same React commit) so the view
     // swaps straight from loading surface to content with no empty-state frame.
     get().setActiveRoom(roomJid)
-    set({ activationPending: false })
+    set({ activationPending: false, pendingActivation: null })
   },
 
   getActiveRoomJid: () => get().activeRoomJid,

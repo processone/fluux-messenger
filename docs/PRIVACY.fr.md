@@ -35,8 +35,8 @@ XMPP.
 ## Positions de lecture facultatives dans les salons
 
 Le partage de votre position de lecture est désactivé par défaut pour chaque
-compte sur cet appareil. Activez le réglage général de confidentialité, puis
-choisissez chaque salon séparément dans ses informations. Seul l'affichage de
+compte sur cet appareil. Choisissez chaque salon séparément dans ses informations,
+sans réglage supplémentaire dans Confidentialité. Seul l'affichage de
 messages entrants non chiffrés dans la fenêtre active peut partager une position,
 dans les salons vérifiés, non répertoriés, réservés aux membres et non anonymes,
 avec moins de 20 occupants. Les conversations individuelles et les messages

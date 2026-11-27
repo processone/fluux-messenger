@@ -2027,11 +2027,9 @@
         "reload": "Znova načítať"
     },
     "readMarkers": {
-        "master": "Zdieľať pozície prečítania v miestnostiach",
-        "description": "Predvolene vypnuté. Po zapnutí vyberte každú miestnosť osobitne v jej podrobnostiach.",
         "shareInRoom": "Zdieľať moju pozíciu prečítania v tejto miestnosti",
         "roomDescription": "Odosielať iba v overených, nezverejnených, neanonymných miestnostiach len pre členov, s menej ako 20 prítomnými so stálymi identitami v miestnosti. Šifrované správy sú vylúčené.",
-        "masterOff": "Hlavný prepínač v Súkromí je vypnutý. Miestnosť nebude zdieľať vašu pozíciu prečítania, kým ho nezapnete.",
+        "offHidesReaders": "Vypnutie zdieľania skryje aj pozície prečítania ostatných v tejto miestnosti.",
         "metadata": "Miestnosť a jej prítomní vidia vašu aktivitu čítania. Archív môže tieto metaúdaje uchovať. Vypnutie zastaví budúce aktualizácie, no neodstráni uložené značky.",
         "readThroughHere": "Prečítané potiaľto:",
         "others_one": "+{{count}} ďalšia osoba",

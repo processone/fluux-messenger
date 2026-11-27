@@ -22,10 +22,11 @@ export interface ModuleDependencies {
   stores: StoreBindings | null
   /** Room-only peer marker port; the base must not depend on its concrete module. */
   getRoomReadMarkers?: () => {
+    captureReplayBoundary?(): () => boolean
     mayQualify(roomJid: string): boolean
     ensureEligible(roomJid: string): Promise<boolean>
     recordArchiveOrder(roomJid: string, ids: readonly string[], cursor?: { before?: string; after?: string }): void
-    receive(roomJid: string, stanza: Element, additional?: readonly RoomMessage[], archived?: boolean): Promise<void>
+    receive(roomJid: string, stanza: Element, additional?: readonly RoomMessage[], archived?: boolean, replayCurrent?: () => boolean): Promise<void>
   }
   /** Reuse the archive's existing positive purged-anchor classification. */
   lookUpRoomArchiveAnchor?: (roomJid: string, archiveId: string) => Promise<{ kind: 'found' | 'absent' | 'unknown' }>
@@ -37,7 +38,8 @@ export interface ModuleDependencies {
    * connection store binding. Always provided (defaults to a headless reader).
    */
   presence: PresenceReader
-  sendStanza: (stanza: Element) => Promise<void>
+  /** Run beforeWrite synchronously after preflight, immediately before the stream write. */
+  sendStanza: (stanza: Element, beforeWrite?: () => void) => Promise<void>
   sendIQ: (iq: Element, timeoutMs?: number) => Promise<Element>
   getCurrentJid: () => string | null
   emit: <K extends keyof ClientEvents>(

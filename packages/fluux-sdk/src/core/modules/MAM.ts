@@ -272,6 +272,19 @@ const PREVIEW_WALK_MAX_CONCURRENT = 2
  * @category Core
  */
 export class MAM extends BaseModule {
+  captureRoomReplay() {
+    return this.deps.getRoomReadMarkers?.().captureReplayBoundary?.() ?? (() => false)
+  }
+
+  private readonly roomReplayOrigins = new WeakMap<RoomHistoryQueryOptions, () => boolean>()
+
+  // Keep the origin across async wrappers without changing public query options.
+  private async queryRoomArchiveWithReplay(options: RoomHistoryQueryOptions, replayCurrent: () => boolean) {
+    this.roomReplayOrigins.set(options, replayCurrent)
+    try { return await this.queryRoomArchive(options) }
+    finally { this.roomReplayOrigins.delete(options) }
+  }
+
   readonly correctionReceipts = new CorrectionReceipts(this.deps)
   private correctionQueries = new Map<string, CorrectionReconciliation>()
   private observedArchives = new Map<string, () => boolean>()
@@ -894,6 +907,7 @@ export class MAM extends BaseModule {
    * @returns Query result with messages, completion status, and pagination info
    */
   async queryRoomArchive(options: RoomHistoryQueryOptions): Promise<RoomHistoryResult> {
+    const replayCurrent = this.roomReplayOrigins.get(options) ?? this.captureRoomReplay()
     const session = this.captureQuery()
     const requestId = generateUUID()
     const { roomJid, max = 50, before, after, start, end, dateLookup, maxAutoPages: maxAutoPagesOpt, walkOriginTs, healGapsOnly } = options
@@ -1016,7 +1030,7 @@ export class MAM extends BaseModule {
               // Strip the purged id from the persisted gap anchor — see the
               // 1:1 twin in queryArchive for the full rationale.
               this.deps.emitSDK('room:history-anchor-purged', { roomJid, after })
-              const degraded = await this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
+              const degraded = await this.queryRoomArchiveWithReplay({ roomJid, max, before: '', preserveGapMarker }, replayCurrent)
               session.assertCurrent()
               // Mark the result so callers (the catch-up orchestrator) can tell
               // this is ALREADY a fetch-latest page and skip issuing another one.
@@ -1028,7 +1042,7 @@ export class MAM extends BaseModule {
               // twin in queryArchive).
               logInfo(`Room MAM before-cursor purged for ${roomJid} — degrading to fetch-latest`)
               this.deps.emitSDK('room:history-coverage-purged', { roomJid, before: currentBefore })
-              const degraded = await this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
+              const degraded = await this.queryRoomArchiveWithReplay({ roomJid, max, before: '', preserveGapMarker }, replayCurrent)
               session.assertCurrent()
               return { ...degraded, degradedToFetchLatest: true }
             }
@@ -1066,7 +1080,7 @@ export class MAM extends BaseModule {
 
           // Resolve only after all targets in the page have been parsed.
           await this.resolvePeerMarkers(roomJid, rawEntries, [...allMessages, ...collectedMessages],
-            isForward ? { after: currentAfter } : { before: currentBefore })
+            replayCurrent, isForward ? { after: currentAfter } : { before: currentBefore })
           session.assertCurrent()
 
           if (!isForward) modifications.corrections.unshift(...modifications.corrections.splice(correctionStart))
@@ -1354,6 +1368,7 @@ export class MAM extends BaseModule {
    * @returns Room messages matching the query, with pagination info
    */
   async searchRoomArchive(options: RoomHistorySearchOptions): Promise<RoomHistoryResult> {
+    const replayCurrent = this.captureRoomReplay()
     const session = this.captureQuery()
     const { query, roomJid, max = 20, before } = options
     const queryId = `mam_rsearch_${generateUUID()}`
@@ -1402,7 +1417,7 @@ export class MAM extends BaseModule {
         if (msg) collectedMessages.push(msg)
       }
 
-      await this.resolvePeerMarkers(roomJid, rawEntries, collectedMessages)
+      await this.resolvePeerMarkers(roomJid, rawEntries, collectedMessages, replayCurrent)
       session.assertCurrent()
       const originalBodies = collectedMessages.map(message => message.body)
       const unresolved = await this.applyModifications(collectedMessages, modifications, roomMessageAuthor, undefined, undefined,
@@ -1545,6 +1560,7 @@ export class MAM extends BaseModule {
     targetTimestamp: string,
     contextSize: number = 50
   ): Promise<{ messages: (Message | RoomMessage)[]; complete: boolean }> {
+    const replayCurrent = isRoom ? this.captureRoomReplay() : () => false
     const session = this.captureQuery()
     // Fetch messages before and after the target timestamp
     const oneHourBefore = new Date(new Date(targetTimestamp).getTime() - 3600000).toISOString()
@@ -1553,7 +1569,7 @@ export class MAM extends BaseModule {
     // contiguity outside the [oneHourBefore, ...] window, so it must not
     // clear (or plant) a recorded gap — `preserveGapMarker` leaves it alone.
     if (isRoom) {
-      const result = await this.queryRoomArchive({
+      const result = await this.queryRoomArchiveWithReplay({
         roomJid: conversationId,
         max: contextSize * 2,
         start: oneHourBefore,
@@ -1564,7 +1580,7 @@ export class MAM extends BaseModule {
         // results too. Without this, queryRoomArchive's forward branch would
         // silently inherit its MAM_ROOM_FORWARD_MAX_PAGES (50-page) default.
         maxAutoPages: 1,
-      })
+      }, replayCurrent)
       session.assertCurrent()
       return { messages: result.messages, complete: result.complete }
     } else {
@@ -1599,6 +1615,7 @@ export class MAM extends BaseModule {
     targetTimestamp: string,
     oldestCachedTimestamp?: string
   ): Promise<void> {
+    const replayCurrent = isRoom ? this.captureRoomReplay() : () => false
     const session = this.captureQuery()
     const targetTime = new Date(targetTimestamp).getTime()
     const maxPages = 30 // Safety cap
@@ -1614,11 +1631,11 @@ export class MAM extends BaseModule {
       if (isRoom) {
         // This room backfill uses its RSM cursor and stops at the target below.
         // Unlike a detached date lookup, it does not bound the request with `end`.
-        const result = await this.queryRoomArchive({
+        const result = await this.queryRoomArchiveWithReplay({
           roomJid: conversationId,
           max: 100,
           before: roomBefore,
-        })
+        }, replayCurrent)
         session.assertCurrent()
         // Check if we've reached the target
         const oldestInPage = result.messages.length > 0
@@ -1941,7 +1958,8 @@ export class MAM extends BaseModule {
    * @param sessionStartTime - Epoch ms of the current session; forward cursor
    *   excludes messages received this session (see `selectCatchUpQuery`).
    */
-  async catchUpRoom(roomJid: string, sessionStartTime?: number): Promise<void> {
+  async catchUpRoom(roomJid: string, sessionStartTime?: number, replayCurrent = this.captureRoomReplay()): Promise<void> {
+    const session = this.captureQuery()
     const endUpdate = this.deps.stores?.connection?.beginUpdate?.([`room:${roomJid}`, 'rooms'])
     try {
       if (this.deps.stores?.connection.getStatus() !== 'online') return
@@ -1955,7 +1973,8 @@ export class MAM extends BaseModule {
       // just the persisted preview timestamp) so the cursor lands on the newest
       // PRE-session message and the forward query fills the whole offline gap.
       const messages = (await this.deps.stores?.room.loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT, peek: true })) || []
-      await this.catchUpRoomHistory(roomJid, messages, { sessionStartTime, stitchReadPointer: true })
+      session.assertCurrent()
+      await this.catchUpRoomHistory(roomJid, messages, { sessionStartTime, stitchReadPointer: true }, replayCurrent)
     } finally {
       endUpdate?.()
     }
@@ -1965,9 +1984,10 @@ export class MAM extends BaseModule {
   async catchUpRoomHistory(
     roomJid: string,
     messages: Array<{ timestamp?: Date; stanzaId?: string }>,
-    options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
+    options: { sessionStartTime?: number; stitchReadPointer?: boolean; replayCurrent?: () => boolean } = {},
+    replayCurrent = options.replayCurrent ?? this.captureRoomReplay(),
   ): Promise<void> {
-    if (messages.length) void this.restorePeerMarkers(roomJid).catch(() => {})
+    if (messages.length) void this.restorePeerMarkers(roomJid, replayCurrent).catch(() => {})
     const endUpdate = this.deps.stores?.connection?.beginUpdate?.([`room:${roomJid}`, 'rooms'])
     await this.runCatchUpHistory(messages, options, {
       label: roomJid,
@@ -1991,7 +2011,7 @@ export class MAM extends BaseModule {
           peek: true,
           oldest: true,
         })) ?? []) as Array<{ timestamp?: Date; stanzaId?: string }>,
-      query: (opts) => this.queryRoomArchive({ roomJid, ...opts }),
+      query: (opts) => this.queryRoomArchiveWithReplay({ roomJid, ...opts }, replayCurrent),
     }).finally(() => endUpdate?.())
   }
 
@@ -2290,6 +2310,8 @@ export class MAM extends BaseModule {
    * @param options.concurrency - Max concurrent MAM queries (default: 2)
    */
   async forceCatchUpAllRooms(options: { days?: number; concurrency?: number } = {}): Promise<void> {
+    const replayCurrent = this.captureRoomReplay()
+    const session = this.captureQuery()
     const { days = 45, concurrency = 2 } = options
     const joinedRooms = this.deps.stores?.room.joinedRooms() || []
     const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat)
@@ -2308,16 +2330,16 @@ export class MAM extends BaseModule {
       mamRooms,
       async (room) => {
         try {
-          if (this.deps.stores?.connection.getStatus() !== 'online') return
+          if (!session.isCurrent() || this.deps.stores?.connection.getStatus() !== 'online') return
 
-          await this.queryRoomArchive({
+          await this.queryRoomArchiveWithReplay({
             roomJid: room.jid,
             start,
             max: MAM_CATCHUP_FORWARD_MAX,
             maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
             walkOriginTs: startTs,
             healGapsOnly: true,
-          })
+          }, replayCurrent)
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
         }
@@ -2412,6 +2434,7 @@ export class MAM extends BaseModule {
    * @param options.concurrency - Maximum parallel requests (default: 3)
    */
   async refreshRoomPreviews(options: { concurrency?: number } = {}): Promise<void> {
+    const replayCurrent = this.captureRoomReplay()
     const session = this.captureQuery()
     const { concurrency = 3 } = options
     // Get all joined rooms (skip QuickChat rooms)
@@ -2434,7 +2457,7 @@ export class MAM extends BaseModule {
       const mamRoomJids = mamRooms.map((r) => r.jid)
       await executeWithConcurrency(
         mamRoomJids,
-        (roomJid) => session.isCurrent() ? this.fetchPreviewForRoom(roomJid) : Promise.resolve(),
+        (roomJid) => session.isCurrent() ? this.fetchPreviewForRoom(roomJid, replayCurrent) : Promise.resolve(),
         concurrency
       )
 
@@ -2460,8 +2483,9 @@ export class MAM extends BaseModule {
    *
    * @param roomJid - The bare JID of the room
    */
-  async fetchPreviewForRoom(roomJid: string): Promise<void> {
+  async fetchPreviewForRoom(roomJid: string, replayCurrent?: () => boolean): Promise<void> {
     const session = this.captureQuery()
+    const watermarkCurrent = replayCurrent ?? this.captureRoomReplay()
     const endUpdate = this.deps.stores?.connection?.beginUpdate?.(['rooms'])
     try {
       // Cache-first: try loading preview from IndexedDB before making a network query.
@@ -2469,7 +2493,7 @@ export class MAM extends BaseModule {
       const cached = await this.deps.stores?.room.loadPreviewFromCache(roomJid)
       session.assertCurrent()
       if (cached) {
-        void this.restorePeerMarkers(roomJid).catch(() => {})
+        void this.restorePeerMarkers(roomJid, watermarkCurrent).catch(() => {})
         return
       }
 
@@ -2504,7 +2528,7 @@ export class MAM extends BaseModule {
         const response = await this.deps.sendIQ(iq)
         session.assertCurrent()
         if (!response) return
-        const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, me)
+        const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, me, watermarkCurrent)
         session.assertCurrent()
         const latestMessage = messages.at(-1)
         if (latestMessage) this.deps.stores?.room.updateLastMessagePreview(roomJid, latestMessage)
@@ -3349,8 +3373,9 @@ export class MAM extends BaseModule {
 
   /** Cached edges can lie after every peer marker. Recover one latest page,
    * independent of forward catch-up, without timeline or coverage writes. */
-  private async restorePeerMarkers(roomJid: string): Promise<void> {
+  private async restorePeerMarkers(roomJid: string, replayCurrent?: () => boolean): Promise<void> {
     const session = this.captureQuery()
+    const watermarkCurrent = replayCurrent ?? this.captureRoomReplay()
     for (const [room, replay] of this.peerMarkerReplays) {
       if (!replay.isCurrent()) this.peerMarkerReplays.delete(room)
     }
@@ -3370,7 +3395,7 @@ export class MAM extends BaseModule {
       if (page.kind !== 'page') return
       // Only resident/cache targets have passed through their normal content
       // owners. Raw page rows have not been decrypted and are not candidates.
-      await this.resolvePeerMarkers(roomJid, page.entries, [], { before: '' })
+      await this.resolvePeerMarkers(roomJid, page.entries, [], watermarkCurrent, { before: '' })
     }).finally(() => {
       // A queued room can stop qualifying; do not consume its page before a query.
       if (!queried && this.peerMarkerReplays.get(roomJid)?.task === task) this.peerMarkerReplays.delete(roomJid)
@@ -3380,19 +3405,19 @@ export class MAM extends BaseModule {
   }
 
   private async resolvePeerMarkers(roomJid: string, entries: readonly RawArchiveEntry[], messages: readonly RoomMessage[],
-    cursor?: { before?: string; after?: string }): Promise<void> {
+    watermarkCurrent: () => boolean, cursor?: { before?: string; after?: string }): Promise<void> {
     const markers = this.deps.getRoomReadMarkers?.()
     if (!markers) return
     const session = this.captureQuery()
     markers.recordArchiveOrder(roomJid, entries.map(entry => entry.archiveId).filter((id): id is string => !!id), cursor)
     for (const { messageEl } of entries) {
       if (!messageEl.getChild('displayed', NS_CHAT_MARKERS) || messageEl.getChild('body')) continue
-      await markers.receive(roomJid, messageEl, messages, true)
+      await markers.receive(roomJid, messageEl, messages, true, watermarkCurrent)
       session.assertCurrent()
     }
   }
 
-  private async resolveRoomArchiveEntries(entries: RawArchiveEntry[], roomJid: string, me: RoomSelf): Promise<RoomMessage[]> {
+  private async resolveRoomArchiveEntries(entries: RawArchiveEntry[], roomJid: string, me: RoomSelf, watermarkCurrent: () => boolean): Promise<RoomMessage[]> {
     const session = this.captureQuery()
     const messages: RoomMessage[] = []
     const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
@@ -3402,7 +3427,7 @@ export class MAM extends BaseModule {
         if (message) messages.push(message)
       }
     }
-    await this.resolvePeerMarkers(roomJid, entries, messages)
+    await this.resolvePeerMarkers(roomJid, entries, messages, watermarkCurrent)
     session.assertCurrent()
     const unresolved = await this.applyModifications(messages, modifications, roomMessageAuthor)
     session.assertCurrent()
@@ -3854,6 +3879,7 @@ export class MAM extends BaseModule {
   async locateRoomMessage(roomJid: string, stanzaId: string): Promise<
     { kind: 'found'; message: RoomMessage; source: 'resident' | 'cache' | 'archive' } | { kind: 'absent' | 'unknown' }
   > {
+    const replayCurrent = this.captureRoomReplay()
     const session = this.captureQuery()
     if (!this.deps.stores?.room.getRoom(roomJid)?.joined) return { kind: 'unknown' }
     const pending = this.deps.stores.room.waitForMessageArrivals?.(roomJid)
@@ -3886,7 +3912,7 @@ export class MAM extends BaseModule {
       const message = this.parseRoomArchiveMessage(forwarded, roomJid, me, archiveId)
       if (message) messages.push(message)
     }
-    await this.resolvePeerMarkers(roomJid, entries, messages)
+    await this.resolvePeerMarkers(roomJid, entries, messages, replayCurrent)
     session.assertCurrent()
     await this.applyModifications(messages, modifications, roomMessageAuthor, from => getResource(from) || from)
     session.assertCurrent()
@@ -3986,6 +4012,7 @@ export class MAM extends BaseModule {
    * @returns The message if found, or null
    */
   async fetchRoomMessageById(roomJid: string, messageId: string): Promise<RoomMessage | null> {
+    const replayCurrent = this.captureRoomReplay()
     const session = this.captureQuery()
     const pending = this.deps.stores?.room.waitForMessageArrivals?.(roomJid)
     if (pending && !await pending) return null
@@ -4006,7 +4033,7 @@ export class MAM extends BaseModule {
         await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, 'room', this.extractForwardedTimestamp(forwarded))
         if (!session.isCurrent()) return null
       }
-      const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, me)
+      const messages = await this.resolveRoomArchiveEntries(rawEntries, roomJid, me, replayCurrent)
       if (!session.isCurrent()) return null
       result = messages.at(-1) ?? null
     } catch (error) {

@@ -74,7 +74,7 @@ export interface ReadMarkers<T extends BaseMessage = BaseMessage> {
   /** Called when the bottom-most visible row changes; receives its row handle. */
   onSeen?: (rowId: string) => void
   /** Independent focused viewport evidence; never a local read-state writer. */
-  onFocusedVisibleRows?: (rows: readonly T[]) => void
+  onFocusedVisibleRows?: (rows: readonly T[], isCurrent: () => boolean) => void
   /** Clear the first-new row marker (used by the viewport observer). */
   onClear?: () => void
   /**
