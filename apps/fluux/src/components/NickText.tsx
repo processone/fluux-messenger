@@ -9,8 +9,8 @@ import { splitNickForDisplay } from '@fluux/sdk'
  * invisible / bidi-control characters are flagged with a warning badge. Without
  * desktop truncation, a clean nick renders verbatim (no wrapper, no cost).
  *
- * Desktop truncation requires a flex parent: only the core may clip, never the
- * identity markers. Other callers keep inline content and own their layout.
+ * Desktop truncation requires a flex parent: edge markers keep one em each at
+ * most so padding cannot push the warning away. Other callers keep inline layout.
  *
  * Never mutates the nick: trimming a remote nick for display would *complete* an
  * impersonation (`"admin "` and `"admin"` both collapse to `"admin"`). See
@@ -76,8 +76,8 @@ export function NickSentence({ i18nKey, nick }: { i18nKey: string; nick: string 
 /**
  * A run of edge whitespace rendered as visible NBSP cells on a faint amber
  * ground so the padding is noticeable rather than an easy-to-miss gap. NBSP
- * keeps the browser from collapsing it; one cell per source character signals
- * presence (exact width is not important).
+ * prevents collapse; the dock caps painted padding so long runs cannot displace
+ * the warning. Inline callers retain one cell per source character.
  */
 function WhitespaceMarker({ run, label, keepAtDesktop = false }: { run: string; label: string; keepAtDesktop?: boolean }) {
   return (
@@ -85,7 +85,7 @@ function WhitespaceMarker({ run, label, keepAtDesktop = false }: { run: string; 
       data-testid="nick-ws-marker"
       title={label}
       aria-label={label}
-      className={`rounded-[2px] bg-amber-400/40 ring-1 ring-inset ring-amber-500/40 whitespace-pre${keepAtDesktop ? ' lg:shrink-0' : ''}`}
+      className={`rounded-[2px] bg-amber-400/40 ring-1 ring-inset ring-amber-500/40 whitespace-pre${keepAtDesktop ? ' lg:shrink-0 lg:max-w-[1em] lg:overflow-hidden' : ''}`}
     >
       {' '.repeat(run.length)}
     </span>

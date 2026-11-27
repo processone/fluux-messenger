@@ -180,29 +180,45 @@ for (const lang of ['en', 'fr']) {
       await heading.click()
       await expect(popover).toHaveCount(0)
 
-      // The existing identity design requires warnings to stay painted beside a clipped core.
-      await page.evaluate(({ jid }) => {
-        const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
-        const room = store.getRoom(store.activeRoomJid!)!
-        const emma = [...room.occupants.values()].find(occupant => occupant.jid === jid)!
-        for (const occupant of room.occupants.values()) {
-          if (occupant.jid === jid) store.removeOccupant(room.jid, occupant.nick)
+      // Identity warnings must survive clipped cores and adversarial edge-padding runs.
+      for (const [padding, markedNick, edgeCount] of [
+        ['ordinary', 'Emma Wilson — community\u200b ', 1],
+        ['long', `${' '.repeat(64)}Emma Wilson — community\u200b${'\u00a0'.repeat(64)}`, 2],
+      ] as const) {
+        await page.evaluate(({ jid, nick }) => {
+          const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
+          const room = store.getRoom(store.activeRoomJid!)!
+          const emma = [...room.occupants.values()].find(occupant => occupant.jid === jid)!
+          for (const occupant of room.occupants.values()) {
+            if (occupant.jid === jid) store.removeOccupant(room.jid, occupant.nick)
+          }
+          store.addOccupant(room.jid, {
+            ...emma, nick, affiliation: 'none', role: 'participant', hats: [],
+          })
+        }, { jid, nick: markedNick })
+        const warningRow = page.locator('.touch-menu-row').filter({ has: page.getByTestId('nick-hidden-chars') })
+        await expect(warningRow.getByTestId('nick-ws-marker')).toHaveCount(edgeCount)
+        const markers = warningRow.locator('[data-testid="nick-ws-marker"], [data-testid="nick-hidden-chars"]')
+        for (const marker of await markers.all()) {
+          await expect.poll(() => marker.evaluate(el => {
+            const bounds = el.getBoundingClientRect()
+            return bounds.width > 0 && bounds.height > 0 && [0.1, 0.5, 0.9].every(fraction =>
+              el.contains(document.elementFromPoint(bounds.left + bounds.width * fraction, bounds.top + bounds.height / 2)),
+            )
+          }), 'identity marker is visibly painted, not clipped with the long nickname').toBe(true)
         }
-        store.addOccupant(room.jid, {
-          ...emma, nick: 'Emma Wilson — community\u200b ', affiliation: 'none', role: 'participant', hats: [],
-        })
-      }, { jid })
-      const warningRow = page.locator('.touch-menu-row').filter({ has: page.getByTestId('nick-hidden-chars') })
-      for (const marker of [warningRow.getByTestId('nick-ws-marker'), warningRow.getByTestId('nick-hidden-chars')]) {
-        await expect.poll(() => marker.evaluate(el => {
-          const bounds = el.getBoundingClientRect()
-          return bounds.width > 0 && bounds.height > 0 && [0.1, 0.5, 0.9].every(fraction =>
-            el.contains(document.elementFromPoint(bounds.left + bounds.width * fraction, bounds.top + bounds.height / 2)),
-          )
-        }), 'identity marker is visibly painted, not clipped with the long nickname').toBe(true)
-      }
-      if (process.env.FLUUX_MEMBERS_HEADER_PROOF) {
-        await page.screenshot({ path: test.info().outputPath('members-compact-markers.png') })
+        await expect.poll(() => warningRow.evaluate(el => {
+          let list = el.parentElement!
+          while (getComputedStyle(list).overflowY !== 'auto') list = list.parentElement!
+          return el.scrollWidth <= el.clientWidth && list.scrollWidth <= list.clientWidth
+        }), 'padding cannot widen the row or make the Members list scroll sideways').toBe(true)
+        expect(await page.evaluate(jid => {
+          const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
+          return [...store.getRoom(store.activeRoomJid!)!.occupants.values()].find(occupant => occupant.jid === jid)!.nick
+        }, jid)).toBe(markedNick)
+        if (process.env.FLUUX_MEMBERS_HEADER_PROOF) {
+          await page.screenshot({ path: test.info().outputPath(`members-compact-markers-${padding}.png`) })
+        }
       }
       // Crossing lg must switch back to the unchanged fixed-width overlaid drawer.
       await page.setViewportSize({ width: 1023, height: 812 })

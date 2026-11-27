@@ -205,8 +205,8 @@ const OccupantRow = memo(function OccupantRow({
           forceOffline={forceOffline}
         />
 
-        {/* Only the nickname core clips in the dock: whitespace and invisible-character
-            markers must stay visible even when the narrower label runs out of space. */}
+        {/* Clip the docked nickname separately from its bounded edge markers so
+            padding cannot hide the invisible-character warning. */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             {isMe ? (
