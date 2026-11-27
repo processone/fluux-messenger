@@ -230,6 +230,8 @@ for (const lang of ['en', 'fr'] as const) {
         await capture(page, `settings-${category}-${lang}-${mode}-375`)
         const baseFont = await page.locator('html').evaluate(el => parseFloat(getComputedStyle(el).fontSize))
         await page.evaluate(() => (window as any).__settingsStore.getState().setFontSize(150))
+        // Idle WebKit can retain the old computed font after its inline percentage changes until paint.
+        await syncEngineGeometry(page)
         await expect(page.locator('html')).toHaveCSS('font-size', `${baseFont * 1.5}px`)
         await fullDescription(description)
         await capture(page, `settings-${category}-${lang}-${mode}-large`)
@@ -237,6 +239,7 @@ for (const lang of ['en', 'fr'] as const) {
         await expect(back).toBeVisible()
         await back.click()
         await page.evaluate(() => (window as any).__settingsStore.getState().setFontSize(100))
+        await syncEngineGeometry(page)
         await expect(page.locator('html')).toHaveCSS('font-size', `${baseFont}px`)
       }
       await page.setViewportSize({ width: 1280, height: 812 })
