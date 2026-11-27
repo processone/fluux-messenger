@@ -63,7 +63,9 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
       await expect(person).toBeVisible()
       await person.click()
       await expect(input).toHaveValue('notes')
-      await expect(page.getByRole('button', { name: senderChipName, exact: true })).toBeVisible()
+      const senderChip = page.getByRole('button', { name: senderChipName, exact: true })
+      await expect(senderChip).toBeVisible()
+      await expect(senderChip).toHaveAccessibleName(new RegExp(`\\b${senderNick}\\b`))
 
       await input.fill('fr')
       await expect(input).toHaveAttribute('aria-expanded', 'false')
