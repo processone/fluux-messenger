@@ -2470,11 +2470,13 @@ export const roomStore = createStore<RoomState>()(
       ? messageCache.saveMessageWithResult('room', messageToAdd).then((committed) => {
         // An empty archive has no RSM cursor. Materialize its coverage only from
         // a durable live row, before endArrival retires that row's overlay.
+        // Loading defers counting, not this evidence: a failed overlapping
+        // query will not replay the committed row to create its anchor.
         if (committed && stillCurrent() && emptyProof && !messageToAdd.isDelayed && archiveId) {
           let anchored = false
           set((state) => {
             const mam = state.mamQueryStates.get(roomJid)
-            if (!mam || mam.emptyArchiveProof !== emptyProof || !isCaughtUpForCounting(mam) ||
+            if (!mam || mam.emptyArchiveProof !== emptyProof || !mam.isCaughtUpToLive ||
               state.roomCoverage.has(roomJid) || getGapList(state.roomGaps, roomJid).length > 0) return state
             const roomCoverage = new Map(state.roomCoverage)
             roomCoverage.set(roomJid, {

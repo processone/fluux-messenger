@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { xml, type Element } from '@xmpp/client'
@@ -11,7 +11,7 @@ import { _resetStorageScopeForTesting } from '../../utils/storageScope'
 import { createPresenceReader } from '../presenceReader'
 import type { ModuleDependencies } from './BaseModule'
 import type { SDKEvents } from '../types/sdk-events'
-import type { Room, RoomHistoryQueryOptions } from '../types'
+import type { Room, RoomMessage, RoomHistoryQueryOptions } from '../types'
 import type { SDKEventSource } from '../types/eventSource'
 
 const ROOM = 'lounge@conference.example.com'
@@ -25,6 +25,7 @@ function joinedRoom(): Room {
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks()
   _resetStorageScopeForTesting()
   globalThis.indexedDB = new IDBFactory()
   messageCache._resetDBForTesting()
@@ -147,6 +148,56 @@ describe('room archive emptiness evidence', () => {
     expect(events).toHaveLength(1)
     expect(events[0].emptyRoomArchive).toBe(true)
     expect(roomStore.getState().getRoomMAMQueryState(ROOM).emptyArchiveProof).toBeDefined()
+  })
+
+  // Intent: the empty-room private read must not depend on an unrelated
+  // history query succeeding or another live row arriving to create coverage.
+  it.each([
+    { name: 'bounded', options: { end: '2026-11-26T12:00:00Z' } },
+    { name: 'forward', options: { after: 'previous-archive-id' } },
+  ])('anchors the first durable row before an overlapping $name query fails', async ({ options }) => {
+    const otherRoom = 'workshop@conference.example.com'
+    roomStore.getState().addRoom({ ...joinedRoom(), jid: otherRoom, name: 'Workshop' })
+    roomStore.getState().setActiveRoom(otherRoom)
+    let finish!: () => void
+    let started!: () => void
+    const held = new Promise<void>(resolve => { finish = resolve })
+    const loading = new Promise<void>(resolve => { started = resolve })
+    let overlapping!: ReturnType<typeof query>
+    await query([{ entries: [], complete: true }], {}, async () => {
+      overlapping = query([{ entries: [], complete: true }], options, async () => {
+        started()
+        await held
+        throw new Error('Room archive temporarily unavailable')
+      })
+      await loading
+    })
+    expect(roomStore.getState().getRoomMAMQueryState(ROOM).emptyArchiveProof).toBeDefined()
+    expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(true)
+    const row: RoomMessage = {
+      type: 'groupchat', roomJid: ROOM, from: `${ROOM}/bob`, nick: 'bob',
+      originId: undefined, occupantId: undefined,
+      id: 'first-live-message', stanzaId: 'first-live-archive-id', body: 'See you in the lounge',
+      timestamp: new Date('2026-11-26T12:00:01Z'), isOutgoing: false,
+    }
+    const save = vi.spyOn(messageCache, 'saveMessageWithResult')
+    await roomStore.getState().addMessage(ROOM, row)
+    expect(save).toHaveBeenCalledOnce()
+    // The store registered its anchor continuation before this await; cache
+    // visibility alone would not prove that the loading query outlived it.
+    await save.mock.results[0].value
+    expect(await messageCache.getMessageByStanzaId('room', ROOM, row.stanzaId!)).not.toBeNull()
+    roomStore.getState().applyRemoteDisplayed(ROOM, row.stanzaId!)
+    await vi.waitFor(() => expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe(row.id))
+    expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(true)
+    expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(1)
+    finish()
+    await expect(overlapping).rejects.toThrow('Room archive temporarily unavailable')
+    await vi.waitFor(() => expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(0))
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({
+      bottomId: row.stanzaId, countBottomId: row.stanzaId, topId: row.stanzaId,
+    })
+    expect(roomStore.getState().activeRoomJid).toBe(otherRoom)
   })
 
   it('does not certify a query issued before membership even if the room joins before its reply', async () => {

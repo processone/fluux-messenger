@@ -395,7 +395,9 @@ A complete, positive-sized, unbounded room fetch-latest that returned no raw
 archive entries records session-only empty-archive proof. Filtering standalone
 markers or other signals does not make a nonempty walk empty. A successfully
 cached live room row with a room archive ID can materialize the first coverage
-record from that proof and schedule the normal guarded unread recount. After a
+record from that proof and schedule the normal guarded unread recount. An
+unrelated loading query delays counting, not anchor creation: if that query
+fails, the retained anchor lets the automatic recount recover. After a
 live write commits, a matching stashed private-sync marker is retried through
 the existing cache-backed forward-only resolver, even if deactivation evicted
 its resident row before the cache write. A pre-write cache miss finishes before
