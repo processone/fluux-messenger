@@ -139,12 +139,14 @@ export function RoomHeader({
         </button>
       )}
 
-      {/* Room Avatar or Icon */}
+      {/* Only the in-flow Members dock competes for this space; drawers and
+          closed panels retain the normal header layout. */}
       <RoomAvatar
         identifier={room.jid}
         name={room.name}
         avatarUrl={room.avatar}
         size="header"
+        className={showOccupants ? 'lg:hidden lg:@[16rem]:block' : undefined}
       />
 
       {/* The room-info button covers the original full free area. Content is
@@ -168,10 +170,9 @@ export function RoomHeader({
         </div>
       </div>
 
-      {/* Trailing action cluster — grouped tightly on mobile (gap-1) so the
-          kebab and members pill read as one unit. Only search and the members
-          toggle are inline on a wide header; the other actions live in the kebab. */}
-      <div className="flex items-center gap-1 md:gap-3">
+      {/* Compact spacing preserves the title beside a dock at larger text sizes.
+          Search still folds into the kebab; the Members toggle stays inline. */}
+      <div className={`flex items-center gap-1 md:gap-3 ${showOccupants ? 'lg:shrink-0 lg:gap-0 lg:@[16rem]:gap-3' : ''}`}>
         {/* Notification settings — inline only as a status icon while the room is
             muted or set to all messages; at the default (mentions only) it lives in
             the kebab. Collapses with search on a narrow header. */}
@@ -233,6 +234,7 @@ export function RoomHeader({
             type="button"
             onClick={onToggleOccupants}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors tap-target
+                       ${showOccupants ? 'lg:px-1.5 lg:@[16rem]:px-3' : ''}
                        ${showOccupants
                          ? 'bg-fluux-brand/20 text-fluux-brand-on-tint'
                          : 'hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text'
@@ -241,7 +243,7 @@ export function RoomHeader({
           >
             <Users className="size-4" />
             <span className="text-sm font-medium">{uniqueOccupantCount}</span>
-            <ChevronRight className={`size-4 transition-transform ${showOccupants ? '' : 'rotate-180'}`} />
+            <ChevronRight className={`size-4 transition-transform ${showOccupants ? 'lg:hidden lg:@[16rem]:block' : 'rotate-180'}`} />
           </button>
         </Tooltip>
       </div>
