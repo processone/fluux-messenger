@@ -35,7 +35,7 @@ interface UseViewportObserverOptions {
   /** Callback when the bottom-most visible row changes; receives the row handle. */
   onMessageSeen?: (rowId: string) => void
   /** Independent focused-view evidence; never flushed during conversation teardown. */
-  onVisibleRows?: (rowIds: readonly string[]) => void
+  onVisibleRows?: (rowIds: readonly string[], isCurrent: () => boolean) => void
   /** Whether the observer is active (e.g., skip while loading) */
   enabled?: boolean
 }
@@ -165,10 +165,10 @@ export function useViewportObserver({
     // Track all currently visible entries
     const visibleEntries = new Map<Element, IntersectionObserverEntry>()
 
+    let viewVersion = 0
+    const invalidateView = () => { viewVersion++ }
     let viewingTimer: ReturnType<typeof setTimeout> | undefined
-    const measureVisibleRows = () => {
-      // Re-measure at delivery, including after a deferred read write. Map
-      // insertion order is not screen order when scrolling up through rows.
+    const visibleRows = () => {
       const viewport = scrollContainer.getBoundingClientRect()
       const rows = new Map<string, number>()
       for (const entry of visibleEntries.values()) {
@@ -179,13 +179,25 @@ export function useViewportObserver({
         const overlap = Math.min(rect.bottom, viewport.bottom) - Math.max(rect.top, viewport.top)
         if (rect.height > 0 && viewport.height > 0 && overlap >= Math.min(rect.height, viewport.height) / 2) rows.set(rowId, rect.bottom)
       }
+      return rows
+    }
+    const measureVisibleRows = () => {
+      // Re-measure after the deferred private read, not from cached intersections.
+      invalidateView()
+      const rows = visibleRows()
       const bottom = findBottomMostVisible([...visibleEntries.values()])
       if (bottom) reportMessageSeen(bottom)
       if (pendingMessageIdRef.current && pendingMessageIdRef.current !== lastReportedRef.current) {
         afterReadRef.current = measureVisibleRows
         return
       }
-      onVisibleRowsRef.current?.([...rows].sort((a, b) => a[1] - b[1]).map(([id]) => id))
+      const version = viewVersion
+      const ids = [...rows].sort((a, b) => a[1] - b[1]).map(([id]) => id)
+      onVisibleRowsRef.current?.(ids, () => {
+        const current = visibleRows()
+        return version === viewVersion && scrollContainer.isConnected && document.hasFocus()
+          && document.visibilityState === 'visible' && !isViewportCovered(scrollContainer) && ids.every(id => current.has(id))
+      })
     }
     const reportVisibleRows = () => {
       if (!onVisibleRowsRef.current || viewingTimer !== undefined) return
@@ -230,6 +242,7 @@ export function useViewportObserver({
       if (watchesViews && onVisibleRowsRef.current) {
         const wasCovered = covered
         covered = isViewportCovered(scrollContainer)
+        if (wasCovered !== covered) invalidateView()
         if (wasCovered && !covered) reportVisibleRows()
       }
       for (const mutation of mutations) {
@@ -275,6 +288,7 @@ export function useViewportObserver({
     // all entries. This listener uses live rects to ensure the read marker
     // advances after scroll-to-bottom corrections.
     const handleScroll = () => {
+      invalidateView()
       if (visibleEntries.size === 0) return
       reportVisibleRows()
       const allVisible = Array.from(visibleEntries.values())
@@ -290,6 +304,7 @@ export function useViewportObserver({
     // a cached row (the reader may have scrolled while the window was hidden).
     // The SDK still owns focus, live-window and current bottom-evidence guards.
     const handleFocus = () => {
+      invalidateView()
       if (!document.hasFocus()) return
       resetReporting()
       visibleEntries.clear()
@@ -298,11 +313,14 @@ export function useViewportObserver({
       scrollContainer.querySelectorAll('[data-message-id]').forEach(el => observer.observe(el))
     }
 
+    window.addEventListener('blur', invalidateView)
     window.addEventListener('focus', handleFocus)
     document.addEventListener('visibilitychange', handleFocus)
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
 
     return () => {
+      invalidateView()
+      window.removeEventListener('blur', invalidateView)
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleFocus)
       observer.disconnect()

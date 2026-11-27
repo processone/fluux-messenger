@@ -9,11 +9,13 @@ interface ToggleProps {
    * `isToggling` state EncryptionSettings passes in.
    */
   loading?: boolean
+  /** Native disabling a pending save would remove the user's keyboard focus. */
+  preserveFocusWhileLoading?: boolean
   id?: string
   'aria-label'?: string
 }
 
-export function Toggle({ checked, onChange, disabled = false, loading = false, id, 'aria-label': ariaLabel }: ToggleProps) {
+export function Toggle({ checked, onChange, disabled = false, loading = false, preserveFocusWhileLoading = false, id, 'aria-label': ariaLabel }: ToggleProps) {
   // `loading` implies non-interactive too: never fire onChange mid-operation.
   const inactive = disabled || loading
   return (
@@ -23,7 +25,9 @@ export function Toggle({ checked, onChange, disabled = false, loading = false, i
       id={id}
       aria-checked={checked}
       aria-label={ariaLabel}
-      disabled={inactive}
+      disabled={disabled || (loading && !preserveFocusWhileLoading)}
+      aria-disabled={inactive || undefined}
+      aria-busy={loading || undefined}
       onClick={() => !inactive && onChange(!checked)}
       className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
         checked ? 'bg-fluux-brand' : 'bg-fluux-hover'

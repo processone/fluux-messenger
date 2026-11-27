@@ -233,6 +233,7 @@ export function setupBackgroundSyncSideEffects(
     if (!isFreshRoomCatchUpEligible(roomJid, generation, membershipEpoch)) {
       return false
     }
+    const replayCurrent = client.internal.mam.captureRoomReplay?.() ?? (() => false)
     const messages = await roomStore.getState().loadMessagesFromCache(
       roomJid,
       { limit: MAM_CACHE_LOAD_LIMIT, peek: true },
@@ -243,7 +244,7 @@ export function setupBackgroundSyncSideEffects(
     await client.internal.mam.catchUpRoomHistory(
       roomJid,
       messages,
-      { sessionStartTime, stitchReadPointer: true },
+      { sessionStartTime, stitchReadPointer: true, replayCurrent },
     )
     return true
   }

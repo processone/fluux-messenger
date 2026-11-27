@@ -71,6 +71,7 @@ export function setupRoomSideEffects(
   // The phase of the latest session; kept across a disconnect.
   let phase: SessionPhase | undefined
   let disposed = false
+  let activationReplay: { activation: NonNullable<ReturnType<typeof roomStore.getState>['pendingActivation']>; isCurrent: () => boolean } | undefined
 
   function hasConfirmedJoinForCurrentSession(roomJid: string): boolean {
     return (
@@ -116,7 +117,7 @@ export function setupRoomSideEffects(
    * latest-first orchestrator (`client.internal.mam.catchUpRoomHistory`) after
    * loading the IndexedDB cache.
    */
-  async function fetchMAMForRoom(roomJid: string): Promise<void> {
+  async function fetchMAMForRoom(roomJid: string, replayCurrent = captureRoomReplay(roomJid)): Promise<void> {
     if (disposed) return
     const room = roomStore.getState().rooms.get(roomJid)
     if (!room) {
@@ -217,7 +218,7 @@ export function setupRoomSideEffects(
       // Latest-first orchestrator — room twin, Phase A only (active entity).
       const { messages, windowAtLiveEdge } = roomStore.getState()
       const roomMessages = catchUpSeed(messages.get(roomJid) ?? [], windowAtLiveEdge.get(roomJid) !== false, latestCached)
-      await client.internal.mam.catchUpRoomHistory(roomJid, roomMessages, { sessionStartTime })
+      await client.internal.mam.catchUpRoomHistory(roomJid, roomMessages, { sessionStartTime, replayCurrent })
       if (!isRoomFetchOwnerCurrent(roomJid, fetchOwner)) {
         return
       }
@@ -246,6 +247,19 @@ export function setupRoomSideEffects(
       endUpdate()
     }
   }
+
+  function captureRoomReplay(roomJid: string): () => boolean {
+    const activation = roomStore.getState().pendingActivation
+    if (activation?.roomJid === roomJid) return activationReplay?.activation === activation ? activationReplay.isCurrent : () => false
+    return client.internal.mam.captureRoomReplay?.() ?? (() => false)
+  }
+
+  const unsubscribeActivation = roomStore.subscribe(
+    state => state.pendingActivation,
+    activation => {
+      activationReplay = activation ? { activation, isCurrent: client.internal.mam.captureRoomReplay?.() ?? (() => false) } : undefined
+    },
+  )
 
   const unsubscribe = roomStore.subscribe(
     // Selector: only react to activeRoomJid changes
@@ -292,6 +306,7 @@ export function setupRoomSideEffects(
           return
         }
 
+        const replayCurrent = captureRoomReplay(activeRoomJid)
         // Step 1: Load from IndexedDB cache (deduplication is handled by loadMessagesFromCache).
         // Covers paths that set the active room WITHOUT a cache load (e.g. CommandPalette's
         // setActiveRoom, session restore) and the first activation / post-reconnect catch-up.
@@ -317,7 +332,7 @@ export function setupRoomSideEffects(
           return
         }
 
-        await fetchMAMForRoom(activeRoomJid)
+        await fetchMAMForRoom(activeRoomJid, replayCurrent)
       })()
     },
     { fireImmediately: false }
@@ -476,6 +491,7 @@ export function setupRoomSideEffects(
     fetchInitiated.clear()
     resumeArchiveHeldRooms.clear()
     unsubscribe()
+    unsubscribeActivation()
     unsubscribePhase()
     unsubscribeConnection()
     unsubscribeRoomMAMSupport()

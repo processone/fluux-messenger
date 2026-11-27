@@ -2025,11 +2025,9 @@
         "reload": "Pārlādēt"
     },
     "readMarkers": {
-        "master": "Kopīgot lasīšanas pozīcijas istabās",
-        "description": "Pēc noklusējuma izslēgts. Pēc ieslēgšanas izvēlieties katru istabu atsevišķi tās informācijā.",
         "shareInRoom": "Kopīgot manu lasīšanas pozīciju šajā istabā",
         "roomDescription": "Sūtīt tikai pārbaudītās, sarakstā neiekļautās, neanonīmās istabās tikai biedriem, kur ir mazāk par 20 klātesošajiem ar pastāvīgām istabas identitātēm. Šifrēti ziņojumi netiek iekļauti.",
-        "masterOff": "Galvenais privātuma slēdzis ir izslēgts. Istaba nekopīgos jūsu lasīšanas pozīciju, kamēr to neieslēgsiet.",
+        "offHidesReaders": "Izslēdzot kopīgošanu, tiek paslēptas arī citu dalībnieku lasīšanas pozīcijas šajā istabā.",
         "metadata": "Istaba un klātesošie redz jūsu lasīšanas darbības. Arhīvs var saglabāt šos metadatus. Izslēgšana aptur turpmākos atjauninājumus, bet neizdzēš saglabātās atzīmes.",
         "readThroughHere": "Izlasīts līdz šejienei:",
         "others_one": "+{{count}} cits",

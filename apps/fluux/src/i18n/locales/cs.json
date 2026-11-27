@@ -2028,11 +2028,9 @@
         "reload": "Načíst znovu"
     },
     "readMarkers": {
-        "master": "Sdílet pozice přečtení v místnostech",
-        "description": "Ve výchozím nastavení vypnuto. Po zapnutí vyberte každou místnost zvlášť v jejích podrobnostech.",
         "shareInRoom": "Sdílet mou pozici přečtení v této místnosti",
         "roomDescription": "Odesílat jen v ověřených, neveřejně uvedených, neanonymních místnostech pouze pro členy s méně než 20 přítomnými se stálými identitami v místnosti. Šifrované zprávy jsou vyloučeny.",
-        "masterOff": "Hlavní přepínač v nastavení soukromí je vypnutý. Místnost nebude sdílet vaši pozici přečtení, dokud jej nezapnete.",
+        "offHidesReaders": "Vypnutí sdílení také skryje pozice přečtení ostatních v této místnosti.",
         "metadata": "Místnost a její přítomní vidí vaši aktivitu čtení. Archiv může tato metadata uchovat. Vypnutí zastaví budoucí aktualizace, nikoli již uložené značky.",
         "readThroughHere": "Přečteno až sem:",
         "others_one": "+{{count}} další osoba",

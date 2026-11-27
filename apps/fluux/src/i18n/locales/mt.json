@@ -2030,11 +2030,9 @@
         "reload": "Erġa' tella'"
     },
     "readMarkers": {
-        "master": "Aqsam il-pożizzjonijiet tal-qari fil-kmamar",
-        "description": "Mitfi b’mod awtomatiku. Wara li tixgħel dan, agħżel kull kamra separatament fid-dettalji tagħha.",
         "shareInRoom": "Aqsam il-pożizzjoni tal-qari tiegħi f’din il-kamra",
         "roomDescription": "Ibgħat biss fi kmamar ivverifikati, mhux elenkati, mhux anonimi u għall-membri biss, b’inqas minn 20 persuna preżenti b’identitajiet stabbli fil-kamra. Il-messaġġi kriptati huma esklużi.",
-        "masterOff": "Is-swiċċ ewlieni tal-Privatezza huwa mitfi. Il-kamra mhux se taqsam il-pożizzjoni tal-qari tiegħek sakemm tixegħlu.",
+        "offHidesReaders": "Meta titfi l-kondiviżjoni, jinħbew ukoll il-pożizzjonijiet tal-qari ta’ ħaddieħor f’din il-kamra.",
         "metadata": "Il-kamra u n-nies fiha jistgħu jaraw l-attività tal-qari tiegħek. L-arkivju jista’ jżomm din il-metadata. It-tifi jwaqqaf aġġornamenti futuri, iżda ma jneħħix il-markaturi maħżuna.",
         "readThroughHere": "Moqri sa hawn:",
         "others_one": "+{{count}} persuna oħra",

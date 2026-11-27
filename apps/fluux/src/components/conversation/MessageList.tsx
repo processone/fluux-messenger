@@ -707,7 +707,7 @@ export function MessageList<T extends BaseMessage>({
   // VIEWPORT OBSERVER (tracks the bottom-most visible row for the read pointer)
   // --------------------------------------------------------------------------
 
-  const onVisibleRows = useFocusedVisibleRows(scrollContainerRef, messages, onFocusedVisibleRows, !staticMode && !isLoading)
+  const onVisibleRows = useFocusedVisibleRows(scrollContainerRef, messages, onFocusedVisibleRows, !staticMode && !isLoading, conversationId)
 
   useViewportObserver({
     scrollContainerRef,

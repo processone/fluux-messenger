@@ -2026,11 +2026,9 @@
         "reload": "Reîncarcă"
     },
     "readMarkers": {
-        "master": "Partajează pozițiile de citire în camere",
-        "description": "Dezactivat implicit. După activare, alege fiecare cameră separat în detaliile acesteia.",
         "shareInRoom": "Partajează poziția mea de citire în această cameră",
         "roomDescription": "Trimite numai în camere verificate, nelistate, neanonime și rezervate membrilor, cu mai puțin de 20 de persoane prezente cu identități stabile în cameră. Mesajele criptate sunt excluse.",
-        "masterOff": "Comutatorul principal din Confidențialitate este oprit. Camera nu va partaja poziția ta de citire până când nu îl activezi.",
+        "offHidesReaders": "Dezactivarea partajării ascunde și pozițiile de citire ale celorlalți din această cameră.",
         "metadata": "Camera și persoanele prezente pot vedea activitatea ta de citire. Arhiva poate păstra aceste metadate. Dezactivarea oprește actualizările viitoare, dar nu elimină marcajele stocate.",
         "readThroughHere": "Citit până aici:",
         "others_one": "+{{count}} altă persoană",

@@ -2026,11 +2026,9 @@
         "reload": "Įkelti iš naujo"
     },
     "readMarkers": {
-        "master": "Bendrinti skaitymo pozicijas kambariuose",
-        "description": "Pagal numatymą išjungta. Įjungę pasirinkite kiekvieną kambarį atskirai jo informacijoje.",
         "shareInRoom": "Bendrinti mano skaitymo poziciją šiame kambaryje",
         "roomDescription": "Siųsti tik patikrintuose, neskelbiamuose, neanoniminiuose kambariuose tik nariams, kuriuose yra mažiau nei 20 dalyvių su pastoviomis kambario tapatybėmis. Užšifruoti pranešimai neįtraukiami.",
-        "masterOff": "Pagrindinis privatumo jungiklis išjungtas. Kambarys nebendrins jūsų skaitymo pozicijos, kol jo neįjungsite.",
+        "offHidesReaders": "Išjungus bendrinimą, taip pat paslepiamos kitų dalyvių skaitymo pozicijos šiame kambaryje.",
         "metadata": "Kambarys ir jo dalyviai mato jūsų skaitymo veiklą. Archyvas gali saugoti šiuos metaduomenis. Išjungimas sustabdo būsimus atnaujinimus, bet nepašalina išsaugotų žymų.",
         "readThroughHere": "Perskaityta iki čia:",
         "others_one": "+{{count}} kitas",

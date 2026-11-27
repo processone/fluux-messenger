@@ -6,16 +6,275 @@ receipts and not proof that someone understood a message.
 
 ## Privacy and controls
 
-Sharing starts off. Enable **Share room read positions** in Privacy, then enable
-**Share my read position in this room** in each room's details. Both choices are
-saved for the account on this device. Enabling one room never enables another.
-The master switch stops all sending without forgetting the selected rooms.
+Sharing starts off. Enable **Share my read position in this room** in the room's
+details. This is the only consent needed for sharing and showing room positions.
+Each room choice is saved for the account on this device. Enabling one room never
+enables another. There is no room read-position control in Privacy.
 
 The room and its occupants can see this metadata, and the room archive may retain
 it. Opting out stops future updates; it cannot retract previously stored markers.
-Fluux hides other people’s positions while either your master switch or this
-room’s sharing choice is off. This visibility choice does not delete received
-markers or change what the room has already stored.
+Fluux hides other people’s positions and closes their reader list while this
+room’s sharing choice is off. This does not delete received markers or change
+what the room has already stored.
+
+### Upgrading and older clients
+
+An upgrade preserves sharing only where both the old Privacy switch and the old
+room choice were on. Rooms paused by Privacy Off remain off until you choose each
+one again. Missing, invalid or unreadable preferences remain off. Conversion does
+not publish a marker or reset the last-sent positions.
+
+Consent stays under the same account-scoped local storage key, in a versioned
+format without a master flag. Account generations and per-room edit revisions
+reject an older On that arrives after a newer Off without discarding another
+room's choices. The existing migration fence also retains the epoch and per-room
+edit revisions and account identity, so an older client's preference overwrite cannot hide a newer Off
+from a waiting updated client or cancel an independent converted edit. Browser storage transactions serialize the actual
+commits; they do not by themselves establish the order in which people made choices. Web Locks
+support is not required.
+
+Pending sends recheck durable consent. Choosing Off stops publication in this tab
+while saving waits, including through a reconnect. The room switch shows its busy
+state and keeps keyboard focus until saving finishes; repeated input does not
+start another save. Saving and account clearing are asynchronous. Conversion
+never reuses a pending view; a fresh focused observation is required afterward.
+
+Scoped clearing removes target consent and watermarks before attempting to convert
+unaffected preferences. It retains a verified denial-only restriction until an
+account fence or shared seal replaces it; another scoped or full clear follows
+the same rule. A first clear also installs denial when its account fence cannot be
+saved, including when a retained linked proof cannot be read. An unreadable
+continuity record is uncertain, not absent, and remains until a saved replacement
+protects erasure. Conversion without overlapping protection stores its
+self-contained choice before its compatibility fence, retaining linked proof
+until that fence is saved. The erasable continuity record also binds the exact
+validated input before the preference changes. A refused fence restores the original
+preference, but that restoration alone is not protection: until an import barrier
+commits, updated readers reject a different legacy or version-2 value even before
+the first recovery read. Failed recovery retains this restriction until a supported
+account fence exists; an older migration stamp alone cannot protect version-2 input.
+Compact Off recovery also keeps that restriction until its replacement fence commits.
+An unmatched retained input stays a restriction, never a permission link in that fence.
+A matching witnessed input preserves independent choices through failed background
+conversion or an unsuccessful On for another room, without granting the failed On.
+Completion refusal after a saved fence leaves the protected replacement intact.
+Overlapping linked and
+shared protection instead mirrors combined revocations and ordering into the fence first, before
+retiring either protector, so refusal preserves the surviving choices.
+Refused unrelated conversion is reported without discarding its valid choices.
+If an unrelated record cannot be classified while legacy import remains open,
+a writable target-account fence or verified denial restriction protects erasure.
+Sealing stays incomplete until that record can be read; no unverified exception
+is created. Either protector requires classifying all unrelated accounts before
+starting any conversion. Target protection is checked through denial metadata,
+never by rereading its erased preference, so a refused preference read cannot
+block an otherwise writable shared seal.
+Direct fallback only erases the target's records and attempts its account fence;
+it never replaces the shared guard. If that fence is refused and the shared guard
+still permits the target, a writable erasable denial-only reservation rejects
+stale legacy or version-2 import while recovery obtains a new storage turn.
+The reservation uses the existing proof format in a separate account slot, never
+replacing consent-bearing continuity. It binds opaque fence ordering and shared
+identity, not room names. The clear captures its metadata boundary before
+removing consent and never adopts a later fence for recovery. A committed room
+choice changes that fence and remains valid even if it arrives immediately
+after consent removal or immediately before or after the reservation write.
+Unlocked cleanup removes watermarks before consent and retains exact or uncertain
+continuity until a barrier protects retirement. A full sweep processes consent last
+and retains continuity when its early seal fails. Initial unlocked compaction
+precedes consent removal; only an ownership-checked coordinated turn may retry
+compaction or retire proof afterward. A fence that becomes writable after deletion
+is retried in the original coordinated turn or a guarded follow-up, never by
+repeating ordinary erasure. Full recovery carries only the exact fence value it
+successfully saved and the restriction removal it completed, never a later reread.
+Scoped sealing preserves the shared generation and its open or sealed status.
+It uses a non-authorizing entry in the existing account map to deny the target,
+without changing another account's denial or waiting explicit choice. This also
+protects denial installed after enumeration. Active or unreadable unrelated
+restriction slots are left unchanged rather than converted.
+The restriction defines a new ownership boundary without granting permission:
+pre-clear opt-ins and self-marker work cannot restore erased records, while
+fresh post-clear work uses the new boundary. Automatic reload cannot turn it On.
+Before refreshing a reservation, clearing checks the initiating slot, fence and
+shared permission; it never overwrites a later clear's denial before retry checks.
+Recovery and repeated clears retain denial until an account fence or shared seal
+commits and the preference has been removed. A refused preference deletion keeps
+its account-level denial: a shared import seal alone cannot deny a surviving
+current-format On. A scoped target entry rejects legacy input and any earlier current-format
+On, including an intact earlier fence. Only a confirmed fence-backed save whose
+identity includes this target denial supersedes it. The target boundary is
+attempted before unrelated reads can defer conversion, preserving all peer entries. Its opaque identity combines
+with any active restriction and fence epoch, so another target clear invalidates
+older work even if only one denial form can advance. In a coordinated turn,
+full clearing installs account fences
+before early sealing, or defers sealing until all unfenced preferences have been
+removed, so token rotation cannot deactivate their only denial. Each new clear advances either verified denial form when writable,
+rejecting earlier opt-ins and self-marker work without rejecting fresh work.
+Full clearing retries the refresh after ordinary deletion and compaction free
+space, stopping after one successful advance per account across initial cleanup
+and follow-up. Its known accounts include the supplied account even before its
+first room-read key exists. Full-clear compaction
+retires each account's restriction only after its replacement fence is saved. If reservation is refused, guarded coordinated sealing
+still runs when available; cleanup never claims that an unsaved reservation
+protected the wait. If refresh of an existing verified denial is refused,
+recovery can still obtain the available seal against that exact unchanged slot
+and original fence. Recovery compares its exact reservation and pre-write fence,
+never a later tab's proof or fence. It stops when a later seal already excludes
+the target and never deletes fresh watermarks during its retry.
+Other accounts' shared-only Off and completed clears also survive. If no safe
+barrier can be saved, cleanup reports failure without writing a stale shared
+snapshot or claiming durable protection.
+When either target protector permits deferral, all unrelated accounts are classified
+before any conversion starts, so an earlier paused account cannot be left converted
+without its compatibility barrier by a later unreadable account.
+Shared exceptions permit only the exact effective choices of unaffected accounts
+whose conversion was refused; a target-only entry grants no permission. An open
+profile still admits unclassified accounts without exceptions, never a mismatched
+exception or erased target. Refused conversion retains an existing exception even
+when a different legacy room list is present; unconfirmed On is not
+witnessed over the surviving choice. Automatic reload likewise defers before retiring that authority. Explicit room
+edits merge the independently confirmed shared choices, never the rejected list.
+Confirmed current-format choices take precedence over older shared exceptions
+in capture and recovery. Legacy all-Off additionally captures previously confirmed
+rooms hidden by a recognizable stale Off for suppression and revocation, never
+as permission for that rejected input. It reuses its complete opening capture;
+normal commit and recovery still check the latest stored choices and preserve
+room edits committed after that capture. If stale Off remains stored through
+refused account-fence writes, recovery carries the verified exception into the
+shared revocation fallback; the stale input itself acquires no permission.
+A matching shared choice survives a revocation fence only while its continuity
+still has that fence’s generation; erased continuity cannot restore permission.
+Once coordinated clearing removes consent, it retires that handoff proof when
+the existing revocation fence independently denies both legacy formats, even
+if all replacement barrier writes fail. Unlocked cleanup and refused consent
+removal do not authorize that retirement.
+When no exact input is available, the writer reserves continuity before fencing
+and retains shared authority until an observed input can safely replace it.
+An explicit re-enable lifts the shared revocation only after its preference
+commits; refusing that shared write leaves the room Off and other choices intact.
+A recognizable Off still acquires its exact-input restriction so older On cannot replace it. Its denial and ordering still apply
+without granting that different input permission. Permission-bearing exceptions
+retire only after conversion or a choice safely replaces their protection.
+Scoped cleanup retains unscanned peer entries even when their preference is
+absent during another clear; only verified replacement permits retirement.
+Scoped clearing replaces the target's exception with denial even if preference
+removal failed, while still reporting incomplete erasure. Denial-only entries need
+not be pruned before a confirmed fence-backed local On can save. Unknown
+older guards remain sealed. A refused replacement retains the existing seal or
+a writable account fence and reports incomplete cleanup. When no safe barrier can
+be saved and no usable prior barrier exists, durable revocation cannot be
+guaranteed; cleanup reports failure rather than claiming completion. Successful
+scoped cleanup retains only the target's non-authorizing account identity in the
+guard, without room names or the erased preference. Full clearing removes account
+entries when its shared seal commits; failed cleanup can retain protection records. Full clearing retries its shared seal after ordinary data frees
+storage, including after compacting history fences. A guarded full-clear follow-up
+uses only its unchanged known accounts; it never rescans and erases newer records.
+It cannot replace the shared seal over an account that changed ownership.
+An unreadable shared guard remains ineligible for replacement without stopping
+independent consent and watermark deletion. The original coordinated full-clear
+turn can still save independent account fences without reading shared protection.
+An unreadable account boundary is excluded from recovery without stopping other
+verified accounts' barriers. Direct full fallback never writes the shared guard;
+only an ownership-checked storage turn can seal after that fallback.
+A refused growing save
+retains a compact revocation boundary wherever storage allows it. Uncoordinated
+recovery may change only the initiating unchanged storage boundary; it cannot
+recreate cleared records or erase newer choices. Transaction abort never replays
+destructive cleanup outside its storage turn once local mutation has begun.
+A denial before mutation can still use direct cleanup. A refused individual
+removal does not stop the remaining independent deletions in the same turn;
+cleanup reports partial failure without replaying that turn. A failed Off instead obtains a
+fresh storage turn to revoke only its still-owned choices, preserving newer
+independent opt-ins. Normal and compact recovery fences retain revocations and ordering history;
+they cannot authorize an unsaved On. Confirmed preferences remain the
+only source of permission, with revocations overlaid after partial writes.
+An independently erasable continuity proof binds the account identity to its
+preference; clearing retires preference-bearing proof behind a verified denial
+or retained import seal even when the account fence cannot be replaced.
+An unprotected exact input remains until a coordinated turn can retire it safely. Empty-input proof remains usable denial until
+a replacement commits. If its role cannot be read, clearing retains the uncertain
+record and reports incomplete cleanup when replacement remains unavailable.
+During a partial legacy Off, the proof also binds the exact previously validated
+input, so untouched selections survive conversion refusal without authorizing a
+different replacement. Fences link that input by an opaque identifier, never a
+copy of the preference. Scoped conversion retains existing proof until its
+preference commits. Unconverted legacy ownership is reserved independently of
+the shared token, so another tab’s later conversion cannot release a failed Off,
+including when its two reads fail after that reservation already exists.
+Scoped conversion reserves missing identity once; only existing input proof
+waits for preference commit before replacement.
+If the account-local identity reservation itself is refused, the exact legacy
+exception carries its surviving identity in the shared guard; later conversion
+and both Off setters keep that boundary. This fallback still requires a writable
+shared guard and does not replace the total-write-denial limitation above.
+When local identity exists, the exception references its opaque, erasable proof
+ID instead of copying identity; a replacement proof cannot reactivate it. If continuity remains unwritable during Off, the exact
+shared exception can retain room revocations and ordering while preserving
+untouched choices; deleting local proof still invalidates earlier work. Repeated
+scoped conversion retains that exception’s revocations and ordering. When both
+a linked fence and shared exception survive, room revisions combine both
+histories without replacing either. Scoped conversion mirrors their merged
+revocations and revisions into the fence before pruning the exception or
+cleaning linked input, so refused cleanup cannot restore an older room On.
+A refused replacement fence retains the existing shared exception until a
+readable replacement mirrors its revocations and ordering. An unreadable
+unrelated preference retains its existing exception unchanged, not a newly
+bound identity; target erasure remains independent of that uncertainty. Migration
+retires shared authority only after a linked replacement is saved, and delayed
+failure cleanup checks the account’s shared protection as well as its token.
+A retained exception links newly reserved local proof even when replacement
+is refused. Exact confirmed shared or linked input survives replacement even
+without a prior revocation; it never grants the proposed unsaved On. A new On
+that fails before writing leaves other confirmed choices unchanged. Refused
+new On writes also preserve the existing confirmed current-format record.
+Focused observations retain their conversion boundary through discovery and
+dispatch; another tab’s conversion requires a fresh observation even when
+account identity and effective choices do not change. Each observation snapshot
+reads the conversion token before and after its preference read; a change
+between those reads rejects the observation instead of mixing two conversions.
+The erasable continuity
+record reserves a pending conversion token before preference commit without
+retiring linked input, then completes it after the preference is committed.
+Observations captured while the token is pending cannot publish, even after
+an exact older preference rewrite. Refused completion leaves publication
+blocked; coordinated reads retry completion only for a confirmed current
+preference. Ordinary writes retain the completed boundary. Scoped conversion
+completes the token with linked-input cleanup; refusal leaves it pending,
+without discarding committed independent choices.
+Already-linked inputs need no duplicate exception in the shared clear guard.
+Pure migration never publishes from its first write.
+Refusal of a final On lift leaves its revocation in place without deleting other
+saved selections. Recovery advances
+ordering without changing account identity, so another room’s Off remains valid. Local room suppression survives failed saving until a fresh
+choice or a new account boundary supersedes it. The legacy all-Off operation
+uses the same room-scoped guards and temporarily protects an unknown selection
+until its initial snapshot is available, including after repeated read refusal.
+Unresolved suppression becomes room-scoped when reads recover, excluding newer
+choices and retiring after target erasure, not after an unrelated logout. It never uses local suppression as saved consent. Pre-clear Off cannot modify
+post-clear consent, even after a legacy overwrite or fresh opt-in. A later fresh choice preserves the fallback epoch independently of the
+consent record, so an older overwrite cannot reset the erasure boundary.
+The empty coordination database contains no account data.
+
+Watermark writes share the clearing transaction and merge the durable map rather
+than a cached copy. Room archive operations capture their erasure boundary once
+and carry it through cursor fallbacks, hydration, paging and queued catch-up,
+including both cache reads in normal room activation.
+Foreground and fresh-session callers capture before loading their cache.
+Generic chat archive work does not capture room consent. Discovery retry drains
+the original observation after refreshing consent; it never creates a new view.
+Pending publication rechecks its original observer's lifetime, current geometry, conversation,
+coverage and current private read pointer after waiting for storage. The real
+transport runs preflight before synchronously saving the anchor and starting its
+write. A definitely unstarted send leaves no anchor; uncertain attempted delivery
+retains it. A background read failure does not discard saved room choices.
+
+An older client reads the new format as off. A still-open older tab can write and
+use its cached choices, including choices revoked in the new app. The new app
+cannot enforce its revocations in older code. Failed saves stop sharing and
+report the failure.
+
+Direct-chat read positions remain separate planned work in issue #5. They will
+need their own Privacy preference and fresh consent, never copied from rooms.
 
 ## Eligibility
 

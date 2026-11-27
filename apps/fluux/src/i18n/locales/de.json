@@ -2024,11 +2024,9 @@
         "reload": "Neu laden"
     },
     "readMarkers": {
-        "master": "Lesepositionen in Räumen teilen",
-        "description": "Standardmäßig ausgeschaltet. Wähle nach dem Einschalten jeden Raum einzeln in seinen Raumdetails aus.",
         "shareInRoom": "Meine Leseposition in diesem Raum teilen",
         "roomDescription": "Nur in verifizierten, nicht aufgelisteten, nicht anonymen Räumen nur für Mitglieder mit weniger als 20 Anwesenden und stabilen Raumidentitäten senden. Verschlüsselte Nachrichten sind ausgeschlossen.",
-        "masterOff": "Der Hauptschalter unter Datenschutz ist ausgeschaltet. Dieser Raum teilt deine Leseposition erst, wenn du ihn einschaltest.",
+        "offHidesReaders": "Wenn du das Teilen ausschaltest, werden auch die Lesepositionen anderer in diesem Raum ausgeblendet.",
         "metadata": "Der Raum und seine Anwesenden können deine Leseaktivität sehen. Das Archiv kann diese Metadaten speichern. Ausschalten stoppt künftige Aktualisierungen, entfernt aber keine gespeicherten Markierungen.",
         "readThroughHere": "Bis hier gelesen:",
         "others_one": "+{{count}} weitere Person",

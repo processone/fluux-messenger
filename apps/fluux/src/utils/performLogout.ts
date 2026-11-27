@@ -16,7 +16,7 @@ export interface PerformLogoutDeps {
   disconnect: (options?: { invalidateFastToken?: boolean }) => Promise<void>
   /** Push module belonging to the account being logged out. */
   push?: PushRegistrar
-  /** Bare/full JID of the account being logged out (for FAST-token cleanup). */
+  /** Capture the account before disconnect and session removal so cleanup stays scoped. */
   jid: string | null
   /** When true, wipe all local account data; otherwise keep messages/cache. */
   shouldCleanLocalData: boolean
@@ -72,7 +72,7 @@ export async function performLogout({ disconnect, push, jid, shouldCleanLocalDat
 
   if (shouldCleanLocalData) {
     // clearLocalData() clears session at the end of cleanup.
-    await clearLocalData().catch(() => {})
+    await clearLocalData({ accountJid: jid }).catch(() => {})
     return
   }
 

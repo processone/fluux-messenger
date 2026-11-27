@@ -51,6 +51,8 @@ export function clearAutoReconnectCredentials(jid: string | null): void {
 }
 
 interface ClearLocalDataOptions {
+  /** Logout may have removed the session before cleanup starts. */
+  accountJid?: string | null
   /** Live client push module, when clearing data before disconnect. */
   push?: PushRegistrar
   /**
@@ -67,10 +69,10 @@ interface ClearLocalDataOptions {
  * Call on disconnect when the user opts to clean local data.
  */
 export async function clearLocalData(options: ClearLocalDataOptions = {}): Promise<void> {
+  const accountJid = options.accountJid === undefined ? getSession()?.jid : options.accountJid
+  const scopedJid = accountJid ? getBareJid(accountJid) : null
   await endPushSession(options.push)
   const allAccounts = options.allAccounts ?? false
-  const session = getSession()
-  const scopedJid = session?.jid ? getBareJid(session.jid) : null
 
   console.log(`[Fluux] clearLocalData: starting (${allAccounts ? 'all accounts' : (scopedJid ?? 'current account')})`)
 
@@ -98,7 +100,9 @@ export async function clearLocalData(options: ClearLocalDataOptions = {}): Promi
     ignoreStore.getState().reset()
     // Saved messages and their unsent queue are message text kept on this device too.
     clearSavedLocalData(scopedJid, allAccounts)
-    clearRoomReadMarkersLocalData(scopedJid, allAccounts)
+    if (await clearRoomReadMarkersLocalData(scopedJid, allAccounts) === false) {
+      console.warn('[Fluux] Room read-position data removal could not be coordinated')
+    }
     // Clear search index (IndexedDB)
     await clearSearchIndex()
     console.log('[Fluux] clearLocalData: stores reset')

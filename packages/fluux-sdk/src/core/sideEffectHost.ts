@@ -44,6 +44,7 @@ export interface CatchUpHistoryOptions {
 
 /** The archive operations background sync and the history side effects drive. */
 export interface MamSideEffectHost {
+  captureRoomReplay?(): () => boolean
   catchUpAllConversations(options?: {
     concurrency?: number
     exclude?: string | null
@@ -58,7 +59,7 @@ export interface MamSideEffectHost {
   catchUpRoomHistory(
     roomJid: string,
     messages: ArchivePosition[],
-    options?: CatchUpHistoryOptions
+    options?: CatchUpHistoryOptions & { replayCurrent?: () => boolean }
   ): Promise<void>
   /**
    * Completion contract: see MAM.discoverNewConversationsFromRoster.
