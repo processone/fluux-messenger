@@ -5,6 +5,7 @@
  * this client supports (e.g., PEP notifications for avatars).
  */
 
+import { sha1 } from '@noble/hashes/legacy'
 import {
   NS_CHATSTATES,
   NS_DISCO_INFO,
@@ -137,14 +138,9 @@ export function calculateVerificationString(extraFeatures: readonly string[] = [
  * This is the 'ver' attribute used in the <c/> element
  */
 export async function calculateCapsHash(extraFeatures: readonly string[] = []): Promise<string> {
-  const verString = calculateVerificationString(extraFeatures)
-  const encoder = new TextEncoder()
-  const data = encoder.encode(verString)
-
-  // Use Web Crypto API for SHA-1
-  const hashBuffer = await crypto.subtle.digest('SHA-1', data)
-  const hashArray = new Uint8Array(hashBuffer)
-
-  // Convert to base64
-  return btoa(String.fromCharCode(...hashArray))
+  const data = textEncoder.encode(calculateVerificationString(extraFeatures))
+  const subtle = globalThis.crypto?.subtle
+  // XEP-0115 fingerprints public capabilities even when HTTP origins lack SubtleCrypto.
+  const hash = subtle ? new Uint8Array(await subtle.digest('SHA-1', data)) : sha1(data)
+  return btoa(String.fromCharCode(...hash))
 }
