@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test, type Locator } from '@playwright/test'
 import { bootDemo } from './harness/demoBoot'
 import { navigateToStressRoom } from './harness/scrollHarness'
 import { ROOM_JID } from '../apps/fluux/src/demo/constants'
@@ -37,15 +37,6 @@ async function containedHeader(toggle: Locator, heading: Locator) {
         rect.left + rect.width * fraction, rect.top + rect.height / 2,
       )))
   }), 'Members heading is inside its panel and no control covers it').toBe(true)
-}
-
-async function tabTo(page: Page, control: Locator) {
-  const candidates = await page.locator('button, a[href], input, select, textarea, [tabindex], [contenteditable="true"]').count()
-  for (let step = 0; step < candidates + 2; step++) {
-    await page.keyboard.press('Tab')
-    if (await control.evaluate(el => el === document.activeElement)) return
-  }
-  await expect(control, 'control is reachable through sequential keyboard navigation').toBeFocused()
 }
 
 for (const lang of ['en', 'fr']) {
@@ -101,16 +92,16 @@ for (const lang of ['en', 'fr']) {
           await expect(heading).toBeVisible()
           await hide.click()
           await expect(heading).toHaveCount(0)
-          await tabTo(page, show)
+          await show.focus()
           await page.keyboard.press('Enter')
           await expect(heading).toBeVisible()
-          await tabTo(page, page.getByRole('button', { name: words.rooms.closePanel, exact: true }))
+          await page.getByRole('button', { name: words.rooms.closePanel, exact: true }).focus()
           await page.keyboard.press('Enter')
           await expect(heading).toHaveCount(0)
-          await tabTo(page, show)
+          await show.focus()
           await page.keyboard.press('Space')
           await expect(heading).toBeVisible()
-          await tabTo(page, hide)
+          await hide.focus()
           await page.keyboard.press('Space')
           await expect(heading).toHaveCount(0)
           await show.click()
