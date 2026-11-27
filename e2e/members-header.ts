@@ -153,7 +153,11 @@ for (const lang of ['en', 'fr']) {
       const row = page.locator('.touch-menu-row').filter({ has: page.getByText(nick, { exact: true }) })
       await expect(row.getByText('×2', { exact: true })).toBeVisible()
       await expect(row.locator(`[title="${words.rooms.affiliationAdmin}"]`)).toBeVisible()
-      await expect(row.getByText('Community coordinator', { exact: true })).toBeVisible()
+      await expect(row.getByText('+1', { exact: true })).toBeVisible()
+      await row.getByText('+1', { exact: true }).hover()
+      await expect(page.getByRole('tooltip').getByText('Community coordinator', { exact: true })).toBeVisible()
+      await heading.hover()
+      await expect(page.getByRole('tooltip')).toHaveCount(0)
       await expect.poll(() => row.getByText(jid, { exact: true }).evaluate(el =>
         el.clientWidth > 0 && el.scrollWidth > el.clientWidth,
       ), 'long address truncates inside the compact member row').toBe(true)
@@ -161,7 +165,7 @@ for (const lang of ['en', 'fr']) {
         const bounds = el.getBoundingClientRect()
         return Array.from(el.querySelectorAll('svg, p, span')).every(child => {
           const rect = child.getBoundingClientRect()
-          return rect.left >= bounds.left && rect.right <= bounds.right
+          return rect.width === 0 || (rect.left >= bounds.left && rect.right <= bounds.right)
         }) && el.scrollWidth <= el.clientWidth
       }), 'long names, addresses and badges stay inside the compact member row').toBe(true)
       const name = row.getByText(nick, { exact: true })
@@ -193,11 +197,28 @@ for (const lang of ['en', 'fr']) {
             if (occupant.jid === jid) store.removeOccupant(room.jid, occupant.nick)
           }
           store.addOccupant(room.jid, {
-            ...emma, nick, affiliation: 'none', role: 'participant', hats: [],
+            ...emma, nick, affiliation: 'admin', role: 'moderator',
+            hats: [
+              { uri: 'urn:fluux:community', title: 'Community coordinator' },
+              { uri: 'urn:fluux:release', title: 'Release coordination' },
+              { uri: 'urn:fluux:support', title: 'Support' },
+              { uri: 'urn:fluux:moderation', title: 'Moderation' },
+            ],
           })
+          store.addOccupant(room.jid, { ...emma, nick: `${nick}mobile`, hats: [] })
         }, { jid, nick: markedNick })
         const warningRow = page.locator('.touch-menu-row').filter({ has: page.getByTestId('nick-hidden-chars') })
         await expect(warningRow.getByTestId('nick-ws-marker')).toHaveCount(edgeCount)
+        await expect(warningRow.getByText('×2', { exact: true })).toBeVisible()
+        await expect(warningRow.locator(`[title="${words.rooms.affiliationAdmin}"]`)).toBeVisible()
+        await expect(warningRow.getByText('+4', { exact: true })).toBeVisible()
+        await expect.poll(() => warningRow.evaluate(el => {
+          const row = el.getBoundingClientRect()
+          const line = el.lastElementChild!.firstElementChild!
+          const bounds = Array.from(line.children).map(child => child.getBoundingClientRect()).filter(rect => rect.width > 0)
+          return bounds.every((rect, index) => rect.left >= row.left && rect.right <= row.right &&
+            (index === 0 || rect.left >= bounds[index - 1].right))
+        }), 'identity and connection, affiliation and extra-label badges remain separate and contained').toBe(true)
         const markers = warningRow.locator('[data-testid="nick-ws-marker"], [data-testid="nick-hidden-chars"]')
         for (const marker of await markers.all()) {
           await expect.poll(() => marker.evaluate(el => {
@@ -216,6 +237,13 @@ for (const lang of ['en', 'fr']) {
           const store = (window as unknown as { __roomStore: typeof roomStore }).__roomStore.getState()
           return [...store.getRoom(store.activeRoomJid!)!.occupants.values()].find(occupant => occupant.jid === jid)!.nick
         }, jid)).toBe(markedNick)
+        await warningRow.getByText('+4', { exact: true }).hover()
+        const extraLabels = page.getByRole('tooltip').filter({ has: page.getByText('Release coordination', { exact: true }) })
+        for (const label of ['Community coordinator', 'Release coordination', 'Support', 'Moderation']) {
+          await expect(extraLabels.getByText(label, { exact: true })).toBeVisible()
+        }
+        await heading.hover()
+        await expect(extraLabels).toHaveCount(0)
         if (process.env.FLUUX_MEMBERS_HEADER_PROOF) {
           await page.screenshot({ path: test.info().outputPath(`members-compact-markers-${padding}.png`) })
         }
@@ -238,6 +266,11 @@ for (const lang of ['en', 'fr']) {
       await expect(heading).toBeVisible()
       await page.setViewportSize({ width: 1280, height: 812 })
       await containedHeader(hide, heading)
+      const roomyRow = page.locator('.touch-menu-row').filter({ has: page.getByTestId('nick-hidden-chars') })
+      for (const label of ['Community coordinator', 'Release coordination', 'Support']) {
+        await expect(roomyRow.getByText(label, { exact: true })).toBeVisible()
+      }
+      await expect(roomyRow.getByText('+1', { exact: true })).toBeVisible()
     })
   }
 }
