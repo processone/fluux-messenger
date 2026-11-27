@@ -8,6 +8,7 @@ enum PreviewDecision: String, Codable {
     case previewsOff, senderNotCovered, snapshotChanged, noSession, ledgerUnavailable
     case previewsHidden, capabilityChanged, windowUnavailable, archiveUnavailable
     case deadline, systemExpiry, preview, noEngineResult, nothingNew, appShown, appDuplicate
+    case lookupFailed, archiveEmpty, allHandled, unreadable
     case widgetNotCounted, widgetBadgeUnavailable, widgetListUnavailable, widgetAccountMismatch, widgetAlreadyListed
     case widgetRowSelected, widgetWriteSucceeded, widgetWriteFailed, widgetReloadRequested, widgetReloadUnavailable
     case widgetCountMismatch, widgetAppReadObserved, widgetAppReadStillListed, widgetAppReadNotListed, widgetAppReadStateUnavailable
