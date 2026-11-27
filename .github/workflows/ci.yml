@@ -370,7 +370,7 @@ jobs:
         run: npm run test:run --workspace=@xmpp/fluux
 
   e2e-scroll:
-    name: Browser invariants (e2e, ${{ matrix.browser }} ${{ matrix.shard }}/${{ matrix.shards }})
+    name: Browser invariants (e2e, ${{ matrix.group || matrix.browser }} ${{ matrix.shard }}/${{ matrix.shards }})
     needs: changes
     if: needs.changes.outputs.js == 'true'
     runs-on: ubuntu-latest
@@ -379,11 +379,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Equal test counts alone can put nearly all of the slow reading suite on one runner.
         # Four WebKit shards keep its slower journeys within the 30-minute job budget.
         # Every shard is a blocking check.
         include:
-          - { browser: chromium, shard: 1, shards: 2 }
-          - { browser: chromium, shard: 2, shards: 2 }
+          - { browser: chromium, group: chromium-scroll-reading, shard: 1, shards: 2 }
+          - { browser: chromium, group: chromium-scroll-reading, shard: 2, shards: 2 }
+          - { browser: chromium, group: chromium-rest, shard: 1, shards: 4 }
+          - { browser: chromium, group: chromium-rest, shard: 2, shards: 4 }
+          - { browser: chromium, group: chromium-rest, shard: 3, shards: 4 }
+          - { browser: chromium, group: chromium-rest, shard: 4, shards: 4 }
           - { browser: webkit, shard: 1, shards: 4 }
           - { browser: webkit, shard: 2, shards: 4 }
           - { browser: webkit, shard: 3, shards: 4 }
@@ -468,9 +473,8 @@ jobs:
           sudo --preserve-env=CI_RETRY_CLEANUP env "PATH=$PATH" scripts/ci-retry.sh 3 300 \
             npx playwright install-deps ${{ matrix.browser }}
 
-      # Each engine runs against its own bundled demo. Separate reading and
-      # live-edge files let both workers share the scroll workload while tests
-      # within each suite retain their declaration order.
+      # Each job runs against its own bundled demo. The dedicated Chromium reading
+      # jobs split one test file across runners, with two parallel workers per job.
       #
       # The composer half cannot be unit tested: jsdom has no layout, so the autosize
       # unit tests mock scrollHeight — and a mocked measurement can never contradict
@@ -482,16 +486,18 @@ jobs:
       # failOnFlakyTests, and the github + html reporters. Blocks the PR if any invariant
       # regresses, including one that only regressed on its first attempt: a retry says
       # whether a failure is intermittent, not whether it counts.
-      # --shard splits the test list test by test (fullyParallel in the config), so the shards
-      # of an engine together run exactly the tests the unsharded job ran.
-      - name: Run browser invariants (${{ matrix.browser }} ${{ matrix.shard }}/${{ matrix.shards }})
-        run: npm run test:e2e -- --project="*-${{ matrix.browser }}" --shard=${{ matrix.shard }}/${{ matrix.shards }}
+      # --shard divides each selected group test by test (fullyParallel in the config).
+      - name: Run browser invariants (${{ matrix.group || matrix.browser }} ${{ matrix.shard }}/${{ matrix.shards }})
+        env:
+          PLAYWRIGHT_PROJECT: ${{ matrix.group == 'chromium-scroll-reading' && 'scroll-reading-chromium' || format('*-{0}', matrix.browser) }}
+          FLUUX_E2E_EXCLUDE_CHROMIUM_SCROLL_READING: ${{ matrix.group == 'chromium-rest' && '1' || '' }}
+        run: npm run test:e2e -- --project="$PLAYWRIGHT_PROJECT" --shard=${{ matrix.shard }}/${{ matrix.shards }}
 
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-scroll-report-${{ matrix.browser }}-${{ matrix.shard }}
+          name: playwright-scroll-report-${{ matrix.group || matrix.browser }}-${{ matrix.shard }}
           path: e2e/playwright-report/
           retention-days: 7
 

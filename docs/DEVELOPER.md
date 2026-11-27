@@ -211,17 +211,20 @@ npm run test:run -w @fluux/sdk -- --maxWorkers=1
   previews across viewport sizes, themes, and text sizes.
 
 The reading and live-edge suites share their setup, geometry helpers, and after-test
-scroll diagnostics in `e2e/harness/scrollHarness.ts`. Tests within each file run in
-declaration order.
+scroll diagnostics in `e2e/harness/scrollHarness.ts`. Discovery lists tests within
+each file in declaration order; parallel workers do not guarantee that execution order.
 
-CI runs the browser projects configured in `e2e/playwright.e2e.config.ts` in
-separate Chromium and WebKit jobs with two workers per runner.
-Each job builds and serves its own demo and uploads a separate report on failure.
-To reproduce one engine's job or one scroll suite:
+CI gives the `scroll-reading-chromium` project two dedicated shards and divides
+all other Chromium projects into four shards. Keeping the slower reading cases
+separate avoids concentrating them in one otherwise equal-count shard. WebKit
+still runs all its projects across four shards. Each job has two workers and
+30 minutes, builds and serves its own demo, and uploads a report on test failure.
+To reproduce one job from each group locally:
 
 ```bash
-npm run test:e2e -- --project="*-chromium" --workers=2
-npm run test:e2e -- --project=scroll-reading-webkit
+npm run test:e2e -- --project=scroll-reading-chromium --shard=1/2 --workers=2
+FLUUX_E2E_EXCLUDE_CHROMIUM_SCROLL_READING=1 npm run test:e2e -- --project="*-chromium" --shard=1/4 --workers=2
+npm run test:e2e -- --project="*-webkit" --shard=1/4 --workers=2
 ```
 
 On macOS, the WebKit projects keep their failure traces without screenshots. Playwright's
