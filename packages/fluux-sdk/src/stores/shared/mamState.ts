@@ -252,6 +252,7 @@ export function setMAMQueryCompleted(
     // doesn't re-affirm it (e.g. a later forward Phase-A page, an ordinary
     // backward scroll, or an all-deduped merge).
     coverageBottomUnproven: current.coverageBottomUnproven,
+    ...(current.emptyArchiveMembership && { emptyArchiveMembership: current.emptyArchiveMembership }),
   })
   return newStates
 }

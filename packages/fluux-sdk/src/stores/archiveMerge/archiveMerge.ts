@@ -292,6 +292,10 @@ export function createArchiveMerge<M extends Message | RoomMessage>(
             isFetchLatest,
             mamState.isDisjointFromResidentWindow(facts.existing, extras?.initialBefore, isFetchLatest),
           )
+          if (kind === 'room' && extras?.emptyRoomArchive && direction === 'backward' &&
+            isFetchLatest && complete && !preserveGapMarker && !gatedOnDurableWrite) {
+            mamStates.get(entityId)!.emptyArchiveProof = {}
+          }
 
           // The newest PROVEN in-memory boundary. Undefined when nothing is resident.
           const residentNewestTs = messagePageExtent(facts.existing).newestTs

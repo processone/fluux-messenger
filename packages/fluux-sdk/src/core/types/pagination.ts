@@ -269,6 +269,13 @@ export interface HistoryPagingSearchOptions {
  * @category MAM
  */
 export interface HistoryQueryState {
+  /** Room-only session proof of an empty, complete archive query. Identity
+   *  survives resident-window changes, but not another merge or membership.
+   *  A durable live row can materialize the first coverage anchor from it. */
+  emptyArchiveProof?: object
+  /** Room membership identity for authorizing empty-archive evidence.
+   *  Independent queries share it; membership loss revokes it. */
+  emptyArchiveMembership?: object
   loadingRequestId?: string
   /** True while query is in progress */
   isLoading: boolean
@@ -381,8 +388,9 @@ export interface GapInterval {
 export interface CoverageRecord {
   /** Archive id of the OLDEST entry proven contiguous with the live edge. */
   bottomId: string
-  /** Archive id of the NEWEST entry seen by the fetch-latest walk that
-   *  established this record (page-1 page.last). */
+  /** Archive id of the newest entry in the establishing fetch-latest walk
+   *  (page-1 page.last), or the durable live room row that materialized coverage
+   *  after a confirmed empty archive. */
   topId?: string
   /** Oldest persisted message proven contiguous with live for unread counting.
    *  null means the walk has no materialized anchor; absent on legacy records,
@@ -396,6 +404,9 @@ export interface CoverageRecord {
  * @category MAM
  */
 export interface MergeArchiveExtras {
+  /** ROOM only: the whole positive-sized, unbounded fetch-latest completed
+   *  without a single raw archive result, before filtering any signals. */
+  emptyRoomArchive?: boolean
   /** The `before` cursor the query was started with ('' = fetch-latest). */
   initialBefore?: string
   /** page.last of the FIRST page of a backward walk (newest covered entry). */

@@ -672,9 +672,16 @@ export function createReadTracker(kind: ReadTrackerKind, ports: ReadTrackerPorts
      * Resolves once the lookup has been applied, to whether the cache holds the marker, so a
      * caller deciding whether to search the archive can read the stash afterwards.
      */
-    async resolvePendingFromCache(entityId: string): Promise<boolean> {
+    async resolvePendingFromCache(entityId: string, options?: { afterWrite?: boolean }): Promise<boolean> {
       const stanzaId = ports.storage.read(entityId)?.pendingRemoteMarker
-      return stanzaId !== undefined && await lookUpStashInCache(entityId, stanzaId)
+      if (stanzaId === undefined) return false
+      if (options?.afterWrite) {
+        const stillCurrent = ports.captureCacheRead(entityId)
+        // A pre-write miss must finish before starting a read of the committed cache.
+        await stashLookups.get(JSON.stringify([entityId, stanzaId]))
+        if (!stillCurrent() || ports.storage.read(entityId)?.pendingRemoteMarker !== stanzaId) return false
+      }
+      return await lookUpStashInCache(entityId, stanzaId)
     },
 
     /**
