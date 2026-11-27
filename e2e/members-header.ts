@@ -285,13 +285,30 @@ for (const lang of ['en', 'fr']) {
       await secondDisclosure.press('Escape')
       await expect(secondRoles).toHaveCount(0)
 
-      // Sidebar dragging changes the dock query without resizing the window.
+      // Applying saved text size can hide the trigger without pointer input or viewport resize.
       await page.setViewportSize({ width: 1120, height: 812 })
       await firstDisclosure.click()
       await expect(firstRoles).toBeVisible()
-      await resizeSidebar(page, 288)
+      await page.evaluate(() => (window as any).__settingsStore.getState().setFontSize(100))
+      await expect(page.locator('html')).toHaveCSS('font-size', `${baseFont}px`)
+      await expect.poll(() => heading.evaluate(el =>
+        el.parentElement!.parentElement!.getBoundingClientRect().width,
+      )).toBe(16 * baseFont)
       await expect(firstDisclosure).toBeHidden()
       await expect(firstRoles).toHaveCount(0)
+      expect(page.viewportSize()).toEqual({ width: 1120, height: 812 })
+      await expect(page.locator('.chrome-sidebar')).toHaveCSS('width', '400px')
+      await page.evaluate(() => (window as any).__settingsStore.getState().setFontSize(150))
+      await expect(page.locator('html')).toHaveCSS('font-size', `${baseFont * 1.5}px`)
+      await expect(firstDisclosure).toBeVisible()
+
+      // Dragging owns the layout transition; its pointer-down also dismisses popups.
+      await resizeSidebar(page, 288)
+      await expect.poll(() => heading.evaluate(el =>
+        el.parentElement!.parentElement!.getBoundingClientRect().width,
+      )).toBe(16 * baseFont * 1.5)
+      await expect(firstDisclosure).toBeHidden()
+      await containedHeader(hide, heading)
       await resizeSidebar(page, 400)
       await page.setViewportSize({ width: 1024, height: 812 })
       await firstDisclosure.click()
